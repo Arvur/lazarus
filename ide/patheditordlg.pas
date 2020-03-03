@@ -26,13 +26,13 @@ uses
   LCLType, LCLProc, Forms, Controls, Buttons, StdCtrls, Dialogs, Menus, Graphics,
   ButtonPanel, Clipbrd,
   // LazUtils
-  FileUtil, LazFileUtils,
+  FileUtil, LazFileUtils, LazStringUtils, LazFileCache,
   // LazControls
   ShortPathEdit,
   // IdeIntf
-  MacroIntf, IDEImagesIntf,
+  MacroIntf, IDEImagesIntf, IDEUtils,
   // IDE
-  TransferMacros, GenericListSelect, LazarusIDEStrConsts, IDEProcs;
+  TransferMacros, GenericListSelect, LazarusIDEStrConsts;
 
 type
 
@@ -70,7 +70,6 @@ type
     procedure DirectoryEditAcceptDirectory(Sender: TObject; var Value: String);
     procedure DirectoryEditChange(Sender: TObject);
     procedure FormCreate(Sender: TObject);
-    procedure FormResize(Sender: TObject);
     procedure FormShow(Sender: TObject);
     procedure MoveDownButtonClick(Sender: TObject);
     procedure MoveUpButtonClick(Sender: TObject);
@@ -81,15 +80,12 @@ type
     procedure PathListBoxSelectionChange(Sender: TObject; {%H-}User: boolean);
     procedure ReplaceButtonClick(Sender: TObject);
     procedure ImportMenuItemClick(Sender: TObject);
-    procedure TemplatesListBoxDblClick(Sender: TObject);
-    procedure TemplatesListBoxSelectionChange(Sender: TObject; {%H-}User: boolean);
   private
     FBaseDirectory: string;
     FEffectiveBaseDirectory: string;
     FTemplateList: TStringList;
     procedure AddPath(aPath: String; aObject: TObject);
     function GetPath: string;
-    //function GetTemplates: string;
     function BaseRelative(const APath: string): String;
     function PathAsAbsolute(const APath: string): String;
     function PathMayExist(APath: string): TObject;
@@ -230,7 +226,7 @@ begin
   Result:=TObject(0);
   if (FEffectiveBaseDirectory<>'') and FilenameIsAbsolute(FEffectiveBaseDirectory) then
     APath:=CreateAbsolutePath(APath, FEffectiveBaseDirectory);
-  if DirectoryExists(APath) then
+  if DirPathExistsCached(APath) then
     Result:=TObject(1);
 end;
 
@@ -292,6 +288,7 @@ var
 begin
   TemplateForm := TGenericListSelectForm.Create(Nil);
   try
+    TemplateForm.Caption := lisPathEditPathTemplates;
     // Let a user select only templates which are not in the list already.
     for i := 0 to FTemplateList.Count-1 do
       if PathListBox.Items.IndexOf(FTemplateList[i]) = -1 then
@@ -407,16 +404,6 @@ begin
   UpdateButtons;
 end;
 
-procedure TPathEditorDialog.TemplatesListBoxSelectionChange(Sender: TObject; User: boolean);
-begin
-  UpdateButtons;
-end;
-
-procedure TPathEditorDialog.TemplatesListBoxDblClick(Sender: TObject);
-begin
-  AddTemplateButtonClick(Nil);
-end;
-
 procedure TPathEditorDialog.FormCreate(Sender: TObject);
 const
   Filt = 'Text file (*.txt)|*.txt|All files (*)|*';
@@ -450,13 +437,13 @@ begin
   OpenDialog1.Filter:=Filt;
   SaveDialog1.Filter:=Filt;
 
-  TIDEImages.AssignImage(MoveUpButton.Glyph, 'arrow_up');
-  TIDEImages.AssignImage(MoveDownButton.Glyph, 'arrow_down');
-  TIDEImages.AssignImage(ReplaceButton.Glyph, 'menu_reportingbug');
-  TIDEImages.AssignImage(AddButton.Glyph, 'laz_add');
-  TIDEImages.AssignImage(DeleteButton.Glyph, 'laz_delete');
-  TIDEImages.AssignImage(DeleteInvalidPathsButton.Glyph, 'menu_clean');
-  TIDEImages.AssignImage(AddTemplateButton.Glyph, 'laz_add');
+  IDEImages.AssignImage(MoveUpButton, 'arrow_up');
+  IDEImages.AssignImage(MoveDownButton, 'arrow_down');
+  IDEImages.AssignImage(ReplaceButton, 'menu_reportingbug');
+  IDEImages.AssignImage(AddButton, 'laz_add');
+  IDEImages.AssignImage(DeleteButton, 'laz_delete');
+  IDEImages.AssignImage(DeleteInvalidPathsButton, 'menu_clean');
+  IDEImages.AssignImage(AddTemplateButton, 'laz_add');
 end;
 
 procedure TPathEditorDialog.FormDestroy(Sender: TObject);
@@ -468,16 +455,6 @@ procedure TPathEditorDialog.FormShow(Sender: TObject);
 begin
   PathListBox.ItemIndex:=-1;
   UpdateButtons;
-end;
-
-procedure TPathEditorDialog.FormResize(Sender: TObject);
-var
-  PathGroupBoxHeight: integer;
-begin
-  PathGroupBoxHeight:=((ClientHeight-70)*2) div 3;
-  if PathGroupBoxHeight<10 then
-    PathGroupBoxHeight:=10;
-  PathGroupBox.Height:=PathGroupBoxHeight;
 end;
 
 procedure TPathEditorDialog.MoveDownButtonClick(Sender: TObject);
@@ -550,13 +527,7 @@ begin
     sl.Free;
   end;
 end;
-{
-function TPathEditorDialog.GetTemplates: string;
-begin
-  raise Exception.Create('TPathEditorDialog.GetTemplates is called.');
-  //Result := TextToPath(FTemplateList.Text);
-end;
-}
+
 procedure TPathEditorDialog.SetTemplates(const AValue: string);
 begin
   SplitString(GetForcedPathDelims(AValue), ';', FTemplateList, True);
@@ -569,8 +540,10 @@ var
   InValidPathsExist: Boolean;
 begin
   // Replace / add / delete / Delete Invalid Paths
-  AddButton.Enabled:=(DirectoryEdit.Text<>'') and (DirectoryEdit.Text<>FEffectiveBaseDirectory)
-      and (PathListBox.Items.IndexOf(BaseRelative(DirectoryEdit.Text))=-1);
+  AddButton.Enabled:=(DirectoryEdit.Text<>'')
+                 and (DirectoryEdit.Text<>FEffectiveBaseDirectory)
+                 and (IndexInStringList(PathListBox.Items,cstCaseSensitive,
+                                        BaseRelative(DirectoryEdit.Text)) = -1);
   ReplaceButton.Enabled:=AddButton.Enabled and (PathListBox.ItemIndex>-1) ;
   DeleteButton.Enabled:=PathListBox.SelCount=1; // or ItemIndex>-1; ?
   // Delete non-existent paths button. Check if there are any.

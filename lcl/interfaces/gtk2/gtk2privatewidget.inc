@@ -77,6 +77,24 @@ begin
   SetWindowCursor(Window, AInfo^.ControlCursor, False, True);
 end;
 
+{ TGtk2PrivateMemo }
+
+class procedure TGtk2PrivateMemo.UpdateCursor(AInfo: PWidgetInfo);
+var
+  Widget, FixWidget: PGtkWidget;
+  Window: PGdkWindow;
+begin
+  Widget := AInfo^.CoreWidget;
+  if (Widget = nil) or not GTK_IS_TEXT_VIEW(Widget) then Exit;
+  FixWidget := GetFixedWidget(Widget);
+  Window := GetControlWindow(FixWidget);
+  if Window = nil then Exit;
+  if TControl(AInfo^.LCLObject).Cursor = crDefault then
+    SetWindowCursor(Window, 0, True, False)
+  else
+    SetWindowCursor(Window, AInfo^.ControlCursor, True, False);
+end;
+
 class procedure TGtk2PrivateNotebook.UpdateCursor(AInfo: PWidgetInfo);
 var
   Widget: PGtkWidget;

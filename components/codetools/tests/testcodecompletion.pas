@@ -29,6 +29,7 @@ type
     procedure TestCompleteMethodSignature_Body_GenericDelphi; // todo
     procedure TestCompleteMethodBody_GenericObjFPC;
     procedure TestCompleteMethodBody_GenericDelphi;
+    procedure TestCompleteMethodBody_GenericMethod;
     procedure TestCompleteMethodBody_ParamGenericObjFPC;
     procedure TestCompleteMethodBody_ParamGenericDelphi;
     procedure TestCompleteProperty_TypeWithUnitname;
@@ -442,6 +443,40 @@ begin
     '',
     'procedure TBird<T>.DoIt;',
     'begin',
+    '',
+    'end;',
+    '',
+    'end.']);
+end;
+
+procedure TTestCodeCompletion.TestCompleteMethodBody_GenericMethod;
+begin
+  Test('TestCompleteMethodBody_GenericMethod',
+    ['unit test1;',
+    '{$mode delphi}',
+    'interface',
+    'type',
+    '  TBird<T: class> = class',
+    '    generic class procedure DoIt<P>(i: P);',
+    '  end;',
+    'implementation',
+    'end.'],
+    6,1,
+    ['unit test1;',
+    '{$mode delphi}',
+    'interface',
+    'type',
+    '',
+    '  { TBird }',
+    '',
+    '  TBird<T: class> = class',
+    '    generic class procedure DoIt<P>(i: P);',
+    '  end;',
+    'implementation',
+    '',
+    'generic class procedure TBird<T>.DoIt<P>(i: P);',
+    'begin',
+    '',
     'end;',
     '',
     'end.']);
@@ -672,6 +707,7 @@ begin
     'type',
     '  TBird<T> = class',
     '  public',
+    '    function Fly(w: TArray<T>): TArray<T>;',
     '    property Wing: string;',
     '  end;',
     'implementation',
@@ -689,6 +725,7 @@ begin
     '    fWing: string;',
     '    procedure SetWing(AValue: string);',
     '  public',
+    '    function Fly(w: TArray<T>): TArray<T>;',
     '    property Wing: string read fWing write SetWing;',
     '  end;',
     'implementation',
@@ -696,6 +733,9 @@ begin
     'begin',
     '  if fWing=AValue then Exit;',
     '  fWing:=AValue;',
+    'end;',
+    'function TBird<T>.Fly(w: TArray<T>): TArray<T>;',
+    'begin',
     'end;',
     'end.']);
 end;

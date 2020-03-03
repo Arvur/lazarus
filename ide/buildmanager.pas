@@ -37,25 +37,26 @@ uses
   // RTL + FCL
   Classes, SysUtils, Laz_AVL_Tree,
   // LCL
-  InterfaceBase, LCLPlatformDef, LCLProc, Dialogs, Forms, Controls,
+  InterfaceBase, LCLPlatformDef, Dialogs, Forms, Controls,
   // CodeTools
   ExprEval, BasicCodeTools, CodeToolManager, DefineTemplates, CodeCache,
-  FileProcs, CodeToolsCfgScript,
+  FileProcs, CodeToolsCfgScript, LinkScanner,
   // LazUtils
   LConvEncoding, FileUtil, LazFileUtils, LazFileCache, LazUTF8, Laz2_XMLCfg,
-  LazUtilities,
+  LazUtilities, LazStringUtils, LazMethodList,
   // IDEIntf
-  IDEOptionsIntf, ProjectIntf, MacroIntf, IDEDialogs, IDEExternToolIntf,
+  BaseIDEIntf, IDEOptionsIntf, ProjectIntf, MacroIntf, IDEDialogs, IDEExternToolIntf,
   CompOptsIntf, LazIDEIntf, MacroDefIntf, IDEMsgIntf,
   // IDE
-  IDECmdLine, LazarusIDEStrConsts, DialogProcs, IDEProcs, IDEUtils,
+  IDECmdLine, LazarusIDEStrConsts, DialogProcs, IDEProcs,
   InputHistory, EditDefineTree, ProjectResources, MiscOptions, LazConf,
-  EnvironmentOpts, TransferMacros, CompilerOptions,
-  ExtTools, etMakeMsgParser, etFPCMsgParser,
+  EnvironmentOpts, TransferMacros, CompilerOptions, PublishModule,
+  ExtTools, etMakeMsgParser, etFPCMsgParser, etPas2jsMsgParser,
   Compiler, FPCSrcScan, PackageDefs, PackageSystem, Project, ProjectIcon,
   ModeMatrixOpts, BaseBuildManager, ApplicationBundle, RunParamsOpts;
   
 type
+
   { TBuildManager }
 
   TBuildManager = class(TBaseBuildManager)
@@ -79,6 +80,9 @@ type
     fTargetOS: string;
     fTargetCPU: string;
     fLCLWidgetType: string;
+    // cache
+    FFPCompilerFilename: string;
+    FFPCompilerFilenameStamp: Integer;
     procedure DoOnRescanFPCDirectoryCache(Sender: TObject);
     function GetTargetFilename: String;
     procedure OnMacroSubstitution(TheMacro: TTransferMacro;
@@ -142,6 +146,8 @@ type
                                 var {%H-}Abort: boolean): string;
     function MacroFuncTargetFile(const {%H-}Param: string; const {%H-}Data: PtrInt;
                                  var {%H-}Abort: boolean): string;
+    function MacroFuncOutputFile(const {%H-}Param: string; const {%H-}Data: PtrInt;
+                                 var {%H-}Abort: boolean): string;
     function MacroFuncTargetOS(const {%H-}Param: string; const Data: PtrInt;
                                var {%H-}Abort: boolean): string;
     function MacroFuncIDEBuildOptions(const {%H-}Param: string; const Data: PtrInt;
@@ -183,7 +189,7 @@ type
     destructor Destroy; override;
     procedure SetupTransferMacros;
     procedure TranslateMacros;
-    procedure SetupExternalTools;
+    procedure SetupExternalTools(aToolsClass: TExternalToolsClass);
     procedure SetupCompilerInterface;
     procedure SetupInputHistories(aInputHist: TInputHistories);
     procedure EnvOptsChanged;
@@ -195,6 +201,7 @@ type
     function GetLCLWidgetType: string; override;
     function GetRunCommandLine: string; override;
 
+    function GetCompilerFilename: string; override;
     function GetFPCompilerFilename: string; override;
     function GetFPCFrontEndOptions: string; override;
     function GetProjectPublishDir: string; override;
@@ -331,6 +338,7 @@ begin
   DefaultCfgVars:=TCTCfgScriptVariables.Create;
   DefaultCfgVarsBuildMacroStamp:=CTInvalidChangeStamp;
   FFPCVerChangeStamp:=CTInvalidChangeStamp;
+  FFPCompilerFilenameStamp:=CTInvalidChangeStamp;
   MainBuildBoss:=Self;
   inherited Create(AOwner);
   fTargetOS:=GetCompiledTargetOS;
@@ -412,6 +420,8 @@ begin
                       lisTargetFilenamePlusParams,@MacroFuncTargetCmdLine,[]));
   GlobalMacroList.Add(TTransferMacro.Create('RunCmdLine','',
                       lisLaunchingCmdLine,@MacroFuncRunCmdLine,[]));
+  GlobalMacroList.Add(TTransferMacro.Create('OutputFile','',
+                      lisOutputFilenameOfProject,@MacroFuncOutputFile,[]));
   GlobalMacroList.Add(TTransferMacro.Create('ProjPublishDir','',
                       lisPublishProjDir,@MacroFuncProjPublishDir,[]));
   GlobalMacroList.Add(TTransferMacro.Create('ProjNamespaces','',
@@ -485,6 +495,7 @@ begin
   tr('TargetFile',lisTargetFilenameOfProject);
   tr('TargetCmdLine',lisTargetFilenamePlusParams);
   tr('RunCmdLine',lisLaunchingCmdLine);
+  tr('OutputFile',lisOutputFilenameOfProject);
   tr('ProjPublishDir',lisPublishProjDir);
   tr('ProjNamespaces',lisProjectNamespaces);
   tr('ProjUnitPath',lisProjectUnitPath);
@@ -518,16 +529,18 @@ begin
   tr('MakeFile',lisTMFunctionChompPathDelimiter);
 end;
 
-procedure TBuildManager.SetupExternalTools;
+procedure TBuildManager.SetupExternalTools(aToolsClass: TExternalToolsClass);
 begin
   // setup the external tool queue
-  ExternalTools:=TExternalTools.Create(Self);
+  ExternalTools:=aToolsClass.Create(Self);
   EnvOptsChanged;
   RegisterFPCParser;
+  RegisterPas2jsParser;
   RegisterMakeParser;
   ExternalToolList.RegisterParser(TDefaultParser);
 
   FPCMsgFilePool:=TFPCMsgFilePool.Create(nil);
+  Pas2jsMsgFilePool:=TPas2jsMsgFilePool.Create(nil);
 end;
 
 procedure TBuildManager.SetupCompilerInterface;
@@ -629,36 +642,53 @@ begin
   end;
 end;
 
-function TBuildManager.GetFPCompilerFilename: string;
+function TBuildManager.GetCompilerFilename: string;
 var
-  s: string;
   Opts: TProjectCompilerOptions;
 begin
   Result:='';
+  //debugln(['TBuildManager.GetCompilerFilename START FBuildTarget=',DbgSName(FBuildTarget)]);
   if FBuildTarget<>nil then
   begin
     Opts:=FBuildTarget.CompilerOptions;
-    if ([crCompile,crBuild]*Opts.CompileReasons<>[])
-    and (Opts.CompilerPath<>'')
+    //debugln(['TBuildManager.GetCompilerFilename FBuildTarget=',DbgSName(FBuildTarget),' Path=',Opts.CompilerPath,' Build=',[crCompile,crBuild]*Opts.CompileReasons<>[],' Parsing=',Opts.ParsedOpts.Values[pcosCompilerPath].Parsing]);
+    // Note: even if Opts.CompileReasons are disabled, the project compiler path is used by codetools
+    if (Opts.CompilerPath<>'')
     and (not Opts.ParsedOpts.Values[pcosCompilerPath].Parsing) then
     begin
       Result:=Opts.CompilerPath;
       // the compiler filename is resolved twice, once for getting the default
       // compiler target OS/CPU and once with the real values.
-      // For easier debugging macros, avoid this double resolve.
-      if Result='$(CompPath)' then
+      // For easier macro debugging, avoid this double resolve.
+      if Result='' then
+        // see below
+      else if Result='$(CompPath)' then
         Result:=''
       else if (Pos('$',Result)<1) and (FilenameIsAbsolute(Result)) then
         Result:=TrimFilename(Result)
       else
         Result:=FBuildTarget.GetCompilerFilename;
-      //debugln(['TBuildManager.GetFPCompilerFilename project compiler="',Result,'"']);
+      //debugln(['TBuildManager.GetCompilerFilename project compiler="',Result,'"']);
     end;
   end;
-  if not IsFPCExecutable(Result,s) then begin
-    //if Result<>'' then debugln(['TBuildManager.GetFPCompilerFilename project compiler NOT fpc: "',Result,'"']);
+  if Result='' then
     Result:=EnvironmentOptions.GetParsedCompilerFilename;
+  //debugln(['TBuildManager.GetCompilerFilename END Result="',Result,'"']);
+end;
+
+function TBuildManager.GetFPCompilerFilename: string;
+var
+  ErrMsg: string;
+  Kind: TPascalCompiler;
+begin
+  if FFPCompilerFilenameStamp<>CompilerParseStamp then begin
+    FFPCompilerFilename:=GetCompilerFilename;
+    if (not IsCompilerExecutable(FFPCompilerFilename,ErrMsg,Kind,false)) or (ErrMsg<>'')
+        or (Kind<>pcFPC) then
+      FFPCompilerFilename:=EnvironmentOptions.GetParsedCompilerFilename;
+    FFPCompilerFilenameStamp:=CompilerParseStamp;
   end;
+  Result:=FFPCompilerFilename;
 end;
 
 function TBuildManager.GetFPCFrontEndOptions: string;
@@ -686,19 +716,10 @@ end;
 
 function TBuildManager.GetProjectPublishDir: string;
 begin
-  Result:='';
-  if Project1=nil then
-    exit;
-  Result:=Project1.PublishOptions.DestinationDirectory;
-  if GlobalMacroList.SubstituteStr(Result) then begin
-    if FilenameIsAbsolute(Result) then begin
-      Result:=AppendPathDelim(TrimFilename(Result));
-    end else begin
-      Result:='';
-    end;
-  end else begin
+  if Project1<>nil then
+    Result:=RealPublishDir(Project1.PublishOptions)
+  else
     Result:='';
-  end;
 end;
 
 function TBuildManager.GetProjectTargetFilename(aProject: TProject): string;
@@ -718,8 +739,9 @@ end;
 
 function TBuildManager.GetProjectUsesAppBundle: Boolean;
 begin
-  Result := (Project1<>nil) and (Project1.RunParameterOptions.GetActiveMode<>nil)
-    and (Project1.RunParameterOptions.GetActiveMode.HostApplicationFilename = '')
+  Result := (Project1<>nil)
+    and ( (Project1.RunParameterOptions.GetActiveMode=nil)
+          or (Project1.RunParameterOptions.GetActiveMode.HostApplicationFilename = ''))
     and (GetTargetOS = 'darwin') and Project1.UseAppBundle;
 end;
 
@@ -814,19 +836,21 @@ procedure TBuildManager.RescanCompilerDefines(ResetBuildTarget,
   begin
     Cfg:=UnitSetCache.GetConfigCache(false);
     if Cfg=nil then exit(true);
-    if Cfg.RealCompiler='' then begin
-      if ConsoleVerbosity>=0 then
-        debugln(['Error: (lazarus) [PPUFilesAndCompilerMatch] Compiler=',Cfg.Compiler,' RealComp=',Cfg.RealCompiler,' InPath=',Cfg.RealCompilerInPath]);
-      IDEMessageDialog(lisCCOErrorCaption, Format(
-        lisCompilerDoesNotSupportTarget, [Cfg.Compiler, Cfg.TargetCPU, Cfg.TargetOS]),
-        mtError,[mbOk]);
-      exit(false);
-    end;
-    Filename:=GetPhysicalFilenameCached(Cfg.RealCompiler,true);
-    if (Filename='') then begin
-      IDEMessageDialog('Error','Compiler executable is missing: '+Cfg.RealCompiler,
-        mtError,[mbOk]);
-      exit(false);
+    if Cfg.Kind=pcFPC then begin
+      if Cfg.RealCompiler='' then begin
+        if ConsoleVerbosity>=0 then
+          debugln(['Error: (lazarus) [PPUFilesAndCompilerMatch] Compiler=',Cfg.Compiler,' RealComp=',Cfg.RealCompiler,' InPath=',Cfg.RealTargetCPUCompiler]);
+        IDEMessageDialog(lisCCOErrorCaption, Format(
+          lisCompilerDoesNotSupportTarget, [Cfg.Compiler, Cfg.TargetCPU, Cfg.TargetOS]),
+          mtError,[mbOk]);
+        exit(false);
+      end;
+      Filename:=GetPhysicalFilenameCached(Cfg.RealCompiler,true);
+      if (Filename='') then begin
+        IDEMessageDialog('Error','Compiler executable is missing: '+Cfg.RealCompiler,
+          mtError,[mbOk]);
+        exit(false);
+      end;
     end;
     Result:=true;
   end;
@@ -843,8 +867,10 @@ var
   AsyncScanFPCSrcDir: String;
   UnitSetChanged: Boolean;
   HasTemplate: Boolean;
-  FPCExecMsg: string;
-  Msg: String;
+  CompilerErrorMsg: string;
+  Msg, DefCompilerFilename, ProjCompilerFilename, ProjCompilerErrorMsg,
+    DefCompilerErrorMsg: String;
+  CompilerKind, ProjCompilerKind, DefCompilerKind: TPascalCompiler;
 begin
   if ClearCaches then begin
     {$IFDEF VerboseFPCSrcScan}
@@ -863,13 +889,18 @@ begin
   // use current TargetOS, TargetCPU, compilerfilename and FPC source dir
   TargetOS:=GetTargetOS;
   TargetCPU:=GetTargetCPU;
+  {$IFDEF VerboseFPCSrcScan}
+  debugln(['TBuildManager.RescanCompilerDefines GetParsedFPCSourceDirectory needs FPCVer...']);
+  {$ENDIF}
+  CompilerFilename:=GetCompilerFilename;
+  IsCompilerExecutable(CompilerFilename,CompilerErrorMsg,CompilerKind,{$IFDEF VerboseFPCSrcScan}true{$ELSE}false{$ENDIF});
   FPCSrcDir:=EnvironmentOptions.GetParsedFPCSourceDirectory; // needs FPCVer macro
-  CompilerFilename:=GetFPCompilerFilename;
   FPCOptions:=GetFPCFrontEndOptions;
 
   {$IFDEF VerboseFPCSrcScan}
   debugln(['TMainIDE.RescanCompilerDefines START ',
     ' CompilerFilename=',CompilerFilename,
+    ' Kind=',PascalCompilerNames[CompilerKind],
     ' TargetOS=',TargetOS,
     ' TargetCPU=',TargetCPU,
     ' FPCOptions="',FPCOptions,'"',
@@ -882,39 +913,48 @@ begin
   {$ENDIF}
 
   // first check the default targetos, targetcpu of the default compiler
-  if FileExistsCached(EnvironmentOptions.GetParsedCompilerFilename) then
+  DefCompilerFilename:=EnvironmentOptions.GetParsedCompilerFilename;
+  if FileExistsCached(DefCompilerFilename) then
   begin
     {$IFDEF VerboseFPCSrcScan}
     debugln(['TBuildManager.RescanCompilerDefines reading default compiler settings']);
     {$ENDIF}
     UnitSetCache:=CodeToolBoss.CompilerDefinesCache.FindUnitSet(
-      EnvironmentOptions.GetParsedCompilerFilename,'','','',FPCSrcDir,true);
+      DefCompilerFilename,'','','',FPCSrcDir,true);
     UnitSetCache.GetConfigCache(true);
   end;
 
+  if CompilerFilename<>DefCompilerFilename then
+    IsCompilerExecutable(CompilerFilename,CompilerErrorMsg,CompilerKind,true);
+
   // then check the project's compiler
-  if not IsFPCExecutable(CompilerFilename,FPCExecMsg) then begin
+  if (CompilerErrorMsg<>'') then begin
     Msg:='';
     if (FBuildTarget<>nil)
     and ([crCompile,crBuild]*FBuildTarget.CompilerOptions.CompileReasons<>[])
     and (FBuildTarget.CompilerOptions.CompilerPath<>'')
     then begin
-      CompilerFilename:=FBuildTarget.GetCompilerFilename;
-      if not IsFPCExecutable(CompilerFilename,FPCExecMsg) then begin
-        Msg+='Project''s compiler: "'+CompilerFilename+'": '+FPCExecMsg+#13;
+      ProjCompilerFilename:=FBuildTarget.GetCompilerFilename;
+      if not IsCompilerExecutable(ProjCompilerFilename,ProjCompilerErrorMsg,ProjCompilerKind,true)
+      then begin
+        Msg+='Project''s compiler: "'+ProjCompilerFilename+'": '+ProjCompilerErrorMsg+#13;
       end;
     end;
-    CompilerFilename:=EnvironmentOptions.GetParsedCompilerFilename;
-    if not IsFPCExecutable(CompilerFilename,FPCExecMsg) then begin
-      Msg+='Environment compiler: "'+CompilerFilename+'": '+FPCExecMsg+#13;
+
+    if not IsCompilerExecutable(DefCompilerFilename,DefCompilerErrorMsg,DefCompilerKind,true)
+    then begin
+      Msg+='Environment compiler: "'+DefCompilerFilename+'": '+DefCompilerErrorMsg+#13;
     end;
+    if Msg='' then
+      Msg+='Compiler: "'+CompilerFilename+'": '+CompilerErrorMsg+#13;
+
     debugln('Warning: (lazarus) [TBuildManager.RescanCompilerDefines]: invalid compiler:');
     debugln(Msg);
     if not Quiet then begin
       IDEMessageDialog('Error','There is no Free Pascal Compiler'
         +' (e.g. fpc'+ExeExt+' or ppc<cpu>'+ExeExt+') configured in the'
-        +' environment options. Codetools will not work properly.'#13
-        +Msg,mtError,[mbCancel]);
+        +' project options. Codetools will not work properly.'#13
+        +Msg,mtError,[mbOk]);
     end;
     UnitSetCache:=nil;
     exit;
@@ -924,6 +964,7 @@ begin
   {$IFDEF VerboseFPCSrcScan}
   debugln(['TBuildManager.RescanCompilerDefines reading active compiler settings']);
   {$ENDIF}
+  //debugln(['TBuildManager.RescanCompilerDefines ',CompilerFilename,' OS=',TargetOS,' CPU=',TargetCPU,' Options="',FPCOptions,'"']);
   UnitSetCache:=CodeToolBoss.CompilerDefinesCache.FindUnitSet(
     CompilerFilename,TargetOS,TargetCPU,FPCOptions,FPCSrcDir,true);
 
@@ -1035,9 +1076,9 @@ begin
   if not Quiet then begin
     // check for common installation mistakes
     if not PPUFilesAndCompilerMatch then exit;
-    if (UnitSetCache<>nil) then begin
+    if (UnitSetCache.GetCompilerKind=pcFPC) then begin
       // check if at least one fpc config is there
-      if UnitSetCache.GetFirstFPCCfg='' then begin
+      if (UnitSetCache.GetFirstFPCCfg='') then begin
         IgnorePath:='MissingFPCCfg_'+TargetOS+'-'+TargetCPU;
         if (InputHistories<>nil) and (InputHistories.Ignores.Find(IgnorePath)=nil)
         then begin
@@ -1048,12 +1089,13 @@ begin
             InputHistories.Ignores.Add(IgnorePath,iiidIDERestart);
         end;
       end;
-    end else if not FoundSystemPPU then begin
-      // system.ppu is missing
-      IDEMessageDialog(lisCCOErrorCaption,
-        Format(lisTheProjectUsesTargetOSAndCPUTheSystemPpuForThisTar,
-               [TargetOS, TargetCPU, LineEnding, LineEnding]),
-        mtError,[mbOk]);
+      if not FoundSystemPPU then begin
+        // system.ppu is missing
+        IDEMessageDialog(lisCCOErrorCaption,
+          Format(lisTheProjectUsesTargetOSAndCPUTheSystemPpuForThisTar,
+                 [TargetOS, TargetCPU, LineEnding, LineEnding]),
+          mtError,[mbOk]);
+      end;
     end;
   end;
 end;
@@ -1475,8 +1517,7 @@ var
   AUnitName: String;
 begin
   if EnvironmentOptions.AmbiguousFileAction=afaIgnore then exit(mrOK);
-  if EnvironmentOptions.AmbiguousFileAction
-    in [afaAsk,afaAutoDelete,afaAutoRename]
+  if EnvironmentOptions.AmbiguousFileAction in [afaAsk,afaAutoDelete,afaAutoRename]
   then begin
     ADirectory:=AppendPathDelim(ExtractFilePath(Filename));
     if FindFirstUTF8(ADirectory+GetAllFilesMask,faAnyFile,FileInfo)=0 then
@@ -1834,7 +1875,7 @@ begin
     Result:=ExtractFileNameOnly(AnUnitInfo.Filename)+ResourceFileExt;
     Result:=FileUtil.SearchFileInPath(Result,'',
         CodeToolBoss.GetIncludePathForDirectory(ExtractFilePath(AnUnitInfo.Filename)),
-        ';',[sffDontSearchInBasePath,sffSearchLoUpCase]);
+        ';',[sffDontSearchInBasePath,sffSearchLoUpCase,sffFile]);
   end;
   if (Result='') and UseDefaultIfNotFound then
     Result:=GetDefaultLRSFilename(AnUnitInfo);
@@ -1887,7 +1928,6 @@ end;
 function TBuildManager.UpdateProjectAutomaticFiles(TestDir: string): TModalResult;
 var
   AnUnitInfo: TUnitInfo;
-  Code: TCodeBuffer;
 begin
   Result:=mrOk;
   // update project resource
@@ -1903,23 +1943,8 @@ begin
           if Result = mrIgnore then Result:=mrOk;
           if Result <> mrOk then exit;
         end;
-      rtRes:
-        begin
-          Result:=mrCancel;
-          if (AnUnitInfo.Source=nil) and (not AnUnitInfo.IsVirtual) then begin
-            AnUnitInfo.Source:=CodeToolBoss.LoadFile(AnUnitInfo.Filename,true,false);
-            Code:=AnUnitInfo.Source;
-            if (Code<>nil) and (Code.DiskEncoding<>EncodingUTF8) then begin
-              if ConsoleVerbosity>=0 then
-                DebugLn(['Note: (lazarus) fixing encoding of ',Code.Filename,' from ',Code.DiskEncoding,' to ',EncodingUTF8]);
-              Code.DiskEncoding:=EncodingUTF8;
-              if Code.Save then
-                Result:=mrOk
-              else if ConsoleVerbosity>=0 then
-                DebugLn(['Note: (lazarus) [TBuildManager.UpdateProjectAutomaticFiles] failed to save file ',Code.Filename]);
-            end;
-          end;
-
+      rtRes:  // This fixed encoding of source files but only if rtRes type. Why?
+        begin // Source was read in every time although encoding is correct most of times.
         end;
       end;
     end;
@@ -2098,38 +2123,64 @@ end;
 function TBuildManager.MacroFuncFPCVer(const Param: string; const Data: PtrInt;
   var Abort: boolean): string;
 
+  function TryTarget(CompilerFilename, TargetOS, TargetCPU: String): boolean;
+  var
+    ConfigCache: TPCTargetConfigCache;
+  begin
+    Result:=false;
+    ConfigCache:=CodeToolBoss.CompilerDefinesCache.ConfigCaches.Find(
+                                 CompilerFilename,'',TargetOS,TargetCPU,true);
+    if ConfigCache=nil then exit;
+    if ConfigCache.NeedsUpdate then begin
+      // ask compiler
+      if not ConfigCache.Update(CodeToolBoss.CompilerDefinesCache.TestFilename,
+                                CodeToolBoss.CompilerDefinesCache.ExtraOptions,nil)
+      then
+        exit;
+    end;
+    FFPCVer:=ConfigCache.GetFPCVer;
+    FFPC_FULLVERSION:=ConfigCache.GetFPC_FULLVERSION;
+    Result:=FFPC_FULLVERSION>0;
+  end;
+
   procedure Compute;
   var
     TargetOS: String;
     TargetCPU: String;
-    CompilerFilename: String;
-    ConfigCache: TPCTargetConfigCache;
-    s: string;
+    CompilerFilename, s: String;
   begin
     FFPC_FULLVERSION:=0;
-    if OverrideFPCVer<>'' then
+    if OverrideFPCVer<>'' then begin
       FFPCVer:=OverrideFPCVer;
+      FFPC_FULLVERSION:=FPCVersionToNumber(FFPCVer);
+      exit;
+    end;
     FFPCVer:={$I %FPCVERSION%};   // Version.Release.Patch
     if CodeToolBoss<>nil then begin
       // fetch the FPC version from the current compiler
       // Not from the fpc.exe, but from the real compiler
       CompilerFilename:=GetFPCompilerFilename;
-      if not IsFPCExecutable(CompilerFilename,s) then exit;
+      if not IsCTExecutable(CompilerFilename,s) then exit;
+
+      // 1. try with project target OS/CPU
       TargetOS:=GetTargetOS;
       TargetCPU:=GetTargetCPU;
-      ConfigCache:=CodeToolBoss.CompilerDefinesCache.ConfigCaches.Find(
-                                   CompilerFilename,'',TargetOS,TargetCPU,true);
-      if ConfigCache=nil then exit;
-      if ConfigCache.NeedsUpdate then begin
-        // ask compiler
-        if not ConfigCache.Update(CodeToolBoss.CompilerDefinesCache.TestFilename,
-                                  CodeToolBoss.CompilerDefinesCache.ExtraOptions,nil)
-        then
-          exit;
-      end;
-      FFPCVer:=ConfigCache.GetFPCVer;
-      FFPC_FULLVERSION:=ConfigCache.GetFPC_FULLVERSION;
+      if IsPas2jsTargetOS(TargetOS) or IsPas2jsTargetCPU(TargetCPU) then
+        // skip
+      else if TryTarget(CompilerFilename,TargetOS,TargetCPU) then
+        exit;
+
+      // 2. try with IDE target OS/CPU
+      TargetOS:=GetCompiledTargetOS;
+      TargetCPU:=GetCompiledTargetCPU;
+      if TryTarget(CompilerFilename,TargetOS,TargetCPU) then exit;
+
+      // 3. try with no target OS/CPU - using whatever the compiler supports
+      TargetOS:='';
+      TargetCPU:='';
+      if TryTarget(CompilerFilename,TargetOS,TargetCPU) then exit;
     end;
+    FFPC_FULLVERSION:=FPCVersionToNumber(FFPCVer);
   end;
 
 begin
@@ -2188,6 +2239,15 @@ begin
     Result:='';
 end;
 
+function TBuildManager.MacroFuncOutputFile(const Param: string;
+  const Data: PtrInt; var Abort: boolean): string;
+begin
+  if Project1<>nil then
+    Result:=Project1.CompilerOptions.CreateTargetFilename
+  else
+    Result:='';
+end;
+
 function TBuildManager.MacroFuncTargetCmdLine(const Param: string;
   const Data: PtrInt; var Abort: boolean): string;
 begin
@@ -2214,10 +2274,7 @@ end;
 function TBuildManager.MacroFuncProjPublishDir(const Param: string;
   const Data: PtrInt; var Abort: boolean): string;
 begin
-  if Project1<>nil then
-    Result:=GetProjectPublishDir
-  else
-    Result:='';
+  Result:=GetProjectPublishDir;
 end;
 
 function TBuildManager.MacroFuncProjUnitPath(const Param: string;
@@ -2281,7 +2338,8 @@ function TBuildManager.MacroFuncCompPath(const s: string; const Data: PtrInt;
 begin
   Result:='';
   if CompareText(s,'IDE')<>0 then
-    Result:=GetFPCompilerFilename;
+    Result:=GetCompilerFilename;
+
   if Result='' then
     Result:=EnvironmentOptions.GetParsedCompilerFilename;
 end;
@@ -2549,7 +2607,7 @@ begin
     // compute macro values
 
     if ParseOpts.MacroValuesParsing then begin
-      if ConsoleVerbosity>=-1 then
+      if ConsoleVerbosity>=0 then
         debugln(['Warning: (lazarus) [TBuildManager.OnGetBuildMacroValues] cycle computing macros of ',dbgsname(Options.Owner)]);
       exit;
     end;
@@ -2713,7 +2771,7 @@ var
   OldTargetOS: String;
   OldTargetCPU: String;
   OldLCLWidgetType: String;
-  FPCTargetChanged: Boolean;
+  PCTargetChanged: Boolean;
   LCLTargetChanged: Boolean;
   CompilerTargetOS: string;
   CompilerTargetCPU: string;
@@ -2759,7 +2817,7 @@ begin
       CompQueryOptions:='-T'+GetFPCTargetOS(fTargetOS);
     // Note: resolving the comiler filename requires macros
     CodeToolBoss.CompilerDefinesCache.ConfigCaches.GetDefaultCompilerTarget(
-      GetFPCompilerFilename,CompQueryOptions,CompilerTargetOS,CompilerTargetCPU);
+      GetCompilerFilename,CompQueryOptions,CompilerTargetOS,CompilerTargetCPU);
     if fTargetOS='' then
       fTargetOS:=CompilerTargetOS;
     if fTargetOS='' then
@@ -2778,11 +2836,11 @@ begin
   fTargetOS:=GetFPCTargetOS(fTargetOS);
   fTargetCPU:=GetFPCTargetCPU(fTargetCPU);
 
-  FPCTargetChanged:=(OldTargetOS<>fTargetOS)
+  PCTargetChanged:=(OldTargetOS<>fTargetOS)
                     or (OldTargetCPU<>fTargetCPU)
                     or (CodeToolBoss.DefineTree.FindDefineTemplateByName(
                          StdDefTemplLazarusSources,true)=nil);
-  if FPCTargetChanged then
+  if PCTargetChanged then
   begin
     IncreaseBuildMacroChangeStamp;
     CodeToolBoss.DefineTree.ClearCache;
@@ -2792,9 +2850,9 @@ begin
   fLCLWidgetType:=GetEffectiveLCLWidgetType;
   LCLTargetChanged:=(OldLCLWidgetType<>fLCLWidgetType);
 
-  if FPCTargetChanged or LCLTargetChanged then begin
+  if PCTargetChanged or LCLTargetChanged then begin
     if ConsoleVerbosity>=0 then
-      DebugLn(['Hint: (lazarus) [TBuildManager.SetBuildTarget] Old=',OldTargetCPU,'-',OldTargetOS,'-',OldLCLWidgetType,' New=',fTargetCPU,'-',fTargetOS,'-',fLCLWidgetType,' FPC=',FPCTargetChanged,' LCL=',LCLTargetChanged]);
+      DebugLn(['Hint: (lazarus) [TBuildManager.SetBuildTarget] Old=',OldTargetCPU,'-',OldTargetOS,'-',OldLCLWidgetType,' New=',fTargetCPU,'-',fTargetOS,'-',fLCLWidgetType,' Changed: OS/CPU=',PCTargetChanged,' LCL=',LCLTargetChanged]);
   end;
   if LCLTargetChanged then
     CodeToolBoss.SetGlobalValue(ExternalMacroStart+'LCLWidgetType',fLCLWidgetType);
@@ -2837,6 +2895,8 @@ begin
 end;
 
 function TBuildManager.BuildTargetIDEIsDefault: boolean;
+// check if current BuildLazarus creates the normal lazarus exe
+// aka not some cross compile
 var
   NewTargetOS: String;
   NewTargetCPU: String;
@@ -2850,8 +2910,8 @@ begin
   //debugln(['TBuildManager.BuildTargetIDEIsDefault NewTargetOS=',NewTargetOS,' Default=',GetDefaultTargetOS,' NewTargetCPU=',NewTargetCPU,' default=',GetDefaultTargetCPU,' ws=',LCLPlatformDisplayNames[NewLCLWidgetSet],' default=',LCLPlatformDisplayNames[GetDefaultLCLWidgetType]]);
   Result:=((NewTargetOS='') or (NewTargetOS=GetCompiledTargetOS))
       and ((NewTargetCPU='') or (NewTargetCPU=GetCompiledTargetCPU))
-      and (NewLCLWidgetSet<>lpNoGUI)
-      and (GetFPCompilerFilename=EnvironmentOptions.GetParsedCompilerFilename);
+      and (NewLCLWidgetSet<>lpNoGUI);
+      // Note: no need to check if CompilerFilename is the default
 end;
 
 end.

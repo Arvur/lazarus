@@ -15,12 +15,10 @@ interface
 
 uses
   Classes, SysUtils, Math, Laz_AVL_Tree,
-  // LCL
-  LCLProc,
   // LazUtils
-  UTF8Process, LazFileUtils, LazFileCache,
+  UTF8Process, LazFileUtils, LazFileCache, LazMethodList, LazLoggerBase,
   // IdeIntf
-  ObjInspStrConsts, LazLogger, Menus;
+  ObjInspStrConsts;
 
 const
   SubToolFPC = 'FPC';
@@ -29,6 +27,9 @@ const
   SubToolFPCRes = 'FPCRes';
   SubToolFPCWindRes = 'FPCWindRes';
   SubToolFPCAssembler = 'FPCAssembler';
+
+  SubToolPas2js = 'Pas2JS';
+  SubToolPas2jsPriority = 99;
 
   SubToolMake = 'make';
   SubToolMakePriority = 1000; // higher than FPC
@@ -102,6 +103,7 @@ type
   TAbstractExternalTool = class;
 
   TMessageLineFlag = (
+    mlfStdErr,
     mlfLeftToken, // position is about left token, otherwise right token
     mlfFixed, // reason for the messages was resolved, e.g. quick fixed
     mlfHiddenByIDEDirective,
@@ -296,7 +298,7 @@ type
     procedure Init; virtual; // called after macros resolved, before starting thread (main thread)
     procedure InitReading; virtual; // called if process started, before first line (worker thread)
     procedure Done; virtual; // called after process stopped (worker thread)
-    procedure ReadLine(Line: string; OutputIndex: integer; var Handled: boolean); virtual; abstract; // (worker thread)
+    procedure ReadLine(Line: string; OutputIndex: integer; IsStdErr: boolean; var Handled: boolean); virtual; abstract; // (worker thread)
     function CreateMsgLine(OutputIndex: integer): TMessageLine; // (worker thread)
     procedure AddMsgLine(MsgLine: TMessageLine); virtual; // (worker thread)
     property Tool: TAbstractExternalTool read FTool;// set when added to a tool
@@ -347,6 +349,7 @@ type
   TFPCParserClass = class of TFPCParser;
 var
   IDEFPCParser: TFPCParserClass = nil;
+  IDEPas2jsParser: TFPCParserClass = nil;
 
 type
   { TMakeParser - standard parser for 'make' messages, implemented by IDE }
@@ -358,8 +361,8 @@ type
 
   TDefaultParser = class(TExtToolParser)
   public
-    procedure ReadLine(Line: string; OutputIndex: integer; var Handled: boolean
-      ); override;
+    procedure ReadLine(Line: string; OutputIndex: integer; IsStdErr: boolean;
+      var Handled: boolean); override;
     class function DefaultSubTool: string; override;
     class function GetLocalizedParserName: string; override;
     class function Priority: integer; override;
@@ -377,6 +380,7 @@ type
   TExtToolView = class(TComponent)
   private
     FCaption: string;
+    FExitCode: integer;
     FExitStatus: integer;
     FLines: TMessageLines;
     FMinUrgency: TMessageLineUrgency;
@@ -392,9 +396,9 @@ type
     FMessageLineClass: TMessageLineClass;
     procedure CreateLines; virtual;
     procedure FetchAllPending; virtual; // (main thread)
-    procedure ToolExited; virtual; // (main thread) called by InputClosed
-    procedure QueueAsyncOnChanged; virtual; abstract; // (worker thread)
-    procedure RemoveAsyncOnChanged; virtual; abstract; // (main or worker thread)
+    procedure ToolExited; virtual;      // (main thread) called by InputClosed
+    procedure QueueAsyncOnChanged; virtual;  // (worker thread)
+    procedure RemoveAsyncOnChanged; virtual; // (main or worker thread)
   public
     constructor Create(AOwner: TComponent); override; // (main thread)
     destructor Destroy; override; // (main thread)
@@ -412,6 +416,7 @@ type
     property Tool: TAbstractExternalTool read FTool;
     property Caption: string read FCaption write FCaption;
     property OnChanged: TNotifyEvent read FOnChanged write FOnChanged; // called in main thread
+    property ExitCode: integer read FExitCode write FExitCode;
     property ExitStatus: integer read FExitStatus write FExitStatus;
     property MinUrgency: TMessageLineUrgency read FMinUrgency write FMinUrgency default DefaultETViewMinUrgency; // hide messages below this
     property MessageLineClass: TMessageLineClass read FMessageLineClass;
@@ -448,7 +453,7 @@ type
     ethStopped
     );
 
-  TIDEExternalTools = class;
+  TExternalToolsBase = class;
 
   TExternalToolGroup = class;
 
@@ -462,6 +467,7 @@ type
     FData: TObject;
     FEnvironmentOverrides: TStrings;
     FEstimatedLoad: int64;
+    FExitCode: integer;
     FExitStatus: integer;
     FFreeData: boolean;
     FGroup: TExternalToolGroup;
@@ -474,7 +480,7 @@ type
     FParsers: TFPList; // list of TExtToolParser
     FReferences: TStringList;
     FTitle: string;
-    FTools: TIDEExternalTools;
+    FTools: TExternalToolsBase;
     FViews: TFPList; // list of TExtToolView
     FCurrentDirectoryIsTestDir: boolean;
     function GetCmdLineParams: string;
@@ -492,7 +498,6 @@ type
                             const AMethod: TMethod);
   protected
     FErrorMessage: string;
-    FExitCode: integer;
     FTerminated: boolean;
     FHandlers: array[TExternalToolHandler] of TMethodList;
     FStage: TExternalToolStage;
@@ -519,7 +524,7 @@ type
     property Hint: string read FHint write FHint; // this hint is shown in About dialog
     property Data: TObject read FData write FData; // free for user, e.g. the IDE uses TIDEExternalToolData
     property FreeData: boolean read FFreeData write FFreeData default false; // true = auto free Data on destroy
-    property Tools: TIDEExternalTools read FTools;
+    property Tools: TExternalToolsBase read FTools;
     property Group: TExternalToolGroup read FGroup write SetGroup;
     property EstimatedLoad: int64 read FEstimatedLoad write FEstimatedLoad default 1; // used for deciding which tool to run next
 
@@ -551,6 +556,7 @@ type
     procedure Terminate; virtual; abstract;
     procedure WaitForExit; virtual; abstract;
     property Terminated: boolean read FTerminated;
+    property ExitCode: integer read FExitCode write FExitCode;
     property ExitStatus: integer read FExitStatus write FExitStatus;
     property ErrorMessage: string read FErrorMessage write FErrorMessage; // error executing tool
     property ReadStdOutBeforeErr: boolean read FReadStdOutBeforeErr write FReadStdOutBeforeErr;
@@ -621,10 +627,10 @@ type
     property ErrorMessage: string read FErrorMessage write FErrorMessage;
   end;
 
-  { TIDEExternalTools
-    Implemented by the IDE. }
+  { TExternalToolsBase
+    Implemented by an application or the IDE. }
 
-  TIDEExternalTools = class(TComponent)
+  TExternalToolsBase = class(TComponent)
   private
     function GetItems(Index: integer): TAbstractExternalTool; inline;
   protected
@@ -658,7 +664,7 @@ type
   end;
 
 var
-  ExternalToolList: TIDEExternalTools = nil; // will be set by the IDE
+  ExternalToolList: TExternalToolsBase = nil; // will be set by the IDE
 
 type
   { TIDEExternalToolOptions }
@@ -992,7 +998,7 @@ end;
 { TDefaultParser }
 
 procedure TDefaultParser.ReadLine(Line: string; OutputIndex: integer;
-  var Handled: boolean);
+  IsStdErr: boolean; var Handled: boolean);
 var
   MsgLine: TMessageLine;
 begin
@@ -1001,6 +1007,8 @@ begin
   MsgLine:=CreateMsgLine(OutputIndex);
   MsgLine.Msg:=Line;
   MsgLine.Urgency:=mluImportant;
+  if IsStdErr then
+    MsgLine.Flags:=MsgLine.Flags+[mlfStdErr];
   AddMsgLine(MsgLine);
 end;
 
@@ -1181,8 +1189,8 @@ end;
 
 constructor TAbstractExternalTool.Create(AOwner: TComponent);
 begin
-  if AOwner is TIDEExternalTools then
-    FTools:=TIDEExternalTools(AOwner);
+  if AOwner is TExternalToolsBase then
+    FTools:=TExternalToolsBase(AOwner);
   inherited Create(AOwner);
   if FWorkerMessagesClass=nil then
     FWorkerMessagesClass:=TMessageLine;
@@ -1580,33 +1588,33 @@ begin
   Result:=0;
 end;
 
-{ TIDEExternalTools }
+{ TExternalToolsBase }
 
 // inline
-function TIDEExternalTools.GetItems(Index: integer): TAbstractExternalTool;
+function TExternalToolsBase.GetItems(Index: integer): TAbstractExternalTool;
 begin
   Result:=TAbstractExternalTool(fItems[Index]);
 end;
 
 // inline
-function TIDEExternalTools.Count: integer;
+function TExternalToolsBase.Count: integer;
 begin
   Result:=fItems.Count;
 end;
 
-function TIDEExternalTools.AddDummy(Title: string): TAbstractExternalTool;
+function TExternalToolsBase.AddDummy(Title: string): TAbstractExternalTool;
 begin
   Result:=Add(Title);
   Result.Terminate;
 end;
 
-constructor TIDEExternalTools.Create(aOwner: TComponent);
+constructor TExternalToolsBase.Create(aOwner: TComponent);
 begin
   inherited Create(aOwner);
   fItems:=TFPList.Create;
 end;
 
-destructor TIDEExternalTools.Destroy;
+destructor TExternalToolsBase.Destroy;
 begin
   inherited Destroy;
   FreeAndNil(fItems);
@@ -1614,7 +1622,7 @@ begin
     ExternalToolList:=nil;
 end;
 
-procedure TIDEExternalTools.ConsistencyCheck;
+procedure TExternalToolsBase.ConsistencyCheck;
 var
   i: Integer;
 begin
@@ -1622,7 +1630,7 @@ begin
     Items[i].ConsistencyCheck;
 end;
 
-function TIDEExternalTools.GetMsgPattern(SubTool: string; MsgID: integer; out
+function TExternalToolsBase.GetMsgPattern(SubTool: string; MsgID: integer; out
   Urgency: TMessageLineUrgency): string;
 var
   Parser: TExtToolParserClass;
@@ -1637,7 +1645,7 @@ begin
   end;
 end;
 
-function TIDEExternalTools.GetMsgHint(SubTool: string; MsgID: integer): string;
+function TExternalToolsBase.GetMsgHint(SubTool: string; MsgID: integer): string;
 var
   Parser: TExtToolParserClass;
   i: Integer;
@@ -2294,7 +2302,17 @@ end;
 
 procedure TExtToolView.ToolExited;
 begin
+  ;
+end;
 
+procedure TExtToolView.QueueAsyncOnChanged;
+begin
+  raise Exception.Create('TExtToolView.QueueAsyncOnChanged should be overridden when needed.');
+end;
+
+procedure TExtToolView.RemoveAsyncOnChanged;
+begin
+  ;
 end;
 
 procedure TExtToolView.CreateLines;
@@ -2446,8 +2464,10 @@ begin
   finally
     LeaveCriticalSection;
   end;
-  if Tool<>nil then
+  if Tool<>nil then begin
+    ExitCode:=Tool.ExitCode;
     ExitStatus:=Tool.ExitStatus;
+  end;
   ToolExited;
   if Assigned(OnChanged) then begin
     RemoveAsyncOnChanged;

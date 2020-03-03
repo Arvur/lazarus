@@ -58,35 +58,35 @@ type
   private
     FCaption: TTranslateString;
     FData: TCustomData;
-    FImageIndex: SmallInt;
+    FImageIndex: TImageIndex;
     procedure SetCaption(const AValue: TTranslateString);
-    procedure SetImageIndex(AValue: SmallInt);
+    procedure SetImageIndex(AValue: TImageIndex);
   public
     property Data: TCustomData read FData write FData;
     constructor Create(ACollection: TCollection); override;
   published
     property Caption: TTranslateString read FCaption write SetCaption;
-    property ImageIndex: SmallInt read FImageIndex write SetImageIndex default -1;
+    property ImageIndex: TImageIndex read FImageIndex write SetImageIndex default -1;
   end;
 
   { TComboExItem }
   TComboExItem = class(TListControlItem)
   private
-    FIndent: SmallInt;
-    FOverlayImageIndex: SmallInt;
-    FSelectedImageIndex: SmallInt;
-    procedure SetIndent(AValue: SmallInt);
-    procedure SetOverlayImageIndex(AValue: SmallInt);
-    procedure SetSelectedImageIndex(AValue: SmallInt);
+    FIndent: Integer;
+    FOverlayImageIndex: TImageIndex;
+    FSelectedImageIndex: TImageIndex;
+    procedure SetIndent(AValue: Integer);
+    procedure SetOverlayImageIndex(AValue: TImageIndex);
+    procedure SetSelectedImageIndex(AValue: TImageIndex);
   protected const
     cDefCaption = 'ItemEx';
   public
     constructor Create(ACollection: TCollection); override;
     destructor Destroy; override;
   published
-    property Indent: SmallInt read FIndent write SetIndent default -1;
-    property OverlayImageIndex: SmallInt read FOverlayImageIndex write SetOverlayImageIndex default -1;
-    property SelectedImageIndex: SmallInt read FSelectedImageIndex write SetSelectedImageIndex default -1;
+    property Indent: Integer read FIndent write SetIndent default -1;
+    property OverlayImageIndex: TImageIndex read FOverlayImageIndex write SetOverlayImageIndex default -1;
+    property SelectedImageIndex: TImageIndex read FSelectedImageIndex write SetSelectedImageIndex default -1;
   end;
 
   { TListControlItems }
@@ -140,7 +140,9 @@ type
     FItemsEx: TComboExItems;
     FStyle: TComboBoxExStyle;
     FStyleEx: TComboBoxExStyles;
+    FImagesWidth: Integer;
     procedure SetImages(AValue: TCustomImageList);
+    procedure SetImagesWidth(const aImagesWidth: Integer);
     procedure SetStyle(AValue: TComboBoxExStyle); reintroduce;
     procedure SetStyleEx(AValue: TComboBoxExStyles);
   protected const
@@ -159,21 +161,22 @@ type
     constructor Create(TheOwner: TComponent); override;
     destructor Destroy; override;
     function Add: Integer; overload;
-    procedure Add(const ACaption: string; AIndent: SmallInt = -1;
-                  AImgIdx: SmallInt = -1; AOverlayImgIdx: SmallInt = -1;
-                  ASelectedImgIdx: SmallInt = -1); overload;
+    procedure Add(const ACaption: string; AIndent: Integer = -1;
+                  AImgIdx: TImageIndex = -1; AOverlayImgIdx: TImageIndex = -1;
+                  ASelectedImgIdx: TImageIndex = -1); overload;
     procedure AddItem(const Item: String; AnObject: TObject); override;
     procedure AssignItemsEx(AItems: TStrings); overload;
     procedure AssignItemsEx(AItemsEx: TComboExItems); overload;
     procedure Clear; override;
     procedure Delete(AIndex: Integer);
     procedure DeleteSelected;
-    procedure Insert(AIndex: Integer; const ACaption: string; AIndent: SmallInt = -1;
-                     AImgIdx: SmallInt = -1; AOverlayImgIdx: SmallInt = -1;
-                     ASelectedImgIdx: SmallInt = -1);
+    procedure Insert(AIndex: Integer; const ACaption: string; AIndent: Integer = -1;
+                     AImgIdx: TImageIndex = -1; AOverlayImgIdx: TImageIndex = -1;
+                     ASelectedImgIdx: TImageIndex = -1);
     property AutoCompleteOptions: TAutoCompleteOptions read FAutoCompleteOptions
              write FAutoCompleteOptions default cDefAutoCompOpts;
     property Images: TCustomImageList read FImages write SetImages;
+    property ImagesWidth: Integer read FImagesWidth write SetImagesWidth default 0;
     property ItemsEx: TComboExItems read FItemsEx write FItemsEx;
     property Style: TComboBoxExStyle read FStyle write SetStyle default cDefStyle;
     property StyleEx: TComboBoxExStyles read FStyleEx write SetStyleEx default [];
@@ -204,6 +207,7 @@ type
     property Enabled;
     property Font;
     property Images;
+    property ImagesWidth;
     property ItemHeight;
     property ItemsEx;  { do not change order; ItemsEx must be before ItemIndex }
     property ItemIndex;
@@ -280,6 +284,8 @@ type
   protected
     FCheckHighlight: Boolean;
     FCheckSize: TSize;
+    FDropped: Boolean;
+    FHilightedIndex: Integer;
     FHiLiteLeft: Integer;
     FHiLiteRight: Integer;
     FNeedMeasure: Boolean;
@@ -302,6 +308,7 @@ type
     procedure MouseLeave; override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure SetItemHeight(const AValue: Integer); override;
+    procedure SetItems(const Value: TStrings); override;
     procedure Select; override;
   public
     constructor Create(AOwner: TComponent); override;

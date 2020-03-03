@@ -21,11 +21,15 @@ unit InputFileDialog;
 interface
 
 uses
+  Classes, SysUtils, Math,
   // LCL
-  Classes, SysUtils, Math, Forms, Controls, Dialogs, Buttons, StdCtrls,
-  LazFileUtils, LazFileCache, LResources,
+  Forms, Controls, Dialogs, StdCtrls, LResources,
+  // LazUtils
+  LazFileUtils, LazFileCache,
+  // IdeIntf
+  IDEDialogs,
   // IDE
-  LazarusIDEStrConsts, TransferMacros, InputHistory, IDEProcs, IDEDialogs;
+  LazarusIDEStrConsts, TransferMacros, InputHistory;
 
 type
   TInputFileFlag = (iftDirectory, iftFilename, iftCmdLine,
@@ -159,7 +163,7 @@ var
 begin
   FileIndex:=FileIndexOfFileDlgBtn(TButton(Sender));
   if FileIndex<0 then exit;
-  if OpenDialog=nil then OpenDialog:=TOpenDialog.Create(Self);
+  if OpenDialog=nil then OpenDialog:=IDEOpenDialogClass.Create(Self);
   with OpenDialog do begin
     InputHistories.ApplyFileDialogSettings(OpenDialog);
     Title:=GetGroupBox(FileIndex).Caption;

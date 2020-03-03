@@ -32,20 +32,20 @@ interface
 uses
   // FCL
   Classes, SysUtils,
-  Laz2_DOM, Laz2_XMLRead,
+  // LazUtils
+  Laz2_DOM, Laz2_XMLRead, LazStringUtils, LazTracer,
   // LCL
-  LCLProc, LResources, StdCtrls, Buttons, ComCtrls, Controls, Dialogs,
-  ExtCtrls, Forms, Graphics, LCLType,
+  LResources, StdCtrls, Buttons, ComCtrls, Controls, Dialogs,
+  ExtCtrls, Forms, Graphics, LCLType, LCLProc,
   // Synedit
   SynEdit, SynHighlighterXML,
   // codetools
-  FileProcs, CodeCache, CodeToolManager,
-  CTXMLFixFragment,
+  FileProcs, CodeCache, CodeToolManager, CTXMLFixFragment,
   // IDEIntf
   IDEWindowIntf, ProjectIntf, LazIDEIntf, IDEHelpIntf, Menus,
   SrcEditorIntf, IDEDialogs, LazFileUtils, IDEImagesIntf,
   // IDE
-  IDEOptionDefs, EnvironmentOpts, PackageSystem, IDEProcs, LazarusIDEStrConsts,
+  IDEOptionDefs, EnvironmentOpts, PackageSystem, LazarusIDEStrConsts,
   FPDocSelectInherited, FPDocSelectLink, CodeHelp;
 
 type
@@ -291,16 +291,16 @@ begin
   CodeHelpBoss.AddHandlerOnChanging(@OnFPDocChanging);
   CodeHelpBoss.AddHandlerOnChanged(@OnFPDocChanged);
 
-  Name := NonModalIDEWindowNames[nmiwFPDocEditorName];
+  Name := NonModalIDEWindowNames[nmiwFPDocEditor];
 
-  TIDEImages.AssignImage(BoldFormatButton.Glyph, 'formatbold');
-  TIDEImages.AssignImage(UnderlineFormatButton.Glyph, 'formatunderline');
-  TIDEImages.AssignImage(ItalicFormatButton.Glyph, 'formatitalic');
-  TIDEImages.AssignImage(InsertVarTagButton.Glyph, 'insertvartag');
-  TIDEImages.AssignImage(InsertCodeTagButton.Glyph, 'insertcodetag');
-  TIDEImages.AssignImage(InsertRemarkButton.Glyph, 'insertremark');
-  TIDEImages.AssignImage(InsertURLTagSpeedButton.Glyph, 'formatunderline');
-  TIDEImages.AssignImage(SaveButton.Glyph, 'laz_save');
+  IDEImages.AssignImage(BoldFormatButton, 'formatbold');
+  IDEImages.AssignImage(UnderlineFormatButton, 'formatunderline');
+  IDEImages.AssignImage(ItalicFormatButton, 'formatitalic');
+  IDEImages.AssignImage(InsertVarTagButton, 'insertvartag');
+  IDEImages.AssignImage(InsertCodeTagButton, 'insertcodetag');
+  IDEImages.AssignImage(InsertRemarkButton, 'insertremark');
+  IDEImages.AssignImage(InsertURLTagSpeedButton, 'formatunderline');
+  IDEImages.AssignImage(SaveButton, 'laz_save');
 
   SourceEditorManagerIntf.RegisterChangeEvent(semEditorActivate, @DoEditorUpdate);
   SourceEditorManagerIntf.RegisterChangeEvent(semEditorStatus, @DoEditorUpdate);
@@ -852,11 +852,11 @@ begin
     begin
       FOldValues:=Element.FPDocFile.GetValuesFromNode(Element.ElementNode);
       FOldVisualValues[fpdiShort]:=ReplaceLineEndings(FOldValues[fpdiShort],'');
-      FOldVisualValues[fpdiElementLink]:=ConvertLineEndings(FOldValues[fpdiElementLink]);
-      FOldVisualValues[fpdiDescription]:=ConvertLineEndings(FOldValues[fpdiDescription]);
-      FOldVisualValues[fpdiErrors]:=ConvertLineEndings(FOldValues[fpdiErrors]);
-      FOldVisualValues[fpdiSeeAlso]:=ConvertLineEndings(FOldValues[fpdiSeeAlso]);
-      FOldVisualValues[fpdiExample]:=ConvertLineEndings(FOldValues[fpdiExample]);
+      FOldVisualValues[fpdiElementLink]:=LineBreaksToSystemLineBreaks(FOldValues[fpdiElementLink]);
+      FOldVisualValues[fpdiDescription]:=LineBreaksToSystemLineBreaks(FOldValues[fpdiDescription]);
+      FOldVisualValues[fpdiErrors]:=LineBreaksToSystemLineBreaks(FOldValues[fpdiErrors]);
+      FOldVisualValues[fpdiSeeAlso]:=LineBreaksToSystemLineBreaks(FOldValues[fpdiSeeAlso]);
+      FOldVisualValues[fpdiExample]:=LineBreaksToSystemLineBreaks(FOldValues[fpdiExample]);
       //DebugLn(['TFPDocEditor.LoadGUIValues Short="',dbgstr(FOldValues[fpdiShort]),'"']);
     end
     else

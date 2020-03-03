@@ -124,7 +124,7 @@ var
 
 begin
   Widget:={%H-}PGtkWidget(Handle);
-  Info:=GetWidgetInfo(Widget,false);
+  Info:=GetWidgetInfo(Widget);
   if Info<>nil then
     Inc(Info^.PaintDepth);
   PS.hDC:=GetDC(Handle);
@@ -138,7 +138,7 @@ begin
   else Control := nil;
 
   if (Control <> nil)
-  and Control.DoubleBuffered
+  and TWSWinControlClass(Control.WidgetSetClass).GetDoubleBuffered(Control)
   and not GTK_WIDGET_DOUBLE_BUFFERED({%H-}PGTKWidget(Handle))
   then begin
     //DebugLn(['TGtk2WidgetSet.BeginPaint ',DbgSName(Control)]);
@@ -431,8 +431,10 @@ begin
     {$EndIf}
     Result:=true;
   finally
-    if SupportedFormats<>nil then FreeMem(SupportedFormats);
-    if SelData.Data<>nil then FreeMem(SelData.Data);
+    if SupportedFormats<>nil then
+      FreeMem(SupportedFormats);
+    if (SelData.Data<>nil) and (PGdkAtom(SelData.Data)<>SupportedFormats) then
+      FreeMem(SelData.Data);
   end;
 end;
 
@@ -718,6 +720,12 @@ begin
      Of course this will only be a local clipboard, invisible to other
      applications. }
     Result:=true;
+end;
+
+function TGtk2WidgetSet.ClipboardFormatNeedsNullByte(
+  const AFormat: TPredefinedClipboardFormat): Boolean;
+begin
+  Result := False;
 end;
 
 {------------------------------------------------------------------------------
@@ -1401,6 +1409,7 @@ begin
          (lfWeight = FW_NORMAL) and
          (lfItalic = 0) and
          (lfUnderline = 0) and
+         (lfStrikeOut = 0) and
          (lfOrientation = 0) and
          IsFontNameDefault(lfFacename) then
       begin
@@ -1509,14 +1518,18 @@ begin
           AttrList := pango_attr_list_new();
           AttrListTemporary := True;
         end;
-        if LogFont.lfUnderline <> 0 then
-          Attr := pango_attr_underline_new(PANGO_UNDERLINE_SINGLE)
-        else
-          Attr := pango_attr_underline_new(PANGO_UNDERLINE_NONE);
-        pango_attr_list_change(AttrList, Attr);
 
-        Attr := pango_attr_strikethrough_new(LogFont.lfStrikeOut<>0);
-        pango_attr_list_change(AttrList, Attr);
+        if LogFont.lfUnderline<>0 then
+        begin
+          Attr := pango_attr_underline_new(PANGO_UNDERLINE_SINGLE);
+          pango_attr_list_change(AttrList, Attr);
+        end;
+
+        if LogFont.lfStrikeOut<>0 then
+        begin
+          Attr := pango_attr_strikethrough_new(True);
+          pango_attr_list_change(AttrList, Attr);
+        end;
 
         pango_layout_set_attributes(CurFont, AttrList);
         
@@ -2400,6 +2413,8 @@ var
   l: LongInt;
   Pt: TPoint;
   SavedRect: TRect; // if font orientation <> 0
+  LineHeight: Integer;
+  Size: TSize;
 
   function LeftOffset: Longint;
   begin
@@ -2445,7 +2460,7 @@ var
   var
     AP: TSize;
     J, MaxWidth,
-    LineWidth: Integer;
+    LineWidth, ActualHeight: Integer;
   begin
     theRect := Rect;
 
@@ -2457,7 +2472,10 @@ var
       TextExtentPoint(PChar(AStr), length(AStr), AP{%H-});
       theRect.Bottom := theRect.Top + TM.tmHeight;
       if (Flags and DT_CALCRECT)<>0 then
-        theRect.Right := theRect.Left +  AP.cX
+      begin
+        theRect.Right := theRect.Left +  AP.cX;
+        theRect.Bottom := theRect.Top +  AP.cY;
+      end
       else
       begin
         theRect.Right := theRect.Left + Min(MaxWidth, AP.cX);
@@ -2486,20 +2504,25 @@ var
       if (Flags and DT_CALCRECT)<>0 then
       begin
         LineWidth := 0;
+        ActualHeight := 0;
         if (Lines <> nil) then
         begin
           for J := 0 to NumLines - 1 do
           begin
             TextExtentPoint(Lines[J], StrLen(Lines[J]), AP);
             LineWidth := Max(LineWidth, AP.cX);
+            Inc(ActualHeight, AP.cY);
           end;
         end;
         LineWidth := Min(MaxWidth, LineWidth);
       end else
+      begin
         LineWidth := MaxWidth;
+        ActualHeight := NumLines*TM.tmHeight;
+      end;
 
       theRect.Right := theRect.Left + LineWidth;
-      theRect.Bottom := theRect.Top + NumLines*TM.tmHeight;
+      theRect.Bottom := theRect.Top + ActualHeight;
       if NumLines>1 then
         Inc(theRect.Bottom, (NumLines-1)*TM.tmExternalLeading);// space between lines
 
@@ -2522,16 +2545,16 @@ var
     var TextLeft,TextTop: Integer);
   var
     OffsX, OffsY: integer;
-    Angle: Integer;
+    Angle: Double;
     Size: TSize;
     R: TRect;
   begin
     R := SavedRect;
     OffsX := R.Right - R.Left;
     OffsY := R.Bottom - R.Top;
-    Size.cX := OffsX;
+    Size.cx := OffsX;
     Size.cy := OffsY;
-    Angle := AFontAngle div 10;
+    Angle := AFontAngle / 10;
     if Angle < 0 then
       Angle := 360 + Angle;
 
@@ -2707,11 +2730,7 @@ begin
       AStr := StringReplace(AStr, #9, TabString, [rfReplaceAll]);
 
     if (Flags and DT_NOPREFIX) <> DT_NOPREFIX then
-    begin
-      pIndex := DeleteAmpersands(AStr);
-      if pIndex > Length(AStr) then
-        pIndex := -1; // String ended in '&', which was deleted
-    end
+      pIndex := DeleteAmpersands(AStr)
     else
       pIndex := -1;
 
@@ -2760,12 +2779,17 @@ begin
       and (tm.tmHeight > (theRect.Bottom - theRect.Top))
       then Break;
 
-      if Lines[i] <> nil then begin
+      if Lines[i] <> nil then
+      begin
         l:=StrLen(Lines[i]);
         DrawLine(Lines[i], l, theRect.Top);
         dec(pIndex,l+length(LineEnding));
-      end;
-      Inc(theRect.Top, TM.tmExternalLeading + TM.tmHeight);// space between lines
+        GetTextExtentPoint(DC, Lines[i], l, Size{%H-});
+        LineHeight := Size.cY;
+      end
+      else
+        LineHeight := TM.tmHeight;
+      Inc(theRect.Top, LineHeight + TM.tmExternalLeading);// space between lines
     end;
 
   finally
@@ -2831,14 +2855,16 @@ begin
   then Control := TWinControl(GetLCLObject({%H-}Pointer(Handle)))
   else Control := nil;
 
-  If (Control <> nil) and (not GTK_WIDGET_DOUBLE_BUFFERED(({%H-}PGTKWidget(Handle)))) and (Control.DoubleBuffered) then
-  begin
+  if (Control <> nil)
+  and TWSWinControlClass(Control.WidgetSetClass).GetDoubleBuffered(Control)
+  and not GTK_WIDGET_DOUBLE_BUFFERED({%H-}PGTKWidget(Handle))
+  then begin
     gdk_window_thaw_updates(TGtkDeviceContext(PS.HDC).Drawable);
     gdk_window_end_paint (TGtkDeviceContext(PS.HDC).Drawable);
   end;
 
   Widget := {%H-}PGtkWidget(Handle);
-  Info:=GetWidgetInfo(Widget,false);
+  Info:=GetWidgetInfo(Widget);
   if Info<>nil then
     dec(Info^.PaintDepth);
 
@@ -3333,13 +3359,15 @@ var
     AFamilies: PPPangoFontFamily;
     AFaces: PPPangoFontFace;
     ANumFaces: Integer;
+    PContext: PPangoContext;
   begin
     AList.Clear;
     SetLength(Faces, 0);
     Result := -1;
     AFamilies := nil;
 
-    pango_context_list_families(gdk_pango_context_get, @AFamilies, @Result);
+    PContext := gdk_pango_context_get;
+    pango_context_list_families(PContext, @AFamilies, @Result);
     SetLength(Faces, Result);
     for i := 0 to Result - 1 do
     begin
@@ -3354,6 +3382,7 @@ var
       g_free(AFaces);
     end;
     g_free(AFamilies);
+    g_object_unref(PContext);
   end;
 
   function Gtk2GetFontFamilies(var List: TStringList;
@@ -4715,10 +4744,10 @@ begin
   //we will also have to add internal support for Papersizes etc..
 
   LOGPIXELSX : { Logical pixels per inch in X }
-    Result := RoundToInt(gdk_screen_width / (GetScreenWidthMM / 25.4));
+    Result := ScreenInfo.PixelsPerInchX;
 
   LOGPIXELSY : { Logical pixels per inch in Y }
-    Result := RoundToInt(gdk_screen_height / (GetScreenHeightMM / 25.4));
+    Result := ScreenInfo.PixelsPerInchY;
 
   SIZEPALETTE: { number of entries in color palette }
     if GetVisual then
@@ -4753,7 +4782,7 @@ begin
   end;
   
   {$IFDEF RaiseExceptionOnNilPointers}
-  RaiseException('TGtk2WidgetSet.GetDeviceSize Window=nil');
+  RaiseGDBException('TGtk2WidgetSet.GetDeviceSize Window=nil');
   {$ENDIF}
   DebugLn('TGtk2WidgetSet.GetDeviceSize:', ' WARNING: DC ',DbgS(DC),' without gdkwindow.',
           ' Widget=',DbgS(DevCtx.Widget));
@@ -4861,7 +4890,7 @@ begin
         
         if (Widget <> nil) and gtk_widget_has_focus(Widget)
         then begin
-          Info:=GetWidgetInfo(PGtkWidget(Window),false);
+          Info:=GetWidgetInfo(PGtkWidget(Window));
           if (Info=nil) or (not (wwiDeactivating in Info^.Flags)) then
             Result := HWND({%H-}PtrUInt(GetMainWidget(Widget)));
           Break;
@@ -5959,6 +5988,94 @@ begin
 end;
 
 {------------------------------------------------------------------------------
+  Function: GetTextExtentExPoint
+  Params:
+  Returns:
+
+ ------------------------------------------------------------------------------}
+function TGtk2WidgetSet.GetTextExtentExPoint(DC: HDC; Str: PChar;
+  Count, MaxWidth: Integer; MaxCount, PartialWidths: PInteger;
+  var Size: TSize): Boolean;
+var
+  DevCtx: TGtkDeviceContext absolute DC;
+  UseFont : TGtkIntfFont;
+  Utf8Len, Accu, I: PtrInt;
+  Iter: PPangoLayoutIter;
+  CharRect: TPangoRectangle;
+begin
+  if not IsValidDC(DC) then
+    Exit(False);
+
+  Size.cx := 0;
+  Size.cy := 0;
+  if MaxCount <> nil then
+    MaxCount^ := 0;
+
+  if Count = 0 then
+    Exit(True);
+  if (Count < -1) or (Str = nil) then
+    Exit(False);
+
+  if Count = -1 then
+    Count := Length(Str);
+  Utf8Len := UTF8Length(Str, Count);
+  if Utf8Len = 0 then
+    Exit(True);
+
+  UseFont := GetGtkFont(DevCtx);
+  UpdateDCTextMetric(DevCtx);
+  SetLayoutText(UseFont, Str, Count);
+  pango_layout_get_pixel_size(UseFont, @Size.cx, @Size.cy);
+  if DevCtx.HasTransf then
+  begin
+    DevCtx.InvTransfExtent(Size.cx, Size.cy);
+    Size.cx := Abs(Size.cx);
+    Size.cy := Abs(Size.cy);
+  end;
+
+  if PartialWidths = nil then
+  begin
+    if MaxCount = nil then
+      Exit(True);
+    if Size.cx <= MaxWidth then
+    begin
+      MaxCount^ := Utf8Len;
+      Exit(True);
+    end;
+  end;
+
+  I := 1;
+  Accu := 0;
+  Iter := pango_layout_get_iter(UseFont);
+  repeat
+    pango_layout_iter_get_char_extents(Iter, @CharRect);
+    Inc(Accu, CharRect.Width);
+
+    CharRect.Width := Accu;
+    pango_extents_to_pixels(nil, @CharRect);
+    if DevCtx.HasTransf then
+    begin
+      DevCtx.InvTransfExtent(CharRect.Width, CharRect.Height);
+      CharRect.Width := Abs(CharRect.Width);
+    end;
+
+    if MaxCount <> nil then
+    begin
+      if CharRect.Width > MaxWidth then
+        Break;
+      MaxCount^ := I;
+    end;
+    if PartialWidths <> nil then
+      PartialWidths[I - 1] := CharRect.Width;
+
+    Inc(I);
+  until not pango_layout_iter_next_char(Iter);
+  pango_layout_iter_free(Iter);
+
+  Exit(True);
+end;
+
+{------------------------------------------------------------------------------
   Function: GetTextExtentPoint
   Params:  none
   Returns: Nothing
@@ -5967,32 +6084,8 @@ end;
  ------------------------------------------------------------------------------}
 function TGtk2WidgetSet.GetTextExtentPoint(DC: HDC; Str: PChar; Count: Integer;
   var Size: TSize): Boolean;
-var
-  DevCtx: TGtkDeviceContext absolute DC;
-  UseFont : PPangoLayout;
 begin
-  Result := IsValidDC(DC);
-  if not Result then Exit;
-  if (Count <= 0) or (Str = nil) or (StrPas(Str) = '') then
-  begin
-    FillChar(Size, SizeOf(Size), 0);
-    Exit;
-  end;
-
-  UseFont := GetGtkFont(TGtkDeviceContext(DC));
-
-  UpdateDCTextMetric(TGtkDeviceContext(DC));
-
-  SetLayoutText(UseFont, Str, Count);
-  pango_layout_get_pixel_size(UseFont, @Size.cX, @Size.cY);
-  //DebugLn(['TGtk2WidgetSet.GetTextExtentPoint Str="',copy(Str,1,Count),' Count=',Count,' X=',Size.cx,' Y=',Size.cY]);
-
-  if DevCtx.HasTransf then
-  begin
-    DevCtx.InvTransfExtent(Size.cx, Size.cy);
-    Size.cx := Abs(Size.cx);
-    Size.cy := Abs(Size.cy);
-  end;
+  Result := GetTextExtentExPoint(DC, Str, Count, 0, nil, nil, Size);
 end;
 
 {------------------------------------------------------------------------------
@@ -6376,7 +6469,7 @@ begin
     dec(gdkRect.y, Pt.Y);
     OffsetRect(Rect^, -Pt.X, -Pt.Y);
   end;
-  WidgetInfo := GetWidgetInfo(Widget, False); // True ??
+  WidgetInfo := GetWidgetInfo(Widget); // GetOrCreateWidgetInfo() ??
   if WidgetInfo <> nil then
     UnionRect(WidgetInfo^.UpdateRect, WidgetInfo^.UpdateRect, Rect^);
 
@@ -6570,12 +6663,11 @@ function TGtk2WidgetSet.MessageBox(hWnd: HWND; lpText, lpCaption: PChar;
   uType : Cardinal): integer;
 var Dialog, ALabel : PGtkWidget;
     ButtonCount, DefButton, ADialogResult : Integer;
-    DialogType : Cardinal;
 
     procedure CreateButton(const ALabel : PChar; const RetValue : integer);
     var AButton : PGtkWidget;
     begin
-      AButton:= gtk_button_new_with_label(ALabel);
+      AButton:= gtk_button_new_with_mnemonic(Ampersands2Underscore(ALabel));
       Inc(ButtonCount);
       if ButtonCount = DefButton then begin
         gtk_window_set_focus(PGtkWindow(Dialog), AButton);
@@ -6606,45 +6698,39 @@ begin
   gtk_window_set_default_size(PGtkWindow(Dialog), 100, 100);
   ALabel:= gtk_label_new(lpText);
   gtk_container_add (PGtkContainer(PGtkDialog(Dialog)^.vbox), ALabel);
-  DialogType:= (uType and $0000000F);
-  if DialogType = MB_OKCANCEL
-  then begin
-    CreateButton(PChar(rsMbOK), IDOK);
-    CreateButton(PChar(rsMbCancel), IDCANCEL);
-  end
-  else begin
-    if DialogType = MB_ABORTRETRYIGNORE
-    then begin
-      CreateButton(PChar(rsMbAbort), IDABORT);
-      CreateButton(PChar(rsMbRetry), IDRETRY);
-      CreateButton(PChar(rsMbIgnore), IDIGNORE);
-    end
-    else begin
-      if DialogType = MB_YESNOCANCEL
-      then begin
+  case (uType and $0000000F) of
+    MB_OKCANCEL:
+      begin
+        CreateButton(PChar(rsMbOK), IDOK);
+        CreateButton(PChar(rsMbCancel), IDCANCEL);
+      end;
+    MB_ABORTRETRYIGNORE:
+      begin
+        CreateButton(PChar(rsMbAbort), IDABORT);
+        CreateButton(PChar(rsMbRetry), IDRETRY);
+        CreateButton(PChar(rsMbIgnore), IDIGNORE);
+      end;
+    MB_YESNOCANCEL:
+      begin
         CreateButton(PChar(rsMbYes), IDYES);
         CreateButton(PChar(rsMbNo), IDNO);
         CreateButton(PChar(rsMbCancel), IDCANCEL);
-      end
-      else begin
-        if DialogType = MB_YESNO
-        then begin
-          CreateButton(PChar(rsMbYes), IDYES);
-          CreateButton(PChar(rsMbNo), IDNO);
-        end
-        else begin
-          if DialogType = MB_RETRYCANCEL
-          then begin
-            CreateButton(PChar(rsMbRetry), IDRETRY);
-            CreateButton(PChar(rsMbCancel), IDCANCEL);
-          end
-          else begin
-            { We have no buttons to show. Create the default of OK button }
-            CreateButton(PChar(rsMbOK), IDOK);
-          end;
-        end;
       end;
-    end;
+    MB_YESNO:
+      begin
+        CreateButton(PChar(rsMbYes), IDYES);
+        CreateButton(PChar(rsMbNo), IDNO);
+      end;
+    MB_RETRYCANCEL:
+      begin
+        CreateButton(PChar(rsMbRetry), IDRETRY);
+        CreateButton(PChar(rsMbCancel), IDCANCEL);
+      end;
+    else
+      begin
+        { We have no buttons to show. Create the default of OK button }
+        CreateButton(PChar(rsMbOK), IDOK);
+      end;
   end;
   gtk_window_set_title(PGtkWindow(Dialog), lpCaption);
   gtk_window_set_position(PGtkWindow(Dialog), GTK_WIN_POS_CENTER);
@@ -7643,7 +7729,7 @@ begin
   {$ENDIF}
 
   // And also, only Source that is valid
-  WidgetInfo := GetWidgetInfo(Widget, False);
+  WidgetInfo := GetWidgetInfo(Widget);
   if WidgetInfo <> nil then begin
     {$ifdef VerboseScrollWindowEx}
     DebugLn(['ScrollWindowEx C ', dbgs(WidgetInfo^.UpdateRect)]);
@@ -7679,6 +7765,7 @@ begin
   if (Rect1.height > 0) and (Rect1.width > 0) then begin
     Region := gdk_region_rectangle(@Rect1);
     gdk_window_move_region(Window, Region, dx, dy);
+    gdk_region_destroy(Region);
 
     if (flags and SW_INVALIDATE) <> 0 then begin
       //invalidate
@@ -8456,7 +8543,7 @@ begin
       {$EndIf}
       if NewTopLevelObject is TCustomForm then
       begin
-        Info := GetWidgetInfo(NewTopLevelWidget, False);
+        Info := GetWidgetInfo(NewTopLevelWidget);
         if (Info <> nil) and not (wwiActivating in  Info^.Flags) then
           SetForegroundWindow(TCustomForm(NewTopLevelObject).Handle);
       end;

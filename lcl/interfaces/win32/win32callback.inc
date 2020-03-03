@@ -72,16 +72,43 @@ var
   depthLen: integer;
 {$endif}
   setComboWindow: boolean;
+  WindowInfo: PWin32WindowInfo;
 begin
 {$if defined(MSG_DEBUG) or defined(DBG_SendPaintMessage)}
   depthLen := Length(MessageStackDepth);
   if depthLen > 0 then
     MessageStackDepth[depthLen] := '#';
 {$endif}
-  PrevWndProc := GetWin32WindowInfo(Window)^.DefWndProc;
+  WindowInfo := GetWin32WindowInfo(Window);
+  PrevWndProc := WindowInfo^.DefWndProc;
   if (PrevWndProc = nil) or (PrevWndProc = @WindowProc) // <- prevent recursion
   then begin
-    Result := Windows.DefWindowProcW(Window, Msg, WParam, LParam)
+    if WindowInfo^.WinControl is TCustomForm then
+    begin
+      case TCustomForm(WindowInfo^.WinControl).FormStyle of
+        fsMDIForm:
+        begin
+          if Msg <> WM_COMMAND then
+            Result := Windows.DefFrameProcW(Window, Win32WidgetSet.MDIClientHandle, Msg, WParam, LParam)
+          else
+          if (LoWord(WParam)=SC_CLOSE) or
+             (LoWord(WParam)=SC_MAXIMIZE) or
+             (LoWord(WParam)=SC_MINIMIZE) or
+             (LoWord(WParam)=SC_RESTORE) or
+             (LoWord(WParam)=SC_NEXTWINDOW) or
+             (LoWord(WParam)=SC_PREVWINDOW)
+          then
+            Result := Windows.DefFrameProcW(Window, Win32WidgetSet.MDIClientHandle, Msg, WParam, LParam)
+          else
+            Result := Windows.DefWindowProcW(Window, Msg, WParam, LParam);
+        end;
+        fsMDIChild:
+          Result := Windows.DefMDIChildProcW(Window, Msg, WParam, LParam);
+      else
+        Result := Windows.DefWindowProcW(Window, Msg, WParam, LParam);
+      end;
+    end else
+      Result := Windows.DefWindowProcW(Window, Msg, WParam, LParam);
   end
   else begin
     // combobox child edit weirdness: combobox handling WM_SIZE will compare text
@@ -287,33 +314,15 @@ begin
     TWin32WSWinControl.SetText(ComboBox, ComboBox.Items[Index]);
 end;
 
-procedure EnableChildWindows(WinControl: TWinControl; Enable: boolean);
-var
-  i: integer;
-  ChildControl: TWinControl;
-begin
-  for i := 0 to WinControl.ControlCount-1 do
-  begin
-    if WinControl.Controls[i] is TWinControl then
-    begin
-      ChildControl := TWinControl(WinControl.Controls[i]);
-
-      if not Enable or ChildControl.Enabled then
-      begin
-        EnableWindow(ChildControl.Handle, Enable and ChildControl.Enabled);
-        EnableChildWindows(ChildControl, Enable and ChildControl.Enabled);  // Recursive call
-      end;
-    end;
-  end;
-end;
-
 // A helper class for WindowProc to make it easier to split code into smaller pieces.
 // The original function was about 2400 lines.
 
 type
   TAccessCustomEdit = class(TCustomEdit);
 
-  TWindowProcHelper = class
+  { TWindowProcHelper }
+
+  TWindowProcHelper = record
   private
     // WindowProc parameters
     Window: HWnd;            // DWord / QWord
@@ -421,14 +430,18 @@ end;
 
 function TWindowProcHelper.GetPopMenuItemObject: TObject;
 var
-  MainMenuHandle: HMENU;
+  MenuHandle: HMENU;
   MenuInfo: MENUITEMINFO;
 begin
   MenuInfo.cbSize := MMenuItemInfoSize;
   MenuInfo.fMask := MIIM_DATA;
 
-  MainMenuHandle := GetMenuParent(HMENU(WParam), GetMenu(Window));
-  if GetMenuItemInfo(MainMenuHandle, LOWORD(LParam), true, @MenuInfo) then
+  MenuHandle := 0;
+  if Assigned(WindowInfo^.PopupMenu) then
+    MenuHandle := GetMenuParent(HMENU(WParam), WindowInfo^.PopupMenu.Handle);
+  if MenuHandle = 0 then
+    MenuHandle := GetMenuParent(HMENU(WParam), GetMenu(Window));
+  if GetMenuItemInfo(MenuHandle, LOWORD(LParam), true, @MenuInfo) then
     Result := TObject(MenuInfo.dwItemData)
   else
     Result := nil;
@@ -438,6 +451,7 @@ function TWindowProcHelper.GetMenuItemObject(ByPosition: Boolean): TObject;
 var
   MenuInfo: MENUITEMINFO;
   PopupMenu: TPopupMenu;
+  Menu: HMENU;
 begin
   // first we have to decide if the command is from a popup menu
   // or from the window main menu
@@ -456,7 +470,11 @@ begin
   MenuInfo.cbSize := MMenuItemInfoSize;
   MenuInfo.fMask := MIIM_DATA;
 
-  if GetMenuItemInfo(GetMenu(Window), LOWORD(Integer(WParam)), ByPosition, @MenuInfo) then
+  if ByPosition then
+    Menu := HMENU(LParam)
+  else
+    Menu := GetMenu(Window);
+  if GetMenuItemInfo(Menu, LOWORD(Integer(WParam)), ByPosition, @MenuInfo) then
     Result := TObject(MenuInfo.dwItemData)
   else
     Result := nil;
@@ -502,7 +520,7 @@ end;
 
 procedure TWindowProcHelper.CalcClipRgn(PaintRegion: HRGN);
 var
-  nSize, BytesCount: DWORD;
+  nSize: DWORD;
   RgnData: PRgnData;
   WindowOrg: Windows.POINT;
   XFRM: TXFORM;
@@ -536,8 +554,7 @@ begin
     XFRM.eM11:=-1; XFRM.eM12:=0;
     XFRM.eM21:=0;  XFRM.eM22:=1;
 
-    // ToDo: BytesCount is not initialized.
-    MirroredPaintRgn := ExtCreateRegion(@XFRM, BytesCount, RgnData^);
+    MirroredPaintRgn := ExtCreateRegion(@XFRM, nSize, RgnData^);
     Windows.SelectClipRgn(CurDoubleBuffer.DC, MirroredPaintRgn);
     Windows.DeleteObject(MirroredPaintRgn);
     Freemem(RgnData);
@@ -596,7 +613,10 @@ begin
     PushEraseBkgndCommand(ecDiscard);
 
   // check if double buffering is requested
-  useDoubleBuffer := (ControlDC = 0) and (lWinControl.DoubleBuffered or ThemeServices.ThemesEnabled);
+  useDoubleBuffer := (ControlDC = 0) and (
+      ((csDesigning in lWinControl.ComponentState) and (GetSystemMetrics(SM_REMOTESESSION)=0)) // force double buffer in the designer
+    or TWSWinControlClass(TWinControl(lWinControl).WidgetSetClass).GetDoubleBuffered(lWinControl));
+
   if useDoubleBuffer then
     BufferWasSaved := PrepareDoubleBuffer(DoubleBufferBitmapOld)
   else
@@ -622,13 +642,13 @@ begin
       if useDoubleBuffer then
       begin
         RTLLayout := (GetWindowLong(Window, GWL_EXSTYLE) and WS_EX_LAYOUTRTL) = WS_EX_LAYOUTRTL;
-{$ifdef DEBUG_DOUBLEBUFFER}
+
         ORect.Left := 0;
         ORect.Top := 0;
         ORect.Right := CurDoubleBuffer.BitmapWidth;
         ORect.Bottom := CurDoubleBuffer.BitmapHeight;
-        Windows.FillRect(CurDoubleBuffer.DC, ORect, GetSysColorBrush(COLOR_DESKTOP));
-{$endif}
+        Windows.FillRect(CurDoubleBuffer.DC, ORect, GetSysColorBrush(COLOR_BTNFACE));
+
         PaintRegion := CreateRectRgn(0, 0, 1, 1);
         if GetRandomRgn(DC, PaintRegion, SYSRGN) = 1 then
           CalcClipRgn(PaintRegion);
@@ -747,13 +767,13 @@ begin
   with LMScroll do
   begin
     Msg := LMsg;
-    ScrollCode := LOWORD(WParam);
+    ScrollCode := LOWORD(LongInt(WParam));
     SmallPos := 0;
     ScrollBar := HWND(LParam);
     Pos := 0;
   end;
 
-  if not (LOWORD(WParam) in [SB_THUMBTRACK, SB_THUMBPOSITION])
+  if not (LOWORD(LongInt(WParam)) in [SB_THUMBTRACK, SB_THUMBPOSITION])
   then begin
     WindowInfo^.TrackValid := False;
     Exit;
@@ -781,23 +801,23 @@ begin
   // MWE.
 
   ScrollInfo.cbSize := SizeOf(ScrollInfo);
-  if LOWORD(WParam) = SB_THUMBTRACK
+  if LOWORD(LongInt(WParam)) = SB_THUMBTRACK
   then begin
     ScrollInfo.fMask := SIF_TRACKPOS;
     // older windows versions may not support trackpos, so fill it with some default
     if WindowInfo^.TrackValid
-    then ScrollInfo.nTrackPos := Integer(WindowInfo^.TrackPos and $FFFF0000) or HIWORD(WParam)
-    else ScrollInfo.nTrackPos := HIWORD(WParam);
+    then ScrollInfo.nTrackPos := Integer(WindowInfo^.TrackPos and $FFFF0000) or HIWORD(LongInt(WParam))
+    else ScrollInfo.nTrackPos := HIWORD(LongInt(WParam));
   end
   else begin
     ScrollInfo.fMask := SIF_POS;
-    ScrollInfo.nPos := HIWORD(WParam);
+    ScrollInfo.nPos := HIWORD(LongInt(WParam));
   end;
 
   if LParam <> 0
   then begin
     // The message is send by a scrollbar
-    GetScrollInfo(HWND(LParam), SB_CTL, ScrollInfo);
+    GetScrollInfo(HWND(LongInt(LParam)), SB_CTL, ScrollInfo);
   end
   else begin
     // The message is send by a window's standard scrollbar
@@ -806,7 +826,7 @@ begin
     else GetScrollInfo(Window, SB_VERT, ScrollInfo);
   end;
 
-  if LOWORD(WParam) = SB_THUMBTRACK
+  if LOWORD(LongInt(WParam)) = SB_THUMBTRACK
   then begin
     LMScroll.Pos := ScrollInfo.nTrackPos;
     WindowInfo^.TrackPos := ScrollInfo.nTrackPos;
@@ -814,8 +834,8 @@ begin
   end
   else begin
     if WindowInfo^.TrackValid
-    then LMScroll.Pos := LongInt(WindowInfo^.TrackPos and $FFFF0000) or HIWORD(WParam)
-    else LMScroll.Pos := (ScrollInfo.nPos and $FFFF0000) or HIWORD(WParam);
+    then LMScroll.Pos := LongInt(WindowInfo^.TrackPos and $FFFF0000) or HIWORD(LongInt(WParam))
+    else LMScroll.Pos := (ScrollInfo.nPos and $FFFF0000) or HIWORD(LongInt(WParam));
   end;
 
   if LMScroll.Pos < High(LMScroll.SmallPos)
@@ -858,7 +878,7 @@ begin
   begin
     if not (csDesigning in lWinControl.ComponentState) and (LOWORD(LParam) = HTCLIENT) then
     begin
-      ACursor := Screen.Cursor;
+      ACursor := Screen.RealCursor;
       if ACursor = crDefault then
       begin
         Windows.GetCursorPos(Windows.POINT(P));
@@ -1463,8 +1483,7 @@ end;
 
 procedure TWindowProcHelper.DoMsgEnable;
 begin
-  if WParam <> 0 Then
-    LMessage.Msg := LM_SETEDITABLE;
+  LMessage.Msg := LM_ENABLE;
   if Window = Win32WidgetSet.AppHandle then
     if WParam = 0 then
     begin
@@ -1476,13 +1495,8 @@ begin
       Screen.EnableForms(DisabledForms);
     end;
 
-  // disable child windows of for example groupboxes, but not of forms
-  if Assigned(lWinControl) and not (lWinControl is TCustomForm) then
-    EnableChildWindows(lWinControl, WParam<>0);
-
-  // ugly hack to give bitbtns a nice look
-  // When no theming active, the internal image needs to be
-  // recreated when the enabled state is changed
+  // When themes are not enabled, it is necessary to redraw the BitMap associated
+  // with the TCustomBitBtn so Windows will reflect the new UI appearence.
   if not ThemeServices.ThemesEnabled and (lWinControl is TCustomBitBtn) then
     DrawBitBtnImage(TCustomBitBtn(lWinControl), TCustomBitBtn(lWinControl).Caption);
 end;
@@ -1955,6 +1969,7 @@ var
   R: TRect;
   ACtl: TWinControl;
   LMouseEvent: TTRACKMOUSEEVENT;
+  MaximizedActiveChild: WINBOOL;
 {$IF NOT DECLARED(WM_DPICHANGED)} // WM_DPICHANGED was added in FPC 3.1.1
 const
   WM_DPICHANGED = $02E0;
@@ -2041,6 +2056,16 @@ begin
       if HIWORD(lParam) = 0 then //if not system menu
       begin
         TargetObject := GetPopMenuItemObject;
+        // Check if the menu was the maximized icon menu for an MDI child window and ignore it in that case
+        if (LoWord(LParam)=0) and (lWinControl=Application.MainForm) and (Application.MainForm.FormStyle=fsMDIForm) then
+        begin
+          MaximizedActiveChild := False;
+          if SendMessage(Win32WidgetSet.MDIClientHandle, WM_MDIGETACTIVE, 0, Windows.WPARAM(@MaximizedActiveChild)) <> 0 then
+          begin
+            if MaximizedActiveChild then
+              TargetObject := nil;
+          end;
+        end;
         if TargetObject is TMenuItem then
         begin
           LMessage.Msg := LM_ACTIVATE;
@@ -2053,6 +2078,16 @@ begin
     WM_MENUSELECT:
     begin
       TargetObject := GetMenuItemObject((HIWORD(Integer(WParam)) and MF_POPUP) <> 0);
+      // Check if the menu was the maximized icon menu for an MDI child window and ignore it in that case
+      if (LoWord(WParam)=0) and (lWinControl=Application.MainForm) and (Application.MainForm.FormStyle=fsMDIForm) then
+      begin
+        MaximizedActiveChild := False;
+        if SendMessage(Win32WidgetSet.MDIClientHandle, WM_MDIGETACTIVE, 0, Windows.WPARAM(@MaximizedActiveChild)) <> 0 then
+        begin
+          if MaximizedActiveChild then
+            TargetObject := nil;
+        end;
+      end;
       if TargetObject is TMenuItem then
         TMenuItem(TargetObject).IntfDoSelect
       else
@@ -2432,6 +2467,13 @@ begin
       SetLMessageAndParams(Msg, True);
   end;  // case Msg of
 
+  // Update MDI form client bounds
+  if WinProcess and (Msg=WM_SIZE) and (Window=Application.MainFormHandle) and (Application.MainForm.FormStyle=fsMDIForm) then
+  begin
+    Win32WidgetSet.UpdateMDIClientBounds;
+    WinProcess := False;
+  end;
+
   if WinProcess then
   begin
     PLMsg^.Result := CallDefaultWindowProc(Window, Msg, WParam, LParam);
@@ -2605,7 +2647,7 @@ begin
           WM_CHAR:
           begin
             // if want chars, then handled already
-            PLMsg^.Result := CallDefaultWindowProc(Window, WM_GETDLGCODE, 0, 0) and DLGC_WANTCHARS;
+            PLMsg^.Result := CallDefaultWindowProc(Window, WM_GETDLGCODE, WParam, 0) and DLGC_WANTCHARS;
             SetLMCharData(LM_CHAR);
           end;
           WM_SYSCHAR:    SetLMCharData(LM_SYSCHAR);
@@ -2681,17 +2723,13 @@ function
 var
   Helper: TWindowProcHelper;
 begin
-  Helper := TWindowProcHelper.Create;
-  try
-    Helper.Window := Window;
-    Helper.Msg := Msg;
-    Helper.WParam := WParam;
-    Helper.LParam := LParam;
-    Helper.NMHdr := PNMHdr(LParam);
-    Result := Helper.DoWindowProc;
-  finally
-    Helper.Free;
-  end;
+  FillChar(Helper, SizeOf(TWindowProcHelper), 0);
+  Helper.Window := Window;
+  Helper.Msg := Msg;
+  Helper.WParam := WParam;
+  Helper.LParam := LParam;
+  Helper.NMHdr := PNMHdr(LParam);
+  Result := Helper.DoWindowProc;
 end;
 
 {$ifdef MSG_DEBUG}

@@ -75,16 +75,20 @@ type
     procedure TestIsSet;
   end;
 
-type
   THistoryTest = class(TTestCase)
   published
     procedure TestHistory;
   end;
 
+  TFitTest = class(TTestCase)
+  published
+    procedure TestFitEquationText;
+  end;
+
 implementation
 
 uses
-  Math, TAGeometry, TAMath, AssertHelpers;
+  Math, TAGeometry, TAMath, TAFitUtils, AssertHelpers;
 
 { TIntervalListTest }
 
@@ -115,11 +119,55 @@ begin
   AssertTrue(FIList.Intersect(l, r, hint));
   AssertEquals(2.0, r);
   FIList.Epsilon := 0.1;
-  l := 0.5;
-  r := 2.5;
+  FIList.AddRange(101.0, 102.0);
+  l := 100.5;
+  r := 102.5;
   AssertTrue(FIList.Intersect(l, r, hint));
-  AssertEquals(0.9, l);
-  AssertEquals(2.1, r);
+  AssertEquals(100.9, l);
+  AssertEquals(102.1, r);
+  FIList.Epsilon := -0.1;
+  FIList.AddRange(201.0, 202.0);
+  l := 200.5;
+  r := 202.5;
+  AssertTrue(FIList.Intersect(l, r, hint));
+  AssertEquals(201.1, l);
+  AssertEquals(201.9, r);
+  FIList.Epsilon := 0.1;
+  FIList.AddRange(301.0, 302.0, [ioOpenStart]);
+  l := 300.5;
+  r := 302.5;
+  AssertTrue(FIList.Intersect(l, r, hint));
+  AssertEquals(301.0, l);
+  AssertEquals(302.1, r);
+  FIList.AddRange(401.0, 402.0, [ioOpenEnd]);
+  l := 400.5;
+  r := 402.5;
+  AssertTrue(FIList.Intersect(l, r, hint));
+  AssertEquals(400.9, l);
+  AssertEquals(402.0, r);
+  FIList.AddRange(501.0, 502.0, [ioOpenStart, ioOpenEnd]);
+  l := 500.5;
+  r := 502.5;
+  AssertTrue(FIList.Intersect(l, r, hint));
+  AssertEquals(501.0, l);
+  AssertEquals(502.0, r);
+  FIList.Epsilon := DEFAULT_EPSILON; // don't alter other tests
+
+  FIList.Clear;
+  FIList.AddRange(10.0, 20.0, [ioOpenStart, ioOpenEnd]);
+  FIList.AddRange(30.0, 40.0, [ioOpenStart, ioOpenEnd]);
+  l := 0.0;
+  r := 100.0;
+  hint := 0;
+  AssertTrue(FIList.Intersect(l, r, hint));
+  AssertEquals(10.0, l);
+  AssertEquals(20.0, r);
+  l := 0.0;
+  r := 100.0;
+  hint := 1;
+  AssertTrue(FIList.Intersect(l, r, hint));
+  AssertEquals(10.0, l);
+  AssertEquals(20.0, r);
 end;
 
 procedure TIntervalListTest.Merge;
@@ -445,6 +493,10 @@ begin
   AssertTrue(FISet.AllSet);
   FISet.AsString := '+';
   AssertEquals(PUB_INT_SET_EMPTY, FISet.AsString);
+  FISet.AsString := '3 ;1;; 2';
+  AssertEquals('3,1,2', FISet.AsString);
+  FISet.AsString := '3|1||2';
+  AssertEquals('3,1,2', FISet.AsString);
 end;
 
 procedure TPublishedIntegerSetTest.TestIsSet;
@@ -509,11 +561,79 @@ begin
   end;
 end;
 
+
+{ TFitTest }
+
+procedure TFitTest.TestFitEquationText;
+var
+  t: IFitEquationText;
+begin
+  t := TFitEquationText.Create.Equation(fePolynomial).NumFormat('%.1f')
+    .DecimalSeparator('.').X('x').Y('y').TextFormat(tfNormal);
+  AssertEquals('y = 1.2 + 10.5*x + 2.5*x^2', t.Params([1.2, 10.5, +2.5]));
+  AssertEquals('y = 1.2 + 10.5*x - 2.5*x^2', t.Params([1.2, 10.5, -2.5]));
+  AssertEquals('y = -1.2 + 10.5*x + 2.5*x^2', t.Params([-1.2, 10.5, +2.5]));
+  AssertEquals('y = -1.2 + x + 2.5*x^2', t.Params([-1.2, 1.0, +2.5]));
+  AssertEquals('y = -1.2 - x + 2.5*x^2', t.Params([-1.2, -1.0, +2.5]));
+  AssertEquals('y = -1.2 + 10.5*x + x^2', t.Params([-1.2, 10.5, +1.0]));
+  AssertEquals('y = -1.2 + 10.5*x - x^2', t.Params([-1.2, 10.5, -1.0]));
+  AssertEquals('y = 10.5*x - x^2', t.Params([0.0, 10.5, -1.0]));
+  AssertEquals('y = -10.5*x - x^2', t.Params([0.0, -10.5, -1.0]));
+  AssertEquals('y = x - x^2', t.Params([0.0, 1.0, -1.0]));
+  AssertEquals('y = -x - x^2', t.Params([0.0, -1.0, -1.0]));
+
+  t.TextFormat(tfHtml);
+  AssertEquals('y = 1.2 + 10.5&middot;x + 2.5&middot;x<sup>2</sup>', t.Params([1.2, 10.5, +2.5]));
+  AssertEquals('y = 1.2 + 10.5&middot;x - 2.5&middot;x<sup>2</sup>', t.Params([1.2, 10.5, -2.5]));
+  AssertEquals('y = -1.2 + 10.5&middot;x + 2.5&middot;x<sup>2</sup>', t.Params([-1.2, 10.5, +2.5]));
+  AssertEquals('y = 10.5&middot;x - x<sup>2</sup>', t.Params([0.0, 10.5, -1.0]));
+
+  t.Equation(feExp).TextFormat(tfNormal);
+  AssertEquals('y = 1.2*exp(-3.4*x)', t.Params([1.2, -3.4]));
+  AssertEquals('y = -1.2*exp(3.4*x)', t.Params([-1.2, 3.4]));
+  AssertEquals('y = 1.2*exp(x)', t.Params([1.2, 1.0]));
+  AssertEquals('y = 1.2*exp(-x)', t.Params([1.2, -1.0]));
+  AssertEquals('y = exp(x)', t.Params([1.0, 1.0]));
+  AssertEquals('y = -exp(x)', t.Params([-1.0, 1.0]));
+  t.TextFormat(tfHtml);
+  AssertEquals('y = 1.2&middot;e<sup>-3.4&middot;x</sup>', t.Params([1.2, -3.4]));
+  AssertEquals('y = -1.2&middot;e<sup>3.4&middot;x</sup>', t.Params([-1.2, 3.4]));
+  AssertEquals('y = e<sup>x</sup>', t.Params([1.0, 1.0]));
+
+  t.Equation(fePower).Textformat(tfNormal);
+  AssertEquals('y = 1.2*x^3.4', t.Params([1.2, 3.4]));
+  AssertEquals('y = 1.2*x^-3.4', t.Params([1.2, -3.4]));
+  AssertEquals('y = -1.2*x^3.4', t.Params([-1.2, 3.4]));
+  AssertEquals('y = -1.2*x^-3.4', t.Params([-1.2, -3.4]));
+  AssertEquals('y = x^3.4', t.Params([1.0, 3.4]));
+  AssertEquals('y = -x^3.4', t.Params([-1.0, 3.4]));
+  t.TextFormat(tfHtml);
+  AssertEquals('y = 1.2&middot;x<sup>3.4</sup>', t.Params([1.2, 3.4]));
+  AssertEquals('y = 1.2&middot;x<sup>-3.4</sup>', t.Params([1.2, -3.4]));
+  AssertEquals('y = -1.2&middot;x<sup>3.4</sup>', t.Params([-1.2, 3.4]));
+  AssertEquals('y = -1.2&middot;x<sup>-3.4</sup>', t.Params([-1.2, -3.4]));
+  AssertEquals('y = -x<sup>3.4</sup>', t.Params([-1.0, 3.4]));
+
+  t.Equation(feCustom).BasisFuncs(['sin(x)', 'sin(2x)', '']).TextFormat(tfNormal);
+  AssertEquals('y = 1.2*sin(x) + 3.4*sin(2x) + 10.0', t.Params([1.2, 3.4, 10]));
+  AssertEquals('y = -1.2*sin(x) + 3.4*sin(2x) + 10.0', t.Params([-1.2, 3.4, 10]));
+  AssertEquals('y = 1.2*sin(x) + 3.4*sin(2x) - 10.0', t.Params([1.2, 3.4, -10]));
+  AssertEquals('y = 1.2*sin(x) + 3.4*sin(2x)', t.Params([1.2, 3.4, 0.0]));
+  t.Equation(feCustom).BasisFuncs(['', 'sin(x)', 'sin(2x)']).TextFormat(tfNormal);
+  AssertEquals('y = 10.0 + 1.2*sin(x) + 3.4*sin(2x)', t.Params([10, 1.2, 3.4]));
+  AssertEquals('y = -10.0 + 1.2*sin(x) + 3.4*sin(2x)', t.Params([-10, 1.2, 3.4]));
+  AssertEquals('y = 1.2*sin(x) + 3.4*sin(2x)', t.Params([0.0, 1.2, 3.4]));
+  AssertEquals('y = -1.2*sin(x) + 3.4*sin(2x)', t.Params([0.0, -1.2, 3.4]));
+  AssertEquals('y = 10.0 + sin(x) + 3.4*sin(2x)', t.Params([10, 1.0, 3.4]));
+  AssertEquals('y = 10.0 - sin(x) + 3.4*sin(2x)', t.Params([10, -1.0, 3.4]));
+end;
+
+
 initialization
 
   RegisterTests([
     TIntervalListTest, TMathTest, TGeometryTest, TColorTest, TRTTITest,
-    TPublishedIntegerSetTest, THistoryTest]);
+    TPublishedIntegerSetTest, THistoryTest, TFitTest]);
 
 end.
 

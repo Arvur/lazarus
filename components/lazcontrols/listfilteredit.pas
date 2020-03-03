@@ -53,7 +53,7 @@ type
     function ReturnKeyHandled: Boolean; override;
     procedure SortAndFilter; override;
     procedure ApplyFilterCore; override;
-    function GetDefaultGlyph: TBitmap; override;
+    function GetDefaultGlyphName: string; override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -67,9 +67,6 @@ type
   published
     property FilteredListbox: TCustomListBox read fFilteredListbox write SetFilteredListbox;
   end;
-
-var
-  ListFilterGlyph: TBitmap;
 
 implementation
 
@@ -133,9 +130,9 @@ begin
   MoveTo(0, ASelect);
 end;
 
-function TListFilterEdit.GetDefaultGlyph: TBitmap;
+function TListFilterEdit.GetDefaultGlyphName: string;
 begin
-  Result := ListFilterGlyph;
+  Result := 'btnfiltercancel';
 end;
 
 procedure TListFilterEdit.SetFilteredListbox(const AValue: TCustomListBox);
@@ -174,13 +171,12 @@ procedure TListFilterEdit.SortAndFilter;
 // Copy data from fOriginalData to fSortedData in sorted order
 var
   Origi, i: Integer;
-  Capt, FilterLC: string;
+  Capt: string;
 begin
   fSortedData.Clear;
-  FilterLC:=UTF8LowerCase(Filter);
   for Origi:=0 to fOriginalData.Count-1 do begin
     Capt:=fOriginalData[Origi];
-    if DoFilterItem(Capt, FilterLC, fOriginalData.Objects[Origi]) then begin
+    if DoFilterItem(Capt, fOriginalData.Objects[Origi]) then begin
       i:=fSortedData.Count-1;       // Always sort the data.
       while i>=0 do begin
         if CompareFNs(Capt,fSortedData[i])>=0 then break;

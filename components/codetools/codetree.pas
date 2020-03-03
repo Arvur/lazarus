@@ -83,7 +83,7 @@ const
   ctnVarDefinition      = 21;
   ctnConstDefinition    = 22;
   ctnGlobalProperty     = 23;
-  ctnVarArgs            = 24;
+  ctnVarArgs            = 24; // macpas ... parameter
   ctnSrcName            = 25; // children are ctnIdentifier
   ctnUseUnit            = 26; // StartPos=unit, EndPos=unitname+inFilename, children ctnUseUnitNamespace, ctnUseUnitClearName, parent ctnUsesSection
   ctnUseUnitNamespace   = 27; // <namespace>.clearname.pas, parent ctnUseUnit
@@ -164,6 +164,8 @@ const
   ctnHintModifier       =122; // deprecated, platform, unimplemented, library, experimental
   ctnAttribute          =123; // children are ctnAttribParam
   ctnAttribParam        =124; // 1st child: ctnIdentifier, optional 2nd: ctnParamsRound
+
+  ctnUser               =1000; // user constants start here
 
   // combined values
   AllSourceTypes =
@@ -262,6 +264,7 @@ type
     psLibrary,
     psEnumerator,
     psVarargs,
+    psVectorCall,
     psEdgedBracket
     );
   TAllProcedureSpecifiers = set of TProcedureSpecifier;
@@ -273,7 +276,7 @@ const
       'EXTERNAL', 'FORWARD', 'PASCAL', 'ASSEMBLER', 'SAVEREGISTERS',
       'FAR', 'NEAR', 'FINAL', 'STATIC', 'MWPASCAL', 'NOSTACKFRAME',
       'DEPRECATED', 'DISPID', 'PLATFORM', 'SAFECALL', 'UNIMPLEMENTED',
-      'EXPERIMENTAL', 'LIBRARY', 'ENUMERATOR', 'VARARGS',
+      'EXPERIMENTAL', 'LIBRARY', 'ENUMERATOR', 'VARARGS', 'VECTORCALL',
       '['
     );
 

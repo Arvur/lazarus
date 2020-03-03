@@ -54,7 +54,6 @@ type
     FilterEdit: TTreeFilterEdit;
     lblMenuTree: TLabel;
     lblToolbar: TLabel;
-    lblSelect: TLabel;
     lvToolbar: TListView;
     miAll: TMenuItem;
     miCustom: TMenuItem;
@@ -83,7 +82,6 @@ type
   private
     Image: TBitMap;
     defImageIndex: integer;
-    divImageIndex: Integer;
     procedure AddCommand;
     procedure AddDivider;
     procedure AddTailItem;
@@ -172,14 +170,12 @@ procedure TToolBarConfig.FormCreate(Sender: TObject);
 begin
   inherited;
   pnlButtons.Color := clBtnFace;
-  lblSelect.Caption := '';
   // load button images
-  TIDEImages.AssignImage(btnAdd.Glyph, 'arrow__darkgreen_right');
-  TIDEImages.AssignImage(btnRemove.Glyph, 'arrow__darkred_left');
-  TIDEImages.AssignImage(btnMoveUp.Glyph, 'arrow__darkgreen_up');
-  TIDEImages.AssignImage(btnMoveDown.Glyph, 'arrow__darkgreen_down');
-  TIDEImages.AssignImage(btnAddDivider.Glyph, 'menu_divider16');
-  TIDEImages.AssignImage(FilterEdit.Glyph, 'btnfiltercancel');
+  IDEImages.AssignImage(btnAdd, 'arrow__darkgreen_right');
+  IDEImages.AssignImage(btnRemove, 'arrow__darkred_left');
+  IDEImages.AssignImage(btnMoveUp, 'arrow__darkgreen_up');
+  IDEImages.AssignImage(btnMoveDown, 'arrow__darkgreen_down');
+  //IDEImages.AssignImage(btnAddDivider, 'menu_divider16');  // uncomment if 'menu_divider16' exists (currently not)
 
   btnAddDivider.Caption := '---';
   btnAdd.Hint       := lisCoolBarAddSelected;
@@ -192,8 +188,6 @@ begin
   lvToolbar.SmallImages := IDEImages.Images_16;
   // default image to be used when none is available
   defImageIndex := IDEImages.LoadImage('execute');
-  // Image for divider
-  divImageIndex := IDEImages.Images_16.Add(btnAddDivider.Glyph,nil);
 
   Image := TBitmap.Create;
   SetupCaptions;
@@ -330,7 +324,7 @@ var
   lvItem: TListItem;
 begin
   lvItem := NewLvItem(cIDEToolbarDivider);
-  lvItem.ImageIndex := divImageIndex;
+  lvItem.ImageIndex := -1;
   InsertItem(lvItem);
   UpdateButtonsState;
 end;
@@ -342,16 +336,8 @@ end;
 
 procedure TToolBarConfig.lvToolbarSelectItem(Sender: TObject;
   Item: TListItem; Selected: Boolean);
-var
-  RealCount: integer;
 begin
   UpdateButtonsState;
-  // Update selection status label.
-  RealCount := lvToolbar.Items.Count-1;
-  if lvToolbar.ItemIndex < RealCount then
-    lblSelect.Caption := Format('%d / %d', [lvToolbar.ItemIndex+1, RealCount])
-  else
-    lblSelect.Caption := Format('%d+ / %d', [lvToolbar.ItemIndex, RealCount])
 end;
 
 procedure TToolBarConfig.MoveUpDown(aOffset: integer);
@@ -509,7 +495,7 @@ var
 begin
   lvItem := lvToolbar.Items.Add;
   lvItem.Caption := cIDEToolbarDivider;
-  lvItem.ImageIndex := divImageIndex;
+  lvItem.ImageIndex := -1;
 end;
 
 procedure TToolBarConfig.AddTailItem;
@@ -627,17 +613,7 @@ begin
 end;
 
 { TIDEToolbarBase }
-{                           For future needs ...
-constructor TIDEToolbarBase.Create(AOwner: TComponent);
-begin
-  inherited Create(AOwner);
-end;
 
-destructor TIDEToolbarBase.Destroy;
-begin
-  inherited Destroy;
-end;
-}
 procedure TIDEToolbarBase.AddButton(ACommand: TIDEButtonCommand);
 var
   B: TIDEToolButton;

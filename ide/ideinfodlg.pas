@@ -31,7 +31,7 @@ interface
 
 uses
   Classes, SysUtils, LazFileUtils, LazUTF8,
-  CodeToolManager, DefineTemplates,
+  CodeToolManager, DefineTemplates, LinkScanner,
   Forms, Controls, Graphics, Dialogs, StdCtrls, ComCtrls,
   LCLProc, ButtonPanel, LazHelpHTML, LazHelpIntf,
   IDEHelpIntf, IDEWindowIntf, LazIDEIntf, IDEExternToolIntf,
@@ -219,6 +219,7 @@ begin
     sl.Add('  Process.Running='+dbgs(Tool.Process.Running));
     sl.Add('  CmdLineParams='+AnsiQuotedStr(Tool.CmdLineParams,'"'));
     sl.Add('  ErrorMessage='+AnsiQuotedStr(Tool.ErrorMessage,'"'));
+    sl.Add('  ExitCode='+IntToStr(Tool.ExitCode));
     sl.Add('  ExitStatus='+IntToStr(Tool.ExitStatus));
     sl.Add('  Terminated='+dbgs(Tool.Terminated));
     sl.Add('  ReadStdOutBeforeErr='+dbgs(Tool.ReadStdOutBeforeErr));
@@ -278,7 +279,8 @@ end;
 procedure TIDEInfoDialog.GatherGlobalOptions(sl: TStrings);
 var
   CfgCache: TPCTargetConfigCache;
-  Note: string;
+  Note, aFilename: string;
+  CompilerKind: TPascalCompiler;
 begin
   sl.add('Global IDE options:');
   sl.Add('Primary config directory='+GetPrimaryConfigPath);
@@ -292,18 +294,27 @@ begin
 
   sl.Add('Default CompilerFilename='+EnvironmentOptions.CompilerFilename);
   sl.Add('Real Default CompilerFilename='+EnvironmentOptions.GetParsedCompilerFilename);
-  if CheckCompilerQuality(EnvironmentOptions.GetParsedCompilerFilename,Note,
+  if CheckFPCExeQuality(EnvironmentOptions.GetParsedCompilerFilename,Note,
                        CodeToolBoss.CompilerDefinesCache.TestFilename)<>sddqCompatible
   then
     sl.Add('WARNING: '+Note);
 
   if Project1<>nil then begin
     sl.Add('Project CompilerFilename='+Project1.CompilerOptions.CompilerPath);
-    sl.Add('Real Project CompilerFilename='+LazarusIDE.GetFPCompilerFilename);
-    if CheckCompilerQuality(LazarusIDE.GetFPCompilerFilename,Note,
-                         CodeToolBoss.CompilerDefinesCache.TestFilename)<>sddqCompatible
-    then
-      sl.Add('WARNING: '+Note);
+    aFilename:=LazarusIDE.GetCompilerFilename;
+    sl.Add('Real Project CompilerFilename='+aFilename);
+    IsCompilerExecutable(aFilename,Note,CompilerKind,true);
+    if CompilerKind=pcPas2js then begin
+      if CheckPas2jsQuality(aFilename,Note,
+                           CodeToolBoss.CompilerDefinesCache.TestFilename)<>sddqCompatible
+      then
+        sl.Add('WARNING: '+Note);
+    end else begin
+      if CheckFPCExeQuality(aFilename,Note,
+                           CodeToolBoss.CompilerDefinesCache.TestFilename)<>sddqCompatible
+      then
+        sl.Add('WARNING: '+Note);
+    end;
   end;
 
   sl.Add('CompilerMessagesFilename='+EnvironmentOptions.CompilerMessagesFilename);

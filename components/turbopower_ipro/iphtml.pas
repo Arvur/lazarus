@@ -96,8 +96,9 @@ const
   MAXINTS = 4096; {buffer size - this should be way more than needed}
   TINTARRGROWFACTOR = 64;
   DEFAULT_PRINTMARGIN = 0.5; {inches}
-  FONTSIZESVALUSARRAY : array[0..6] of integer = (8,10,12,14,18,24,36);
+  FONTSIZESVALUESARRAY : array[0..6] of integer = (8,10,12,14,18,24,36);
   MAXWORDS = 65536;
+  DEFAULT_LINKS_UNDERLINED = false;
 
   ZOOM_TO_FIT = 0;
   ZOOM_TO_FIT_WIDTH = -1;
@@ -134,6 +135,8 @@ type
 
   {$IFDEF IP_LAZARUS}
   TIpAbstractHtmlDataProvider = class;
+
+  {.$DEFINE CSS_CASESENSITIVE_CLASSID}
   {$DEFINE CSS_INTERFACE}
 {$I ipcss.inc}
   {$UNDEF CSS_INTERFACE}
@@ -243,8 +246,8 @@ type
     FCurProps : TIpHtmlProps;
     FBlockMin, FBlockMax : Integer;
     function GetProps: TIpHtmlProps;
+    procedure ProcessDuplicateLFs;
     procedure RemoveLeadingLFs;
-    procedure RemoveDuplicateLFs;
   public
     FPageRect : TRect;
     constructor Create(AOwner: TIpHtmlNodeCore); virtual;
@@ -299,6 +302,7 @@ type
     WordRect2 : TRect;
     Props : TIpHtmlProps;
     Owner : TIpHtmlNode;
+    LFHeight : Integer;  // Height of LineFeed elements
     {$IFDEF IP_LAZARUS}
     IsSelected: boolean;
     {$ENDIF}
@@ -338,6 +342,7 @@ type
     procedure HideUnmarkedControl; virtual;
     procedure EnumChildren(EnumProc: TIpHtmlNodeEnumProc; UserData: Pointer); virtual;
     procedure AppendSelection(var S : string; var Completed: Boolean); virtual;
+    function GetMargin(AMargin: TIpHtmlElemMargin; ADefault: Integer): Integer; virtual;
   public
     constructor Create(ParentNode : TIpHtmlNode);
     destructor Destroy; override;
@@ -375,6 +380,7 @@ type
     procedure ReportMapRects(M : TRectMethod); override;
     procedure AppendSelection(var S : string; var Completed: Boolean); override;
     procedure EnumChildren(EnumProc: TIpHtmlNodeEnumProc; UserData: Pointer); override;
+    function GetMargin(AMargin: TIpHtmlElemMargin; ADefault: Integer): Integer; override;
   public
     constructor Create(ParentNode : TIpHtmlNode);
     destructor Destroy; override;
@@ -401,22 +407,32 @@ type
     FClassId: string;
     FTitle: string;
     FId: string;
+    FAreaList: {$ifdef IP_LAZARUS}TFPList{$else}TList{$endif};
   protected
+    procedure AddArea(const R: TRect);
+    procedure BuildAreaList; virtual;
+    procedure ClearAreaList; virtual;
     procedure ParseBaseProps(aOwner : TIpHtml);
     {$IFDEF IP_LAZARUS}
     function SelectCSSFont(const aFont: string): string;
     procedure ApplyCSSProps(const ACSSProps: TCSSProps; const props: TIpHtmlProps);
     function ElementName: String;
+    function GetAlign: TIpHtmlAlign; virtual;
     function GetFontSizeFromCSS(CurrentFontSize:Integer; aFontSize: string):Integer;
+    procedure SetAlign(const Value: TIpHtmlAlign); virtual;
+    procedure SetId(const Value: string); virtual;
     {$ENDIF}
   public
+    constructor Create(ParentNode : TIpHtmlNode);
     {$IFDEF IP_LAZARUS}
     destructor Destroy; override;
     procedure LoadAndApplyCSSProps; virtual;
+    procedure MakeVisible; override;
     property InlineCSS: TCSSProps read FInlineCSSProps write FInlineCSSProps;
     {$ENDIF}
+    property Align: TIpHtmlAlign read GetAlign write SetAlign;
     property ClassId : string read FClassId write FClassId;
-    property Id : string read FId write FId;
+    property Id : string read FId write SetId;
     property Style : string read FStyle write FStyle;
     property Title : string read FTitle write FTitle;
   end;
@@ -637,31 +653,46 @@ type
   private
     FAlign : TIpHtmlAlign;
     FSize : TIpHtmlHeaderSize;
+  protected
+    function GetAlign: TIpHtmlAlign; override;
+    procedure SetAlign(const Value: TIpHtmlAlign); override;
   public
     constructor Create(ParentNode : TIpHtmlNode);
     destructor Destroy; override;
     procedure Enqueue; override;
+    {$IFDEF IP_LAZARUS}
+    procedure LoadAndApplyCSSProps; override;
+    {$ENDIF}
     procedure SetProps(const RenderProps: TIpHtmlProps); override;
   {$IFDEF HTML_RTTI}
   published
   {$ENDIF}
-    property Align : TIpHtmlAlign read FAlign write FAlign;
+//    property Align : TIpHtmlAlign read FAlign write FAlign;
     property Size : TIpHtmlHeaderSize read FSize write FSize;
   end;
+
+  { TIpHtmlNodeP }
 
   TIpHtmlNodeP = class(TIpHtmlNodeInline)
   private
     FAlign : TIpHtmlAlign;
-    procedure SetAlign(const Value: TIpHtmlAlign);
+  protected
+    function GetAlign: TIpHtmlAlign; override;
+    procedure SetAlign(const Value: TIpHtmlAlign); override;
   public
     constructor Create(ParentNode : TIpHtmlNode);
     destructor Destroy; override;
     procedure Enqueue; override;
+    {$IFDEF IP_LAZARUS}
+    procedure LoadAndApplyCSSProps; override;
+    {$ENDIF}
     procedure SetProps(const RenderProps: TIpHtmlProps); override;
+  (*
   {$IFDEF HTML_RTTI}
   published
   {$ENDIF}
-    property Align : TIpHtmlAlign read FAlign write SetAlign;
+    property Align : TIpHtmlAlign read GetAlign write SetAlign;
+  *)
   end;
 
   TIpHtmlNodeADDRESS = class(TIpHtmlNodeInline);
@@ -885,7 +916,7 @@ type
     FSrc: string;
     FWidth: TIpHtmlLength;
     FFrame : TIpHtmlFrame;
-    procedure SetAlign(const Value: TIpHtmlAlign);
+    procedure SetAlign(const Value: TIpHtmlAlign); override;
     procedure SetFrameBorder(const Value: Integer);
     procedure SetMarginHeight(const Value: Integer);
     procedure SetMarginWidth(const Value: Integer);
@@ -949,15 +980,23 @@ type
   TIpHtmlNodeDIV = class(TIpHtmlNodeInline)
   private
     FAlign : TIpHtmlAlign;
+  protected
+    function GetAlign: TIpHtmlAlign; override;
+    procedure SetAlign(const Value: TIpHtmlAlign); override;
   public
     constructor Create(ParentNode : TIpHtmlNode);
     destructor Destroy; override;
     procedure Enqueue; override;
+    {$IFDEF IP_LAZARUS}
+    procedure LoadAndApplyCSSProps; override;
+    {$ENDIF}
     procedure SetProps(const RenderProps: TIpHtmlProps); override;
+    (*
   {$IFDEF HTML_RTTI}
   published
   {$ENDIF}
     property Align : TIpHtmlAlign read FAlign write FAlign;
+    *)
   end;
 
   { TIpHtmlNodeSPAN }
@@ -967,12 +1006,19 @@ type
     FAlign : TIpHtmlAlign;
   protected
     procedure ApplyProps(const RenderProps: TIpHtmlProps); override;
+    function GetAlign: TIpHtmlAlign; override;
+    procedure SetAlign(const Value: TIpHtmlAlign); override;
   public
     constructor Create(ParentNode: TIpHtmlNode);
+    {$IFDEF IP_LAZARUS}
+    procedure LoadAndApplyCSSProps; override;
+    {$ENDIF}
+    (*
   {$IFDEF HTML_RTTI}
   published
   {$ENDIF}
     property Align : TIpHtmlAlign read FAlign write FAlign;
+    *)
   end;
 
   TIpHtmlNodeBLINK = class(TIpHtmlNodeInline);
@@ -1078,6 +1124,7 @@ type
     FId: string;
   protected
     procedure SetClear(const Value: TIpHtmlBreakClear);
+    function GetMargin(AMargin: TIpHtmlElemMargin; ADefault:Integer): Integer; override;
   public
     constructor Create(ParentNode: TIpHtmlNode);
     procedure Enqueue; override;
@@ -1109,16 +1156,14 @@ type
     procedure SetHRef(const Value: string);
     procedure SetName(const Value: string);
   protected
-    AreaList : {$ifdef IP_LAZARUS}TFPList{$else}TList{$endif};
     FHasRef : Boolean;
     FHot: Boolean;
     MapAreaList : {$ifdef IP_LAZARUS}TFPList{$else}TList{$endif};
-    procedure ClearAreaList;
+    procedure ClearAreaList; override;
     function PtInRects(const P : TPoint) : Boolean;
     function RelMapPoint(const P: TPoint): TPoint;
     procedure SetHot(const Value: Boolean);
-    procedure AddArea(const R: TRect);
-    procedure BuildAreaList;
+    procedure BuildAreaList; override;
     procedure AddMapArea(const R: TRect);
     function GetHint: string; override;
     procedure DoOnFocus;
@@ -1128,7 +1173,7 @@ type
   public
     constructor Create(ParentNode : TIpHtmlNode);
     destructor Destroy; override;
-    procedure MakeVisible; override;
+//    procedure MakeVisible; override;
     procedure SetProps(const RenderProps: TIpHtmlProps); override;
   {$IFDEF HTML_RTTI}
   published
@@ -1520,45 +1565,52 @@ type
     property Width : TIpHtmlLength read FWidth write FWidth;
   end;
 
-  TIpHtmlNodeTHeadFootBody = class(TIpHtmlNodeCore);
+  TIpHtmlNodeTHeadFootBody = class(TIpHtmlNodeCore)
+  private
+    FAlign: TIpHtmlAlign;
+  protected
+    function GetAlign: TIpHtmlAlign; override;
+    procedure SetAlign(const Value: TIpHtmlAlign); override;
+  public
+    {$IFDEF IP_LAZARUS}
+    procedure LoadAndApplyCSSProps; override;
+    {$ENDIF}
+  end;
 
   TIpHtmlNodeTABLEHEADFOOTBODYClass = class of TIpHtmlNodeTHeadFootBody;
 
   TIpHtmlNodeTHEAD = class(TIpHtmlNodeTHeadFootBody)
   private
-    FAlign: TIpHtmlAlign;
     FVAlign: TIpHtmlVAlign3;
+  protected
   public
     constructor Create(ParentNode : TIpHtmlNode);
   {$IFDEF HTML_RTTI}
   published
   {$ENDIF}
-    property Align : TIpHtmlAlign read FAlign write FAlign;
+    property Align;
     property VAlign : TIpHtmlVAlign3 read FVAlign write FVAlign;
   end;
 
   TIpHtmlNodeTFOOT = class(TIpHtmlNodeTHeadFootBody)
   private
-    FAlign: TIpHtmlAlign;
     FVAlign: TIpHtmlVAlign3;
   public
   {$IFDEF HTML_RTTI}
   published
   {$ENDIF}
-    property Align : TIpHtmlAlign read FAlign write FAlign;
     property VAlign : TIpHtmlVAlign3 read FVAlign write FVAlign;
   end;
 
   TIpHtmlNodeTBODY = class(TIpHtmlNodeTHeadFootBody)
   private
-    FAlign: TIpHtmlAlign;
     FVAlign: TIpHtmlVAlign3;
   public
     constructor Create(ParentNode : TIpHtmlNode);
   {$IFDEF HTML_RTTI}
   published
   {$ENDIF}
-    property Align : TIpHtmlAlign read FAlign write FAlign;
+    property Align;
     property VAlign : TIpHtmlVAlign3 read FVAlign write FVAlign;
   end;
 
@@ -1568,12 +1620,18 @@ type
     FSpan: Integer;
     FVAlign: TIpHtmlVAlign3;
     FWidth: TIpHtmlMultiLength;
+  protected
+    function GetAlign: TIpHtmlAlign; override;
+    procedure SetAlign(const Value: TIpHtmlAlign); override;
   public
     destructor Destroy; override;
+    {$IFDEF IP_LAZARUS}
+    procedure LoadAndApplyCSSProps; override;
+    {$ENDIF}
   {$IFDEF HTML_RTTI}
   published
   {$ENDIF}
-    property Align : TIpHtmlAlign read FAlign write FAlign;
+    property Align;
     property Span : Integer read FSpan write FSpan;
     property VAlign : TIpHtmlVAlign3 read FVAlign write FVAlign;
     property Width : TIpHtmlMultiLength read FWidth write FWidth;
@@ -1585,12 +1643,18 @@ type
     FVAlign: TIpHtmlVAlign3;
     FSpan: Integer;
     FWidth: TIpHtmlMultiLength;
+  protected
+    function GetAlign: TIpHtmlAlign; override;
+    procedure SetAlign(const Value: TIpHtmlAlign); override;
   public
     destructor Destroy; override;
+    {$IFDEF IP_LAZARUS}
+    procedure LoadAndApplyCSSProps; override;
+    {$ENDIF}
   {$IFDEF HTML_RTTI}
   published
   {$ENDIF}
-    property Align : TIpHtmlAlign read FAlign write FAlign;
+    property Align;
     property Span : Integer read FSpan write FSpan;
     property VAlign : TIpHtmlVAlign3 read FVAlign write FVAlign;
     property Width : TIpHtmlMultiLength read FWidth write FWidth;
@@ -1608,13 +1672,18 @@ type
     procedure SetTextColor(const AValue: TColor);
   protected
     procedure AppendSelection(var S: String; var Completed: Boolean); override;
+    function GetAlign: TIpHtmlAlign; override;
+    procedure SetAlign(const Value: TIpHtmlAlign); override;
   public
     constructor Create(ParentNode : TIpHtmlNode);
+    {$IFDEF IP_LAZARUS}
+    procedure LoadAndApplyCSSProps; override;
+    {$ENDIF}
     procedure SetProps(const RenderProps: TIpHtmlProps); override;
   {$IFDEF HTML_RTTI}
   published
   {$ENDIF}
-    property Align : TIpHtmlAlign read FAlign write FAlign;
+    property Align;
     property VAlign : TIpHtmlVAlign read FVAlign write FVAlign;
     property BgColor: TColor read FBgColor write SetBgColor;
     property TextColor: TColor read FTextColor write SetTextColor;
@@ -1638,11 +1707,16 @@ type
   protected
     procedure AppendSelection(var S: String; var Completed: Boolean); override;
     procedure DimChanged(Sender: TObject);
+    function GetAlign: TIpHtmlAlign; override;
+    procedure SetAlign(const Value: TIpHtmlAlign); override;
   public
     FPadRect : TRect;
     constructor Create(ParentNode : TIpHtmlNode);
     destructor Destroy; override;
     procedure Layout(RenderProps: TIpHtmlProps; const TargetRect : TRect); override;
+    {$IFDEF IP_LAZARUS}
+    procedure LoadAndApplyCSSProps; override;
+    {$ENDIF}
     procedure Render(RenderProps: TIpHtmlProps); override;
     procedure CalcMinMaxPropWidth(RenderProps: TIpHtmlProps; var Min, Max: Integer); override;
   public
@@ -1650,7 +1724,7 @@ type
   {$IFDEF HTML_RTTI}
   published
   {$ENDIF}
-    property Align : TIpHtmlAlign read FAlign write FAlign;
+    property Align;
     property BgColor;
     property CalcWidthMin: Integer read FCalcWidthMin write FCalcWidthMin;
     property CalcWidthMax: Integer read FCalcWidthMax write FCalcWidthMax;
@@ -1662,6 +1736,7 @@ type
     property Width : TIpHtmlLength read FWidth write FWidth;
   end;
 
+
   { TIpHtmlNodeTH }
 
   TIpHtmlNodeTH = class(TIpHtmlNodeTableHeaderOrCell)
@@ -1669,12 +1744,16 @@ type
     constructor Create(ParentNode: TIpHtmlNode);
   end;
 
+
   { TIpHtmlNodeTD }
 
   TIpHtmlNodeTD = class(TIpHtmlNodeTableHeaderOrCell)
   public
     constructor Create(ParentNode: TIpHtmlNode);
   end;
+
+
+  { TIpHtmlNodeINPUT }
 
   TIpHtmlInputType = (hitText, hitPassword, hitCheckbox, hitRadio,
     hitSubmit, hitReset, hitFile, hitHidden, hitImage, hitButton);
@@ -1928,8 +2007,10 @@ type
     FALinkColor: TColor;
     FTextColor: TColor;
     FBgColor: TColor;
+    FFontQuality: TFontQuality;
     FFactBAParag: Real;
     FHasFrames : Boolean;
+    FLinksUnderlined: Boolean;
     FOnGetImageX : TIpHtmlDataGetImageEvent;
     FOnScroll : TIpHtmlScrollEvent;
     FOnInvalidateSize : TNotifyEvent;
@@ -1991,6 +2072,7 @@ type
     HardLF, HardLFClearLeft, SoftHyphen,
     HardLFClearRight, HardLFClearBoth : PIpHtmlElement;
     NameList : TStringList;
+    IdList: TStringList;
     GifQueue : {$ifdef IP_LAZARUS}TFPList{$else}TList{$endif};
     InPre : Integer;
     InBlock : Integer;
@@ -2010,7 +2092,7 @@ type
     ElementPool : TIpHtmlPoolManager;
     AnchorList : {$ifdef IP_LAZARUS}TFPList{$else}TList{$endif};
     FControlList : {$ifdef IP_LAZARUS}TFPList{$else}TList{$endif};
-    FCURURL : string;
+    FCurURL : string;
     DoneLoading : Boolean;
     ListLevel : Integer;
     PropACache : TIpHtmlPropsAList;
@@ -2039,6 +2121,7 @@ type
     procedure EnsureClosure(const EndToken: TIpHtmlToken; const EndTokens: TIpHtmlTokenSet);
     function NewElement(EType : TElementType; Own: TIpHtmlNode) : PIpHtmlElement;
     function BuildStandardEntry(EType: TElementType): PIpHtmlElement;
+    function BuildLinefeedEntry(EType: TElementType; AHeight: Integer): PIpHtmlElement;
     function ParseDir: TIpHtmlDirection;
     procedure ParseSPAN(Parent: TIpHtmlNode; const EndTokens: TIpHtmlTokenSet);
     procedure ParseQ(Parent: TIpHtmlNode; const EndTokens: TIpHtmlTokenSet);
@@ -2172,6 +2255,7 @@ type
     procedure AddWord(Value: string; Props: TIpHtmlProps; Owner: TIpHtmlNode);
     procedure AddWordEntry(const Value: string; Props: TIpHtmlProps; Owner: TIpHtmlNode);
     function FindElement(const Name: string): TIpHtmlNode;
+    function FindElementId(const Id: String): TIpHtmlNode;
     procedure Clear; {clear any contents}
     procedure Home;
     function GetPageRect(TargetCanvas: TCanvas; Width, Height : Integer): TRect; // computes the layout for this Canvas
@@ -2200,6 +2284,7 @@ type
     property VLinkColor: TColor read FVLinkColor write FVLinkColor;
     property ALinkColor: TColor read FALinkColor write FALinkColor;
     property BgColor: TColor read FBgColor write FBgColor;
+    property LinksUnderlined: Boolean read FLinksUnderlined write FLinksUnderlined;
     property HasFrames: Boolean read FHasFrames;
     property OnGetImageX: TIpHtmlDataGetImageEvent read FOnGetImageX write FOnGetImageX;
     property OnScroll: TIpHtmlScrollEvent read FOnScroll write FOnScroll;
@@ -2248,6 +2333,7 @@ type
     property FixedTypeface: string read FFixedTypeface write FFixedTypeface;
     property DefaultTypeFace: string read FDefaultTypeFace write FDefaultTypeFace;
     property DefaultFontSize: integer read FDefaultFontSize write FDefaultFontSize;
+    property FontQuality: TFontQuality read FFontQuality write FFontQuality;
     property HtmlNode : TIpHtmlNodeHtml read FHtml;
     property CurUrl: string read FCurUrl;
     {$IFDEF IP_LAZARUS}
@@ -2637,6 +2723,7 @@ type
     FCurElement : PIpHtmlElement;
     FPrintSettings: TIpHtmlPrintSettings;
     FFactBAParag: Real;
+    FFontQuality: TFontQuality;
     FWantTabs: Boolean;
     FScrollDist: Integer;
     procedure SetDataProvider(const AValue: TIpAbstractHtmlDataProvider);
@@ -2644,6 +2731,7 @@ type
     function FactBAParagNotIs1: Boolean;
     function GetVScrollPos: Integer;
     procedure SetVScrollPos(const Value: Integer);
+    procedure SetFontQuality(const AValue: TFontQuality);
   protected
     FFlagErrors: Boolean;
     FFixedTypeface: string;
@@ -2660,6 +2748,7 @@ type
     FALinkColor: TColor;
     FTextColor: TColor;
     FBgColor: TColor;
+    FLinksUnderlined: Boolean;
     FShowHints: Boolean;
     FMarginHeight: Integer;
     FMarginWidth: Integer;
@@ -2749,8 +2838,10 @@ type
     property FixedTypeface: string read FFixedTypeface write FFixedTypeface;
     property DefaultTypeFace: string read FDefaultTypeFace write SetDefaultTypeFace;
     property DefaultFontSize: integer read FDefaultFontSize write SetDefaultFontSize;
+    property FontQuality: TFontQuality read FFontQuality write SetFontQuality default fqDefault;
     property HotURL: string read FHotURL;
     property LinkColor: TColor read FLinkColor write FLinkColor default clBlue;
+    property LinksUnderlined: Boolean read FLinksUnderlined write FLinksUnderlined default DEFAULT_LINKS_UNDERLINED;
     property MarginHeight: Integer read FMarginHeight write FMarginHeight default 10;
     property MarginWidth: Integer read FMarginWidth write FMarginWidth default 10;
     property PrintSettings: TIpHtmlPrintSettings read FPrintSettings write FPrintSettings;
@@ -2784,6 +2875,8 @@ type
     {$IFDEF VERSION4}
     property Anchors;
     {$ENDIF}
+    property BgColor;
+    property BorderSpacing;
     property BorderWidth;
     property BorderStyle;
     {$IFDEF VERSION4}
@@ -2792,15 +2885,17 @@ type
     property DataProvider;
     property Enabled;
     property FixedTypeface;
+    property FontQuality;
     property DefaultTypeFace;
     property DefaultFontSize;
     property FactBAParag;
     property FlagErrors;
     property LinkColor;
-    property PopupMenu;
-    property PrintSettings;
+    property LinksUnderlined;
     property MarginHeight;
     property MarginWidth;
+    property PopupMenu;
+    property PrintSettings;
     property ScrollDist;
     property ShowHints;
     property TabOrder;
@@ -3678,6 +3773,57 @@ begin
     Result := I2;
 end;
 
+function FindFontName(const AFontList: string): string;
+
+  function CheckFonts(ATestFontList: array of String): String;
+  var
+    i: Integer;
+  begin
+    for i:=0 to High(ATestFontList) do begin
+      Result := ATestFontList[i];
+      if Screen.Fonts.IndexOf(Result) > -1 then
+        exit;
+    end;
+    Result := '';
+  end;
+
+var
+  L: TStringList;
+  i: Integer;
+begin
+  L := TStringList.Create;
+  try
+    L.CommaText := AFontList;
+    for i:=0 to L.Count-1 do begin
+      Result := L[i];
+      if Screen.Fonts.IndexOf(Result) > -1 then
+        exit;
+      if SameText(Result, 'sans-serif') then begin
+        Result := Checkfonts(['Arial', 'Helvetica', 'Liberation Sans']);
+        if Result = '' then
+          Result := Screen.MenuFont.Name;
+        exit;
+      end else
+      if SameText(Result, 'serif') then begin
+        Result := CheckFonts(['Times', 'Times New Roman', 'Liberation Serif']);
+        if Result = '' then
+          Result := Screen.MenuFont.Name;
+        exit;
+      end else
+      if SameText(Result, 'monospace') then begin
+        Result := CheckFonts(['Courier New', 'Courier', 'Liberation Mono']);
+        if Result = '' then
+          Result := Screen.MenuFont.Name;
+        exit;
+      end else
+        Result := Screen.MenuFont.Name;
+    end;
+  finally
+    L.Free;
+  end;
+end;
+
+(*
 function FirstString(const S: string): string;
 {- returns first string if a list - otherwise the string itself}
 var
@@ -3689,7 +3835,7 @@ begin
   else
     Result := copy(S, 1, P - 1);
 end;
-
+*)
 { TIpHtmlInteger }
 
 constructor TIpHtmlInteger.Create(AValue: Integer);
@@ -3898,6 +4044,33 @@ begin
   end;
 end;
 
+procedure TIpHtmlBaseLayouter.ProcessDuplicateLFs;
+var
+  i: Integer;
+  elem: PIpHtmlElement;
+  prevelem: PIpHtmlElement;
+begin
+  i := pred(FElementQueue.Count);
+  while i > 0 do begin
+    elem := PIpHtmlElement(FElementQueue[i]);
+    prevelem := PIpHtmlElement(FElementQueue[i-1]);
+    case PIpHtmlElement(FElementQueue[i])^.ElementType of
+      etSoftLF:
+        if (prevelem.ElementType in [etHardLF, etSoftLF]) then begin
+          prevelem.LFHeight := MaxI2(prevelem.LFHeight, elem.LFHeight);
+          FElementQueue.Delete(i);
+        end;
+      etHardLF:
+        if (prevelem.ElementType = etSoftLF) then begin
+          prevelem.LFHeight := MaxI2(prevelem.LFHeight, elem.LFHeight);
+          FElementQueue.Delete(i-1);
+        end;
+        // nothing to do for etHardLF
+    end;
+    dec(i);
+  end;
+end;
+
 procedure TIpHtmlBaseLayouter.RemoveLeadingLFs;
 begin
   while (FElementQueue.Count>0)
@@ -3905,28 +4078,6 @@ begin
     FElementQueue.Delete(0);
 end;
 
-procedure TIpHtmlBaseLayouter.RemoveDuplicateLFs;
-var
-  i: Integer;
-begin
-  i := pred(FElementQueue.Count);
-  while i >= 0 do begin
-    case PIpHtmlElement(FElementQueue[i])^.ElementType of
-      etSoftLF:
-        if (i > 0) and (PIpHtmlElement(FElementQueue[i-1])^.ElementType in [etSoftLF, etHardLF])
-          then FElementQueue.Delete(i);
-      {
-      etHardLF:
-        if (i > 0) and (PIpHtmlElement(FElementQueue[i-1])^.ElementType in [etSoftLF, etHardLF])
-        then begin
-          FElementQueue.Delete(i-1);
-          dec(i);
-        end;
-        }
-    end;
-    dec(i);
-  end;
-end;
 
 { TIpHtmlBaseTableLayouter }
 
@@ -4185,6 +4336,12 @@ end;
 procedure TIpHtmlNode.UnmarkControl;
 begin
 end;
+
+function TIpHtmlNode.GetMargin(AMargin: TIpHtmlElemMargin; ADefault: Integer): Integer;
+begin
+  Result := ADefault;
+end;
+
 
 {Attribute support code}
 
@@ -4600,6 +4757,16 @@ begin
   end;
 end;
 
+function TIpHtmlNodeMulti.GetMargin(AMargin: TIpHtmlElemMargin;
+  ADefault: Integer): Integer;
+begin
+  if AMargin.Style = hemsPx then
+    Result := round(AMargin.Size)
+  else
+    Result := ADefault;
+end;
+
+
 { TIpHtmlNodeBODY }
 
 constructor TIpHtmlNodeBODY.Create(ParentNode : TIpHtmlNode);
@@ -4619,7 +4786,7 @@ var
   P : TPoint;
 begin
   if ScaleBitmaps then begin
-    Owner.Target.Brush.Color := clWhite;
+    Owner.Target.Brush.Color := Owner.BgColor;
     Owner.Target.FillRect(Owner.ClientRect);
   end else begin
     {$IFDEF IP_LAZARUS}
@@ -4628,7 +4795,7 @@ begin
         Owner.Target.Brush.Color := BGColor;
         Owner.Target.FillRect(Owner.ClientRect);
       end else begin
-        Owner.Target.Brush.Color := clWhite;
+        Owner.Target.Brush.Color := Owner.BGColor;
         Owner.Target.FillRect(Owner.ClientRect);
       end;
     end;
@@ -4663,7 +4830,7 @@ begin
           Inc(Y, BgPicture.Height);
         end;
       end else begin
-        Owner.Target.Brush.Color := clWhite;
+        Owner.Target.Brush.Color := Owner.BgColor;
         Owner.Target.FillRect(Owner.ClientRect);
       end;
     end;
@@ -5693,9 +5860,8 @@ begin
   ParseBodyText(NewHeader, [EndToken]);
   if CurToken = EndToken then
     NextToken
-  else
-    if FlagErrors then
-      ReportExpectedToken(EndToken);
+  else if FlagErrors then
+    ReportExpectedToken(EndToken);
 end;
 
 procedure TIpHtml.ParseParagraph(Parent : TIpHtmlNode; const EndTokens: TIpHtmlTokenSet);
@@ -6824,7 +6990,7 @@ var
   CurBasefont : TIpHtmlNodeBASEFONT;
 begin
   CurBasefont := TIpHtmlNodeBASEFONT.Create(Parent);
-  if CurBasefont=nil then ;
+  if CurBasefont=nil then ;                                  // ???? What's this?????
   CurBasefont.Size := ParseInteger(htmlAttrSIZE, 3);
   NextToken;
 end;
@@ -7304,7 +7470,7 @@ end;
 
 function TIpHtml.ParseAlignment : TIpHtmlAlign;
 begin
-  Result := GetAlignmentForStr(FindAttribute(htmlAttrALIGN), haLeft);
+  Result := GetAlignmentForStr(FindAttribute(htmlAttrALIGN), haDefault); //haLeft);
 //  if FlagErrors then
 //    ReportError(SHtmlInvAlign);
 end;
@@ -7603,7 +7769,6 @@ begin
       LoadAndApplyCSSProps;
       {$ENDIF}
     end;
-
     NextToken;
     ParseBodyText(Body, EndTokens + [IpHtmlTagBODYend]);
     EnsureClosure(IpHtmlTagBODYend, EndTokens);
@@ -7744,6 +7909,7 @@ begin
   LinkColor := clBlue;
   VLinkColor := clPurple;
   ALinkColor := clRed;
+  FLinksUnderlined := DEFAULT_LINKS_UNDERLINED;
   {$IFDEF IP_LAZARUS}
   FCSS := TCSSGlobalProps.Create;
   FTabList := TIpHtmlTabList.Create;
@@ -7757,6 +7923,7 @@ begin
   OtherImages := {$ifdef IP_LAZARUS}TFPList{$else}TList{$endif}.Create;
   {$ENDIF}
   NameList := TStringList.Create;
+  IdList := TStringList.Create;
   DefaultImage := TPicture.Create;
   TmpBitmap := nil;
   try
@@ -7867,6 +8034,7 @@ begin
   GifQueue.Free;
   DefaultImage.Free;
   NameList.Free;
+  IdList.Free;
   FHtml.Free;
   AnchorList.Free;
   MapList.Free;
@@ -7993,7 +8161,7 @@ end;
 
 procedure TIpHtml.SetDefaultProps;
 begin
-  if FDefaultTypeFace='' then begin
+  if (FDefaultTypeFace='') or SameText(FDefaultTypeFace, 'default') then begin
     {$IFDEF MSWindows}
     Defaultprops.FontName := 'Times New Roman';
     {$ELSE}
@@ -8712,9 +8880,17 @@ begin
   SetWordRect(Result, Rect(0, 0, 0, 0));
 end;
 
+function TIpHtml.BuildLineFeedEntry(EType: TElementType;
+  AHeight: Integer): PIpHtmlElement;
+begin
+  if not (EType in [etHardLF, etSoftLF]) then
+    raise Exception.Create('BuildLinefeedEntry can only be called with parameter etSoftLF or dtHardLF');
+  Result := BuildStandardEntry(EType);
+  Result.LFHeight := AHeight;
+end;
 procedure TIpHtml.MakeVisible(const R: TRect{$IFDEF IP_LAZARUS}; ShowAtTop: Boolean = True{$ENDIF});
 begin
-  if assigned(FOnScroll) then
+  if Assigned(FOnScroll) then
     FOnScroll(Self, R{$IFDEF IP_LAZARUS}, ShowAtTop{$ENDIF});
 end;
 
@@ -8726,6 +8902,18 @@ begin
   i := NameList.IndexOf(Name);
   if i <> -1 then
     Result := TIpHtmlNode(NameList.Objects[i])
+  else
+    Result := nil;
+end;
+
+function TIpHtml.FindElementID(const Id: String): TIpHtmlNode;
+var
+  i: Integer;
+begin
+  IdList.Sorted := true;
+  i := IdList.IndexOf(Id);
+  if i <> -1 then
+    Result := TIpHtmlNode(IdList.Objects[i])
   else
     Result := nil;
 end;
@@ -9209,10 +9397,10 @@ var
 begin
   Props.Assign(RenderProps);
   if Face <> '' then
-    Props.FontName := FirstString(Face);
+    Props.FontName := FindFontName(Face);
   case Size.SizeType of
   hrsAbsolute :
-    Props.FontSize := FONTSIZESVALUSARRAY[Size.Value-1];
+    Props.FontSize := FONTSIZESVALUESARRAY[Size.Value-1];
   hrsRelative :
     begin
       TmpSize := Props.BaseFontSize + Size.Value;
@@ -9222,7 +9410,7 @@ begin
       if TmpSize > 7 then
         Props.FontSize := 36
       else
-        Props.FontSize := FONTSIZESVALUSARRAY[TmpSize-1];
+        Props.FontSize := FONTSIZESVALUESARRAY[TmpSize-1];
     end;
   end;
   if Color <> -1 then
@@ -9625,24 +9813,49 @@ begin
 end;
 
 procedure TIpHtmlNodeP.Enqueue;
+var
+  elem: PIpHtmlElement;
+  hf, h: Integer;
 begin
+  hf := Props.FontSize;
   if FChildren.Count > 0 then begin
-    if not ((FParentNode is TIpHtmlNodeLI) or (FParentNode is TIpHtmlNodeTD)) then
+    if not (FParentNode is TIpHtmlNodeLI) then
     begin
-      EnqueueElement(Owner.SoftLF);
-      EnqueueElement(Owner.HardLF);
+      if FParentNode is TIpHtmlNodeTD then h := 0 else h := hf; // div 2;
+      // FIXME: above line is a workaround for LHelp to display the code tables
+      // correctly
+      h := GetMargin(Props.ElemMarginTop, h);
+      elem := Owner.BuildLinefeedEntry(etSoftLF, h);
+      EnqueueElement(elem);
     end;
   end;
-
   inherited Enqueue;
-
   if FChildren.Count > 0 then begin
-    if not (FParentNode is TIpHtmlNodeTD) then begin
-      EnqueueElement(Owner.SoftLF);
-      EnqueueElement(Owner.HardLF);
+    if not (FParentNode is TIpHtmlNodeLI) then
+    begin
+      if FParentNode is TIpHtmlNodeTD then h := 0 else h := hf; // div 2;
+      // FIXME: above line is a workaround for LHelp to display the code tables
+      // correctly
+      h := GetMargin(Props.ElemMarginBottom, h);
+      elem := Owner.BuildLinefeedEntry(etSoftLF, h);
+      EnqueueElement(elem);
     end;
   end;
 end;
+
+function TIpHtmlNodeP.GetAlign: TIpHtmlAlign;
+begin
+  Result := FAlign;
+end;
+
+{$IFDEF IP_LAZARUS}
+procedure TIpHtmlNodeP.LoadAndApplyCSSProps;
+begin
+  inherited;
+  if not (FCombinedCSSProps.Alignment in [haDefault, haUnknown]) then
+    Align := FCombinedCSSProps.Alignment;
+end;
+{$ENDIF}
 
 procedure TIpHtmlNodeP.SetAlign(const Value: TIpHtmlAlign);
 begin
@@ -9780,27 +9993,56 @@ begin
   inherited;
 end;
 
+function TIpHtmlNodeHeader.GetAlign: TIpHtmlAlign;
+begin
+  Result := FAlign;
+end;
+
+{$IFDEF IP_LAZARUS}
+procedure TIpHtmlNodeHeader.LoadAndApplyCSSProps;
+begin
+  inherited;
+  if not (FCombinedCSSProps.Alignment in [haDefault, haUnknown]) then
+    Align := FCombinedCSSProps.Alignment;
+end;
+{$ENDIF}
+
+procedure TIpHtmlNodeHeader.SetAlign(const Value: TIpHtmlAlign);
+begin
+  FAlign := Value;
+end;
+
 procedure TIpHtmlNodeHeader.SetProps(const RenderProps: TIpHtmlProps);
 begin
   Props.Assign(RenderProps);
   Props.DelayCache:=True;
-  Props.FontSize := FONTSIZESVALUSARRAY[abs(Size-6)];
+  Props.FontSize := FONTSIZESVALUESARRAY[abs(Size-6)];
   Props.FontStyle := [fsBold];
   Props.Alignment := Align;
-  Props.DelayCache:=False;
+  Props.DelayCache := False;
   inherited SetProps(Props);
 end;
 
 procedure TIpHtmlNodeHeader.Enqueue;
+var
+  elem: PIpHtmlElement;
+  hf: Integer;
+  h: Integer;
 begin
-  if FChildren.Count > 0 then
-    EnqueueElement(Owner.HardLF);
+  hf := Props.FontSize;
+  if FChildren.Count > 0 then begin
+    h := GetMargin(Props.ElemMarginTop, hf div 2);
+    elem := Owner.BuildLinefeedEntry(etSoftLF, h);
+    EnqueueElement(elem);
+  end;
   inherited Enqueue;
   if FChildren.Count > 0 then begin
-    EnqueueElement(Owner.SoftLF);
-//    EnqueueElement(Owner.HardLF);    // Remove large spacing after header line
+    h := GetMargin(Props.ElemMarginBottom, hf div 4);
+    elem := Owner.BuildLinefeedEntry(etSoftLF, h);
+    EnqueueElement(elem);
   end;
 end;
+
 
 { TIpHtmlNodeLI }
 
@@ -9913,17 +10155,48 @@ end;
 { TIpHtmlNodeBR }
 
 procedure TIpHtmlNodeBR.Enqueue;
+var
+  h: Integer;
+  elem: PIpHtmlElement;
 begin
+  h := 0;
+  (*      // wp: is there any reason why h should be > 0 for other node types?
+  if (ParentNode is TIpHtmlNodeP) or
+     (ParentNode is TIpHtmlNodeDIV) or
+     (ParentNode is TIpHtmlNodeLI) or
+//     (ParentNode is TIpHtmlNodePRE) or
+     (ParentNode is TIpHtmlNodeHeader) or
+     (ParentNode is TIpHtmlNodeBody)
+  then
+    h := 0
+  else
+    h := Props.FontSize;
+  *)
+
   case Clear of
-  hbcNone :
-    EnqueueElement(Owner.HardLF);
-  hbcLeft :
-    EnqueueElement(Owner.HardLFClearLeft);
-  hbcRight :
-    EnqueueElement(Owner.HardLFClearRight);
-  hbcAll :
-    EnqueueElement(Owner.HardLFClearBoth);
+    hbcNone :
+      begin
+        elem := Owner.BuildLinefeedEntry(etHardLF, h);
+        EnqueueElement(elem);
+      end;
+    hbcLeft :
+      EnqueueElement(Owner.HardLFClearLeft);
+    hbcRight :
+      EnqueueElement(Owner.HardLFClearRight);
+    hbcAll :
+      EnqueueElement(Owner.HardLFClearBoth);
   end;
+end;
+
+function TIpHtmlNodeBR.GetMargin(AMargin: TIpHtmlElemMargin; ADefault: Integer): Integer;
+var
+  default: Integer;
+begin
+  if (ParentNode is TIpHtmlNodeP) then
+    default := 0
+  else
+    default := ADefault;
+  Result := inherited GetMargin(AMargin, default);
 end;
 
 procedure TIpHtmlNodeBR.SetClear(const Value: TIpHtmlBreakClear);
@@ -10055,26 +10328,6 @@ end;
 
 { TIpHtmlNodeA }
 
-procedure TIpHtmlNodeA.AddArea(const R: TRect);
-var
-  RCopy : PRect;
-  c : Integer;
-begin
-  c := AreaList.Count;
-  if c > 0 then begin
-    RCopy := PRect(AreaList[c-1]);
-    if (R.Left = RCopy.Right)
-    and (R.Top = RCopy.Top)
-    and (R.Bottom = RCopy.Bottom) then begin
-      RCopy.Right := R.Right;
-      Exit;
-    end;
-  end;
-  New(RCopy);
-  RCopy^  := R;
-  AreaList.Add(RCopy);
-end;
-
 procedure TIpHtmlNodeA.AddMapArea(const R: TRect);
 var
   RCopy : PRect;
@@ -10082,7 +10335,7 @@ var
 begin
   c := MapAreaList.Count;
   if c > 0 then begin
-    RCopy := PRect(AreaList[c-1]);
+    RCopy := PRect(FAreaList[c-1]);
     if (R.Left = RCopy.Right)
     and (R.Top = RCopy.Top)
     and (R.Bottom = RCopy.Bottom) then begin
@@ -10097,14 +10350,9 @@ end;
 
 procedure TIpHtmlNodeA.ClearAreaList;
 var
-  a: Pointer;
   m: Pointer;
 begin
-  while AreaList.Count > 0 do begin
-    a:=AreaList[0];
-    FreeMem(a);
-    AreaList.Delete(0);
-  end;
+  inherited;
   while MapAreaList.Count > 0 do begin
     m:=MapAreaList[0];
     FreeMem(m);
@@ -10116,7 +10364,6 @@ constructor TIpHtmlNodeA.Create(ParentNode: TIpHtmlNode);
 begin
   inherited Create(ParentNode);
   FElementName := 'a';
-  AreaList := {$ifdef IP_LAZARUS}TFPList{$else}TList{$endif}.Create;
   MapAreaList := {$ifdef IP_LAZARUS}TFPList{$else}TList{$endif}.Create;
 end;
 
@@ -10125,7 +10372,6 @@ begin
   if HasRef then
     Owner.AnchorList.Remove(Self);
   ClearAreaList;
-  AreaList.Free;
   MapAreaList.Free;
   inherited;
 end;
@@ -10134,21 +10380,20 @@ procedure TIpHtmlNodeA.BuildAreaList;
 var
   i : Integer;
 begin
-  for i := 0 to Pred(FChildren.Count) do begin
-    TIpHtmlNode(FChildren[i]).ReportDrawRects(AddArea);
+  inherited;
+  for i := 0 to Pred(FChildren.Count) do
     TIpHtmlNode(FChildren[i]).ReportMapRects(AddMapArea);
-  end;
 end;
 
 function TIpHtmlNodeA.PtInRects(const P: TPoint): Boolean;
 var
   i : Integer;
 begin
-  if AreaList.Count = 0 then
+  if FAreaList.Count = 0 then
     BuildAreaList;
-  for i := 0 to Pred(AreaList.Count) do begin
-    with PRect(AreaList[i])^ do
-    if PtInRect(PRect(AreaList[i])^,P) then begin
+  for i := 0 to Pred(FAreaList.Count) do begin
+    with PRect(FAreaList[i])^ do
+    if PtInRect(PRect(FAreaList[i])^,P) then begin
       Result := True;
       Exit;
     end;
@@ -10160,14 +10405,14 @@ function TIpHtmlNodeA.RelMapPoint(const P: TPoint): TPoint;
 var
   i : Integer;
 begin
-  if AreaList.Count = 0 then
+  if FAreaList.Count = 0 then
     BuildAreaList;
   for i := 0 to Pred(MapAreaList.Count) do begin
     with PRect(MapAreaList[i])^ do
-    if PtInRect(PRect(AreaList[i])^,P) then begin
+    if PtInRect(PRect(FAreaList[i])^,P) then begin
       Result := Point(
-        P.x - PRect(AreaList[i])^.Left,
-        P.y - PRect(AreaList[i])^.Top);
+        P.x - PRect(FAreaList[i])^.Left,
+        P.y - PRect(FAreaList[i])^.Top);
       Exit;
     end;
   end;
@@ -10180,11 +10425,11 @@ var
   R : TRect;
 begin
   FHot := Value;
-  if AreaList.Count = 0 then
+  if FAreaList.Count = 0 then
     BuildAreaList;
   SetProps(Props);
-  for i := 0 to Pred(AreaList.Count) do
-    if PageRectToScreen(PRect(AreaList[i])^, R) then
+  for i := 0 to Pred(FAreaList.Count) do
+    if PageRectToScreen(PRect(FAreaList[i])^, R) then
       Owner.InvalidateRect(R);
 end;
 
@@ -10225,7 +10470,7 @@ begin
   if FName <> '' then
     Owner.NameList.AddObject(FName, Self);
 end;
-
+  (*
 procedure TIpHtmlNodeA.MakeVisible;
 var
   i : Integer;
@@ -10240,7 +10485,7 @@ begin
   Owner.MakeVisible(R{$IFDEF IP_LAZARUS}, true {$ENDIF});
   //Owner.MakeVisible(R{$IFDEF IP_LAZARUS}, False {$ENDIF});  // original
 end;
-
+    *)
 procedure TIpHtmlNodeA.SetProps(const RenderProps: TIpHtmlProps);
 begin
   Props.Assign(RenderProps);
@@ -10250,7 +10495,10 @@ begin
     Props.FontStyle := Props.FontStyle + [fsUnderline];
   end else
     if HasRef then begin
-      Props.FontStyle := Props.FontStyle - [fsUnderline];
+      if Owner.LinksUnderlined then
+        Props.FontStyle := Props.FontStyle + [fsUnderline]
+      else
+        Props.FontStyle := Props.FontStyle - [fsUnderline];
       if Owner.LinkVisited(HRef) then
         Props.FontColor := Props.VLinkColor
       else
@@ -10281,6 +10529,25 @@ begin
   inherited;
 end;
 
+function TIpHtmlNodeDIV.GetAlign: TIpHtmlAlign;
+begin
+  Result := FAlign;
+end;
+
+{$IFDEF IP_LAZARUS}
+procedure TIpHtmlNodeDIV.LoadAndApplyCSSProps;
+begin
+  inherited;
+  if not (FCombinedCSSProps.Alignment in [haDefault, haUnknown]) then
+    Align := FCombinedCSSProps.Alignment;
+end;
+{$ENDIF}
+
+procedure TIpHtmlNodeDIV.SetAlign(const Value: TIpHtmlAlign);
+begin
+  FAlign := Value;
+end;
+
 procedure TIpHtmlNodeDIV.SetProps(const RenderProps: TIpHtmlProps);
 begin
   Props.Assign(RenderProps);
@@ -10292,6 +10559,24 @@ begin
 end;
 
 procedure TIpHtmlNodeDIV.Enqueue;
+var
+  elem: PIpHtmlElement;
+  h: Integer;
+begin
+  //hf := Props.FontSize;
+  if FChildren.Count > 0 then begin
+    h := GetMargin(Props.ElemMarginTop, 0); //hf div 4);
+    elem := Owner.BuildLinefeedEntry(etSoftLF, h);
+    EnqueueElement(elem);
+  end;
+  inherited Enqueue;
+  if FChildren.Count > 0 then begin
+    h := GetMargin(Props.ElemMarginBottom, 0);  //hf div 4);
+    elem := Owner.BuildLinefeedEntry(etSoftLF, h);
+    EnqueueElement(elem);
+  end;
+end;
+(* this is the original code
 begin
   if FChildren.Count > 0 then begin
     if Props.ElemMarginTop.Style=hemsAuto then
@@ -10311,8 +10596,15 @@ begin
     end;
   end;
 end;
+*)
 
 { TIpHtmlNodeSPAN }
+
+constructor TIpHtmlNodeSPAN.Create(ParentNode: TIpHtmlNode);
+begin
+  inherited Create(ParentNode);
+  FElementName := 'span';
+end;
 
 procedure TIpHtmlNodeSPAN.ApplyProps(const RenderProps: TIpHtmlProps);
 begin
@@ -10325,11 +10617,23 @@ begin
   Props.DelayCache:=False;
 end;
 
-constructor TIpHtmlNodeSPAN.Create(ParentNode: TIpHtmlNode);
+function TIpHtmlNodeSPAN.GetAlign: TIpHtmlAlign;
 begin
-  inherited Create(ParentNode);
-  FElementName := 'span';
+  Result := FAlign;
 end;
+
+procedure TIpHtmlNodeSPAN.LoadAndApplyCSSProps;
+begin
+  inherited;
+  if not (FCombinedCSSProps.Alignment in [haDefault, haUnknown]) then
+    Align := FCombinedCSSProps.Alignment;
+end;
+
+procedure TIpHtmlNodeSPAN.SetAlign(const Value: TIpHtmlAlign);
+begin
+  FAlign := Value;
+end;
+
 
 { TIpHtmlNodeTABLE }
 
@@ -10609,15 +10913,14 @@ begin
   hiaCenter :
     EnqueueElement(Owner.SoftLF);
   end;
- }
+}
   EnqueueElement(Owner.SoftLF);
-  EnqueueElement(Owner.HardLF);
 
   EnqueueElement(Element);
 
   EnqueueElement(Owner.SoftLF);
-  EnqueueElement(Owner.hardLF);  // LFs needed otherwise next element is too close
-                               {
+//  EnqueueElement(Owner.HardLF);  // LFs needed otherwise next element is too close
+{
   case Align of
   hiaTop,
   hiaMiddle,
@@ -10625,7 +10928,7 @@ begin
   hiaCenter :
     EnqueueElement(Owner.SoftLF);
   end;
-  }
+}
 end;
 
 procedure TIpHtmlNodeTABLE.SetBorder(const Value: Integer);
@@ -10722,18 +11025,18 @@ begin
       Rules := hrGroups;
     end;
   end;
+  if FCombinedCSSProps.Width.LengthType <> cltUndefined then begin
+    FWidth.Free;
+    FWidth := TIpHtmlLength.Create;
+    FWidth.LengthValue := FCombinedCSSProps.Width.LengthValue;
+    FWidth.LengthType := TIpHtmlLengthType(ord(FCombinedCSSProps.Width.LengthType));
+    FWidth.OnChange := WidthChanged;
+  end;
 end;
 {$ENDIF}
 
-{ TIpNodeTR }
 
-procedure TIpHtmlNodeTR.SetProps(const RenderProps: TIpHtmlProps);
-begin
-  Props.Assign(RenderProps);
-  Props.FontColor := TextColor;
-  Props.BgColor := BgColor;
-  inherited SetProps(Props);
-end;
+{ TIpNodeTR }
 
 constructor TIpHtmlNodeTR.Create(ParentNode: TIpHtmlNode);
 begin
@@ -10743,6 +11046,38 @@ begin
   FValign := hvaMiddle;
   FBgColor := -1;
   FTextColor := -1;
+end;
+
+function TIpHtmlNodeTR.GetAlign: TIpHtmlAlign;
+begin
+  Result := FAlign;
+end;
+
+{$IFDEF IP_LAZARUS}
+procedure TIpHtmlNodeTR.LoadAndApplyCSSProps;
+begin
+  inherited;
+  if Assigned(FCombinedCSSProps) then begin
+    if not (FCombinedCSSProps.Alignment in [haDefault, haUnknown]) then
+      Align := FCombinedCSSProps.Alignment;
+    if FCombinedCSSProps.BgColor <> -1 then
+      BgColor := FCombinedCSSProps.BGColor;
+    // wp: what about VAlign?
+  end;
+end;
+{$ENDIF}
+
+procedure TIpHtmlNodeTR.SetAlign(const Value: TIpHtmlAlign);
+begin
+  FAlign := Value;
+end;
+
+procedure TIpHtmlNodeTR.SetProps(const RenderProps: TIpHtmlProps);
+begin
+  Props.Assign(RenderProps);
+  Props.FontColor := TextColor;
+  Props.BgColor := BgColor;
+  inherited SetProps(Props);
 end;
 
 procedure TIpHtmlNodeTR.AppendSelection(var S: String; var Completed: Boolean);
@@ -11457,12 +11792,26 @@ begin
 end;
 
 procedure TIpHtmlNodeDD.Enqueue;
+var
+  h, hf: Integer;
+  elem: PIpHtmlElement;
 begin
-  EnqueueElement(Owner.HardLF);
+  hf := Props.FontSize;
+  if FChildren.Count > 0 then begin
+    h := GetMargin(Props.ElemMarginTop, hf div 2);
+    elem := Owner.BuildLineFeedEntry(etSoftLF, h);
+    EnqueueElement(elem);
+  end;
+
   EnqueueElement(Owner.FLIndent);
   inherited;
   EnqueueElement(Owner.FLOutdent);
-  EnqueueElement(Owner.HardLF);
+
+  if FChildren.Count > 0 then begin
+    h := GetMargin(Props.ElemMarginTop, hf);
+    elem := Owner.BuildLineFeedEntry(etSoftLF, h);
+    EnqueueElement(elem);
+  end;
 end;
 
 { TIpHtmlNodePRE }
@@ -11490,10 +11839,24 @@ begin
 end;
 
 procedure TIpHtmlNodePRE.Enqueue;
+var
+  h: Integer;
+  elem: PIpHtmlElement;
 begin
-  if FChildren.Count > 0 then
-    EnqueueElement(Owner.HardLF);
+  //hf := Props.FontSize;
+  if FChildren.Count > 0 then begin
+    h := GetMargin(Props.ElemMarginTop, 0);
+    elem := Owner.BuildLineFeedEntry(etSoftLF, h);
+    EnqueueElement(elem);
+  end;
+  //EnqueueElement(Owner.HardLF);
   inherited Enqueue;
+  if FChildren.Count > 0 then begin
+    h := GetMargin(Props.ElemMarginTop, 0);
+    elem := Owner.BuildLineFeedEntry(etSoftLF, h);
+    EnqueueElement(elem);
+  end;
+
   {
   if FChildren.Count > 0 then
     EnqueueElement(Owner.HardLF);
@@ -11515,18 +11878,12 @@ procedure TIpHtmlNodePhrase.ApplyProps(const RenderProps: TIpHtmlProps);
 begin
   Props.Assign(RenderProps);
   case Style of
-  hpsEM :
+  hpsEM, hpsVAR, hpsCITE :
     Props.FontStyle := Props.FontStyle + [fsItalic];
   hpsSTRONG :
     Props.FontStyle := Props.FontStyle + [fsBold];
-  hpsCODE :
+  hpsCODE, hpsKBD, hpsSAMP :
     Props.FontName := Owner.FixedTypeface;
-  hpsKBD :
-    Props.FontName := Owner.FixedTypeface;
-  hpsVAR :
-    Props.FontStyle := Props.FontStyle + [fsItalic];
-  hpsCITE :
-    Props.FontStyle := Props.FontStyle + [fsItalic];
   end;
   
   case Style of
@@ -11567,7 +11924,7 @@ procedure TIpHtmlNodeBASEFONT.ApplyProps(
   const RenderProps: TIpHtmlProps);
 begin
   Props.Assign(RenderProps);
-  Props.FontSize := FONTSIZESVALUSARRAY[Size-1];
+  Props.FontSize := FONTSIZESVALUESARRAY[Size-1];
   Props.BaseFontSize := Size;
 end;
 
@@ -12349,6 +12706,44 @@ end;
 
 { TIpHtmlNodeCore }
 
+procedure TIpHtmlNodeCore.AddArea(const R: TRect);
+var
+  RCopy : PRect;
+  n : Integer;
+begin
+  n := FAreaList.Count;
+  if n > 0 then begin
+    RCopy := PRect(FAreaList[n-1]);
+    if (R.Left = RCopy.Right) and (R.Top = RCopy.Top) and (R.Bottom = RCopy.Bottom)
+    then begin
+      RCopy.Right := R.Right;
+      Exit;
+    end;
+  end;
+  New(RCopy);
+  RCopy^ := R;
+  FAreaList.Add(RCopy);
+end;
+
+procedure TIpHtmlNodeCore.BuildAreaList;
+var
+  i : Integer;
+begin
+  for i := 0 to Pred(FChildren.Count) do
+    TIpHtmlNode(FChildren[i]).ReportDrawRects(AddArea);
+end;
+
+procedure TIpHtmlNodeCore.ClearAreaList;
+var
+  a: Pointer;
+begin
+  while FAreaList.Count > 0 do begin
+    a := FAreaList[0];
+    FreeMem(a);
+    FAreaList.Delete(0);
+  end;
+end;
+
 procedure TIpHtmlNodeCore.ParseBaseProps(aOwner : TIpHtml);
 {$IFDEF IP_LAZARUS}
 var
@@ -12441,10 +12836,43 @@ begin
   Props.DelayCache:=False;
 end;
 
+procedure TIpHtmlNodeCore.MakeVisible;
+var
+  i : Integer;
+  R : TRect;
+begin
+  if FAreaList.Count = 0 then
+    BuildAreaList;
+  SetRectEmpty(R);
+  for i := 0 to Pred(FAreaList.Count) do
+    UnionRect(R, R, PRect(FAreaList[i])^);
+
+  Owner.MakeVisible(R{$IFDEF IP_LAZARUS}, true {$ENDIF});
+  //Owner.MakeVisible(R{$IFDEF IP_LAZARUS}, False {$ENDIF});  // original
+end;
+
 function TIpHtmlNodeCore.SelectCSSFont(const aFont: string): string;
 begin
-  // todo: implement font matching
-  result := FirstString(aFont);
+  result := FindFontName(aFont);
+end;
+
+procedure TIpHtmlNodeCore.SetAlign(const Value: TIpHtmlAlign);
+begin
+  Props.Alignment := Value;
+end;
+
+procedure TIpHtmlNodeCore.SetId(const Value: String);
+var
+  idx: Integer;
+begin
+  if FId <> '' then
+    with Owner.IdList do begin
+      idx := IndexOf(Id);
+      if idx > -1 then Delete(idx);
+    end;
+  FId:= Value;
+  if FId <> '' then
+    Owner.IdList.AddObject(FId, Self);
 end;
 
 procedure TIpHtmlNodeCore.ApplyCSSProps(const ACSSProps: TCSSProps;
@@ -12543,6 +12971,11 @@ begin
   Result := FElementName;
 end;
 
+function TIpHtmlNodeCore.GetAlign: TIpHtmlAlign;
+begin
+  Result := Props.Alignment;
+end;
+
 function TIpHtmlNodeCore.GetFontSizeFromCSS(CurrentFontSize:Integer;
   aFontSize: string):Integer;
 
@@ -12564,6 +12997,9 @@ function TIpHtmlNodeCore.GetFontSizeFromCSS(CurrentFontSize:Integer;
     else
     if (FParentNode is TIpHtmlNodeGenInline) then
       result := TIpHtmlNodeGenInline(FparentNode).Props.FontSize
+    else
+    if (FParentNode is TIpHtmlNodeHtml) or (FParentNode = nil) then
+      Result := 14
     else
       result := CurrentFontSize;
   end;
@@ -12608,12 +13044,20 @@ begin
   end;
 end;
 
+constructor TIpHtmlNodeCore.Create(ParentNode: TIpHtmlNode);
+begin
+  inherited;
+  FAreaList := {$ifdef IP_LAZARUS}TFPList{$else}TList{$endif}.Create;
+end;
+
 destructor TIpHtmlNodeCore.Destroy;
 begin
   if Assigned(FInlineCSSProps) then
     FInlineCSSProps.Free;
   if Assigned(FCombinedCSSProps) then
     FCombinedCSSProps.Free;
+  ClearAreaList;
+  FAreaList.Free;
   inherited Destroy;
 end;
 {$ENDIF}
@@ -12634,6 +13078,30 @@ begin
   Props.FontStyle := Props.FontStyle + [fsStrikeOut];
 end;
 
+
+{ TIpHtmlNodeTHeadFootBody }
+
+function TIpHtmlNodeTHeadFootBody.GetAlign: TIpHtmlAlign;
+begin
+  Result := FAlign;
+end;
+
+{$IFDEF IP_LAZARUS}
+procedure TIpHtmlNodeTHeadFootBody.LoadAndApplyCSSProps;
+begin
+  inherited;
+  if not (FCombinedCSSProps.Alignment in [haDefault, haUnknown]) then
+    Align := FCombinedCSSProps.Alignment;
+  // wp: what about VAlign?
+end;
+{$ENDIF}
+
+procedure TIpHtmlNodeTHeadFootBody.SetAlign(const Value: TIpHtmlAlign);
+begin
+  FAlign := Value;
+end;
+
+
 { TIpHtmlNodeTHEAD }
 
 constructor TIpHtmlNodeTHEAD.Create(ParentNode: TIpHtmlNode);
@@ -12643,6 +13111,7 @@ begin
   FVAlign := hva3Middle;
 end;
 
+
 { TIpHtmlNodeTBODY }
 
 constructor TIpHtmlNodeTBODY.Create(ParentNode: TIpHtmlNode);
@@ -12651,6 +13120,7 @@ begin
   FElementName := 'tbody';
   FVAlign := hva3Middle;
 end;
+
 
 { TIpHtmlNodeSTYLE }
 
@@ -12828,12 +13298,53 @@ begin
   FWidth.Free;
 end;
 
+{$IFDEF IP_LAZARUS}
+procedure TIpHtmlNodeCOL.LoadAndApplyCSSProps;
+begin
+  inherited;
+  if not (FCombinedCSSProps.Alignment in [haDefault, haUnknown]) then
+    Align := FCombinedCSSProps.Alignment;
+  // wp: what about VAlign?
+end;
+{$ENDIF}
+
+function TIpHtmlNodeCOL.GetAlign: TIpHtmlAlign;
+begin
+  Result := FAlign;
+end;
+
+procedure TIpHtmlNodeCOL.SetAlign(const Value: TIpHtmlAlign);
+begin
+  FAlign := Value;
+end;
+
+
 { TIpHtmlNodeCOLGROUP }
 
 destructor TIpHtmlNodeCOLGROUP.Destroy;
 begin
   inherited;
   FWidth.Free;
+end;
+
+{$IFDEF IP_LAZARUS}
+procedure TIpHtmlNodeCOLGROUP.LoadAndApplyCSSProps;
+begin
+  inherited;
+  if not (FCombinedCSSProps.Alignment in [haDefault, haUnknown]) then
+    Align := FCombinedCSSProps.Alignment;
+  // wp: what about VAlign?
+end;
+{$ENDIF}
+
+function TIpHtmlNodeCOLGROUP.GetAlign: TIpHtmlAlign;
+begin
+  Result := FAlign;
+end;
+
+procedure TIpHtmlNodeCOLGROUP.SetAlign(const Value: TIpHtmlAlign);
+begin
+  FAlign := Value;
 end;
 
 { TIpHtmlNodeLABEL }
@@ -12895,9 +13406,19 @@ begin
   FLayouter.CalcMinMaxPropWidth(RenderProps, Min, Max);
 end;
 
+function TIpHtmlNodeTableHeaderOrCell.GetAlign: TIpHtmlAlign;
+begin
+  Result := FAlign;
+end;
+
 procedure TIpHtmlNodeTableHeaderOrCell.Render(RenderProps: TIpHtmlProps);
 begin
   FLayouter.Render(RenderProps);
+end;
+
+procedure TIpHtmlNodeTableHeaderOrCell.SetAlign(const Value: TIpHtmlAlign);
+begin
+  FAlign := Value;
 end;
 
 procedure TIpHtmlNodeTableHeaderOrCell.Layout(RenderProps: TIpHtmlProps;
@@ -12905,6 +13426,16 @@ procedure TIpHtmlNodeTableHeaderOrCell.Layout(RenderProps: TIpHtmlProps;
 begin
   FLayouter.Layout(Props, TargetRect);
 end;
+
+{$IFDEF IP_LAZARUS}
+procedure TIpHtmlNodeTableHeaderOrCell.LoadAndApplyCSSProps;
+begin
+  inherited;
+  if not (FCombinedCSSProps.Alignment in [haDefault, haUnknown]) then
+    Align := FCombinedCSSProps.Alignment;
+  // wp: what about VAlign?
+end;
+{$ENDIF}
 
 procedure TIpHtmlNodeTableHeaderOrCell.DimChanged(Sender: TObject);
 begin
@@ -14225,6 +14756,8 @@ begin
   FHtml.LinkColor := FViewer.LinkColor;
   FHtml.ALinkColor := FViewer.ALinkColor;
   FHtml.VLinkColor := FViewer.VLinkColor;
+  FHtml.BgColor := FViewer.BgColor;
+  FHtml.LinksUnderlined := FViewer.LinksUnderlined;
   if FViewer.DataProvider <> nil then
     FHtml.OnGetImageX := FViewer.DataProvider.DoGetImage;
   FHtml.OnInvalidateRect := InvalidateRect;
@@ -14598,6 +15131,7 @@ var
   i : Integer;
 begin
   E := FHtml.FindElement(URL);
+  if E = nil then E := FHtml.FindElementID(URL);
   FCurAnchor := '';
   if E <> nil then begin
     HyperPanel.GetPageRect;  // Make sure that layout is valid
@@ -15024,6 +15558,7 @@ var
   i : Integer;
 begin
   E := FHtml.FindElement(URL);
+  if E = nil then E := FHtml.FindElementID(URL);
   FCurAnchor := '';
   if E <> nil then begin
     E.MakeVisible;
@@ -15211,6 +15746,7 @@ begin
   URLStack := TStringList.Create;
   VisitedList := TStringList.Create;
   VisitedList.Sorted := True;
+  FLinksUnderlined := DEFAULT_LINKS_UNDERLINED;
   FTextColor := clBlack;
   FLinkColor := clBlue;
   FVLinkColor := clMaroon;
@@ -15220,9 +15756,14 @@ begin
   FMarginWidth := 10;
   FMarginHeight := 10;
   FAllowTextSelect := True;
+  {$IFDEF MSWINDOWS}
   FixedTypeface := 'Courier New';
+  {$ELSE}
+  FixedTypeFace := 'Courier';
+  {$ENDIF}
   DefaultTypeFace := Graphics.DefFontData.Name;
   DefaultFontSize := 12;
+  FFontQuality := fqDefault;
   FPrintSettings := TIpHtmlPrintSettings.Create;
   FFactBAParag := 1;
   FWantTabs := True;
@@ -15512,14 +16053,15 @@ begin
   FMasterFrame := nil;
   FMasterFrame := TIpHtmlFrame.Create(Self, Self, DataProvider, FlagErrors, False,
     MarginWidth, MarginHeight);
-    if NewHtml <> nil then begin
-      NewHtml.FactBAParag := FactBAParag;
-      NewHtml.BgColor := BgColor;
-      NewHtml.FixedTypeface := FixedTypeface;
-      NewHtml.DefaultTypeFace := DefaultTypeFace;
-      NewHtml.DefaultFontSize := FDefaultFontSize;
-      FMasterFrame.SetHtml(NewHtml);
-    end;
+  if NewHtml <> nil then begin
+    NewHtml.FactBAParag := FactBAParag;
+    NewHtml.BgColor := BgColor;
+    NewHtml.FixedTypeface := FixedTypeface;
+    NewHtml.DefaultTypeFace := DefaultTypeFace;
+    NewHtml.DefaultFontSize := FDefaultFontSize;
+    NewHtml.LinksUnderlined := FLinksUnderlined;
+    FMasterFrame.SetHtml(NewHtml);
+  end;
 end;
 
 procedure TIpHtmlCustomPanel.SetHtmlFromStr(NewHtml: string);
@@ -15715,6 +16257,18 @@ begin
     FDefaultFontSize := Value;
     if (FMasterFrame<>nil)and(FMasterFrame.FHtml<>nil) then begin
       FMasterFrame.FHtml.DefaultFontSize := FDefaultFontSize;
+      Invalidate;
+    end;
+  end;
+end;
+
+procedure TIpHtmlCustomPanel.SetFontQuality(const AValue: TFontQuality);
+begin
+  if FFontQuality <> AValue then begin
+    FFontQuality := AValue;
+    if (FMasterFrame <> nil) and (FMasterFrame.FHtml <> nil) then
+    begin
+      FMasterFrame.FHtml.FontQuality := FFontQuality;
       Invalidate;
     end;
   end;

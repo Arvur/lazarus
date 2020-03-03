@@ -6,7 +6,12 @@ unit LazSynTextArea;
 interface
 
 uses
-  Classes, SysUtils, Graphics, Controls, LCLType, LCLIntf, LCLProc,
+  Classes, SysUtils,
+  // LCL
+  Graphics, Controls, LCLType, LCLIntf, LCLProc,
+  // LazUtils
+  LazMethodList,
+  // SynEdit
   SynEditTypes, SynEditMiscProcs, SynEditMiscClasses, LazSynEditText,
   SynEditMarkup, SynEditHighlighter, SynTextDrawer;
 
@@ -690,7 +695,7 @@ begin
 
     LogicIdx := FCurViewScannerPos.Logical - 1;
     LogicEnd := LogicIdx + FCurViewToken.TokenLength;
-    assert(GetCharWidthData(LogicIdx)<>0, 'GetNextHighlighterTokenFromView: Token starts with char');
+    //assert(GetCharWidthData(LogicIdx)<>0, 'GetNextHighlighterTokenFromView: Token starts with char');
 
     case FCurViewinRTL of
       False: // Left To Right

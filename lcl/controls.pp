@@ -34,46 +34,40 @@ interface
 //  {$DEFINE ASSERT_IS_ON}
 {$ENDIF}
 
+{$INTERFACES CORBA}
+
 uses
   Classes, SysUtils, TypInfo, Types, Laz_AVL_Tree,
   // LCL
   LCLStrConsts, LCLType, LCLProc, GraphType, Graphics, LMessages, LCLIntf,
   InterfaceBase, ImgList, PropertyStorage, Menus, ActnList, LCLClasses,
-  LResources, LCLPlatformDef;
+  LResources, LCLPlatformDef,
+  // LazUtils
+  LazMethodList, LazLoggerBase, LazUtilities, UITypes;
 
 {$I controlconsts.inc}
 
 const
   // Used for ModalResult
-  mrNone = 0;
-  mrOK = mrNone + 1;
-  mrCancel = mrNone + 2;
-  mrAbort = mrNone + 3;
-  mrRetry = mrNone + 4;
-  mrIgnore = mrNone + 5;
-  mrYes = mrNone + 6;
-  mrNo = mrNone + 7;
-  mrAll = mrNone + 8;
-  mrNoToAll = mrNone + 9;
-  mrYesToAll = mrNone + 10;
-  mrClose = mrNone + 11;
-  mrLast = mrClose;
+  mrNone    = UITypes.mrNone;
+  mrOK      = UITypes.mrOK;
+  mrCancel  = UITypes.mrCancel;
+  mrAbort   = UITypes.mrAbort;
+  mrRetry   = UITypes.mrRetry;
+  mrIgnore  = UITypes.mrIgnore;
+  mrYes     = UITypes.mrYes;
+  mrNo      = UITypes.mrNo;
+  mrAll     = UITypes.mrAll;
+  mrNoToAll = UITypes.mrNoToAll;
+  mrYesToAll= UITypes.mrYesToAll;
+  mrClose   = UITypes.mrClose;
+  mrLast    = UITypes.mrLast;
 
-  // String representation of ModalResult values
-  ModalResultStr: array[mrNone..mrLast] of shortstring = (
-    'mrNone',
-    'mrOk',
-    'mrCancel',
-    'mrAbort',
-    'mrRetry',
-    'mrIgnore',
-    'mrYes',
-    'mrNo',
-    'mrAll',
-    'mrNoToAll',
-    'mrYesToAll',
-    'mrClose');
+function GetModalResultStr(ModalResult: TModalResult): ShortString;
+  deprecated 'Use the ModalResultStr array from unit UITypes directly.';
+property ModalResultStr[ModalResult: TModalResult]: shortstring read GetModalResultStr;
 
+const
   // define aliases for Delphi compatibility
   fsSurface = GraphType.fsSurface;
   fsBorder = GraphType.fsBorder;
@@ -87,7 +81,15 @@ const
   // Mac and iOS use Meta instead of Ctrl for those shortcuts
   ssModifier = {$if defined(darwin) or defined(macos) or defined(iphonesim)} ssMeta {$else} ssCtrl {$endif};
 
+  GUID_ObjInspInterface = '{37417989-8C8F-4A2D-9D26-0FA377E8D8CC}';
+
 type
+  IObjInspInterface = interface
+      [GUID_ObjInspInterface]
+      function AllowAdd: Boolean;
+      function AllowDelete: Boolean;
+    end;
+
   TWinControl = class;
   TControl = class;
   TWinControlClass = class of TWinControl;
@@ -336,18 +338,60 @@ type
 
   { TDragImageList }
 
+  TImageListHelper = class helper for TCustomImageList
+  private
+    function GetResolutionForControl(AImageWidth: Integer; AControl: TControl): TScaledImageListResolution;
+  public
+    procedure DrawForControl(ACanvas: TCanvas; AX, AY, AIndex, AImageWidthAt96PPI: Integer;
+      AControl: TControl; AEnabled: Boolean = True); overload;
+    procedure DrawForControl(ACanvas: TCanvas; AX, AY, AIndex, AImageWidthAt96PPI: Integer;
+      AControl: TControl; ADrawEffect: TGraphicsDrawEffect); overload;
+
+    property ResolutionForControl[AImageWidth: Integer; AControl: TControl]: TScaledImageListResolution read GetResolutionForControl;
+  end;
+
+  TDragImageList = class;
+
+  TDragImageListResolution = class(TCustomImageListResolution)
+  private
+    FDragging: Boolean;
+    FDragHotspot: TPoint;
+    FLastDragPos: TPoint;
+    FLockedWindow: HWND;// window where drag started and locked via DragLock, invalid=NoLockedWindow=High(PtrInt)
+
+    function GetImageList: TDragImageList;
+  protected
+    class procedure WSRegisterClass; override;
+
+    property ImageList: TDragImageList read GetImageList;
+  public
+    constructor Create(TheOwner: TComponent); override;
+
+    function GetHotSpot: TPoint; override;
+    function BeginDrag(Window: HWND; X, Y: Integer): Boolean;
+    function DragLock(Window: HWND; XPos, YPos: Integer): Boolean;
+    function DragMove(X, Y: Integer): Boolean;
+    procedure DragUnlock;
+    function EndDrag: Boolean;
+    procedure HideDragImage;
+    procedure ShowDragImage;
+
+    property DragHotspot: TPoint read FDragHotspot write FDragHotspot;
+    property Dragging: Boolean read FDragging;
+  end;
+
   TDragImageList = class(TCustomImageList)
   private
     FDragCursor: TCursor;
-    FDragging: Boolean;
-    FDragHotspot: TPoint;
-    FOldCursor: TCursor;
     FImageIndex: Integer;
-    FLastDragPos: TPoint;
-    FLockedWindow: HWND;// window where drag started and locked via DragLock, invalid=NoLockedWindow=High(PtrInt)
     procedure SetDragCursor(const AValue: TCursor);
+    function GetResolution(AImageWidth: Integer): TDragImageListResolution;
+    function GetDragging: Boolean;
+    function GetDraggingResolution: TDragImageListResolution;
+    function GetDragHotspot: TPoint;
+    procedure SetDragHotspot(const aDragHotspot: TPoint);
   protected
-    class procedure WSRegisterClass; override;
+    function GetResolutionClass: TCustomImageListResolutionClass; override;
     procedure Initialize; override;
   public
     function BeginDrag(Window: HWND; X, Y: Integer): Boolean;
@@ -355,13 +399,14 @@ type
     function DragMove(X, Y: Integer): Boolean;
     procedure DragUnlock;
     function EndDrag: Boolean;
-    function GetHotSpot: TPoint; override;
     procedure HideDragImage;
     function SetDragImage(Index, HotSpotX, HotSpotY: Integer): Boolean;
     procedure ShowDragImage;
     property DragCursor: TCursor read FDragCursor write SetDragCursor;
-    property DragHotspot: TPoint read FDragHotspot write FDragHotspot;
-    property Dragging: Boolean read FDragging;
+    property DragHotspot: TPoint read GetDragHotspot write SetDragHotspot;
+    property Dragging: Boolean read GetDragging;
+    property DraggingResolution: TDragImageListResolution read GetDraggingResolution;
+    property Resolution[AImageWidth: Integer]: TDragImageListResolution read GetResolution;
   end;
 
   TKeyEvent = procedure(Sender: TObject; var Key: Word; Shift: TShiftState) of Object;
@@ -880,6 +925,8 @@ type
 
   { TControl }
 
+  ELayoutException = class(Exception);
+
   TControlAutoSizePhase = (
     caspNone,
     caspChangingProperties,
@@ -1087,7 +1134,6 @@ type
     FControlFlags: TControlFlags;
     FControlHandlers: array[TControlHandlerType] of TMethodList;
     FControlStyle: TControlStyle;
-    FDesktopFont: Boolean;
     FDockOrientation: TDockOrientation;
     FDragCursor: TCursor;
     FDragKind: TDragKind;
@@ -1137,7 +1183,6 @@ type
     FOnStartDrag: TStartDragEvent;
     FOnTripleClick: TNotifyEvent;
     FParent: TWinControl;
-    FParentBiDiMode: Boolean;
     FPopupMenu: TPopupMenu;
     FPreferredMinWidth: integer;// without theme space
     FPreferredMinHeight: integer;// without theme space
@@ -1153,6 +1198,8 @@ type
     FWidth: Integer;
     FWindowProc: TWndMethod;
     //boolean fields, keep together to save some bytes
+    FDesktopFont: Boolean;
+    FParentBiDiMode: Boolean;
     FIsControl: Boolean;
     FShowHint: Boolean;
     FParentColor: Boolean;
@@ -1267,7 +1314,6 @@ type
     procedure ScaleConstraints(Multiplier, Divider: Integer);
     procedure ChangeScale(Multiplier, Divider: Integer); virtual;
     function CanAutoSize(var NewWidth, NewHeight: Integer): Boolean; virtual;
-    procedure UpdateAlignIndex;
     procedure SetBiDiMode(AValue: TBiDiMode); virtual;
     procedure SetParentBiDiMode(AValue: Boolean); virtual;
     function IsAParentAligning: boolean;
@@ -1492,6 +1538,7 @@ type
                          KeepDockSiteSize: Boolean = true): Boolean; virtual;
     function ReplaceDockedControl(Control: TControl; NewDockSite: TWinControl;
                            DropControl: TControl; ControlSide: TAlign): Boolean;
+    function Docked: Boolean;
     function Dragging: Boolean;
     // accessibility
     function GetAccessibleObject: TLazAccessibleObject;
@@ -1537,6 +1584,7 @@ type
     procedure GetPreferredSize(var PreferredWidth, PreferredHeight: integer;
                                Raw: boolean = false;
                                WithThemeSpace: boolean = true); virtual;
+    function GetCanvasScaleFactor: Double;
     function GetDefaultWidth: integer;
     function GetDefaultHeight: integer;
     function GetDefaultColor(const DefaultColorType: TDefaultColorType): TColor; virtual;
@@ -1564,6 +1612,7 @@ type
     procedure AutoAdjustLayout(AMode: TLayoutAdjustmentPolicy;
       const AFromPPI, AToPPI, AOldFormWidth, ANewFormWidth: Integer); virtual;
     procedure ShouldAutoAdjust(var AWidth, AHeight: Boolean); virtual;
+    procedure FixDesignFontsPPI(const ADesignTimePPI: Integer); virtual;
     procedure ScaleFontsPPI(const AToPPI: Integer; const AProportion: Double); virtual;
   public
     constructor Create(TheOwner: TComponent);override;
@@ -1579,6 +1628,7 @@ type
     function GetParentComponent: TComponent; override;
     function IsParentOf(AControl: TControl): boolean; virtual;
     function GetTopParent: TControl;
+    function FindSubComponent(AName: string): TComponent;
     function IsVisible: Boolean; virtual;// checks parents too
     function IsControlVisible: Boolean; virtual;// does not check parents
     function IsEnabled: Boolean; // checks parent too
@@ -1971,6 +2021,7 @@ type
     FOnExit: TNotifyEvent;
     FOnUnDock: TUnDockEvent;
     FOnUTF8KeyPress: TUTF8KeyPressEvent;
+    FParentDoubleBuffered: Boolean;
     FParentWindow: HWND;
     FRealizeBoundsLockCount: integer;
     FHandle: HWND;
@@ -1979,11 +2030,11 @@ type
     // keep small variables together to save some bytes
     FTabStop: Boolean;
     FShowing: Boolean;
-    FDoubleBuffered: Boolean;
     FDockSite: Boolean;
     FUseDockManager: Boolean;
     FDesignerDeleting: Boolean;
     procedure AlignControl(AControl: TControl);
+    function DoubleBufferedIsStored: Boolean;
     function GetBrush: TBrush;
     function GetControl(const Index: Integer): TControl;
     function GetControlCount: Integer;
@@ -1995,8 +2046,10 @@ type
     function GetVisibleDockClientCount: Integer;
     procedure SetChildSizing(const AValue: TControlChildSizing);
     procedure SetDockSite(const NewDockSite: Boolean);
+    procedure SetDoubleBuffered(Value: Boolean);
     procedure SetHandle(NewHandle: HWND);
     procedure SetBorderWidth(Value: TBorderWidth);
+    procedure SetParentDoubleBuffered(Value: Boolean);
     procedure SetParentWindow(const AValue: HWND);
     procedure SetTabOrder(NewTabOrder: TTabOrder);
     procedure SetTabStop(NewTabStop: Boolean);
@@ -2007,13 +2060,15 @@ type
     procedure Remove(AControl: TControl);
     procedure AlignNonAlignedControls(ListOfControls: TFPList;
                                       var BoundsModified: Boolean);
+    procedure CreateControlAlignList(TheAlign: TAlign;
+                                    AlignList: TFPList; StartControl: TControl);
+    procedure UpdateAlignIndex(aChild: TControl);
   protected
+    FDoubleBuffered: Boolean;
     FWinControlFlags: TWinControlFlags;
     class procedure WSRegisterClass; override;
     procedure AdjustClientRect(var ARect: TRect); virtual;
     procedure GetAdjustedLogicalClientRect(out ARect: TRect);
-    procedure CreateControlAlignList(TheAlign: TAlign;
-                                    AlignList: TFPList; StartControl: TControl);
     procedure AlignControls(AControl: TControl;
                             var RemainingClientRect: TRect); virtual;
     function CustomAlignInsertBefore(AControl1, AControl2: TControl): Boolean; virtual;
@@ -2055,7 +2110,9 @@ type
     // messages
     procedure CMBiDiModeChanged(var Message: TLMessage); message CM_BIDIMODECHANGED;
     procedure CMBorderChanged(var Message: TLMessage); message CM_BORDERCHANGED;
+    procedure CMDoubleBufferedChanged(var Message: TLMessage); message CM_DOUBLEBUFFEREDCHANGED;
     procedure CMEnabledChanged(var Message: TLMessage); message CM_ENABLEDCHANGED;
+    procedure CMParentDoubleBufferedChanged(var Message: TLMessage); message CM_PARENTDOUBLEBUFFEREDCHANGED;
     procedure CMShowingChanged(var Message: TLMessage); message CM_SHOWINGCHANGED; // called by TWinControl.UpdateShowing
     procedure CMShowHintChanged(var Message: TLMessage); message CM_SHOWHINTCHANGED;
     procedure CMVisibleChanged(var Message: TLMessage); message CM_VISIBLECHANGED;
@@ -2195,7 +2252,7 @@ type
     property DockClients[Index: Integer]: TControl read GetDockClients;
     property DockManager: TDockManager read FDockManager write SetDockManager;
     property DockSite: Boolean read FDockSite write SetDockSite default False;
-    property DoubleBuffered: Boolean read FDoubleBuffered write FDoubleBuffered default False;
+    property DoubleBuffered: Boolean read FDoubleBuffered write SetDoubleBuffered stored DoubleBufferedIsStored;
     property Handle: HWND read GetHandle write SetHandle;
     property IsFlipped: Boolean read FFlipped;
     property IsResizing: Boolean read GetIsResizing;
@@ -2212,6 +2269,7 @@ type
     property OnKeyUp: TKeyEvent read FOnKeyUp write FOnKeyUp;
     property OnUnDock: TUnDockEvent read FOnUnDock write FOnUnDock;
     property OnUTF8KeyPress: TUTF8KeyPressEvent read FOnUTF8KeyPress write FOnUTF8KeyPress;
+    property ParentDoubleBuffered: Boolean read FParentDoubleBuffered write SetParentDoubleBuffered default True;
     property ParentWindow: HWND read FParentWindow write SetParentWindow;
     property Showing: Boolean read FShowing; // handle visible
     property UseDockManager: Boolean read FUseDockManager
@@ -2246,6 +2304,7 @@ type
     procedure WriteLayoutDebugReport(const Prefix: string); override;
     procedure AutoAdjustLayout(AMode: TLayoutAdjustmentPolicy; const AFromPPI,
       AToPPI, AOldFormWidth, ANewFormWidth: Integer); override;
+    procedure FixDesignFontsPPIWithChildren(const ADesignTimePPI: Integer);
   public
     constructor Create(TheOwner: TComponent);override;
     constructor CreateParented(AParentWindow: HWND);
@@ -2356,9 +2415,11 @@ type
     property Height;
     property ImageType;
     property Masked;
+    property Scaled;
     property ShareImages;
     property Width;
     property OnChange;
+    property OnGetWidthForPPI;
   end;
 
 
@@ -2651,15 +2712,15 @@ const
     (akLeft,akRight,akLeft)
     );
 
-function FindDragTarget(const Position: TPoint; AllowDisabled: Boolean): TControl;
+function FindDragTarget(const Position: TPoint; AllowDisabled: Boolean): TControl; inline;
 function FindControlAtPosition(const Position: TPoint; AllowDisabled: Boolean): TControl;
 function FindLCLWindow(const ScreenPos: TPoint; AllowDisabled: Boolean = True): TWinControl;
 function FindControl(Handle: HWND): TWinControl;
 function FindOwnerControl(Handle: HWND): TWinControl;
 function FindLCLControl(const ScreenPos: TPoint): TControl;
 
-function SendAppMessage(Msg: Cardinal; WParam: WParam; LParam: LParam): Longint;
-procedure MoveWindowOrg(dc: hdc; X,Y: Integer);
+function SendAppMessage(Msg: Cardinal; WParam: WParam; LParam: LParam): Longint; inline;
+procedure MoveWindowOrg(dc: hdc; X,Y: Integer); inline;
 
 // Interface support.
 procedure RecreateWnd(const AWinControl:TWinControl);
@@ -2682,8 +2743,8 @@ var
 function CursorToString(Cursor: TCursor): string;
 function StringToCursor(const S: string): TCursor;
 procedure GetCursorValues(Proc: TGetStrProc);
-function CursorToIdent(Cursor: Longint; var Ident: string): Boolean;
-function IdentToCursor(const Ident: string; var Cursor: Longint): Boolean;
+function CursorToIdent(Cursor: Longint; var Ident: string): Boolean; inline;
+function IdentToCursor(const Ident: string; var Cursor: Longint): Boolean; inline;
 
 procedure CheckTransparentWindow(var Handle: THandle; var AWinControl: TWinControl);
 function CheckMouseButtonDownUp(const AWinHandle: THandle; const AWinControl: TWinControl;
@@ -2696,7 +2757,7 @@ function GetKeyShiftState: TShiftState;
 procedure AdjustBorderSpace(var RemainingClientRect, CurBorderSpace: TRect;
   Left, Top, Right, Bottom: integer);
 procedure AdjustBorderSpace(var RemainingClientRect, CurBorderSpace: TRect;
-  const Space: TRect);
+  const Space: TRect); inline;
 
 function IsColorDefault(AControl: TControl): Boolean;
 
@@ -2962,6 +3023,11 @@ begin
   Result:='['+Result+']';
 end;
 
+function GetModalResultStr(ModalResult: TModalResult): ShortString;
+begin
+  Result := UITypes.ModalResultStr[ModalResult];
+end;
+
 {------------------------------------------------------------------------------
  RecreateWnd
  This function was originally member of TWincontrol. From a VCL point of view
@@ -3174,7 +3240,7 @@ begin
   begin // runtime - handle multi clicks according to ControlStyle
     if LastMouse.ClickCount > 1 then
     begin
-      TargetControl := AWinControl.ControlAtPos(AWinControl.ScreenToClient(AMousePos), [capfHasScrollOffset]);
+      TargetControl := AWinControl.ControlAtPos(AWinControl.ScreenToClient(AMousePos), []);
       if TargetControl=nil then
         TargetControl := AWinControl;
       case LastMouse.ClickCount of
@@ -3205,15 +3271,13 @@ end;
 function GetKeyShiftState: TShiftState;
 begin
   Result := [];
-  if (GetKeyState(VK_CONTROL) and $8000) <> 0 then
+  if GetKeyState(VK_CONTROL) < 0 then
     Include(Result, ssCtrl);
-  if (GetKeyState(VK_SHIFT) and $8000) <> 0 then
+  if GetKeyState(VK_SHIFT) < 0 then
     Include(Result, ssShift);
-  if (GetKeyState(VK_MENU) and $8000) <> 0 then
+  if GetKeyState(VK_MENU) < 0 then
     Include(Result, ssAlt);
-  if ((GetKeyState(VK_LWIN) and $8000) <> 0) or ((GetKeyState(VK_RWIN) and $8000) <> 0) then
-    Include(Result, ssMeta);
-  if (GetKeyState(VK_LWIN) < 0) or (GetKeyState(VK_RWIN) < 0) then 
+  if (GetKeyState(VK_LWIN) < 0) or (GetKeyState(VK_RWIN) < 0) then
     Include(Result, ssMeta);
 end;
 
@@ -3344,8 +3408,7 @@ begin
   begin
     Result := WinControl;
     Control := WinControl.ControlAtPos(WinControl.ScreenToClient(Position),
-                        [capfAllowWinControls, capfRecursive,
-                         capfHasScrollOffset] + DisabledFlag[AllowDisabled]);
+                        [capfAllowWinControls, capfRecursive] + DisabledFlag[AllowDisabled]);
     //debugln(['FindControlAtPosition ',dbgs(Position),' ',DbgSName(WinControl),' ',dbgs(WinControl.ScreenToClient(Position)),' ',DbgSName(Control)]);
     if Assigned(Control) then
       Result := Control;
@@ -4561,15 +4624,6 @@ end;
 
 initialization
   //DebugLn('controls.pp - initialization');
-  RegisterPropertyToSkip(TControl, 'AlignWithMargins', 'VCL compatibility property', '');
-  RegisterPropertyToSkip(TControl, 'Ctl3D',            'VCL compatibility property', '');
-  RegisterPropertyToSkip(TControl, 'ParentCtl3D',      'VCL compatibility property', '');
-  RegisterPropertyToSkip(TControl, 'IsControl',        'VCL compatibility property', '');
-  RegisterPropertyToSkip(TControl, 'DesignSize',       'VCL compatibility property', '');
-  RegisterPropertyToSkip(TControl, 'ExplicitLeft',     'VCL compatibility property', '');
-  RegisterPropertyToSkip(TControl, 'ExplicitHeight',   'VCL compatibility property', '');
-  RegisterPropertyToSkip(TControl, 'ExplicitTop',      'VCL compatibility property', '');
-  RegisterPropertyToSkip(TControl, 'ExplicitWidth',    'VCL compatibility property', '');
   {$IF FPC_FULLVERSION<30003}
   RegisterPropertyToSkip(TDataModule, 'PPI',    'PPI was introduced in FPC 3.0.3', '');
   {$ENDIF}

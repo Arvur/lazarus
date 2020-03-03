@@ -91,6 +91,7 @@ type
     class procedure SetShowInTaskbar(const AForm: TCustomForm; const AValue: TShowInTaskbar); virtual;
     class procedure SetZPosition(const AWinControl: TWinControl; const APosition: TWSZPosition); virtual;
     class function GetDefaultColor(const AControl: TControl; const ADefaultColorType: TDefaultColorType): TColor; override;
+    class function GetDefaultDoubleBuffered: Boolean; virtual;
 
     {mdi support}
     class function ActiveMDIChild(const AForm: TCustomForm): TCustomForm; virtual;
@@ -100,6 +101,7 @@ type
     class function Next(const AForm: TCustomForm): Boolean; virtual;
     class function Previous(const AForm: TCustomForm): Boolean; virtual;
     class function Tile(const AForm: TCustomForm): Boolean; virtual;
+    class function ArrangeIcons(const AForm: TCustomForm): Boolean; virtual;
     class function MDIChildCount(const AForm: TCustomForm): Integer; virtual;
   end;
   TWSCustomFormClass = class of TWSCustomForm;
@@ -188,6 +190,11 @@ begin
   Result := DefColors[ADefaultColorType];
 end;
 
+class function TWSCustomForm.GetDefaultDoubleBuffered: Boolean;
+begin
+  Result := False;
+end;
+
 class procedure TWSCustomForm.ShowModal(const ACustomForm: TCustomForm);
 begin
 end;
@@ -244,6 +251,11 @@ begin
 end;
 
 class function TWSCustomForm.Previous(const AForm: TCustomForm): Boolean;
+begin
+  Result := False;
+end;
+
+class function TWSCustomForm.ArrangeIcons(const AForm: TCustomForm): Boolean;
 begin
   Result := False;
 end;

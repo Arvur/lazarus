@@ -936,17 +936,12 @@ type
       BuildTheTree: Boolean): TCodeTreeNode;// search for type, const, var, proc, prop
     function FindSubDeclaration(Identifier: string; ParentNode: TCodeTreeNode
       ): TCodeTreeNode; // search for type, const, var, proc, prop
-
-    function FindInitializationSection: TCodeTreeNode; deprecated 'Use FindInitializationNode instead.';
-    function FindMainUsesSection(UseContainsSection: boolean = false): TCodeTreeNode; deprecated 'Use FindMainUsesNode instead.';
-    function FindImplementationUsesSection: TCodeTreeNode; deprecated 'Use FindImplementationUsesNode instead.';
     function FindNameInUsesSection(UsesNode: TCodeTreeNode; const AUnitName: string): TCodeTreeNode;
     function FindUnitInUsesSection(UsesNode: TCodeTreeNode; const AnUnitName: string;
           out NamePos, InPos: TAtomPosition): boolean;
     function FindUnitInAllUsesSections(const AnUnitName: string;
           out NamePos, InPos: TAtomPosition): boolean;
     function GetUnitNameForUsesSection(TargetTool: TFindDeclarationTool): string;
-    function GetUnitForUsesSection(TargetTool: TFindDeclarationTool): string; deprecated 'use GetUnitNameForUsesSection instead';
     function IsHiddenUsedUnit(TheUnitName: PChar): boolean;
 
     function FindCodeToolForUsedUnit(const AnUnitName, AnUnitInFilename: string;
@@ -957,7 +952,6 @@ type
     function FindUnitCaseInsensitive(var AnUnitName,
                                      AnUnitInFilename: string): string;
     procedure GatherUnitAndSrcPath(var UnitPath, CompleteSrcPath: string);
-    function SearchUnitInUnitLinks(const TheUnitName: string): string; deprecated;
     function SearchUnitInUnitSet(const TheUnitName: string): string;
     function GetNameSpaces: string;
 
@@ -2793,17 +2787,6 @@ begin
   Result:=nil;
 end;
 
-function TFindDeclarationTool.FindMainUsesSection(UseContainsSection: boolean
-  ): TCodeTreeNode;
-begin
-  Result := FindMainUsesNode(UseContainsSection);
-end;
-
-function TFindDeclarationTool.FindImplementationUsesSection: TCodeTreeNode;
-begin
-  Result := FindImplementationUsesNode;
-end;
-
 function TFindDeclarationTool.FindNameInUsesSection(UsesNode: TCodeTreeNode;
   const AUnitName: string): TCodeTreeNode;
 var
@@ -2844,8 +2827,7 @@ begin
       MoveCursorToCleanPos(StartPos);
       ReadNextAtom;
       ReadNextUsedUnit(NamePos,InPos);
-      Result:=true;
-      exit;
+      exit(true);
     end;
     if CurPos.Flag=cafSemicolon then break;
     if CurPos.Flag<>cafComma then break;
@@ -2873,8 +2855,8 @@ begin
   if not IsDottedIdentifier(AnUnitName) then
     RaiseInvalidUnitName;
   BuildTree(lsrImplementationUsesSectionEnd);
-  if FindInSection(FindMainUsesNode) then exit;
-  if FindInSection(FindImplementationUsesNode) then exit;
+  if FindInSection(FindMainUsesNode) then exit(true);
+  if FindInSection(FindImplementationUsesNode) then exit(true);
 end;
 
 function TFindDeclarationTool.GetUnitNameForUsesSection(
@@ -2919,12 +2901,6 @@ begin
   end;
 end;
 
-function TFindDeclarationTool.GetUnitForUsesSection(
-  TargetTool: TFindDeclarationTool): string;
-begin
-  Result:=GetUnitNameForUsesSection(TargetTool);
-end;
-
 function TFindDeclarationTool.IsHiddenUsedUnit(TheUnitName: PChar): boolean;
 var
   HiddenUnits: String;
@@ -2944,15 +2920,11 @@ begin
   Result:=false;
 end;
 
-function TFindDeclarationTool.FindInitializationSection: TCodeTreeNode;
-begin
-  Result:=FindInitializationNode;
-end;
-
 function TFindDeclarationTool.FindDeclarationInUsesSection(
   UsesNode: TCodeTreeNode; CleanPos: integer;
   out NewPos: TCodeXYPosition; out NewTopLine: integer): boolean;
-var AUnitName, UnitInFilename: string;
+var
+  AUnitName, UnitInFilename: string;
   UnitNamePos, UnitInFilePos: TAtomPosition;
 begin
   Result:=false;
@@ -3144,14 +3116,7 @@ begin
   //DebugLn('TFindDeclarationTool.GatherUnitAndSrcPath UnitPath="',UnitPath,'" CompleteSrcPath="',CompleteSrcPath,'"');
 end;
 
-function TFindDeclarationTool.SearchUnitInUnitLinks(const TheUnitName: string
-  ): string;
-begin
-  Result:=DirectoryCache.FindUnitLink(TheUnitName);
-end;
-
-function TFindDeclarationTool.SearchUnitInUnitSet(const TheUnitName: string
-  ): string;
+function TFindDeclarationTool.SearchUnitInUnitSet(const TheUnitName: string): string;
 begin
   Result:=DirectoryCache.FindUnitInUnitSet(TheUnitName);
 end;
@@ -6740,12 +6705,13 @@ function TFindDeclarationTool.FindUnitReferences(UnitCode: TCodeBuffer;
 var
   AUnitName, UpperUnitName: String;
 
-  function CheckUsesSection(UsesNode: TCodeTreeNode; out Found: boolean): boolean;
+  function CheckUsesSection(UsesNode: TCodeTreeNode): boolean;
+  // Returns True if unit name is found.
   var
     ReferencePos: TCodeXYPosition;
+    UnitNamePos, UnitInFilePos: TAtomPosition;
   begin
-    Result:=true;
-    Found:=false;
+    Result:=false;
     if UsesNode=nil then exit;
     //DebugLn(['CheckUsesSection ']);
     MoveCursorToNodeStart(UsesNode);
@@ -6756,22 +6722,15 @@ var
     end;
     repeat
       ReadNextAtom;  // read name
+      ReadNextUsedUnit(UnitNamePos,UnitInFilePos); // read dotted name + IN file
       if CurPos.StartPos>SrcLen then break;
       if AtomIsChar(';') then break;
-      AtomIsIdentifierE;
-      //DebugLn(['CheckUsesSection ',GetAtom,' ',AUnitName]);
       if UpAtomIs(UpperUnitName) then begin // compare case insensitive
         if CleanPosToCaret(CurPos.StartPos,ReferencePos) then begin
           //DebugLn(['CheckUsesSection found in uses section: ',Dbgs(ReferencePos)]);
-          Found:=true;
+          Result:=true;
           AddCodePosition(ListOfPCodeXYPosition,ReferencePos);
         end;
-      end;
-      ReadNextAtom;
-      if UpAtomIs('IN') then begin
-        ReadNextAtom;
-        if not AtomIsStringConstant then RaiseStrConstExpected(20170421200522);
-        ReadNextAtom;
       end;
       if AtomIsChar(';') then break;
       if not AtomIsChar(',') then
@@ -6802,7 +6761,6 @@ var
 var
   InterfaceUsesNode: TCodeTreeNode;
   ImplementationUsesNode: TCodeTreeNode;
-  Found: boolean;
   StartPos: Integer;
 begin
   Result:=false;
@@ -6816,16 +6774,14 @@ begin
     BuildTree(lsrEnd);
 
     InterfaceUsesNode:=FindMainUsesNode;
-    if not CheckUsesSection(InterfaceUsesNode,Found) then exit;
-
-    StartPos:=-1;
-    if Found then begin
-      StartPos:=InterfaceUsesNode.EndPos;
-    end else begin
+    if CheckUsesSection(InterfaceUsesNode) then
+      StartPos:=InterfaceUsesNode.EndPos
+    else begin
       ImplementationUsesNode:=FindImplementationUsesNode;
-      if not CheckUsesSection(ImplementationUsesNode,Found) then exit;
-      if Found then
-        StartPos:=ImplementationUsesNode.EndPos;
+      if CheckUsesSection(ImplementationUsesNode) then
+        StartPos:=ImplementationUsesNode.EndPos
+      else
+        StartPos:=-1;
     end;
 
     // find unit reference in source
@@ -7534,6 +7490,7 @@ function TFindDeclarationTool.FindAncestorOfClassInheritance(
 var
   InheritanceNode: TCodeTreeNode;
   ClassNode: TCodeTreeNode;
+  SpecializeNode : TCodeTreeNode;
   AncestorContext: TFindContext;
   AncestorStartPos: LongInt;
   ExprType: TExpressionType;
@@ -7613,9 +7570,14 @@ begin
     if (AncestorContext.Node.Desc in [ctnTypeDefinition,ctnGenericType]) then
     begin
       Params:=TFindDeclarationParams.Create;
+      if IdentifierNode.Desc=ctnSpecialize then begin
+         SpecializeNode:=IdentifierNode;
+         Params.SetGenericParamValues(Self, SpecializeNode);
+      end;
       try
         Params.Flags:=fdfDefaultForExpressions+[fdfFindChildren];
         AncestorContext:=AncestorContext.Tool.FindBaseTypeOfNode(Params,AncestorContext.Node);
+        ResultParams.GenParams:=Params.GenParams;
       finally
         Params.Free;
       end;
@@ -8836,29 +8798,19 @@ var
   FirstParamStartPos: Integer;
   FirstParamProcContext: TFindContext;
 
-  procedure RaiseIdentExpected;
+  procedure RaiseIdentExpected(const Id: int64);
   begin
-    RaiseExceptionFmt(20170421200530,ctsStrExpectedButAtomFound,[ctsIdentifier,GetAtom]);
+    RaiseExceptionFmt(Id,ctsStrExpectedButAtomFound,[ctsIdentifier,GetAtom]);
   end;
 
-  procedure RaiseIdentNotFound;
+  procedure RaiseIllegalQualifierFound(const Id: int64);
   begin
-    RaiseExceptionFmt(20170421200532,ctsIdentifierNotFound,[GetAtom]);
+    RaiseExceptionFmt(Id,ctsIllegalQualifier,[GetAtom]);
   end;
 
-  procedure RaiseIllegalQualifierFound;
+  procedure RaisePointNotFound(const Id: int64);
   begin
-    RaiseExceptionFmt(20170421200535,ctsIllegalQualifier,[GetAtom]);
-  end;
-
-  procedure RaisePointNotFound;
-  begin
-    RaiseExceptionFmt(20170421200537,ctsStrExpectedButAtomFound,['.',GetAtom]);
-  end;
-
-  procedure RaiseClassDeclarationNotFound(Tool: TFindDeclarationTool);
-  begin
-    Tool.RaiseExceptionFmt(20170421200539,ctsClassSNotFound, [Tool.GetAtom]);
+    RaiseExceptionFmt(Id,ctsStrExpectedButAtomFound,['.',GetAtom]);
   end;
 
   function InitAtomQueue: boolean;
@@ -9573,10 +9525,11 @@ var
         end else begin
           // predefined identifier
           if (Context.Node.Desc=ctnObjCClass)
-            and CompareSrcIdentifiers('alloc',@Src[CurAtom.StartPos])
+            and CompareSrcIdentifiers('alloc',Params.Identifier)
           then begin
             // 'alloc' returns the class itself
             ExprType.Context:=Context;
+            //debugln(['ResolveIdentifier ',ExprTypeToString(ExprType)]);
             Params.Load(OldInput,true);
             exit;
           end;
@@ -9657,6 +9610,12 @@ var
     ResolveBaseTypeOfIdentifier;
     {$IFDEF ShowExprEval}
     debugln(['  FindExpressionTypeOfTerm ResolveChildren ExprType=',ExprTypeToString(ExprType)]);
+    //debugln(['ResolveChildren xtContext=',(ExprType.Desc=xtContext),
+    //  ' ctnPointerType=',(ExprType.Context.Node.Desc=ctnPointerType),
+    //  ' Node=',(ExprType.Context.Node<>StartNode),
+    //  ' cmsAutoderef=',(cmsAutoderef in Scanner.CompilerModeSwitches),
+    //  ' ',CompilerModeNames[Scanner.CompilerMode]
+    //  ]);
     {$ENDIF}
     NewNode:=ExprType.Context.Node;
     if (NewNode=nil) then exit;
@@ -9715,7 +9674,7 @@ var
     begin
       MoveCursorToCleanPos(NextAtom.StartPos);
       ReadNextAtom;
-      RaiseIdentExpected;
+      RaiseIdentExpected(20191003163224);
     end;
     ResolveChildren;
     if ExprType.Desc in xtAllTypeHelperTypes then begin
@@ -9723,14 +9682,15 @@ var
     end else if (ExprType.Context.Node=nil) then begin
       MoveCursorToCleanPos(CurAtom.StartPos);
       ReadNextAtom;
-      RaiseIllegalQualifierFound;
+      RaiseIllegalQualifierFound(20191003163056);
     end else if ExprType.Context.Node.Desc in AllPointContexts then begin
       // ok, allowed
     end else begin
       // not allowed
+      //debugln(['ResolvePoint ',ExprTypeToString(ExprType)]);
       MoveCursorToCleanPos(CurAtom.StartPos);
       ReadNextAtom;
-      RaiseIllegalQualifierFound;
+      RaiseIllegalQualifierFound(20191003163059);
     end;
   end;
 
@@ -9741,7 +9701,7 @@ var
     begin
       MoveCursorToCleanPos(NextAtom.StartPos);
       ReadNextAtom;
-      RaiseIdentExpected;
+      RaiseIdentExpected(20191003163227);
     end;
     // 'as' is a type cast, so the left side is irrelevant
     // -> context is default context
@@ -9765,7 +9725,7 @@ var
     then begin
       MoveCursorToCleanPos(NextAtom.StartPos);
       ReadNextAtom;
-      RaiseIllegalQualifierFound;
+      RaiseIllegalQualifierFound(20191003163101);
     end;
     ResolveBaseTypeOfIdentifier;
     if (ExprType.Desc=xtPointer) then begin
@@ -9780,7 +9740,7 @@ var
       then begin
         MoveCursorToCleanPos(NextAtom.StartPos);
         ReadNextAtom;
-        RaisePointNotFound;
+        RaisePointNotFound(20191003163249);
       end;
       if (ExprType.Context.Node=nil)
       or (ExprType.Context.Node.Desc<>ctnPointerType) then begin
@@ -9808,17 +9768,13 @@ var
         7. string character  e.g. string[3]
   }
 
-    procedure RaiseTypeIdentNotFound;
+    procedure RaiseIdentInCurContextNotFound(const Id: int64);
     begin
-      ExprType.Context.Tool.RaiseExceptionFmt(20170421200553,ctsStrExpectedButAtomFound,
-                             [ctsTypeIdentifier,ExprType.Context.Tool.GetAtom]);
-    end;
-    
-    procedure RaiseIdentInCurContextNotFound;
-    begin
-      ExprType.Context.Tool.RaiseExceptionFmt(20170421200557,ctsStrExpectedButAtomFound,
+      ExprType.Context.Tool.RaiseExceptionFmt(Id,ctsStrExpectedButAtomFound,
                                               [ctsIdentifier,GetAtom]);
     end;
+  var
+    LastAtomPos: TAtomPosition;
   begin
     {$IFDEF ShowExprEval}
     debugln(['  FindExpressionTypeOfTerm ResolveEdgedBracketOpen ',ExprTypeToString(ExprType)]);
@@ -9832,7 +9788,7 @@ var
     then begin
       MoveCursorToCleanPos(NextAtom.StartPos);
       ReadNextAtom;
-      RaiseIllegalQualifierFound;
+      RaiseIllegalQualifierFound(20191003163104);
     end;
 
     if (ExprType.Desc=xtContext)
@@ -9865,7 +9821,7 @@ var
     if ExprType.Context.Node=nil then begin
       MoveCursorToCleanPos(NextAtom.StartPos);
       ReadNextAtom;
-      RaiseIllegalQualifierFound;
+      RaiseIllegalQualifierFound(20191003163107);
     end;
 
     if ExprType.Context.Node.Desc in [ctnRangedArrayType,ctnOpenArrayType] then
@@ -9875,15 +9831,21 @@ var
       ReadNextAtom;
       repeat
         case CurPos.Flag of
-        cafRoundBracketClose: SaveRaiseBracketCloseExpectedButAtomFound(20170425090717);
+        cafRoundBracketClose: RaiseCharExpectedButAtomFound(20191003162217,']');
         cafRoundBracketOpen,
         cafEdgedBracketOpen: ReadTilBracketClose(true);
+        cafEdgedBracketClose: break;
         cafComma:
-          with ExprType, Context do begin
-            Context:=Tool.FindBaseTypeOfNode(Params,Node.LastChild);
-            if not (Node.Desc in [ctnRangedArrayType,ctnOpenArrayType]) then
-              RaiseIllegalQualifierFound;
+          with ExprType do begin
+            LastAtomPos:=CurPos;
+            Context:=Context.Tool.FindBaseTypeOfNode(Params,Context.Node.LastChild);
+            if not (Context.Node.Desc in [ctnRangedArrayType,ctnOpenArrayType]) then
+              RaiseIllegalQualifierFound(20191003162513);
+            MoveCursorToAtomPos(LastAtomPos);
           end;
+        cafNone:
+          if CurPos.StartPos>SrcLen then
+            ;
         end;
         ReadNextAtom;
       until CurPos.Flag=cafEdgedBracketClose;
@@ -9939,7 +9901,7 @@ var
     ctnProperty, ctnGlobalProperty:
       begin
         if not ExprType.Context.Tool.PropertyNodeHasParamList(ExprType.Context.Node) then
-          RaiseIdentInCurContextNotFound;
+          RaiseIdentInCurContextNotFound(20191003163359);
       end;
 
     ctnIdentifier:
@@ -9958,14 +9920,14 @@ var
         end else begin
           MoveCursorToCleanPos(CurAtom.StartPos);
           ReadNextAtom;
-          RaiseIllegalQualifierFound;
+          RaiseIllegalQualifierFound(20191003163124);
         end;
       end;
 
     else
       MoveCursorToCleanPos(CurAtom.StartPos);
       ReadNextAtom;
-      RaiseIllegalQualifierFound;
+      RaiseIllegalQualifierFound(20191003163127);
     end;
   end;
 
@@ -9981,7 +9943,7 @@ var
     begin
       MoveCursorToCleanPos(NextAtom.StartPos);
       ReadNextAtom;
-      RaiseIllegalQualifierFound;
+      RaiseIllegalQualifierFound(20191003163130);
     end;
     if PrevAtomType<>vatNone then begin
       // typecast or function
@@ -10039,7 +10001,7 @@ var
 
     if (Context.Node<>StartNode) or (Context.Node=nil) then begin
       MoveCursorToCleanPos(CurAtom.StartPos);
-      RaiseIllegalQualifierFound;
+      RaiseIllegalQualifierFound(20191003163133);
     end;
     ProcNode:=GetMethodOfBody(Context.Node);
     if ProcNode=nil then begin
@@ -10052,7 +10014,7 @@ var
       begin
         MoveCursorToCleanPos(NextAtom.StartPos);
         ReadNextAtom;
-        RaiseIdentExpected;
+        RaiseIdentExpected(20191003163231);
       end;
 
       ReadNextExpressionAtom;
@@ -12689,7 +12651,7 @@ function TFindDeclarationTool.FindForInTypeAsString(TermPos: TAtomPosition;
       xtContext:
         begin
           case SubExprType.Context.Node.Desc of
-          ctnClass, ctnRecordType, ctnClassHelper, ctnRecordHelper, ctnTypeHelper:
+          ctnClass, ctnRecordType, ctnClassHelper, ctnRecordHelper, ctnTypeHelper, ctnClassInterface:
             begin
               AliasType:=CleanFindContext;
               if not SubExprType.Context.Tool.FindEnumeratorOfClass(

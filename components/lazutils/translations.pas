@@ -6,32 +6,10 @@
   for details about the license.
  *****************************************************************************
 
-  Author: Mattias Gaertner
-
-  Author of SimplePoFiles: Bart Broersma
-
-  Merge by: Giuliano Colla
+  Initial authors: Mattias Gaertner, Bart Broersma, Giuliano Colla
 
   Abstract:
-    Methods and classes for loading translations/localizations from po files.
-
-    This unit is a merge of the Translations unit by Mattias Gaertner and the
-    SimplePoFiles unit by Bart Broersma. Its purpose is to provide a single unit
-    for easier maintenance.
-    In addition the traditional functions, it provides facilities for checking and
-    maintaining translations.
-
-    A number of new properties and methods have been introduced, or exposed, namely:
-
-    in TPOFileItem - Property LineNr
-                     Property Identifier (deprecated but left in for compatibility)
-
-    in TPOFile - Method CheckFormatArguments
-                 Method CleanUp
-                 Method FindPoItem
-                 Property PoName
-                 Property FormatChecked
-    and many more - see the type declaration for details
+    Methods and classes for loading/checking/maintaining translations from po files.
 
   Example 1: Load a specific .po file:
 
@@ -87,7 +65,7 @@ uses
   Classes, SysUtils,
   {$IF FPC_FULLVERSION>=30001}jsonscanner,{$ENDIF} jsonparser, fpjson,
   // LazUtils
-  FileUtil, LazFileUtils, LazUTF8, LazUTF8Classes, LConvEncoding, LazLogger,
+  FileUtil, LazFileUtils, LazUTF8, LazUTF8Classes, LConvEncoding, LazLoggerBase,
   AvgLvlTree, StringHashList;
 
 type
@@ -98,10 +76,19 @@ type
     );
   TTranslateUnitResult = (turOK, turNoLang, turNoFBLang, turEmptyParam);
 
+  TTranslationStatistics = record
+    Translated: Integer;
+    Untranslated: Integer;
+    Fuzzy: Integer;
+  end;
+
 type
   { TPOFileItem }
 
   TPOFileItem = class
+  private
+    FInitialFuzzyState: boolean;
+    FVirtualTranslation: boolean;
   public
     Tag: Integer;
     LineNr: Integer; // required by pochecker
@@ -112,18 +99,25 @@ type
     Flags: string;
     PreviousID: string;
     Context: string;
+    Duplicate: boolean;
     constructor Create(const TheIdentifierLow, TheOriginal, TheTranslated: string);
-    procedure ModifyFlag(const AFlag: string; Check: boolean);
-    property Identifier: string read IdentifierLow; deprecated;
+    // Can accept the comma separated list of flags
+    // Returns true if the Flags property has been modified
+    function ModifyFlag(const AFlags: string; Check: boolean): boolean;
+    property InitialFuzzyState: boolean read FInitialFuzzyState;
+    property VirtualTranslation: boolean read FVirtualTranslation;
   end;
 
   { TPOFile }
 
   TPOFile = class
+  private
+    FStatisticsUpdated: boolean;
+    FStatistics: TTranslationStatistics;
+    function GetStatistics: TTranslationStatistics;
   protected
     FItems: TFPList;// list of TPOFileItem
     FIdentifierLowToItem: TStringToPointerTree; // lowercase identifier to TPOFileItem
-    FIdentLowVarToItem: TStringHashList; // of TPOFileItem
     FOriginalToItem: TStringHashList; // of TPOFileItem
     FCharSet: String;
     FHeader: TPOFileItem;
@@ -131,18 +125,9 @@ type
     FTag: Integer;
     FModified: boolean;
     FHelperList: TStringList;
-    FModuleList: TStringList;
     // New fields
     FPoName: string;
-    FNrTranslated: Integer;
-    FNrUntranslated: Integer;
-    FNrFuzzy: Integer;
-    FNrErrors: Integer;
-    FFormatChecked: Boolean;
-    procedure RemoveTaggedItems(aTag: Integer);
-    procedure RemoveUntaggedModules;
     function Remove(Index: Integer): TPOFileItem;
-    procedure UpdateCounters(Item: TPOFileItem; Removed: Boolean);
     // used by pochecker
     function GetCount: Integer;
     procedure SetCharSet(const AValue: String);
@@ -150,12 +135,10 @@ type
     procedure ReadPOText(AStream: TStream);
   public
     constructor Create(Full:Boolean=True);  //when loading from internal resource Full needs to be False
-    constructor Create(const AFilename: String; Full: boolean=false; AllowChangeFuzzyFlag: boolean=true);
-    constructor Create(AStream: TStream; Full: boolean=false; AllowChangeFuzzyFlag: boolean=true);
+    constructor Create(const AFilename: String; Full: boolean=false);
+    constructor Create(AStream: TStream; Full: boolean=false);
     destructor Destroy; override;
     procedure ReadPOText(const Txt: string);
-    procedure Add(const Identifier, OriginalValue, TranslatedValue, Comments,
-                        Context, Flags, PreviousID: string; SetFuzzy: boolean = false; LineNr: Integer = -1);
     function Translate(const Identifier, OriginalValue: String): String;
     Property CharSet: String read FCharSet;
     procedure Report;
@@ -165,11 +148,14 @@ type
     procedure UpdateStrings(InputLines:TStrings; SType: TStringsType);
     procedure SaveToStrings(OutLst: TStrings);
     procedure SaveToFile(const AFilename: string);
-    procedure UpdateItem(const Identifier: string; Original: string);
+    procedure UpdateItem(const Identifier, Original: string; const Flags: string = '';
+      const ProcessingTranslation: boolean = false);
+    procedure FillItem(var CurrentItem: TPOFileItem; Identifier, Original,
+      Translation, Comments, Context, Flags, PreviousID: string; LineNr: Integer = -1);
     procedure UpdateTranslation(BasePOFile: TPOFile);
-    procedure ClearModuleList;
-    procedure AddToModuleList(Identifier: string);
+
     procedure UntagAll;
+    procedure RemoveTaggedItems(aTag: Integer);
 
     procedure RemoveIdentifier(const AIdentifier: string);
     procedure RemoveOriginal(const AOriginal: string);
@@ -181,21 +167,15 @@ type
     property Items: TFPList read FItems;
     // used by pochecker /pohelper
   public
-    procedure CheckFormatArguments(AllowChangeFuzzyFlag: boolean=true);
-    procedure CleanUp; // removes previous ID from non-fuzzy entries
     property PoName: String read FPoName;
     property PoRename: String write FPoName;
-    property NrTranslated: Integer read FNrTranslated;
-    property NrUntranslated: Integer read FNrUntranslated;
-    property NrFuzzy: Integer read FNrFuzzy;
-    property NrErrors: Integer read FNrErrors;
+    property Statistics: TTranslationStatistics read GetStatistics;
+    procedure InvalidateStatistics;
     function FindPoItem(const Identifier: String): TPoFileItem;
     function OriginalToItem(const Data: String): TPoFileItem;
-    property OriginalList: TStringHashList read FOriginalToItem;
     property PoItems[Index: Integer]: TPoFileItem read GetPoItem;
     property Count: Integer read GetCount;
     property Header: TPOFileItem read FHeader;
-    property FormatChecked: boolean read FFormatChecked;
   end;
 
   EPOFileError = class(Exception)
@@ -208,6 +188,9 @@ var
   SystemCharSetIsUTF8: Boolean = true;// the LCL interfaces expect UTF-8 as default
     // if you don't use UTF-8, install a proper widestring manager and set this
     // to false.
+
+function GetPOFilenameParts(const Filename: string; out AUnitName, Language: string): boolean;
+function FindAllTranslatedPoFiles(const Filename: string): TStringList;
 
 // translate resource strings for one unit
 function TranslateUnitResourceStrings(const ResUnitName, BaseFilename,
@@ -227,14 +210,13 @@ function UpdatePoFile(RSTFiles: TStrings; const POFilename: string): boolean;
 procedure UpdatePoFileTranslations(const BasePOFilename: string; BasePOFile: TPOFile = nil);
 
 const
-  tgHasDup = $01;
   sFuzzyFlag = 'fuzzy';
   sBadFormatFlag = 'badformat';
+  sFormatFlag = 'object-pascal-format';
+  sNoFormatFlag = 'no-object-pascal-format';
 
 
 implementation
-
-{$DEFINE CHECK_FORMAT}
 
 function IsKey(Txt, Key: PChar): boolean;
 begin
@@ -330,7 +312,7 @@ var
 begin
   NewLength:=length(s);
   for SrcPos:=1 to length(s) do
-    if s[SrcPos] in ['"','\'] then inc(NewLength);
+    if s[SrcPos] in ['"','\',#9] then inc(NewLength);
   if NewLength=length(s) then begin
     Result:=s;
   end else begin
@@ -343,6 +325,13 @@ begin
           Result[DestPos]:='\';
           inc(DestPos);
           Result[DestPos]:=s[SrcPos];
+          inc(DestPos);
+        end;
+      #9:
+        begin
+          Result[DestPos]:='\';
+          inc(DestPos);
+          Result[DestPos]:='t';
           inc(DestPos);
         end;
       else
@@ -435,32 +424,44 @@ begin
   end;
 end;
 
+function GetPOFilenameParts(const Filename: string; out AUnitName, Language: string): boolean;
+var
+  NameWithoutExt, Ext: string;
+  ExtLength: Integer;
+begin
+  Result:=false;
+  AUnitName:='';
+  Language:='';
+  if CompareFileExt(Filename, '.po', false)=0 then
+  begin
+    NameWithoutExt:=ExtractFileNameWithoutExt(Filename);
+    Ext:=ExtractFileExt(NameWithoutExt);
+    ExtLength:=Length(Ext);
+    if ExtLength>1 then
+    begin
+      AUnitName:=copy(NameWithoutExt, 1, Length(NameWithoutExt)-ExtLength);
+      Language:=copy(Ext, 2, ExtLength-1);
+      Result:=true;
+    end;
+  end;
+end;
+
 function FindAllTranslatedPoFiles(const Filename: string): TStringList;
 var
   Path: String;
-  Name: String;
   NameOnly: String;
-  Ext: String;
   FileInfo: TSearchRec;
-  CurExt: String;
+  CurUnitName: String;
+  CurLang: String;
 begin
   Result:=TStringList.Create;
   Path:=ExtractFilePath(Filename);
-  Name:=ExtractFilename(Filename);
-  Ext:=ExtractFileExt(Filename);
-  NameOnly:=LeftStr(Name,length(Name)-length(Ext));
-  if FindFirstUTF8(Path+GetAllFilesMask,faAnyFile,FileInfo)=0 then begin
+  NameOnly:=ExtractFileNameOnly(Filename);
+  if FindFirstUTF8(Path+GetAllFilesMask,faAnyFile,FileInfo)=0 then
     repeat
-      if (FileInfo.Name='.') or (FileInfo.Name='..') or (FileInfo.Name='')
-      or (CompareFilenames(FileInfo.Name,Name)=0) then continue;
-      CurExt:=ExtractFileExt(FileInfo.Name);
-      if (CompareFilenames(CurExt,'.po')<>0)
-      or (CompareFilenames(LeftStr(FileInfo.Name,length(NameOnly)),NameOnly)<>0)
-      then
-        continue;
-      Result.Add(Path+FileInfo.Name);
+      if GetPOFilenameParts(FileInfo.Name, CurUnitName, CurLang) and (NameOnly=CurUnitName) then
+        Result.Add(Path+FileInfo.Name);
     until FindNextUTF8(FileInfo)<>0;
-  end;
   FindCloseUTF8(FileInfo);
 end;
 
@@ -532,6 +533,8 @@ begin
     else
       BasePOFile := TPOFile.Create;
     BasePOFile.Tag:=1;
+    // untagging is done only once for BasePoFile
+    BasePOFile.UntagAll;
 
     // Update po file with lrj, rst/rsj of RSTFiles
     for i:=0 to RSTFiles.Count-1 do begin
@@ -561,6 +564,9 @@ begin
           end;
         end;
     end;
+    // once all rst/rsj/lrj files are processed, remove all unneeded (missing in them) items
+    BasePOFile.RemoveTaggedItems(0);
+
     BasePOFile.SaveToFile(POFilename);
     Result := BasePOFile.Modified;
 
@@ -654,16 +660,17 @@ begin
 end;
 
 function TranslateResourceStrings(const AFilename: string): boolean;
-var po: TPOFile;
+var
+  po: TPOFile;
 begin
-  //debugln('TranslateResourceStrings) ResUnitName,'" AFilename="',AFilename,'"');
+  //debugln('TranslateResourceStrings) AFilename="',AFilename,'"');
   if (AFilename='') or (not FileExistsUTF8(AFilename)) then
     exit;
-  result:=false;
+  Result:=false;
   po:=nil;
   try
     po:=TPOFile.Create(AFilename);
-    result:=TranslateResourceStrings(po);
+    Result:=TranslateResourceStrings(po);
   finally
     po.free;
   end;
@@ -681,44 +688,6 @@ begin
 end;
 
 { TPOFile }
-
-procedure TPOFile.RemoveUntaggedModules;
-var
-  Module: string;
-  Item,VItem: TPOFileItem;
-  i, p: Integer;
-  VarName: String;
-begin
-  if FModuleList=nil then
-    exit;
-
-  // remove all module references that were not tagged
-  for i:=FItems.Count-1 downto 0 do begin
-    Item := TPOFileItem(FItems[i]);
-    p := pos('.',Item.IdentifierLow);
-    if P=0 then
-      continue; // module not found (?)
-
-    Module :=LeftStr(Item.IdentifierLow, p-1);
-    if (FModuleList.IndexOf(Module)<0) then
-      continue; // module was not modified this time
-
-    if Item.Tag=FTag then
-      continue; // PO item was updated
-
-    // this item is not more in updated modules, delete it
-    FIdentifierLowToItem.Remove(Item.IdentifierLow);
-    // delete it also from VarToItem
-    VarName := RightStr(Item.IdentifierLow, Length(Item.IdentifierLow)-P);
-    VItem := TPoFileItem(FIdentLowVarToItem.Data[VarName]);
-    if (VItem=Item) then
-      FIdentLowVarToItem.Remove(VarName);
-
-    FOriginalToItem.Remove(Item.Original, Item);
-    FItems.Delete(i);
-    Item.Free;
-  end;
-end;
 
 function TPOFile.GetCount: Integer;
 begin
@@ -753,20 +722,21 @@ constructor TPOFile.Create(Full:Boolean=True);
 begin
   inherited Create;
   FAllEntries:=Full;
+  FModified:=false;
   FItems:=TFPList.Create;
   FIdentifierLowToItem:=TStringToPointerTree.Create(true);
-  FIdentLowVarToItem:=TStringHashList.Create(true);
   FOriginalToItem:=TStringHashList.Create(true);
+  InvalidateStatistics;
 end;
 
-constructor TPOFile.Create(const AFilename: String; Full: boolean=false; AllowChangeFuzzyFlag: boolean=true);
+constructor TPOFile.Create(const AFilename: String; Full: boolean=false);
 var
   f: TStream;
 begin
   FPoName := AFilename;
   f := TFileStreamUTF8.Create(AFilename, fmOpenRead or fmShareDenyNone);
   try
-    Create(f, Full, AllowChangeFuzzyFlag);
+    Create(f, Full);
     if FHeader=nil then
       CreateHeader;
   finally
@@ -774,29 +744,16 @@ begin
   end;
 end;
 
-constructor TPOFile.Create(AStream: TStream; Full: boolean=false; AllowChangeFuzzyFlag: boolean=true);
+constructor TPOFile.Create(AStream: TStream; Full: boolean=false);
 begin
-  Create;
-
-  FAllEntries := Full;
-
+  Create(Full);
   ReadPOText(AStream);
-
-  {$IFDEF CHECK_FORMAT}
-  //AllowChangeFuzzyFlag allows not to change fuzzy flag for items with bad format arguments,
-  //so there can be arguments with only badformat flag set. This is needed for POChecker.
-  CheckFormatArguments(AllowChangeFuzzyFlag); // Verify that translation will not generate crashes
-  if AllowChangeFuzzyFlag then
-    CleanUp; // Removes previous ID from non-fuzzy entries (not needed for POChecker)
-  {$ENDIF}
 end;
 
 destructor TPOFile.Destroy;
 var
   i: Integer;
 begin
-  if FModuleList<>nil then
-    FModuleList.Free;
   if FHelperList<>nil then
     FHelperList.Free;
   if FHeader<>nil then
@@ -804,7 +761,6 @@ begin
   for i:=0 to FItems.Count-1 do
     TObject(FItems[i]).Free;
   FItems.Free;
-  FIdentLowVarToItem.Free;
   FIdentifierLowToItem.Free;
   FOriginalToItem.Free;
   inherited Destroy;
@@ -815,7 +771,7 @@ procedure TPOFile.ReadPOText(const Txt: string);
 
 Example
 #: lazarusidestrconsts:lisdonotshowsplashscreen
-msgid "                      Do not show splash screen"
+msgid "Do not show splash screen"
 msgstr ""
 
 }
@@ -823,7 +779,7 @@ type
   TMsg = (
     mid,
     mstr,
-    mctx
+    mctxt
     );
 var
   l: Integer;
@@ -852,7 +808,7 @@ var
     CurMsg:=mid;
     Msg[mid]:='';
     Msg[mstr]:='';
-    Msg[mctx]:='';
+    Msg[mctxt]:='';
     Identifier := '';
     Comments := '';
     Flags := '';
@@ -863,41 +819,17 @@ var
   procedure AddEntry (LineNr: Integer);
   var
     Item: TPOFileItem;
-    SetFuzzy: boolean;
   begin
+    Item := nil;
     if Identifier<>'' then begin
-      SetFuzzy:=false;
-      // check for unresolved duplicates in po file
-      Item := TPOFileItem(FOriginalToItem.Data[Msg[mid]]);
-      if (Item<>nil) then begin
-        // fix old duplicate context
-        if Item.Context='' then
-          Item.Context:=Item.IdentifierLow;
-        // set context of new duplicate
-        if Msg[mctx]='' then
-          Msg[mctx] := Identifier;
-        // if old duplicate was translated and new one is not,
-        // provide an initial translation and set a flag to mark it fuzzy
-        if (Msg[mstr]='') and (Item.Translation<>'') then begin
-          // copy flags to new duplicate
-          if Flags='' then
-            Flags := Item.Flags;
-          Msg[mstr] := Item.Translation;
-          // if old item is fuzzy, copy PreviousID too
-          if pos(sFuzzyFlag, Item.Flags)<>0 then
-            PrevMsgID := Item.PreviousID;
-          // mark newly translated item fuzzy
-          SetFuzzy:=true;
-        end;
-      end;
-      Add(Identifier,Msg[mid],Msg[mstr],Comments,Msg[mctx],Flags,PrevMsgID,SetFuzzy,LineNr);
+      FillItem(Item,Identifier,Msg[mid],Msg[mstr],Comments,Msg[mctxt],Flags,PrevMsgID,LineNr);
       ResetVars;
-    end else
-    if (Msg[CurMsg]<>'') and (FHeader=nil) then begin
+    end
+    else if (Msg[CurMsg]<>'') and (FHeader=nil) then begin
       FHeader := TPOFileItem.Create('',Msg[mid],Msg[CurMsg]);
       FHeader.Comments:=Comments;
       ResetVars;
-    end
+    end;
   end;
 
 begin
@@ -984,7 +916,7 @@ begin
             end;
           'c':
             if IsKey(LineStart, 'msgctxt "') then begin
-              CurMsg:=mctx;
+              CurMsg:=mctxt;
               Msg[CurMsg]:=Msg[CurMsg]+GetUTF8String(LineStart+length('msgctxt "'), LineEnd-1);
               Handled:=true;
             end;
@@ -1024,6 +956,7 @@ begin
     while (LineStart^ in [#10,#13]) do inc(LineStart);
   end;
   AddEntry(LineNr);
+  FModified := false;
 end;
 
 procedure TPOFile.RemoveIdentifiers(AIdentifiers: TStrings);
@@ -1083,71 +1016,46 @@ begin
     end;
 end;
 
-function TPOFile.Remove(Index: Integer): TPOFileItem;
+function TPOFile.GetStatistics: TTranslationStatistics;
 var
-  P: Integer;
+  Item: TPOFileItem;
+  i: Integer;
+begin
+  if FStatisticsUpdated = false then
+  begin
+    FStatistics.Translated := 0;
+    FStatistics.Untranslated := 0;
+    FStatistics.Fuzzy := 0;
+    for i:=0 to Items.Count-1 do
+    begin
+      Item := TPOFileItem(FItems[i]);
+      // statistics are calculated with respect to actual translation file contents
+      if (Item.Translation = '') or (Item.VirtualTranslation = true) then
+        Inc(FStatistics.Untranslated)
+      else
+        if Item.InitialFuzzyState = true then
+          Inc(FStatistics.Fuzzy)
+        else
+          Inc(FStatistics.Translated);
+    end;
+    FStatisticsUpdated := true;
+  end;
+  Result.Translated := FStatistics.Translated;
+  Result.Untranslated := FStatistics.Untranslated;
+  Result.Fuzzy := FStatistics.Fuzzy;
+end;
+
+function TPOFile.Remove(Index: Integer): TPOFileItem;
 begin
   Result := TPOFileItem(FItems[Index]);
   FOriginalToItem.Remove(Result.Original, Result);
   FIdentifierLowToItem.Remove(Result.IdentifierLow);
-  P := Pos('.', Result.IdentifierLow);
-  if P>0 then
-    FIdentLowVarToItem.Remove(Copy(Result.IdentifierLow, P+1, Length(Result.IdentifierLow)));
   FItems.Delete(Index);
-  UpdateCounters(Result, True);
-end;
-
-procedure TPOFile.Add(const Identifier, OriginalValue, TranslatedValue,
-  Comments, Context, Flags, PreviousID: string; SetFuzzy: boolean = false; LineNr: Integer = -1);
-var
-  Item: TPOFileItem;
-  p: Integer;
-begin
-  if (not FAllEntries) and (TranslatedValue='') then exit;
-  Item:=TPOFileItem.Create(lowercase(Identifier),OriginalValue,TranslatedValue);
-  Item.Comments:=Comments;
-  Item.Context:=Context;
-  Item.Flags:=Flags;
-  if SetFuzzy = true then
-    Item.ModifyFlag(sFuzzyFlag, true);
-  Item.PreviousID:=PreviousID;
-  Item.Tag:=FTag;
-  Item.LineNr := LineNr;
-
-  UpdateCounters(Item, False);
-
-  FItems.Add(Item);
-
-  //debugln(['TPOFile.Add Identifier=',Identifier,' Orig="',dbgstr(OriginalValue),'" Transl="',dbgstr(TranslatedValue),'"']);
-  FIdentifierLowToItem[Item.IdentifierLow]:=Item;
-  P := Pos('.', Identifier);
-  if P>0 then
-    FIdentLowVarToItem.Add(copy(Item.IdentifierLow, P+1, Length(Item.IdentifierLow)), Item);
-
-  if OriginalValue<>'' then
-    FOriginalToItem.Add(OriginalValue,Item);
-end;
-
-procedure TPOFile.UpdateCounters(Item: TPOFileItem; Removed: Boolean);
-var
-  IncrementBy: Integer;
-begin
-  if Removed then
-    IncrementBy := -1
-  else
-    IncrementBy := 1;
-  if Item.Translation = '' then
-    Inc(FNrUntranslated, IncrementBy)
-  else if Pos(sFuzzyFlag, Item.Flags)<>0 then
-    Inc(FNrFuzzy, IncrementBy)
-  else
-    Inc(FNrTranslated, IncrementBy);
 end;
 
 function TPOFile.Translate(const Identifier, OriginalValue: String): String;
 var
   Item: TPOFileItem;
-  l: Integer;
 begin
   Item:=TPOFileItem(FIdentifierLowToItem[lowercase(Identifier)]);
   if Item=nil then
@@ -1155,36 +1063,20 @@ begin
   //Load translation only if it exists and is NOT fuzzy.
   //This matches gettext behaviour and allows to avoid a lot of crashes related
   //to formatting arguments mismatches.
-  if (Item<>nil) and (pos(sFuzzyFlag, lowercase(Item.Flags))=0)
-{$IFDEF CHECK_FORMAT}
+  if (Item<>nil) and (pos(sFuzzyFlag, Item.Flags)=0)
   //Load translation only if it is not flagged as badformat.
   //This allows to avoid even more crashes related
   //to formatting arguments mismatches.
-  and (pos(sBadFormatFlag, lowercase(Item.Flags))=0)
-{$ENDIF}
-  then begin
-    Result:=Item.Translation;
+  and (pos(sBadFormatFlag, Item.Flags)=0) then
+  begin
+    if Item.Translation<>'' then
+      Result:=Item.Translation
+    else
+      Result:=Item.Original;
     if Result='' then
       Raise Exception.Create('TPOFile.Translate Inconsistency');
   end else
     Result:=OriginalValue;
-  //Remove lineending at the end of the string if present.
-  //This is the case e.g. for multiline strings and not desired when assigning e.g. to
-  //Caption property (can negatively affect form layout). In other cases it should not matter.
-  l:=Length(Result);
-  if l>1 then
-  begin
-    //Every string with #13 and/or #10 character at the end was treated as multiline, this means that
-    //extra lineending could have been added to it.
-    if RightStr(Result,2)=#13#10 then
-    begin
-      if l>2 then //do not leave the string empty
-        SetLength(Result,l-2);
-    end
-    else
-      if (Result[l]=#13) or (Result[l]=#10) then
-        SetLength(Result,l-1);
-  end;
 end;
 
 procedure TPOFile.Report;
@@ -1321,7 +1213,6 @@ var
   p: LongInt;
   Identifier, Value, Line: string;
   Ch: Char;
-  MultiLinedValue: boolean;
 
   procedure NextLine;
   begin
@@ -1337,33 +1228,26 @@ var
 
   procedure NormalizeValue;
   begin
-    if MultiLinedValue then begin
-      // check that we end on lineending, multilined
-      // resource strings from rst usually do not end
-      // in lineending, fix here.
-      if not (Value[Length(Value)] in [#13,#10]) then
-        Value := Value + LineEnding;
-
-      //treat #10#13 sequences as #13#10 for consistency,
-      //e.g. #10#13#13#13#10#13#10 should become #13#10#13#13#10#13#10
-      p:=2;
-      while p<=Length(Value) do begin
-        if (Value[p]=#13) and (Value[p-1]=#10) then begin
-          Value[p]:=#10;
-          Value[p-1]:=#13;
-        end;
-        // further analysis shouldn't affect found #13#10 pair
-        if (Value[p]=#10) and (Value[p-1]=#13) then
-          inc(p);
-        inc(p);
+    //treat #10#13 sequences as #13#10 for consistency,
+    //e.g. #10#13#13#13#10#13#10 should become #13#10#13#13#10#13#10
+    p:=2;
+    while p<=Length(Value) do begin
+      if (Value[p]=#13) and (Value[p-1]=#10) then begin
+        Value[p]:=#10;
+        Value[p-1]:=#13;
       end;
-      Value := AdjustLineBreaks(Value);
+      // further analysis shouldn't affect found #13#10 pair
+      if (Value[p]=#10) and (Value[p-1]=#13) then
+        inc(p);
+      inc(p);
     end;
-    // po requires special characters as #number
+    Value := AdjustLineBreaks(Value);
+
+    // escape special characters as #number, do not confuse translators
     p:=1;
     while p<=length(Value) do begin
       j := UTF8CodepointSize(pchar(@Value[p]));
-      if (j=1) and (Value[p] in [#0..#9,#11,#12,#14..#31,#127..#255]) then
+      if (j=1) and (Value[p] in [#0..#8,#11,#12,#14..#31,#127..#255]) then
         Value := copy(Value,1,p-1)+'#'+IntToStr(ord(Value[p]))+copy(Value,p+1,length(Value))
       else
         inc(p,j);
@@ -1385,7 +1269,6 @@ var
         JsonItems := JsonData.Arrays['strings'];
         for K := 0 to JsonItems.Count - 1 do
         begin
-          MultiLinedValue := false;
           JsonItem := JsonItems.Items[K] as TJSONObject;
           Data:=JsonItem.Find('sourcebytes');
           if Data is TJSONArray then begin
@@ -1393,21 +1276,10 @@ var
             // while 'value' contains the string encoded as UTF16 with \u hexcodes.
             SourceBytes := TJSONArray(Data);
             SetLength(Value,SourceBytes.Count);
-            for L := 1 to length(Value) do begin
+            for L := 1 to length(Value) do
               Value[L] := chr(SourceBytes.Integers[L-1]);
-              if Value[L] in [#13,#10] then
-                MultilinedValue := True;
-            end;
-          end else begin
+          end else
             Value:=JsonItem.Get('value');
-            // check if the value we got is multilined
-            L := 1;
-            while (L<=Length(Value)) and (MultiLinedValue = false) do begin
-              if Value[L] in [#13,#10] then
-                MultilinedValue := True;
-              inc(L);
-            end;
-          end;
           if Value<>'' then begin
             NormalizeValue;
             UpdateItem(JsonItem.Get('name'), Value);
@@ -1422,8 +1294,6 @@ var
   end;
 
 begin
-  ClearModuleList;
-  UntagAll;
   if (SType = stLrj) or (SType = stRsj) then
     // .lrj/.rsj file
     UpdateFromRSJ
@@ -1431,7 +1301,6 @@ begin
   begin
     // for each string in lrt/rst/rsj list check if it's already in PO
     // if not add it
-    MultilinedValue := false;
     Value := '';
     Identifier := '';
     i := 0;
@@ -1449,7 +1318,6 @@ begin
 
           Value := '';
           Identifier := '';
-          MultilinedValue := false;
 
         end else begin
 
@@ -1481,8 +1349,6 @@ begin
 
                   Ch := Chr(StrToInt(copy(Line, j, p-j)));
                   Value := Value + Ch;
-                  if Ch in [#13,#10] then
-                    MultilinedValue := True;
 
                   if (p=n) and (Line[p]='+') then
                     NextLine;
@@ -1507,8 +1373,6 @@ begin
       inc(i);
     end;
   end;
-
-  RemoveUntaggedModules;
 end;
 
 procedure TPOFile.SaveToStrings(OutLst: TStrings);
@@ -1519,9 +1383,15 @@ var
   var
     i: Integer;
     s: string;
+    ValueHasTrailingLineEnding: boolean;
   begin
     if (AValue='') and (AProp='') then
       exit;
+
+    if AValue<>'' then
+      ValueHasTrailingLineEnding:=AValue[Length(AValue)] in [#13,#10]
+    else
+      ValueHasTrailingLineEnding:=false;
 
     FHelperList.Text:=AValue;
     if FHelperList.Count=1 then begin
@@ -1532,7 +1402,10 @@ var
           //comments are not quoted
           OutLst.Add(AProp+FHelperList[0])
         else
-          OutLst.Add(AProp+' "'+FHelperList[0]+'"');
+          if ValueHasTrailingLineEnding then
+            OutLst.Add(AProp+' "'+FHelperList[0]+'\n"')
+          else
+            OutLst.Add(AProp+' "'+FHelperList[0]+'"');
       end;
     end else begin
       //comments are not quoted, instead prepend each line with '#'
@@ -1541,7 +1414,10 @@ var
       for i:=0 to FHelperList.Count-1 do begin
         s := FHelperList[i];
         if (AProp<>'') and (AProp<>'#') then begin
-          s := '"' + s + '\n"';
+          if (i<FHelperList.Count-1) or ValueHasTrailingLineEnding then
+            s := '"' + s + '\n"'
+          else
+            s := '"' + s + '"';
           if AProp='#| msgid' then
             s := '#| ' + s;
         end else
@@ -1597,6 +1473,7 @@ begin
     Item := TPOFileItem(FItems[i]);
     if Item.Tag = aTag then
     begin
+      FModified := true;
       Remove(i);
       Item.Free;
     end;
@@ -1616,120 +1493,184 @@ begin
   end;
 end;
 
-procedure TPOFile.UpdateItem(const Identifier: string; Original: string);
+procedure TPOFile.UpdateItem(const Identifier, Original: string; const Flags: string; const ProcessingTranslation: boolean);
+var
+  Item: TPOFileItem;
+  ItemHasFuzzyFlag: boolean;
+  ItemOldFlags: string;
+begin
+  // try to find PO entry by identifier
+  Item:=TPOFileItem(FIdentifierLowToItem[lowercase(Identifier)]);
+  if Item<>nil then begin
+    if ProcessingTranslation then
+    begin
+      // synchronize translation flags with base (.pot) file, but keep fuzzy flag state
+      ItemOldFlags := Item.Flags;
+      ItemHasFuzzyFlag := pos(sFuzzyFlag, Item.Flags) <> 0;
+      Item.Flags := lowercase(Flags);
+      Item.ModifyFlag(sFuzzyFlag, ItemHasFuzzyFlag);
+      if ItemOldFlags <> Item.Flags then
+        FModified := True;
+    end
+    else
+      // flags in base (.pot) file are kept as is, but item's translation must be empty there
+      if Item.Translation <> '' then
+      begin
+        Item.Translation := '';
+        FModified := True;
+      end;
+
+    // cleanup unneeded PreviousIDs in all files (base and translations)
+    if (Item.Translation = '') or (Item.VirtualTranslation = true) or (Item.InitialFuzzyState = false) then
+      if Item.PreviousID <> '' then
+      begin
+        Item.PreviousID := '';
+        FModified := True;
+      end;
+
+    // found, update item value
+    if CompareMultilinedStrings(Item.Original, Original)<>0 then begin
+      FModified := True;
+      if Item.Translation <> '' then begin
+        // note: at this stage all unneeded PreviousIDs had already been cleaned up
+        if Item.PreviousID = '' then
+          Item.PreviousID:=Item.Original;
+        Item.ModifyFlag(sFuzzyFlag, true);
+      end;
+      Item.Original:=Original;
+    end;
+  end
+  else // in this case new item will be added
+    FModified := true;
+  FillItem(Item, Identifier, Original, '', '', '', Flags, '');
+end;
+
+procedure TPOFile.FillItem(var CurrentItem: TPOFileItem; Identifier, Original,
+  Translation, Comments, Context, Flags, PreviousID: string; LineNr: Integer = -1);
 
   function VerifyItemFormatting(var Item: TPOFileItem): boolean;
   var
     HasBadFormatFlag: boolean;
+    i: integer;
   begin
     // this function verifies item formatting and sets its flags if the formatting is bad
     Result := true;
     if Item.Translation <> '' then
     begin
-      Result := CompareFormatArgs(Item.Original,Item.Translation);
+      Result := (pos(sNoFormatFlag, Item.Flags) <> 0) or CompareFormatArgs(Item.Original,Item.Translation);
       if not Result then
+      begin
         if pos(sFuzzyFlag, Item.Flags) = 0 then
         begin
           Item.ModifyFlag(sFuzzyFlag, true);
           FModified := true;
         end;
-      HasBadFormatFlag := pos(sBadFormatFlag, Item.Flags) > 0;
+      end;
+      HasBadFormatFlag := pos(sBadFormatFlag, Item.Flags) <> 0;
       if HasBadFormatFlag <> not Result then
       begin
         Item.ModifyFlag(sBadFormatFlag, not Result);
         FModified := true;
       end;
+    end
+    else
+    begin
+      if pos(sFuzzyFlag, Item.Flags)<>0 then
+      begin
+        Item.ModifyFlag(sFuzzyFlag, false);
+        FModified := true;
+      end;
+      if pos(sBadFormatFlag, Item.Flags) <> 0 then
+      begin
+        Item.ModifyFlag(sBadFormatFlag, false);
+        FModified := true;
+      end;
+    end;
+
+    if Item.Original <> '' then
+    begin
+      i:=0;
+      if (ExtractFormatArgs(Item.Original, i) <> '') and (i = 0) then
+      begin
+        if Item.ModifyFlag(sFormatFlag, pos(sNoFormatFlag, Item.Flags) = 0) then
+          FModified := true;
+      end
+      else
+        if Item.ModifyFlag(sFormatFlag, false) then
+          FModified := true;
     end;
   end;
 
 var
-  Item, ItemTmp: TPOFileItem;
-  AContext,AComment,ATranslation,AFlags,APrevStr: string;
-  SetFuzzy: boolean;
+  FoundItem: TPOFileItem;
+  TmpFlags: string;
 begin
-  if FHelperList=nil then
-    FHelperList := TStringList.Create;
+  FoundItem := TPOFileItem(FOriginalToItem.Data[Original]);
 
-  // try to find PO entry by identifier
-  Item:=TPOFileItem(FIdentifierLowToItem[lowercase(Identifier)]);
-  if Item<>nil then begin
-    // found, update item value
-    AddToModuleList(Identifier);
+  if CurrentItem = nil then
+  begin
+    if (not FAllEntries) and (((FoundItem=nil) or (FoundItem.Translation='')) and (Translation='')) then
+      exit;
+    CurrentItem:=TPOFileItem.Create(lowercase(Identifier), Original, Translation);
+    CurrentItem.Comments := Comments;
+    CurrentItem.Context := Context;
+    //When setting item flags, omit '"' characters in order to avoid regeneration instability.
+    //These characters are not meant to be present in flags anyway according to examples in gettext documentation.
+    TmpFlags := StringReplace(Flags, '"', '', [rfReplaceAll]);
+    CurrentItem.ModifyFlag(lowercase(TmpFlags), true);
+    CurrentItem.FInitialFuzzyState := pos(sFuzzyFlag, CurrentItem.Flags) <> 0;
+    CurrentItem.PreviousID := PreviousID;
+    CurrentItem.LineNr := LineNr;
+    FItems.Add(CurrentItem);
+    //debugln(['TPOFile.FillItem Identifier=',Identifier,' Orig="',dbgstr(OriginalValue),'" Transl="',dbgstr(TranslatedValue),'"']);
+    FIdentifierLowToItem[CurrentItem.IdentifierLow]:=CurrentItem;
+  end;
 
-    if CompareMultilinedStrings(Item.Original, Original)<>0 then begin
-      FModified := True;
-      if Item.Translation <> '' then begin
-        if (Item.PreviousID = '') or (pos(sFuzzyFlag, Item.Flags) = 0) then
-          Item.PreviousID:=Item.Original;
-        Item.ModifyFlag(sFuzzyFlag, true);
-      end;
-    end;
-    Item.Original:=Original;
-    Item.Tag:=FTag;
-    if Item.Translation = '' then
+  CurrentItem.Tag := FTag;
+
+  if FoundItem <> nil then
+  begin
+    if FoundItem.IdentifierLow<>CurrentItem.IdentifierLow then
     begin
-      ItemTmp := TPOFileItem(FOriginalToItem.Data[Original]);
-      if ItemTmp <> nil then
+      // if old item doesn't have context, add one
+      if FoundItem.Context='' then
+        FoundItem.Context := FoundItem.IdentifierLow;
+      // if current item doesn't have context, add one
+      if CurrentItem.Context='' then
+        CurrentItem.Context := CurrentItem.IdentifierLow;
+      // marking items as duplicate (needed only by POChecker)
+      FoundItem.Duplicate := true;
+      CurrentItem.Duplicate := true;
+      // if old item is already translated and current item not, use translation
+      // note, that we do not copy fuzzy translations in order not to potentially mislead translators
+      if (CurrentItem.Translation='') and (FoundItem.Translation<>'') and (pos(sFuzzyFlag, FoundItem.Flags) = 0) then
       begin
-        // if old item is already translated use translation
-        if ItemTmp.Translation<>'' then
-        begin
-          // if old item doesn't have context, add one
-          if ItemTmp.Context='' then
-            ItemTmp.Context := ItemTmp.IdentifierLow;
-          // if current item doesn't have context, add one
-          if Item.Context='' then
-            Item.Context := Item.IdentifierLow;
-          Item.Translation := ItemTmp.Translation;
-          if Item.Flags='' then
-            Item.Flags := ItemTmp.Flags;
-          Item.ModifyFlag(sFuzzyFlag, true);
-          // if old item is fuzzy, copy PreviousID too
-          if pos(sFuzzyFlag, ItemTmp.Flags)<>0 then
-            Item.PreviousID := ItemTmp.PreviousID;
-          FModified := True;
-        end;
+        CurrentItem.Translation := FoundItem.Translation;
+        CurrentItem.ModifyFlag(sFuzzyFlag, true);
+        //Mark an item with added translation with "virtual translation" flag.
+        //Useful e. g. to POChecker in order to allow to ignore such items when checking formatting,
+        //since they can contain formatting errors if copied from an item with no-object-pascal-format flag set.
+        //These translations will not be used anyway (they are fuzzy) and are physically missing in translation file.
+        CurrentItem.FVirtualTranslation := true;
+        FModified := True;
       end;
     end;
-    VerifyItemFormatting(Item);
-    exit;
   end;
 
-  // try to find po entry based only on it's value
-  SetFuzzy := false;
-  AContext := '';
-  AComment := '';
-  ATranslation := '';
-  AFlags := '';
-  APrevStr := '';
-  Item := TPOFileItem(FOriginalToItem.Data[Original]);
-  if Item<>nil then begin
-    // old item doesn't have context, add one
-    if Item.Context='' then
-      Item.Context := Item.IdentifierLow;
+  VerifyItemFormatting(CurrentItem);
 
-    // if old item is already translated use translation
-    if Item.Translation<>'' then begin
-      ATranslation := Item.Translation;
-      // if old item is fuzzy, copy PreviousID too
-      if pos(sFuzzyFlag, Item.Flags)<>0 then
-        APrevStr := Item.PreviousID;
-      // check if old item's formatting arguments are correct and
-      // set old item's fuzzy and badformat flags if not
-      VerifyItemFormatting(Item);
-      // set a flag to mark item fuzzy if it is not already
-      SetFuzzy := true;
+  if Original <> '' then
+  begin
+    if (FoundItem = nil) or ((FoundItem.Translation = '') and (CurrentItem.Translation <> '')) or
+     ((FoundItem.Translation <> '') and (CurrentItem.Translation <> '') and
+      (pos(sFuzzyFlag, FoundItem.Flags) <> 0) and (pos(sFuzzyFlag, CurrentItem.Flags) = 0)) then
+    begin
+      if FoundItem <> nil then
+        FOriginalToItem.Remove(Original);
+      FOriginalToItem.Add(Original,CurrentItem);
     end;
-
-    AFlags := Item.Flags;
-
-    // update identifier list
-    AContext := Identifier;
   end;
 
-  // this appear to be a new item
-  FModified := true;
-  Add(Identifier, Original, ATranslation, AComment, AContext, AFlags, APrevStr, SetFuzzy);
 end;
 
 procedure TPOFile.UpdateTranslation(BasePOFile: TPOFile);
@@ -1738,31 +1679,12 @@ var
   i: Integer;
 begin
   UntagAll;
-  ClearModuleList;
   for i:=0 to BasePOFile.Items.Count-1 do begin
     Item := TPOFileItem(BasePOFile.Items[i]);
-    UpdateItem(Item.IdentifierLow, Item.Original);
+    UpdateItem(Item.IdentifierLow, Item.Original, Item.Flags, true);
   end;
   RemoveTaggedItems(0); // get rid of any item not existing in BasePOFile
-end;
-
-procedure TPOFile.ClearModuleList;
-begin
-  if FModuleList<>nil then
-    FModuleList.Clear;
-end;
-
-procedure TPOFile.AddToModuleList(Identifier: string);
-var
-  p: Integer;
-begin
-  if FModuleList=nil then begin
-    FModuleList := TStringList.Create;
-    FModuleList.Duplicates:=dupIgnore;
-  end;
-  p := pos('.', Identifier);
-  if p>0 then
-    FModuleList.Add(LeftStr(Identifier, P-1));
+  InvalidateStatistics;
 end;
 
 procedure TPOFile.UntagAll;
@@ -1776,71 +1698,9 @@ begin
   end;
 end;
 
-procedure TPOFile.CheckFormatArguments(AllowChangeFuzzyFlag: boolean=true);
-var
-  I: Integer;
-  aPoItem: TPOFileItem;
-  isFuzzy: boolean;
-  isBadFormat: boolean;
+procedure TPOFile.InvalidateStatistics;
 begin
-  FNrErrors := 0;
-  for I := 0 to FItems.Count -1 do begin
-    aPoItem := TPOFileItem(FItems.Items[I]);
-    if aPoItem.Translation = '' then Continue;
-    isFuzzy     := pos(sFuzzyFlag,aPoItem.Flags) <> 0;
-    isBadFormat := pos(sBadFormatFlag,aPoItem.Flags) <> 0;
-    if (pos('%',aPoItem.Original) <> 0) or (pos('%',aPoItem.Translation) <> 0) then begin
-      if not CompareFormatArgs(aPoItem.Original,aPoItem.Translation) then begin
-        inc(FNrErrors);
-        if (not isFuzzy) and AllowChangeFuzzyFlag then begin
-          aPoItem.ModifyFlag(sFuzzyFlag,true);
-          inc(FNrFuzzy);
-          dec(FNrTranslated);
-          FModified := true;
-        end;
-        if not isBadFormat then begin
-          aPoItem.ModifyFlag(sBadFormatFlag,true);
-          FModified := true;
-        end;
-      end
-      else begin //remove badformat flag (if present) from correct item
-        if isBadFormat then begin
-          aPoItem.ModifyFlag(sBadFormatFlag,False);
-          FModified := true;
-        end;
-      end;
-    end
-    else begin // possibly an offending string has been removed
-      if isBadFormat then begin
-        aPoItem.ModifyFlag(sBadFormatFlag,False);
-        FModified := true;
-      end;
-    end;
-  end;
-  FFormatChecked := true;
-end;
-
-procedure TPOFile.CleanUp;
-var
-  i: Integer;
-  aPoItem: TPOFileItem;
-  isFuzzy: boolean;
-begin
-  for i := 0 to FItems.Count -1 do begin
-    aPoItem := TPOFileItem(FItems.Items[i]);
-    isFuzzy := pos(sFuzzyFlag,aPoItem.Flags) <> 0;
-    if not isFuzzy then
-      // remove PreviousID from non-fuzzy Items
-      if aPoItem.PreviousID <> '' then begin
-        aPoItem.PreviousID := '';
-        FModified := true;
-      end;
-    // is Context of some use ?
-    {if aPoItem.Context = '' then begin
-      aPoItem.Context := aPoItem.IdentifierLow;
-      FModified := True;
-      end;}
-  end;
+  FStatisticsUpdated := false;
 end;
 
 function TPOFile.FindPoItem(const Identifier: String): TPoFileItem;
@@ -1859,28 +1719,61 @@ end;
 constructor TPOFileItem.Create(const TheIdentifierLow, TheOriginal,
   TheTranslated: string);
 begin
+  FInitialFuzzyState:=false;
+  FVirtualTranslation:=false;
+  Duplicate:=false;
   IdentifierLow:=TheIdentifierLow;
   Original:=TheOriginal;
   Translation:=TheTranslated;
 end;
 
-procedure TPOFileItem.ModifyFlag(const AFlag: string; Check: boolean);
+function TPOFileItem.ModifyFlag(const AFlags: string; Check: boolean): boolean;
+var
+  F, MF: TStringList;
+
+  procedure ProcessFlag(const AFlag: string);
+  var
+    i: Integer;
+  begin
+    if AFlag <> '' then
+    begin
+      i := F.IndexOf(AFlag);
+      if (i<0) and Check then
+      begin
+        F.Add(AFlag);
+        Result := true;
+      end
+      else
+      begin
+        if (i>=0) and (not Check) then
+        begin
+          F.Delete(i);
+          Result := true;
+        end;
+      end;
+    end;
+  end;
+
 var
   i: Integer;
-  F: TStringList;
 begin
+  Result := false;
   F := TStringList.Create;
+  MF := TStringList.Create;
   try
     F.CommaText := Flags;
-    i := F.IndexOf(AFlag);
-    if (i<0) and Check then
-      F.Add(AFlag)
-    else
-    if (i>=0) and (not Check) then
-      F.Delete(i);
+
+    MF.CommaText := AFlags;
+    for i := 0 to MF.Count - 1 do
+      ProcessFlag(MF[i]);
+
+    if not Result then
+      exit;
     Flags := F.CommaText;
+    Flags := StringReplace(Flags, ',', ', ', [rfReplaceAll]);
   finally
     F.Free;
+    MF.Free;
   end;
 end;
 

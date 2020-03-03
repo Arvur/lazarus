@@ -34,8 +34,13 @@ unit GDBTypeInfo;
 interface
 
 uses
-  Classes, SysUtils, LclProc, math, LazLoggerBase, DebugUtils,
-  DbgIntfBaseTypes, DbgIntfDebuggerBase, GDBMIMiscClasses;
+  Classes, SysUtils, math,
+  // LazUtils
+  LazLoggerBase, LazStringUtils,
+  // DebuggerIntf
+  DbgIntfBaseTypes, DbgIntfDebuggerBase,
+  // LazDebuggerGdbmi
+  DebugUtils, GDBMIMiscClasses;
 
 (*
   ptype = {
@@ -428,8 +433,7 @@ type
   end;
 
 
-function CreatePTypeValueList(AResultValues: String): TStringList;
-function ParseTypeFromGdb(const ATypeText: string): TGDBPTypeResult;
+function ParseTypeFromGdb(ATypeText: string): TGDBPTypeResult;
 function GDBMIMaybeApplyBracketsToExpr(e: string): string;
 
 function dbgs(AFlag: TGDBPTypeResultFlag): string; overload;
@@ -467,132 +471,6 @@ begin
   end;
   if f then
     Result := '(' + Result + ')';
-end;
-
-function CreatePTypeValueList(AResultValues: String): TStringList;
-var
-  S, Line: String;
-  Lines: TStringList;
-
-  procedure DoRecord;
-  var
-    n: Integer;
-    S, Members: String;
-  begin
-    Result.Add('family=record');
-    Members := '';
-
-    //concatinate all lines and skip last end
-    S := '';
-    for n := 0 to Lines.Count - 2 do
-      S := S + Lines[n];
-
-    while S <> '' do
-    begin
-      if Members <> '' then Members := Members + ',';
-      Members := Members + '{name=' + GetPart(['    '], [' '], S);
-      Members := Members + ',type=' + GetPart([' : '], [';'], S) + '}';
-    end;
-    Result.Add('members=[' + Members + ']');
-  end;
-
-  procedure DoEnum;
-  var
-    n: Integer;
-    S: String;
-  begin
-    Result.Add('family=enum');
-
-    S := GetPart(['('], [], Line);
-    //concatinate all lines
-    for n := 0 to Lines.Count - 1 do
-      S := S + Lines[n];
-
-    S := GetPart([], [')'], S);
-    Result.Add('members=[' + StringReplace(S, ' ', '', [rfReplaceAll]) + ']');
-  end;
-
-  procedure DoProcedure;
-  var
-    n: Integer;
-    S: String;
-  begin
-    Result.Add('family=procedure');
-
-    S := GetPart(['('], [''], Line);
-    //concatinate all lines
-    for n := 0 to Lines.Count - 1 do
-      S := S + Lines[n];
-
-    S := GetPart([''], [')'], S);
-    Result.Add('args=[' + StringReplace(S, ', ', ',', [rfReplaceAll]) + ']');
-  end;
-
-  procedure DoFunction;
-  var
-    n: Integer;
-    S, Args: String;
-  begin
-    Result.Add('family=function');
-
-    S := GetPart(['('], [], Line);
-    //concatinate all lines
-    for n := 0 to Lines.Count - 1 do
-      S := S + Lines[n];
-
-    Args := GetPart([], [')'], S);
-    S := GetPart([' : '], [], S);
-    Result.Add('args=[' + StringReplace(Args, ', ', ',', [rfReplaceAll]) + ']');
-    Result.Add('result=' + S);
-  end;
-
-  procedure DoClass;
-  begin
-    Result.Add('family=class');
-    Result.Add('ancestor=' + GetPart([': public '], [' '], Line));
-  end;
-
-begin
-  Result := TStringList.Create;
-  if AResultValues = '' then Exit;
-
-  Lines := TStringList.Create;
-  try
-    Lines.Text := AResultValues;
-    if Lines.Count = 0 then Exit;
-    Line := Lines[0];
-    Lines.Delete(0);
-
-    S := GetPart(['type = '], [' '], Line);
-    if S = '' then Exit;
-    if Pos(' = class ', Line) > 0
-    then DoClass
-    else if S[1] = '^'
-    then begin
-      Result.Add('family=pointer');
-      Result.Add('type=' + GetPart(['^'], [' ='], S));
-    end
-    else if S = 'set'
-    then begin
-      Result.Add('family=set');
-      Result.Add('type=' + Copy(Line, 5, Length(Line)));
-    end
-    else if S = 'procedure'
-    then DoProcedure
-    else if S = 'function'
-    then DoFunction
-    else if Pos(' = (', Line) > 0
-    then DoEnum
-    else if Pos(' = record', Line) > 0
-    then DoRecord
-    else begin
-      Result.Add('family=simple');
-      Result.Add('type=' + S);
-    end;
-
-  finally
-    Lines.Free;
-  end;
 end;
 
 function ParseTypeFromGdb(const ATypeText: PChar; const ATypeTextLen: Integer): TGDBPTypeResult;
@@ -940,11 +818,38 @@ begin
   end;
 end;
 
-function ParseTypeFromGdb(const ATypeText: string): TGDBPTypeResult;
+function ParseTypeFromGdb(ATypeText: string): TGDBPTypeResult;
 var
-  i: SizeInt;
+  i, j: SizeInt;
 begin
   i := pos('type = ', ATypeText);
+  if i = 1 then begin
+    // deal with https://sourceware.org/bugzilla/show_bug.cgi?id=16016
+    i := i + 7;
+    if ATypeText[i] = '^' then inc(i);
+    if (UpperCase(copy(ATypeText, i, 9)) <> 'TOBJECT =') then begin
+      while (i < Length(ATypeText)) and not(ATypeText[i] in [#0..#32,'=',':']) do
+        inc(i);
+      if (UpperCase(copy(ATypeText, i, 9)) = ' = CLASS ') and
+         (Length(ATypeText) > i + 9) and
+         (ATypeText[i+9] in [#10, #13])
+      then begin
+        j := i + 10;
+        if (ATypeText[j] in [#10, #13]) then inc(j);
+        if (uppercase(copy(ATypeText, j, 8)) = '  PUBLIC') and
+           (Length(ATypeText) > j + 8) and
+           (ATypeText[j+8] in [#10, #13])
+        then
+          j := j + 8
+        else
+          j := i + 9;
+        ATypeText := copy(ATypeText, 1, i+2) + 'record ' + copy(ATypeText, j, Length(ATypeText));
+        // TODO remove the "public \n" line
+      end;
+    end;
+    i := 1;
+  end;
+
   if i < 1
   then Result := ParseTypeFromGdb(PChar(ATypeText), length(ATypeText))
   else Result := ParseTypeFromGdb((@ATypeText[i])+7, length(ATypeText)-6-i);
@@ -1282,13 +1187,6 @@ begin
 end;
 
 function TGDBExpressionPartArray.NeedValidation(var AReqPtr: PGDBPTypeRequest): Boolean;
-  function IsNumber(s: String): Boolean;
-  var i: Integer;
-  begin
-    i := Length(s);
-    while (i >= 1) and (s[i] in ['0'..'9']) do dec(i);
-    Result := i = 0;
-  end;
 var
   i, j: Integer;
   IdxPart, IdxPart2: TGDBExpressionPartArrayIdx;
@@ -3224,7 +3122,8 @@ var
     if (ptprfPointer in PTypeResult.Flags)
     and ( (PTypeResult.Kind in [ptprkSimple, ptprkRecord, ptprkEnum, ptprkSet])
           or ( (gtcfClassIsPointer in FCreationFlags) and
-               (PTypeResult.Kind in [ptprkProcedure, ptprkFunction])  )
+               (PTypeResult.Kind in [ptprkProcedure, ptprkFunction]) and
+               not(ptprfDeclarationInBrackets in PTypeResult.Flags)  )
         )
     then begin
       ProcessSimplePointer;
@@ -3308,6 +3207,7 @@ var
           // under stabs, procedure/function are always pointer // pointer to proc/func return empty type
           if (gtcfClassIsPointer in FCreationFlags) // Dwarf
           and (ptprfPointer in PTypeResult.Flags)
+          and not(ptprfDeclarationInBrackets in PTypeResult.Flags)
           then begin
             ProcessSimplePointer;
             exit;
@@ -3325,6 +3225,7 @@ var
           // under stabs, procedure/function are always pointer // pointer to proc/func return empty type
           if (gtcfClassIsPointer in FCreationFlags) // Dwarf
           and (ptprfPointer in PTypeResult.Flags)
+          and not(ptprfDeclarationInBrackets in PTypeResult.Flags)
           then begin
             ProcessSimplePointer;
             exit;

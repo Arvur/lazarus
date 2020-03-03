@@ -156,7 +156,6 @@ begin
 
     T := P.Targets.AddProgram('lazarus.pp');
     t.Dependencies.AddUnit('packagesystem');
-    t.Dependencies.AddUnit('adddirtopkgdlg');
     t.Dependencies.AddUnit('addfiletoapackagedlg');
     t.Dependencies.AddUnit('addtopackagedlg');
     t.Dependencies.AddUnit('basepkgmanager');
@@ -350,7 +349,6 @@ begin
     P.Sources.AddSrc('msgvieweditor.pas');
     P.Sources.AddSrc('newdialog.pas');
     P.Sources.AddSrc('newprojectdlg.pp');
-    P.Sources.AddSrc('objectlists.pas');
     P.Sources.AddSrc('outputfilter.pas');
     P.Sources.AddSrc('patheditordlg.pas');
     P.Sources.AddSrc('procedurelist.pas');
@@ -363,7 +361,7 @@ begin
     P.Sources.AddSrc('projectresources.pas');
     P.Sources.AddSrc('projectwizarddlg.pas');
     P.Sources.AddSrc('publishmodule.pas');
-    P.Sources.AddSrc('publishprojectdlg.pas');
+    P.Sources.AddSrc('publishmoduledlg.pas');
     P.Sources.AddSrc('restrictionbrowser.pas');
     P.Sources.AddSrc('runparamsopts.pas');
     P.Sources.AddSrc('searchfrm.pas');

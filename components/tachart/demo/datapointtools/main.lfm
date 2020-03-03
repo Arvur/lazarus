@@ -7,7 +7,7 @@ object MainForm: TMainForm
   ClientHeight = 488
   ClientWidth = 637
   OnCreate = FormCreate
-  LCLVersion = '1.7'
+  LCLVersion = '2.1.0.0'
   object TabControl: TTabControl
     Left = 0
     Height = 347
@@ -15,7 +15,7 @@ object MainForm: TMainForm
     Width = 637
     MultiLine = True
     OnChange = TabControlChange
-    TabIndex = 0
+    TabIndex = 5
     Tabs.Strings = (
       'Line series'
       'Bar series'
@@ -30,28 +30,33 @@ object MainForm: TMainForm
       'Field series'
       'Function series'
       'Constant line'
+      'Pie series'
     )
     Align = alClient
     TabOrder = 0
     object Chart: TChart
       Left = 2
-      Height = 302
-      Top = 43
+      Height = 282
+      Top = 63
       Width = 633
       AutoFocus = True
       AxisList = <      
         item
+          Marks.LabelBrush.Style = bsClear
           Minors = <>
           Range.Max = 10
           Range.UseMax = True
           Range.UseMin = True
           Title.LabelFont.Orientation = 900
+          Title.LabelBrush.Style = bsClear
         end      
         item
           Intervals.MaxLength = 80
           Intervals.MinLength = 30
           Alignment = calBottom
+          Marks.LabelBrush.Style = bsClear
           Minors = <>
+          Title.LabelBrush.Style = bsClear
         end>
       Foot.Brush.Color = clBtnFace
       Foot.Font.Color = clBlue
@@ -71,6 +76,7 @@ object MainForm: TMainForm
         Active = False
         Title = 'Line series'
         Pointer.Style = psCircle
+        Pointer.Visible = True
         ShowPoints = True
         Stacked = True
         Source = ListChartSource
@@ -100,6 +106,7 @@ object MainForm: TMainForm
         Pointer.HorizSize = 5
         Pointer.Style = psDiamond
         Pointer.VertSize = 5
+        Pointer.Visible = True
         ShowPoints = True
         Source = ListChartSource
       end
@@ -110,6 +117,7 @@ object MainForm: TMainForm
         Pointer.HorizSize = 6
         Pointer.Style = psFullStar
         Pointer.VertSize = 6
+        Pointer.Visible = True
         Source = ListChartSource
         Pen.Color = clRed
       end
@@ -122,6 +130,8 @@ object MainForm: TMainForm
         Pointer.HorizSize = 7
         Pointer.Style = psHexagon
         Pointer.VertSize = 7
+        Pointer.Visible = True
+        ToolTargets = [nptPoint, nptYList, nptCustom]
       end
       object OHLCSeries: TOpenHighLowCloseSeries
         Active = False
@@ -133,7 +143,6 @@ object MainForm: TMainForm
         DownLinePen.Width = 2
         LinePen.Color = clGreen
         LinePen.Width = 2
-        Mode = mOHLC
       end
       object BoxWhiskerSeries: TBoxAndWhiskerSeries
         Active = False
@@ -158,8 +167,8 @@ object MainForm: TMainForm
         Extent.UseXMin = True
         Extent.XMax = 10
         Title = 'Function series'
-        OnCalculate = FuncSeriesCalculate
         Pen.Color = clBlue
+        OnCalculate = FuncSeriesCalculate
       end
       object FieldSeries: TFieldSeries
         Active = False
@@ -179,6 +188,10 @@ object MainForm: TMainForm
         Pointer.HorizSize = 5
         Pointer.Style = psCircle
         Pointer.VertSize = 5
+        Pointer.Visible = True
+      end
+      object PieSeries: TPieSeries
+        Title = 'Pie series'
       end
     end
   end
@@ -222,7 +235,7 @@ object MainForm: TMainForm
     end
     object LblNOTE: TLabel
       AnchorSideLeft.Control = Panel1
-      AnchorSideTop.Control = Label2
+      AnchorSideTop.Control = LblUSAGE
       AnchorSideTop.Side = asrBottom
       AnchorSideRight.Control = Panel1
       AnchorSideRight.Side = asrBottom
@@ -238,7 +251,7 @@ object MainForm: TMainForm
       ParentColor = False
       WordWrap = True
     end
-    object Label2: TLabel
+    object LblUSAGE: TLabel
       AnchorSideLeft.Control = Panel1
       AnchorSideTop.Control = CbDragXY
       AnchorSideTop.Side = asrBottom
@@ -310,6 +323,9 @@ object MainForm: TMainForm
       GrabRadius = 12
       OnDraw = CrosshairToolDraw
       Size = 12
+    end
+    object PieSeriesDatapointDragTool: TDataPointDragTool
+      Shift = [ssLeft]
     end
   end
   object ChartStyles: TChartStyles

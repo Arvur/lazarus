@@ -58,6 +58,7 @@ resourcestring
   oisShowHints = 'Show Hints';
   oisShowInfoBox = 'Show Information Box';
   oisShowStatusBar = 'Show Status Bar';
+  oisShowPropertyFilter = 'Show Property Filter';
   oisOptions = 'Options';
 
   // typeinfo, PropEdits
@@ -133,7 +134,10 @@ resourcestring
   sccsILEdtGrpLCaption = 'Images';
   sccsILEdtGrpRCaption = 'Selected Image';
   sccsILEdtAdd         = '&Add ...';
+  sccsILEdtAddMoreResolutions = 'Add more resolutions ...';
+  sccsILEdtAddSliced   = 'Add sliced ...';
   sccsILEdtReplace     = '&Replace ...';
+  sccsILEdtReplaceAllResolutions = 'Replace all resolutions ...';
   sccsILEdtDelete      = '&Delete';
   sccsILEdtApply       = '&Apply';
   sccsILEdtClear       = '&Clear';
@@ -141,9 +145,16 @@ resourcestring
   sccsILEdtMoveDown    = 'Move D&own';
   sccsILEdtSave        = '&Save ...';
   sccsILEdtSaveAll     = 'Save All ...';
+  sccsILEdtAddNewResolution = 'New resolution ...';
+  sccsILEdtDeleteResolution = 'Delete resolution ...';
+  sccsILEdtDeleteResolutionConfirmation = 'Select the resolution to delete.';
+  sccsILEdtCannotDeleteResolution = 'Cannot delete default resolution.';
+  sccsILEdtImageWidthOfNewResolution = 'Image width of the new resolution:';
   sccsILEdtransparentColor = 'Transparent Color:';
   sccsILEdtAdjustment  = 'Adjustment';
   sccsILEdtNone        = 'None';
+  sccsILEdtAddSlicedIconError = 'Adding sliced icons is not supported.';
+  sccsILEdtCannotSlice = 'Source image size must be an integer multiple of the ImageList''s Width and Height.';
   liisIf               = 'If';
   liisIfDef            = 'IfDef';
   liisIfNDef           = 'IfNDef';
@@ -212,6 +223,9 @@ resourcestring
   cgColumns = 'Columns:';
   cgCheckDuplicate = 'On Add, Check for Duplicate in Items';
   cgCheckDuplicateMsg = 'The "%s" Item is already listed. Add it anyway?';
+
+  // flowpanel editor
+  fpFlowPanelEditor = 'FlowPanel Editor';
 
   // Collection Editor
   oiColEditAdd = 'Add';
@@ -350,6 +364,7 @@ resourcestring
   oisInvalidPropertyValue = 'Invalid property value';
   oisNone = '(none)';
   oisPressAKey = 'Press a key ...';
+  oisPressAKeyEGCtrlP = 'You can press e.g. Ctrl+P ...';
   oisSelectShortCut = 'Select short cut';
   srGrabKey = 'Grab key';
   oisComponentNameIsNotAValidIdentifier = 'Component name "%s" is not a valid identifier';

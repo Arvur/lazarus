@@ -31,9 +31,9 @@ unit opkman_downloader;
 interface
 
 uses
-  Classes, SysUtils, fpjson,
+  Classes, SysUtils, fpjson, LazIDEIntf, md5,
   // OpkMan
-  opkman_timer, opkman_common, opkman_serializablepackages, opkman_const, opkman_options,
+  opkman_common, opkman_serializablepackages, opkman_const, opkman_options,
   {$IFDEF FPC311}fphttpclient{$ELSE}opkman_httpclient{$ENDIF};
 
 type
@@ -88,10 +88,10 @@ type
     FTotPos: Int64;
     FTotPosTmp: Int64;
     FTotSize: Int64;
-    FElapsed: Integer;
     FRemaining: Integer;
     FSpeed: Integer;
-    FTimer: TThreadTimer;
+    FStartTime: QWord;
+    FElapsed: QWord;
     FNeedToBreak: Boolean;
     FDownloadTo: String;
     FUPackageName: String;
@@ -107,7 +107,6 @@ type
     FOnPackageUpdateCompleted: TOnPackageUpdateCompleted;
     function GetUpdateSize(const AURL: String; var AErrMsg: String): Int64;
     procedure DoReceivedUpdateSize(Sender: TObject; const ContentLength, {%H-}CurrentPos: int64);
-    procedure DoOnTimer(Sender: TObject);
     procedure DoOnJSONProgress;
     procedure DoOnJSONDownloadCompleted;
     procedure DoOnWriteStream(Sender: TObject; APos: Int64);
@@ -144,6 +143,7 @@ type
     FRemoteRepository: String;
     FLastError: String;
     FDownloadingJSON: Boolean;
+    FSilent: Boolean;
     FOnJSONProgress: TNotifyEvent;
     FOnJSONDownloadCompleted: TOnJSONDownloadCompleted;
     FOnPackageDownloadProgress: TOnPackageDownloadProgress;
@@ -164,9 +164,8 @@ type
     destructor Destroy; override;
     procedure DownloadJSON(const ATimeOut: Integer = -1; const ASilent: Boolean = False);
     procedure DownloadPackages(const ADownloadTo: String);
-    procedure CancelDownloadPackages;
     procedure UpdatePackages(const ADownloadTo: String);
-    procedure CancelUpdatePackages;
+    procedure Cancel;
   published
     property RemoteRepository: String read FRemoteRepository write FRemoteRepository;
     property LastError: String read FLastError write FLastError;
@@ -257,15 +256,17 @@ end;
 procedure TThreadDownload.DoOnJSONDownloadCompleted;
 var
   JSON: TJSONStringType;
+  JSONFile: String;
 begin
-  if FSilent then
-    Exit;
   if Assigned(FOnJSONComplete) then
   begin
     if (FErrTyp = etNone) or (FMS.Size > 0) then
     begin
       SetLength(JSON, FMS.Size);
       FMS.Read(Pointer(JSON)^, Length(JSON));
+      JSONFile := ExtractFilePath(LocalRepositoryConfigFile) + 'packagelist' + '_' + MD5Print(MD5String(Options.RemoteRepository[Options.ActiveRepositoryIndex])) + '.json';
+      FMS.Position := 0;
+      FMS.SaveToFile(JSONFile);
       SerializablePackages.JSONToPackages(JSON);
       FOnJSONComplete(Self, JSON, FErrTyp, '');
     end
@@ -274,25 +275,6 @@ begin
   end;
 end;
 
-procedure TThreadDownload.DoOnTimer(Sender: TObject);
-begin
-  if FDownloadType = dtJSON then
-  begin
-    FHTTPClient.Terminate;
-    FErrMsg := rsMainFrm_rsMessageError2;
-    FErrTyp := etTimeOut;
-    FTimer.StopTimer;
-    Synchronize(@DoOnJSONDownloadCompleted);
-    FOnJSONComplete := nil;
-  end
-  else if (FDownloadType = dtPackage) or (FDownloadType = dtUpdate) then
-  begin
-    Inc(FElapsed);
-    FSpeed := Round(FTotPosTmp/FElapsed);
-    if FSpeed > 0 then
-      FRemaining := Round((FTotSize - FTotPosTmp)/FSpeed);
-  end;
-end;
 
 procedure TThreadDownload.DoOnJSONProgress;
 begin
@@ -304,8 +286,15 @@ end;
 
 procedure TThreadDownload.DoOnWriteStream(Sender: TObject; APos: Int64);
 begin
+  FElapsed := GetTickCount64 - FStartTime;
+  if FElapsed < 1000 then
+    Exit;
+  FElapsed := FElapsed div 1000;
   FCurPos := APos;
   FTotPosTmp := FTotPos + APos;
+  FSpeed := Round(FTotPosTmp/FElapsed);
+  if FSpeed > 0 then
+    FRemaining := Round((FTotSize - FTotPosTmp)/FSpeed);
   Synchronize(@DoOnPackageDownloadProgress);
   Sleep(5);
 end;
@@ -317,11 +306,13 @@ var
   UpdateSize: Int64;
   UpdCnt: Integer;
 begin
+  Sleep(50);
   FErrMsg := '';
   FErrTyp := etNone;
   if FDownloadType = dtJSON then //JSON
   begin
-    Synchronize(@DoOnJSONProgress);
+    if not FNeedToBreak then
+      Synchronize(@DoOnJSONProgress);
     if FRemoteJSONFile <> cRemoteJSONFile then
     begin
       try
@@ -341,13 +332,13 @@ begin
       FErrTyp := etConfig;
       FErrMsg := rsMainFrm_rsMessageNoRepository0;
     end;
-    if FTimer.Enabled then
-      FTimer.StopTimer;
-    Synchronize(@DoOnJSONDownloadCompleted);
+    if not FNeedToBreak then
+      Synchronize(@DoOnJSONDownloadCompleted)
   end
   else if FDownloadType = dtPackage then //download from repository
   begin
     FCnt := 0;
+    FStartTime := GetTickCount64;
     for I := 0 to SerializablePackages.Count - 1 do
     begin
       if NeedToBreak then
@@ -391,6 +382,7 @@ begin
   begin
     FCnt := 0;
     UpdCnt := 0;
+    FStartTime := GetTickCount64;
     for I := 0 to SerializablePackages.Count - 1 do
     begin
       if FNeedToBreak then
@@ -433,7 +425,6 @@ begin
     begin
       FUSuccess := True;
       Synchronize(@DoOnPackageUpdateCompleted);
-      FTimer.Enabled := True;
       FCnt := 0;
       FTotCnt := UpdCnt;
       for I := 0 to SerializablePackages.Count - 1 do
@@ -485,7 +476,6 @@ constructor TThreadDownload.Create;
 begin
   inherited Create(True);
   FreeOnTerminate := True;
-  FTimer := nil;
   FMS := TMemoryStream.Create;
   FHTTPClient := TFPHTTPClient.Create(nil);
   if Options.ProxyEnabled then
@@ -499,9 +489,6 @@ end;
 
 destructor TThreadDownload.Destroy;
 begin
-  if FTimer.Enabled then
-    FTimer.StopTimer;
-  FTimer.Terminate;
   FHTTPClient.Free;
   FMS.Free;
   inherited Destroy;
@@ -513,11 +500,8 @@ begin
   FRemoteJSONFile := Options.RemoteRepository[Options.ActiveRepositoryIndex] + cRemoteJSONFile;
   FDownloadType := dtJSON;
   FSilent := ASilent;
-  FTimer := TThreadTimer.Create;
-  FTimer.Interval := ATimeOut;
-  FTimer.OnTimer := @DoOnTimer;
-  FTimer.StartTimer;
-  Start;
+  if Assigned(LazarusIDE) and LazarusIDE.IDEStarted and not LazarusIDE.IDEIsClosing then
+    Start;
 end;
 
 procedure TThreadDownload.DownloadPackages(const ADownloadTo: String);
@@ -536,10 +520,8 @@ begin
       FTotSize := FTotSize + SerializablePackages.Items[I].RepositoryFileSize;
     end;
   end;
-  FTimer := TThreadTimer.Create;
-  FTimer.OnTimer := @DoOnTimer;
-  FTimer.StartTimer;
-  Start;
+  if Assigned(LazarusIDE) and LazarusIDE.IDEStarted and not LazarusIDE.IDEIsClosing then
+    Start;
 end;
 
 procedure TThreadDownload.DoReceivedUpdateSize(Sender: TObject;
@@ -600,11 +582,8 @@ begin
   for I := 0 to SerializablePackages.Count - 1 do
     if (SerializablePackages.Items[I].Checked) and (Trim(SerializablePackages.Items[I].DownloadZipURL) <> '') then
       Inc(FTotCnt);
-  FTimer := TThreadTimer.Create;
-  FTimer.OnTimer := @DoOnTimer;
-  FTimer.StartTimer;
-  FTimer.Enabled := False;
-  Start;
+  if (Assigned(LazarusIDE) and LazarusIDE.IDEStarted and (not LazarusIDE.IDEIsClosing)) then
+    Start;
 end;
 
 { TPackageDownloader}
@@ -653,9 +632,12 @@ end;
 procedure TPackageDownloader.DoOnJSONDownloadCompleted(Sender: TObject;
   AJSON: TJSONStringType; AErrTyp: TErrorType; const AErrMsg: String);
 begin
-  FJSON := AJSON;
-  if Assigned(FOnJSONDownloadCompleted) then
-    FOnJSONDownloadCompleted(Self, AJSON, AErrTyp, AErrMsg);
+  if not FSilent then
+  begin
+    FJSON := AJSON;
+    if Assigned(FOnJSONDownloadCompleted) then
+      FOnJSONDownloadCompleted(Self, AJSON, AErrTyp, AErrMsg);
+  end;
   FDownloadingJSON := False;
 end;
 
@@ -668,6 +650,8 @@ end;
 
 destructor TPackageDownloader.Destroy;
 begin
+{  if Assigned(FDownload) then
+    FDownload.Terminate;}
   inherited Destroy;
 end;
 
@@ -675,6 +659,7 @@ procedure TPackageDownloader.DownloadJSON(const ATimeOut: Integer = -1;
   const ASilent: Boolean = False);
 begin
   FDownloadingJSON := True;
+  FSilent := ASilent;
   FDownload := TThreadDownload.Create;
   FDownload.OnJSONProgress := @DoOnJSONProgress;
   FDownload.OnJSONDownloadCompleted := @DoOnJSONDownloadCompleted;
@@ -690,16 +675,6 @@ begin
   FDownload.DownloadPackages(ADownloadTo);
 end;
 
-procedure TPackageDownloader.CancelDownloadPackages;
-begin
-  if Assigned(FDownload) then
-  begin
-    FDownload.FHTTPClient.Terminate;
-    FDownload.FTimer.StopTimer;
-    FDownload.NeedToBreak := True;
-  end;
-end;
-
 procedure TPackageDownloader.UpdatePackages(const ADownloadTo: String);
 begin
   FDownload := TThreadDownload.Create;
@@ -711,12 +686,11 @@ begin
   FDownload.UpdatePackages(ADownloadTo);
 end;
 
-procedure TPackageDownloader.CancelUpdatePackages;
+procedure TPackageDownloader.Cancel;
 begin
   if Assigned(FDownload) then
   begin
     FDownload.FHTTPClient.Terminate;
-    FDownload.FTimer.StopTimer;
     FDownload.NeedToBreak := True;
   end;
 end;

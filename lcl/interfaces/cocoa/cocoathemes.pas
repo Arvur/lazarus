@@ -22,7 +22,7 @@ uses
   LCLType, LCLProc, LCLIntf, Graphics, Themes, TmSchema,
   customdrawndrawers,
   // widgetset
-  CocoaUtils, CocoaGDIObjects;
+  CocoaUtils, CocoaGDIObjects, Cocoa_Extra;
   
 type
   { TCocoaThemeServices }
@@ -30,6 +30,15 @@ type
   TCocoaThemeServices = class(TThemeServices)
   private
   protected
+    callback     : NSObject;
+    BtnCell      : NSButtonCell;
+    function SetButtonCellType(btn: NSButtonCell; Details: TThemedElementDetails): Boolean;
+    procedure SetButtonCellToDetails(btn: NSButtonCell; Details: TThemedElementDetails);
+
+    procedure CellDrawStart(dst: TCocoaContext; const r: Trect; out cur: NSGraphicsContext; out dstRect: NSRect);
+    procedure CellDrawFrame(cell: NSCell; const dst: NSRect);
+    procedure CellDrawEnd(dst: TCocoaContext; cur: NSGraphicsContext);
+
 (*
     function InitThemes: Boolean; override;
     function UseThemes: Boolean; override;
@@ -45,7 +54,12 @@ type
     function DrawTreeviewElement(DC: TCocoaContext; Details: TThemedElementDetails; R: TRect; {%H-}ClipRect: PRect): TRect;
 (*    function DrawWindowElement(DC: TCarbonDeviceContext; Details: TThemedElementDetails; R: TRect; {%H-}ClipRect: PRect): TRect;
 *)
+    function GetCellForDetails(Details: TThemedElementDetails): NSCell;
   public
+    BezelToolBar : NSBezelStyle;
+    BezelButton  : NSBezelStyle;
+    constructor Create;
+    destructor Destroy; override;
     procedure DrawElement(DC: HDC; Details: TThemedElementDetails; const R: TRect; ClipRect: PRect); override;
 (*
     procedure DrawEdge({%H-}DC: HDC; {%H-}Details: TThemedElementDetails; const {%H-}R: TRect; {%H-}Edge, {%H-}Flags: Cardinal; {%H-}AContentRect: PRect); override;
@@ -54,12 +68,116 @@ type
 
     function ContentRect({%H-}DC: HDC; Details: TThemedElementDetails; BoundingRect: TRect): TRect; override;
     function HasTransparentParts({%H-}Details: TThemedElementDetails): Boolean; override;
+*)
     function GetDetailSize(Details: TThemedElementDetails): TSize; override;
     function GetOption(AOption: TThemeOption): Integer; override;
-*)
   end;
 
+// "dark" is not a good reference, as Apple might add more and more themes
+function IsDarkPossible: Boolean; inline;
+
+// returns if the application appearance is set to dark
+function IsAppDark: Boolean;
+
+// returns if the window appearance is set to dark
+function IsWinDark(win: NSWindow): Boolean;
+
+// Returns the appearance object that is active on the current thread.
+// returns true, if currently drawn (Painted) UI control is in Dark theme.
+function IsPaintDark: Boolean;
+
+// returns true, if Appear is assigned and bears name of Dark theme
+function IsAppearDark(Appear: NSAppearance): Boolean; inline;
+
+// weak-referenced NSAppearnceClass. Returns nil on any OS prior to 10.13
+function NSAppearanceClass: pobjc_class;
+
 implementation
+
+type
+  TCocoaThemeCallback = objcclass(NSObject)
+    procedure notifySysColorsChanged(notification: NSNotification); message 'notifySysColorsChanged:';
+  end;
+
+type
+  TCocoaContextAccess = class(TCocoaContext);
+
+const
+  IntBool : array [Boolean] of NSInteger = (0,1);
+
+var
+  _NSAppearanceClass : pobjc_class = nil;
+  _NSAppearanceClassRead: Boolean = false;
+
+const
+  DarkName = 'NSAppearanceNameDarkAqua'; // used in 10.14
+  DarkNameVibrant = 'NSAppearanceNameVibrantDark'; // used in 10.13
+
+function NSAppearanceClass: pobjc_class;
+begin
+  if not _NSAppearanceClassRead then
+  begin
+    _NSAppearanceClass := objc_getClass('NSAppearance');
+    _NSAppearanceClassRead := true;
+  end;
+  Result := _NSAppearanceClass;
+end;
+
+function IsAppearDark(Appear: NSAppearance): Boolean; inline;
+begin
+  Result := Assigned(Appear)
+            and (
+            Appear.name.isEqualToString(NSSTR(DarkName))
+            or
+            Appear.name.isEqualToString(NSSTR(DarkNameVibrant))
+            )
+end;
+
+function IsDarkPossible: Boolean; inline;
+begin
+  Result := NSAppKitVersionNumber > NSAppKitVersionNumber10_12;
+end;
+
+function IsAppDark: Boolean;
+var
+  Appear: NSAppearance;
+begin
+  if not isDarkPossible then
+  begin
+    Result := false;
+    Exit;
+  end;
+  if (not NSApplication(NSApp).respondsToSelector(ObjCSelector('appearance'))) then begin
+    Result := false;
+    Exit;
+  end;
+
+  Result := IsAppearDark(NSApplication(NSApp).appearance);
+end;
+
+function IsWinDark(win: NSWindow): Boolean;
+begin
+  if not Assigned(win) or not isDarkPossible then
+  begin
+    Result := false;
+    Exit;
+  end;
+  if (not NSApplication(win).respondsToSelector(ObjCSelector('appearance'))) then begin
+    Result := false;
+    Exit;
+  end;
+
+  Result := IsAppearDark(win.appearance);
+end;
+
+function IsPaintDark: Boolean;
+var
+  cls : pobjc_class;
+begin
+  cls := NSAppearanceClass;
+  if not Assigned(cls) then Exit;
+  Result := IsAppearDark(objc_msgSend(cls, ObjCSelector('currentAppearance')));
+end;
 
 { TCocoaThemeServices }
 
@@ -159,6 +277,8 @@ end;*)
   BP_GROUPBOX    kHIThemeGroupBoxKindPrimary,
   BP_USERBUTTON  kThemeRoundedBevelButton
  ------------------------------------------------------------------------------}
+
+
 function TCocoaThemeServices.DrawButtonElement(DC: TCocoaContext;
   Details: TThemedElementDetails; R: TRect; ClipRect: PRect): TRect;
 var
@@ -168,7 +288,25 @@ var
   lState: TCDControlState = [];
   lDrawer: TCDDrawer;
   lPt: TPoint;
+  cur : NSGraphicsContext;
+  nsr : NSRect;
+  b   : NSButtonCell;
 begin
+  b := NSButtonCell.alloc.initTextCell(NSString.string_);
+  try
+    // ideally, all uttons are drawn via Cocoa
+    if SetButtonCellType(b, Details) then
+    begin
+      SetButtonCellToDetails(b, Details);
+      CellDrawStart(DC, R, cur, nsr);
+      CellDrawFrame(b, nsr);
+      CellDrawEnd(DC, cur);
+      Exit;
+    end;
+  finally
+    b.release;
+  end;
+
   lCDButton := TCDButtonStateEx.Create;
   lCanvas := TCanvas.Create;
   try
@@ -294,53 +432,68 @@ var
   lCDToolbarItem: TCDToolBarItem;
   lCDToolbar: TCDToolBarStateEx;
   lDrawer: TCDDrawer;
+  cur : NSGraphicsContext;
+  nsr : NSRect;
 begin
-  lCDToolbarItem := TCDToolBarItem.Create;
-  lCDToolbar := TCDToolBarStateEx.Create;
-  lCanvas := TCanvas.Create;
-  try
-    lSize.CX := R.Right - R.Left;
-    lSize.CY := R.Bottom - R.Top;
-    case Details.Part of
-      TP_BUTTON, TP_DROPDOWNBUTTON, TP_SPLITBUTTON:
-      begin
-        lCDToolbarItem.Kind := tikButton;
-        lCDToolbarItem.Width := lSize.CX;
-      end;
-      TP_SPLITBUTTONDROPDOWN:
-      begin
-        lCDToolbarItem.Kind := tikDropDownButton;
-        lCDToolbarItem.SubpartKind := tiskArrow;
-        lCDToolbarItem.Width := -1;
-      end
-      //TP_SEPARATOR, TP_SEPARATORVERT, TP_DROPDOWNBUTTONGLYPH: // tikSeparator, tikDivider
-    else
-      Exit;
-    end;
-    lCDToolbarItem.Down := IsChecked(Details);
-
-    lCDToolbarItem.State := [];
-    if IsHot(Details) then
-      lCDToolbarItem.State := lCDToolbarItem.State + [csfMouseOver];
-    if IsPushed(Details) then
-      lCDToolbarItem.State := lCDToolbarItem.State + [csfSunken];
-    if IsChecked(Details) then
-      lCDToolbarItem.State := lCDToolbarItem.State + [csfSunken];
-    if not IsDisabled(Details) then
-      lCDToolbarItem.State := lCDToolbarItem.State + [csfEnabled];
-
-    lCDToolbar.ToolBarHeight := lSize.CY;
-
-    lDrawer := GetDrawer(dsMacOSX);
-    lCanvas.Handle := HDC(DC);
-    lDrawer.DrawToolBarItem(lCanvas, lSize, lCDToolbarItem, R.Left, R.Top, lCDToolbarItem.State, lCDToolbar);
-
+  if Details.Part = TP_BUTTON then
+  begin
+    //BtnCell.setBezeled(true);
+    SetButtonCellType(BtnCell, Details);
+    SetButtonCellToDetails(BtnCell, Details);
+    CellDrawStart(DC, R, cur, nsr);
+    CellDrawFrame(btnCell, nsr);
+    CellDrawEnd(DC, cur);
     Result := R;
-  finally
-    lCDToolbarItem.Free;
-    lCDToolbar.Free;
-    lCanvas.Handle := 0;
-    lCanvas.Free;
+  end
+  else
+  begin
+    lCDToolbarItem := TCDToolBarItem.Create;
+    lCDToolbar := TCDToolBarStateEx.Create;
+    lCanvas := TCanvas.Create;
+    try
+      lSize.CX := R.Right - R.Left;
+      lSize.CY := R.Bottom - R.Top;
+      case Details.Part of
+        TP_BUTTON, TP_DROPDOWNBUTTON, TP_SPLITBUTTON:
+        begin
+          lCDToolbarItem.Kind := tikButton;
+          lCDToolbarItem.Width := lSize.CX;
+        end;
+        TP_SPLITBUTTONDROPDOWN:
+        begin
+          lCDToolbarItem.Kind := tikDropDownButton;
+          lCDToolbarItem.SubpartKind := tiskArrow;
+          lCDToolbarItem.Width := -1;
+        end
+        //TP_SEPARATOR, TP_SEPARATORVERT, TP_DROPDOWNBUTTONGLYPH: // tikSeparator, tikDivider
+      else
+        Exit;
+      end;
+      lCDToolbarItem.Down := IsChecked(Details);
+
+      lCDToolbarItem.State := [];
+      if IsHot(Details) then
+        lCDToolbarItem.State := lCDToolbarItem.State + [csfMouseOver];
+      if IsPushed(Details) then
+        lCDToolbarItem.State := lCDToolbarItem.State + [csfSunken];
+      if IsChecked(Details) then
+        lCDToolbarItem.State := lCDToolbarItem.State + [csfSunken];
+      if not IsDisabled(Details) then
+        lCDToolbarItem.State := lCDToolbarItem.State + [csfEnabled];
+
+      lCDToolbar.ToolBarHeight := lSize.CY;
+
+      lDrawer := GetDrawer(dsMacOSX);
+      lCanvas.Handle := HDC(DC);
+      lDrawer.DrawToolBarItem(lCanvas, lSize, lCDToolbarItem, R.Left, R.Top, lCDToolbarItem.State, lCDToolbar);
+
+      Result := R;
+    finally
+      lCDToolbarItem.Free;
+      lCDToolbar.Free;
+      lCanvas.Handle := 0;
+      lCanvas.Free;
+    end;
   end;
 end;
 
@@ -364,12 +517,16 @@ begin
         TREIS_HOT: lColor := ColorToNSColor(ColorToRGB(clHotLight));
         TREIS_SELECTED: lColor := ColorToNSColor(ColorToRGB(clHighlight));
         TREIS_DISABLED: lColor := ColorToNSColor(ColorToRGB(clWindow));
-        TREIS_SELECTEDNOTFOCUS: lColor := ColorToNSColor(ColorToRGB(clBtnFace));
+        TREIS_SELECTEDNOTFOCUS: lColor := NSColor.secondarySelectedControlColor;
         TREIS_HOTSELECTED: lColor := ColorToNSColor(ColorToRGB(clHighlight));
+      else
+        lColor := NSColor.blackColor;
       end;
       lBrush := TCocoaBrush.Create(lColor, False);
       DC.Rectangle(R.Left, R.Top, R.Right, R.Bottom, True, lBrush);
       lBrush.Free;
+
+      Result := R;
     end;
     TVP_GLYPH, TVP_HOTGLYPH:
     begin
@@ -434,7 +591,58 @@ begin
       Result := R;
       {$endif}
     end;
+  else
+    Result := Bounds(0,0,0,0);
   end;
+end;
+
+function TCocoaThemeServices.GetCellForDetails(Details: TThemedElementDetails): NSCell;
+var
+  btn  : NSButtonCell;
+  cocoaBtn : Integer;
+begin
+  //todo: instead of recreating btn all the time, should it be cached instead?
+  //      typically as soon as a themed drawing stared, it would be ongoing
+  //      (i.e. customly drawn/themed controls)
+  Result := nil;
+  if Details.Element <> teButton then Exit;
+
+  case Details.Part of
+    BP_CHECKBOX:    cocoaBtn := NSSwitchButton;
+    BP_RADIOBUTTON: cocoaBtn := NSRadioButton;
+    BP_PUSHBUTTON:  cocoaBtn := NSMomentaryLightButton;
+  else
+    cocoaBtn := -1;
+  end;
+  if cocoaBtn < 0 then Exit; // unsupported button type
+
+  btn := NSButtonCell(NSButtonCell.alloc).initTextCell(NSSTR(''));
+  btn.setButtonType(NSButtonType(cocoaBtn));
+
+  SetButtonCellToDetails(btn, Details);
+
+  btn.autorelease;
+  Result := btn;
+end;
+
+constructor TCocoaThemeServices.Create;
+begin
+  inherited Create;
+  BtnCell := NSButtonCell.alloc.initTextCell(NSSTR(''));
+  BezelToolBar := NSSmallSquareBezelStyle; // can be resized at any size
+  BezelButton := NSSmallSquareBezelStyle;
+
+  callback := TCocoaThemeCallback.alloc.init;
+  NSNotificationCenter(NSNotificationCenter.defaultCenter).addObserver_selector_name_object(
+    callback, ObjCSelector('notifySysColorsChanged:'), NSSystemColorsDidChangeNotification, nil
+  );
+end;
+
+destructor TCocoaThemeServices.Destroy;
+begin
+  NSNotificationCenter(NSNotificationCenter.defaultCenter).removeObserver(callback);
+  callback.release;
+  inherited Destroy;
 end;
 
 (*function TCarbonThemeServices.DrawWindowElement(DC: TCarbonDeviceContext;
@@ -599,6 +807,29 @@ begin
     end;
   end;
 end;
+
+function TCocoaThemeServices.GetDetailSize(Details: TThemedElementDetails
+  ): TSize;
+var
+  cl : NSCell;
+  sz : NSSize;
+begin
+  cl := GetCellForDetails(Details);
+  if Assigned(cl) then
+  begin
+    sz:=cl.cellSize;
+    Result.cx:=Round(sz.width);
+    Result.cy:=Round(sz.height);
+  end
+  else
+  if (Details.Element=teHeader) and (Details.Part=HP_HEADERSORTARROW) then
+  begin
+    Result.cx:=-1; // not supported yet
+    Result.cy:=-1;
+  end else
+    Result:=inherited GetDetailSize(Details);
+end;
+
 (*
 {------------------------------------------------------------------------------
   Method:  TCarbonThemeServices.DrawIcon
@@ -680,8 +911,9 @@ begin
     Result := inherited GetDetailSize(Details);
   end;
 end;
+*)
 
-function TCarbonThemeServices.GetOption(AOption: TThemeOption): Integer;
+function TCocoaThemeServices.GetOption(AOption: TThemeOption): Integer;
 begin
   case AOption of
     toShowButtonImages: Result := 0;
@@ -691,6 +923,7 @@ begin
   end;
 end;
 
+(*
 {------------------------------------------------------------------------------
   Method:  TCarbonThemeServices.InternalDrawParentBackground
   Params:  Window - Handle to window
@@ -722,5 +955,105 @@ begin
   //
 end;
 *)
+
+function TCocoaThemeServices.SetButtonCellType(btn: NSButtonCell; Details: TThemedElementDetails): Boolean;
+var
+  BtnType    : NSButtonType;
+  BezelStyle : NSBezelStyle;
+  useBezel   : Boolean;
+begin
+  Result := true;
+  BtnType := NSMomentaryPushButton;
+  BezelStyle := NSRoundedBezelStyle;
+  useBezel := false;
+  if Details.Element = teToolBar then
+  begin
+    BtnType := NSOnOffButton;
+    BezelStyle := BezelToolBar;
+    useBezel := true;
+  end else if Details.Element = teButton then
+  begin
+    useBezel := false;
+    case Details.Part of
+      BP_CHECKBOX:    BtnType := NSSwitchButton;
+      BP_RADIOBUTTON: BtnType := NSRadioButton;
+      BP_PUSHBUTTON:
+      begin
+        BtnType := NSPushOnPushOffButton;
+        BezelStyle := BezelButton;
+        useBezel := true;
+      end;
+    else
+      Result := false;
+    end;
+  end else
+    Result := false;
+
+  if Result then
+  begin
+    btn.setButtonType(BtnType);
+    btn.setBezelStyle(BezelStyle);
+    btn.setBezeled(useBezel);
+  end;
+
+end;
+
+procedure TCocoaThemeServices.SetButtonCellToDetails(btn: NSButtonCell; Details: TThemedElementDetails);
+begin
+  btn.setCellAttribute_to(NSCellAllowsMixedState, 1);
+  btn.setCellAttribute_to(NSCellDisabled, IntBool[IsDisabled(Details)]);
+  //btn.setHighlighted( IsHot(Details) );
+  btn.setHighlighted( IsPushed(Details));
+
+  if ((Details.Element = teToolBar) and (not IsPushed(Details)) and (not IsChecked(Details)))
+    or ((Details.Element = teButton) and (Details.Part = BP_CHECKBOX))
+  then
+    // this is "flat" mode. So unpushed state should draw no borders
+    btn.setBordered(false)
+  else
+    btn.setBordered(true);
+
+  if IsMixed(Details) then begin
+    btn.setState(NSMixedState);
+  end else if IsChecked(Details) then begin
+    btn.setIntValue(1)
+  end
+  else
+    btn.setIntValue(0);
+end;
+
+procedure TCocoaThemeServices.CellDrawStart(dst: TCocoaContext; const r: Trect; out cur: NSGraphicsContext; out dstRect: NSRect);
+var
+  acc : TCocoaContextAccess absolute dst;
+begin
+  cur := NSGraphicsContext.currentContext;
+  NSGraphicsContext.setCurrentContext( acc.ctx );
+
+  acc.SetCGFillping(acc.CGContext, 0, -acc.Size.cy);
+  LCLToNSRect( R, acc.size.cy, dstRect);
+end;
+
+procedure TCocoaThemeServices.CellDrawFrame(cell: NSCell; const dst: NSRect);
+begin
+  cell.drawWithFrame_inView(dst, nil);
+end;
+
+procedure TCocoaThemeServices.CellDrawEnd(dst: TCocoaContext; cur: NSGraphicsContext);
+var
+  acc : TCocoaContextAccess absolute dst;
+begin
+  acc.SetCGFillping(acc.CGContext, 0, -acc.Size.cy);
+  NSGraphicsContext.setCurrentContext( cur );
+end;
+
+{ TCocoaThemeCallback }
+
+procedure TCocoaThemeCallback.notifySysColorsChanged(notification: NSNotification);
+begin
+  ThemeServices.UpdateThemes;
+  Graphics.UpdateHandleObjects;
+  ThemeServices.IntfDoOnThemeChange;
+end;
+
 end.
 

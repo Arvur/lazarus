@@ -46,7 +46,7 @@ uses
   pkgFppkg,
   //IDE interface
   {$IFDEF LazarusIDEPackage}
-    PackageIntf, IDECommands, contnrs, fppkg_lpk,
+    PackageIntf, IDECommands, contnrs, fppkg_lpk, IDEOptionsIntf,
   {$ENDIF}
   // Repository handler objects
   fprepos,
@@ -358,7 +358,10 @@ begin
     Application.Terminate;
     Exit;
     end;
-  TInitializeOptionsForm.CheckLazarusConfiguration;
+  // Setting up the Lazarus directory for fppkg was part of an earlier attempt
+  // to compile Lazarus with fppkg. This is done in a different manner now,
+  // but it could be that we need this again, so keep the code for now.
+  //TInitializeOptionsForm.CheckLazarusConfiguration;
 
   FFPpkg := TpkgFPpkg.Create(Self);
 
@@ -851,7 +854,7 @@ procedure TFppkgForm.LoadFppkgConfiguration;
 var
   i: Integer;
 begin
-  FFPpkg.InitializeGlobalOptions('');
+  FFPpkg.InitializeGlobalOptions(IDEEnvironmentOptions.GetParsedFppkgConfig);
 
   FFPpkg.Options.GlobalSection.Downloader := 'FPC';
 
@@ -874,14 +877,17 @@ begin
           LoadFppkgConfiguration;
         end;
     end
-  else if not Assigned(FFPpkg.FindPackage('lcl', pkgpkInstalled)) then
+  // Setting up the Lazarus directory for fppkg was part of an earlier attempt
+  // to compile Lazarus with fppkg. This is done in a different manner now,
+  // but it could be that we need this again, so keep the code for now.
+{  else if not Assigned(FFPpkg.FindPackage('lcl', pkgpkInstalled)) then
     begin
       ShowMessage('Fppkg seems to be configured for using Lazarus-packages, but the LCL could not be found. Please fix the Fppkg-configuration for Lazarus with the wizard or manualy.');
       if TInitializeOptionsForm.RecreateLazarusConfiguration then
         begin
           LoadFppkgConfiguration;
         end;
-    end
+    end}
   else
     FFPpkg.LoadLocalAvailableMirrors;
 end;

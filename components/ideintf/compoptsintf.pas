@@ -16,7 +16,10 @@ unit CompOptsIntf;
 interface
 
 uses
-  Classes, SysUtils, LCLProc,
+  Classes, SysUtils,
+  // LazUtils
+  LazMethodList,
+  // IdeIntf
   IDEOptionsIntf;
 
 type
@@ -113,6 +116,37 @@ const
   crAll = [crCompile, crBuild, crRun];
 
 type
+  TLazCompilerOptions = class;
+
+  { TLazCompilationToolOptions }
+
+  TLazCompilationToolOptions = class
+  private
+    FOwner: TLazCompilerOptions;
+    FCommand: string;
+  protected
+    FParsers: TStrings;
+    FCompileReasons: TCompileReasons;
+    function GetHasParser(aParserName: string): boolean; virtual;
+    procedure SetHasParser(aParserName: string; const AValue: boolean); virtual;
+    procedure SetParsers(const AValue: TStrings); virtual;
+    procedure SetCommand(AValue: string); virtual;
+    procedure SetCompileReasons(const {%H-}AValue: TCompileReasons); virtual;
+  public
+    constructor Create(TheOwner: TLazCompilerOptions); virtual;
+    destructor Destroy; override;
+    procedure Clear; virtual;
+    procedure Assign(Src: TLazCompilationToolOptions); virtual;
+  public
+    property Owner: TLazCompilerOptions read FOwner;
+    property Command: string read FCommand write SetCommand;
+    property CompileReasons: TCompileReasons read FCompileReasons write SetCompileReasons;
+    property Parsers: TStrings read FParsers write SetParsers;
+    property HasParser[aParserName: string]: boolean read GetHasParser write SetHasParser;
+  end;
+
+  TLazCompilationToolClass = class of TLazCompilationToolOptions;
+
   { TLazCompilerOptions }
 
   TLazCompilerOptions = class(TAbstractIDEOptions)
@@ -121,7 +155,6 @@ type
     fOwner: TObject;
     SetEmulatedFloatOpcodes: boolean;
     function GetDebugInfoTypeStr: String;
-    function GetGenerateDwarf: Boolean;
     procedure SetAllowLabel(const AValue: Boolean);
     procedure SetAssemblerStyle(const AValue: Integer);
     procedure SetCMacros(const AValue: Boolean);
@@ -133,7 +166,6 @@ type
     procedure SetDontUseConfigFile(const AValue: Boolean);
     procedure SetExecutableType(const AValue: TCompilationExecutableType);
     procedure SetGenDebugInfo(const AValue: Boolean);
-    procedure SetGenerateDwarf(const AValue: Boolean);
     procedure SetGenGProfCode(const AValue: Boolean);
     procedure SetHeapSize(const AValue: Integer);
     procedure SetIncludeAssertionCode(const AValue: Boolean);
@@ -149,15 +181,12 @@ type
     procedure SetShowCompProc(const AValue: Boolean);
     procedure SetShowCond(const AValue: Boolean);
     procedure SetShowDebugInfo(const AValue: Boolean);
-    procedure SetShowErrors(const AValue: Boolean);
     procedure SetShowExecInfo(const AValue: Boolean);
-    procedure SetShowGenInfo(const AValue: Boolean);
     procedure SetShowHints(const AValue: Boolean);
     procedure SetShowHintsForSenderNotUsed(const AValue: Boolean);
     procedure SetShowHintsForUnusedUnitsInMainSrc(const AValue: Boolean);
     procedure SetShowLineNum(const AValue: Boolean);
     procedure SetShowNotes(const AValue: Boolean);
-    procedure SetShowSummary(const AValue: Boolean);
     procedure SetShowTriedFiles(const AValue: Boolean);
     procedure SetShowUsedFiles(const AValue: Boolean);
     procedure SetShowWarn(const AValue: Boolean);
@@ -186,17 +215,13 @@ type
     FChangeStamp: int64;
     FSavedChangeStamp: int64;
     fOnChanged: TMethodList;
-
     // Paths:
-
     // conditionals / build modes
     FConditionals: string;
     fBuildMacros: TLazBuildMacros;
-
     // Parsing:
     // assembler style
     fAssemblerStyle: Integer;
-
     // syntax options
     FSyntaxMode: string;
     fCStyleOp: Boolean;
@@ -207,7 +232,6 @@ type
     fCMacros: Boolean;
     fInitConst: Boolean;
     fStaticKeyword: Boolean;
-
     // Code generation:
     fSmartLinkUnit: Boolean;
     fRelocatableUnit: Boolean;
@@ -226,7 +250,6 @@ type
     fVarsInReg: Boolean;
     fUncertainOpt: Boolean;
     FSmallerCode: boolean;
-
     // Linking:
     fGenDebugInfo: Boolean;
     FDebugInfoType: TCompilerDbgSymbolType;
@@ -242,15 +265,13 @@ type
     FWin32GraphicApp: boolean;
     FExecutableType: TCompilationExecutableType;
     FUseExternalDbgSyms : Boolean;
+    fTargetFileExt: string;
     fTargetFilename: string;
     FTargetFilenameAppplyConventions: boolean;
-
     // Messages:
-    fShowErrors: Boolean;
     fShowWarn: Boolean;
     fShowNotes: Boolean;
     fShowHints: Boolean;
-    fShowGenInfo: Boolean;
     fShowLineNum: Boolean;
     fShowAll: Boolean;
     fShowDebugInfo: Boolean;
@@ -259,20 +280,22 @@ type
     fShowCompProc: Boolean;
     fShowCond: Boolean;
     fShowExecInfo: Boolean;
-    fShowSummary: Boolean;
     fShowHintsForUnusedUnitsInMainSrc: Boolean;
     fShowHintsForSenderNotUsed: Boolean;
     fWriteFPCLogo: Boolean;
     fStopAfterErrCount: integer;
     // Turn specific types of compiler messages on or off
     fMessageFlags: TAbstractCompilerMsgIDFlags;
-
+    // Other tools:
+    fExecuteBefore: TLazCompilationToolOptions;
+    fExecuteAfter: TLazCompilationToolOptions;
     // Other:
     fDontUseConfigFile: Boolean;
     fCustomConfigFile: Boolean;
     fConfigFilePath: String;
     fUseCommentsInCustomOptions: Boolean;
   protected
+    function GetCompilerPath: String; virtual; abstract;
     function GetCustomOptions: string; virtual; abstract;
     function GetDebugPath: string; virtual; abstract;
     function GetIncludePaths: String; virtual; abstract;
@@ -295,6 +318,7 @@ type
     procedure SetObjectPath(const AValue: string); virtual; abstract;
     procedure SetSrcPath(const AValue: string); virtual; abstract;
     procedure SetTargetCPU(const AValue: string); virtual; abstract;
+    procedure SetTargetFileExt(const AValue: String); virtual; abstract;
     procedure SetTargetFilename(const AValue: String); virtual; abstract;
     procedure SetTargetOS(const AValue: string); virtual; abstract;
     procedure SetTargetProc(const AValue: string); virtual; abstract;
@@ -306,6 +330,7 @@ type
     function IsActive: boolean; virtual;
     function TrimCustomOptions(o: string): string; virtual; abstract;
     function CreatePPUFilename(const SourceFileName: string): string; virtual; abstract;
+    function CreateTargetFilename: string; virtual; abstract;
     function GetUnitOutputDirectory(RelativeToBaseDir: boolean): string; virtual; abstract;
   public
     property Owner: TObject read fOwner write fOwner;
@@ -355,7 +380,8 @@ type
     property BuildMacros: TLazBuildMacros read fBuildMacros;
 
     // target:
-    property TargetFilename: String read fTargetFilename write SetTargetFilename;
+    property TargetFileExt: string read FTargetFileExt write SetTargetFileExt; // empty for default
+    property TargetFilename: string read fTargetFilename write SetTargetFilename; // empty for default
     property TargetFilenameApplyConventions: boolean read FTargetFilenameAppplyConventions write SetTargetFilenameAppplyConventions;
 
     // parsing:
@@ -396,7 +422,6 @@ type
     property GenerateDebugInfo: Boolean read fGenDebugInfo write SetGenDebugInfo;
     property DebugInfoType: TCompilerDbgSymbolType read FDebugInfoType write SetDebugInfoType;
     property DebugInfoTypeStr: String read GetDebugInfoTypeStr;
-    property GenerateDwarf: Boolean read GetGenerateDwarf write SetGenerateDwarf; deprecated 'use DebugInfoType';
     property UseLineInfoUnit: Boolean read fUseLineInfoUnit write SetUseLineInfoUnit;
     property UseHeaptrc: Boolean read fUseHeaptrc write SetUseHeaptrc;
     property TrashVariables: Boolean read fTrashVariables write SetTrashVariables;
@@ -412,11 +437,9 @@ type
     property UseExternalDbgSyms: Boolean read FUseExternalDbgSyms write SetUseExternalDbgSyms; // -Xg
 
     // messages:
-    property ShowErrors: Boolean read fShowErrors write SetShowErrors; deprecated; // -ve, you cannot ignore errors
     property ShowWarn: Boolean read fShowWarn write SetShowWarn; // -vw
     property ShowNotes: Boolean read fShowNotes write SetShowNotes; // -vn
     property ShowHints: Boolean read fShowHints write SetShowHints; // -vh
-    property ShowGenInfo: Boolean read fShowGenInfo write SetShowGenInfo; deprecated; // -vi, always needed to resolve filenames in fpc messages without path
     property ShowLineNum: Boolean read fShowLineNum write SetShowLineNum; // -vl
     property ShowAll: Boolean read fShowAll write SetShowAll; // -va
     property ShowDebugInfo: Boolean read fShowDebugInfo write SetShowDebugInfo; // -vd
@@ -425,7 +448,6 @@ type
     property ShowCompProc: Boolean read fShowCompProc write SetShowCompProc; // -vp
     property ShowCond: Boolean read fShowCond write SetShowCond; // -vc
     property ShowExecInfo: Boolean read fShowExecInfo write SetShowExecInfo; // -vx
-    property ShowSummary: Boolean read FShowSummary write SetShowSummary; deprecated; // summary is now always shown (in the header)
     property ShowHintsForUnusedUnitsInMainSrc: Boolean
       read fShowHintsForUnusedUnitsInMainSrc write SetShowHintsForUnusedUnitsInMainSrc;
     property ShowHintsForSenderNotUsed: Boolean
@@ -433,7 +455,9 @@ type
     property WriteFPCLogo: Boolean read fWriteFPCLogo write SetWriteFPCLogo;
     property StopAfterErrCount: integer read fStopAfterErrCount write SetStopAfterErrCount;
     property MessageFlags: TAbstractCompilerMsgIDFlags read fMessageFlags;
-
+    // other tools
+    property ExecuteBefore: TLazCompilationToolOptions read fExecuteBefore;
+    property ExecuteAfter: TLazCompilationToolOptions read fExecuteAfter;
     // other
     property DontUseConfigFile: Boolean read fDontUseConfigFile write SetDontUseConfigFile;
     property CustomConfigFile: Boolean read fCustomConfigFile write SetCustomConfigFile;
@@ -441,12 +465,85 @@ type
     property CustomOptions: string read GetCustomOptions write SetCustomOptions;
     property UseCommentsInCustomOptions: Boolean read fUseCommentsInCustomOptions
                                                 write SetUseCommentsInCustomOptions;
-
-    // execute other
-    procedure SetAlternativeCompile(const Command: string; ScanFPCMsgs: boolean); virtual; abstract; // disable normal compile and call this instead
+    // execute
+    property CompilerPath: String read GetCompilerPath write SetCompilerPath;
+    // disable normal compile and call this instead
+    procedure SetAlternativeCompile(const Command: string; ScanFPCMsgs: boolean); virtual; abstract;
   end;
 
 implementation
+
+{ TLazCompilationToolOptions }
+
+constructor TLazCompilationToolOptions.Create(TheOwner: TLazCompilerOptions);
+begin
+  FOwner:=TheOwner;
+  FCompileReasons:=crAll; // This default can be used in some comparisons.
+  FParsers:=TStringList.Create;
+end;
+
+destructor  TLazCompilationToolOptions.Destroy;
+begin
+  FreeAndNil(FParsers);
+  inherited Destroy;
+end;
+
+procedure TLazCompilationToolOptions.Clear;
+begin
+  Command:='';
+  FCompileReasons := crAll;
+  FParsers.Clear;
+end;
+
+procedure TLazCompilationToolOptions.Assign(Src: TLazCompilationToolOptions);
+begin
+  Command:=Src.Command;
+  FCompileReasons := Src.CompileReasons;
+end;
+
+function TLazCompilationToolOptions.GetHasParser(aParserName: string): boolean;
+begin
+  Result:=FParsers.IndexOf(aParserName)>=0;
+end;
+
+procedure TLazCompilationToolOptions.SetHasParser(aParserName: string;
+  const AValue: boolean);
+var
+  i: Integer;
+begin
+  i:=FParsers.IndexOf(aParserName);
+  if i>=0 then begin
+    if AValue then exit;
+    FParsers.Delete(i);
+  end else begin
+    if not AValue then exit;
+    FParsers.Add(aParserName);
+  end;
+  Owner.IncreaseChangeStamp;
+end;
+
+procedure TLazCompilationToolOptions.SetParsers(const AValue: TStrings);
+begin
+  if FParsers.Equals(AValue) then Exit;
+  {$IFDEF VerboseIDEModified}
+  debugln(['TCompilationToolOptions.SetParsers ',AValue.Text]);
+  {$ENDIF}
+  FParsers.Assign(AValue);
+  Owner.IncreaseChangeStamp;
+end;
+
+procedure TLazCompilationToolOptions.SetCommand(AValue: string);
+begin
+  if FCommand=AValue then exit;
+  FCommand:=AValue;
+  FOwner.IncreaseChangeStamp;
+end;
+
+procedure TLazCompilationToolOptions.SetCompileReasons(const AValue: TCompileReasons);
+begin
+  raise Exception.Create('TLazCompilationToolOptions does not support CompileReasons.'
+                        +' Use an inherited class instead.');
+end;
 
 { TLazBuildMacros }
 
@@ -520,24 +617,10 @@ begin
   IncreaseChangeStamp;
 end;
 
-procedure TLazCompilerOptions.SetShowErrors(const AValue: Boolean);
-begin
-  if fShowErrors=AValue then exit;
-  fShowErrors:=AValue;
-  IncreaseChangeStamp;
-end;
-
 procedure TLazCompilerOptions.SetShowExecInfo(const AValue: Boolean);
 begin
   if fShowExecInfo=AValue then exit;
   fShowExecInfo:=AValue;
-  IncreaseChangeStamp;
-end;
-
-procedure TLazCompilerOptions.SetShowGenInfo(const AValue: Boolean);
-begin
-  if fShowGenInfo=AValue then exit;
-  fShowGenInfo:=AValue;
   IncreaseChangeStamp;
 end;
 
@@ -574,13 +657,6 @@ procedure TLazCompilerOptions.SetShowNotes(const AValue: Boolean);
 begin
   if fShowNotes=AValue then exit;
   fShowNotes:=AValue;
-  IncreaseChangeStamp;
-end;
-
-procedure TLazCompilerOptions.SetShowSummary(const AValue: Boolean);
-begin
-  if FShowSummary=AValue then exit;
-  FShowSummary:=AValue;
   IncreaseChangeStamp;
 end;
 
@@ -638,11 +714,6 @@ begin
   if fAllowLabel=AValue then exit;
   fAllowLabel:=AValue;
   IncreaseChangeStamp;
-end;
-
-function TLazCompilerOptions.GetGenerateDwarf: Boolean;
-begin
-  Result := FDebugInfoType in [dsDwarf2, dsDwarf2Set];
 end;
 
 function TLazCompilerOptions.GetDebugInfoTypeStr: String;
@@ -718,14 +789,6 @@ procedure TLazCompilerOptions.SetGenDebugInfo(const AValue: Boolean);
 begin
   if fGenDebugInfo=AValue then exit;
   fGenDebugInfo:=AValue;
-  IncreaseChangeStamp;
-end;
-
-procedure TLazCompilerOptions.SetGenerateDwarf(const AValue: Boolean);
-begin
-  if (FDebugInfoType = dsDwarf2) = AValue then exit;
-  if AValue then
-    FDebugInfoType := dsDwarf2;
   IncreaseChangeStamp;
 end;
 
@@ -894,7 +957,7 @@ end;
 function TLazCompilerOptions.GetModified: boolean;
 begin
   Result:=(FSavedChangeStamp=InvalidChangeStamp)
-         or (FSavedChangeStamp<>FChangeStamp);
+       or (FSavedChangeStamp<>FChangeStamp);
 end;
 
 constructor TLazCompilerOptions.Create(const TheOwner: TObject);

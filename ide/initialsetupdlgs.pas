@@ -40,17 +40,28 @@ unit InitialSetupDlgs;
 interface
 
 uses
-  // RTL + FCL + LCL
-  Classes, SysUtils,
-  Forms, Controls, Buttons, Dialogs, Graphics, ComCtrls, ExtCtrls, StdCtrls, LCLProc,
+  // RTL + FCL
+  Classes, SysUtils, pkgglobals, fpmkunit,
+  // LCL
+  Forms, Controls, Buttons, Dialogs, Graphics, ComCtrls, ExtCtrls, StdCtrls,
   // CodeTools
   FileProcs, CodeToolManager, DefineTemplates,
   // LazUtils
-  FileUtil, LazUTF8, LazUTF8Classes, LazFileUtils, LazFileCache, LazLogger,
-  // Other
-  MacroDefIntf, GDBMIDebugger, DbgIntfDebuggerBase,
-  TransferMacros, LazarusIDEStrConsts, LazConf, EnvironmentOpts, IDEImagesIntf,
-  AboutFrm, IDETranslations, BaseBuildManager, InitialSetupProc;
+  FileUtil, LazUTF8, LazUTF8Classes, LazFileUtils, LazStringUtils, LazFileCache,
+  LazLoggerBase,
+  // IdeIntf
+  MacroDefIntf, IDEDialogs, IDEImagesIntf,
+  // DebuggerIntf
+  DbgIntfDebuggerBase,
+  // LazDebuggerGdbmi
+  GDBMIDebugger,
+  // IDE
+  TransferMacros, LazarusIDEStrConsts, LazConf, EnvironmentOpts,
+  AboutFrm, IDETranslations, BaseBuildManager, InitialSetupProc,
+  {$IF FPC_FULLVERSION>30100}
+  GenerateFppkgConfigurationDlg,
+  {$ENDIF}
+  IDEProcs;
   
 type
   TInitialSetupDialog = class;
@@ -116,6 +127,12 @@ type
     StartIDEBitBtn: TBitBtn;
     StopScanButton: TBitBtn;
     WelcomePaintBox: TPaintBox;
+    FppkgTabSheet: TTabSheet;
+    FppkgComboBox: TComboBox;
+    FppkgLabel: TLabel;
+    FppkgBrowseButton: TButton;
+    FppkgMemo: TMemo;
+    FppkgWriteConfigButton: TButton;
     procedure CompilerBrowseButtonClick(Sender: TObject);
     procedure CompilerComboBoxChange(Sender: TObject);
     procedure DebuggerBrowseButtonClick(Sender: TObject);
@@ -135,13 +152,18 @@ type
     procedure StopScanButtonClick(Sender: TObject);
     procedure WelcomePaintBoxPaint(Sender: TObject);
     procedure OnIdle(Sender: TObject; var {%H-}Done: Boolean);
+    procedure FppkgComboBoxChange(Sender: TObject);
+    procedure FppkgBrowseButtonClick(Sender: TObject);
+    procedure FppkgWriteConfigButtonClick(Sender: TObject);
   private
+    FSkipDebugger: Boolean;
     FFlags: TSDFlags;
     FLastParsedLazDir: string;
     fLastParsedCompiler: string;
     fLastParsedFPCSrcDir: string;
     fLastParsedMakeExe: string;
     fLastParsedDebugger: string;
+    fLastParsedFppkgConfigFile: string;
     FIdleConnected: boolean;
     ImgIDError: LongInt;
     ImgIDWarning: LongInt;
@@ -160,6 +182,7 @@ type
     procedure UpdateFPCSrcDirCandidate(aFPCSrcDirInfo: TSDFileInfo);
     procedure UpdateMakeExeCandidates;
     procedure UpdateDebuggerCandidates;
+    procedure UpdateFppkgCandidates;
     procedure FillComboboxWithFileInfoList(ABox: TComboBox; List: TSDFileInfoList;
        ItemIndex: integer = 0);
     procedure SetIdleConnected(const AValue: boolean);
@@ -168,8 +191,8 @@ type
     procedure UpdateFPCSrcDirNote;
     procedure UpdateMakeExeNote;
     procedure UpdateDebuggerNote;
+    procedure UpdateFppkgNote;
     function FirstErrorNode: TTreeNode;
-    function GetFPCVer: string;
     function GetFirstCandidate(Candidates: TSDFileInfoList;
       MinQuality: TSDFilenameQuality = sddqCompatible): TSDFileInfo;
     function QualityToImgIndex(Quality: TSDFilenameQuality): integer;
@@ -182,6 +205,7 @@ type
     TVNodeFPCSources: TTreeNode;
     TVNodeMakeExe: TTreeNode;
     TVNodeDebugger: TTreeNode;
+    TVNodeFppkg: TTreeNode;
     procedure Init; //Check for config errors, find and show alternatives
     property IdleConnected: boolean read FIdleConnected write SetIdleConnected;
   end;
@@ -191,7 +215,7 @@ function ShowInitialSetupDialog: TModalResult;
 
 // Debugger
 // Checks a given file to see if it is a valid debugger (only gdb supported for now)
-function CheckDebuggerQuality(AFilename: string; out Note: string): TSDFilenameQuality;
+function CheckDebuggerQuality(AFilename: string; out Note: string; ASkip: Boolean = False): TSDFilenameQuality;
 // Search debugger candidates and add them to list, including quality level
 function SearchDebuggerCandidates(StopIfFits: boolean): TSDFileInfoList;
 
@@ -214,8 +238,17 @@ type
     LazarusDir: string;
   end;
 
-function CheckDebuggerQuality(AFilename: string; out Note: string): TSDFilenameQuality;
+function CheckDebuggerQuality(AFilename: string; out Note: string;
+  ASkip: Boolean): TSDFilenameQuality;
 begin
+  Note := '';
+  Result:=sddqCompatible;
+  if ASkip and // assume compatible
+     ( (EnvironmentOptions.CurrentDebuggerPropertiesConfig = nil) or
+       (EnvironmentOptions.CurrentDebuggerPropertiesConfig.DebuggerFilename = AFilename)   // unless the user edited the filename
+     )
+  then
+    exit;
   Result:=sddqInvalid;
   AFilename:=TrimFilename(AFilename);
   if not FileExistsCached(AFilename) then
@@ -252,8 +285,7 @@ function SearchDebuggerCandidates(StopIfFits: boolean): TSDFileInfoList;
     ForcePathDelims(AFilename);
     // check if already checked
     if Assigned(List) and List.CaptionExists(AFilename) then exit;
-    EnvironmentOptions.DebuggerFilename:=AFilename;
-    RealFilename:=EnvironmentOptions.GetParsedDebuggerFilename;
+    RealFilename:=EnvironmentOptions.GetParsedValue(eopDebuggerFilename, AFilename);
     debugln(['SearchDebuggerCandidates Value=',AFilename,' File=',RealFilename]);
     if RealFilename='' then exit;
     // check if exists
@@ -269,36 +301,52 @@ function SearchDebuggerCandidates(StopIfFits: boolean): TSDFileInfoList;
 const
   DebuggerFileName='gdb'; //For Windows, .exe will be appended
 var
-  OldDebuggerFilename: String;
-  s, AFilename: String;
+  s, AFilename, XmlClassName, CurDbgClassName: String;
   Files: TStringList;
   i: Integer;
 begin
   Result:=nil;
 
-  OldDebuggerFilename:=EnvironmentOptions.DebuggerFilename;
-  try
-    // check current setting
-    if CheckFile(EnvironmentOptions.DebuggerFilename,Result) then exit;
+  // check current setting
+  if CheckFile(EnvironmentOptions.DebuggerFilename,Result) then exit;
 
-    // check the primary options
+  if EnvironmentOptions.CurrentDebuggerPropertiesConfig <> nil then
+    CurDbgClassName := UpperCase(EnvironmentOptions.CurrentDebuggerPropertiesConfig.ConfigClass)
+  else
+    CurDbgClassName := UpperCase(DefaultDebuggerClass.ClassName);
+
+  // check the primary options
+  XmlClassName :=GetValueFromPrimaryConfig(EnvOptsConfFileName,
+                                  'EnvironmentOptions/Debugger/Class');
+  if UpperCase(XmlClassName) = CurDbgClassName then begin
     AFilename:=GetValueFromPrimaryConfig(EnvOptsConfFileName,
                                     'EnvironmentOptions/DebuggerFilename/Value');
     if CheckFile(AFilename,Result) then exit;
+  end;
 
-    // check the secondary options
+  // check the secondary options
+  XmlClassName :=GetValueFromSecondaryConfig(EnvOptsConfFileName,
+                                  'EnvironmentOptions/Debugger/Class');
+  if UpperCase(XmlClassName) = CurDbgClassName then begin
     AFilename:=GetValueFromSecondaryConfig(EnvOptsConfFileName,
                                     'EnvironmentOptions/DebuggerFilename/Value');
     if CheckFile(AFilename,Result) then exit;
+  end;
 
-    // Check locations proposed by debugger class
+  // Check locations proposed by debugger class
+  if EnvironmentOptions.CurrentDebuggerClass <> nil then
+    s := EnvironmentOptions.CurrentDebuggerClass.ExePaths
+  else
     s := DefaultDebuggerClass.ExePaths;
-    while s <> '' do begin
-      AFilename := GetPart([], [';'], s);
-      if CheckFile(AFilename, Result) then exit;
-      if s <> '' then delete(s, 1, 1);
-    end;
+  while s <> '' do begin
+    AFilename := GetPart([], [';'], s);
+    if CheckFile(AFilename, Result) then exit;
+    if s <> '' then delete(s, 1, 1);
+  end;
 
+  // Search for gdb
+  // only if TGDBMIDebugger
+  if CurDbgClassName = UpperCase(DefaultDebuggerClass.ClassName) then begin
 
     // Windows-only locations:
     if (GetDefaultSrcOSForTargetOS(GetCompiledTargetOS)='win') then begin
@@ -308,7 +356,9 @@ begin
     end;
 
     // check history
-    Files:=EnvironmentOptions.DebuggerFileHistory;
+    Files:=EnvironmentOptions.DebuggerFileHistory[CurDbgClassName];
+    if (Files=nil) or (Files.Count=0) then
+      Files:=EnvironmentOptions.DebuggerFileHistory[''];
     if Files<>nil then
       for i:=0 to Files.Count-1 do
         if CheckFile(Files[i],Result) then exit;
@@ -316,13 +366,11 @@ begin
     // check PATH
     AFilename:=DebuggerFileName+GetExecutableExt;
     if CheckFile(AFilename,Result) then exit;
-
-    // There are no common directories apart from the PATH
-    // where gdb would be installed. Otherwise we could do something similar as
-    // in SearchMakeExeCandidates.
-  finally
-    EnvironmentOptions.DebuggerFilename:=OldDebuggerFilename;
   end;
+
+  // There are no common directories apart from the PATH
+  // where gdb would be installed. Otherwise we could do something similar as
+  // in SearchMakeExeCandidates.
 end;
 
 function ShowInitialSetupDialog: TModalResult;
@@ -477,6 +525,7 @@ begin
   FPCSourcesTabSheet.Caption:=lisFPCSources;
   MakeExeTabSheet.Caption:='Make';
   DebuggerTabSheet.Caption:=lisDebugger;
+  FppkgTabSheet.Caption := 'Fppkg';
 
   FHeadGraphic:=TPortableNetworkGraphic.Create;
   FHeadGraphic.LoadFromResourceName(HInstance, 'ide_icon48x48');
@@ -486,10 +535,16 @@ begin
   TVNodeFPCSources:=PropertiesTreeView.Items.Add(nil,FPCSourcesTabSheet.Caption);
   TVNodeMakeExe:=PropertiesTreeView.Items.Add(nil,MakeExeTabSheet.Caption);
   TVNodeDebugger:=PropertiesTreeView.Items.Add(nil,DebuggerTabSheet.Caption);
+  {$IF FPC_FULLVERSION>30100}
+  TVNodeFppkg:=PropertiesTreeView.Items.Add(nil,FppkgTabSheet.Caption);
+  FppkgTabSheet.TabVisible := True;
+  {$ELSE}
+  FppkgTabSheet.TabVisible := False;
+  {$ENDIF FPC_FULLVERSION>30100}
   ImgIDError := Imagelist1.AddResourceName(HInstance, 'state_error');
   ImgIDWarning := Imagelist1.AddResourceName(HInstance, 'state_warning');
 
-  TIDEImages.AssignImage(StopScanButton.Glyph, 'menu_stop');
+  IDEImages.AssignImage(StopScanButton, 'menu_stop');
 
   UpdateCaptions;
 
@@ -505,10 +560,10 @@ end;
 procedure TInitialSetupDialog.DebuggerBrowseButtonClick(Sender: TObject);
 var
   Filename: String;
-  Dlg: TOpenDialog;
+  Dlg: TIDEOpenDialog;
   Filter: String;
 begin
-  Dlg:=TOpenDialog.Create(nil);
+  Dlg:=IDEOpenDialogClass.Create(nil);
   try
     Filename:='gdb'+GetExecutableExt;
     Dlg.Title:=SimpleFormat(lisSelectPathTo, [Filename]);
@@ -534,10 +589,10 @@ end;
 procedure TInitialSetupDialog.CompilerBrowseButtonClick(Sender: TObject);
 var
   Filename: String;
-  Dlg: TOpenDialog;
+  Dlg: TIDEOpenDialog;
   Filter: String;
 begin
-  Dlg:=TOpenDialog.Create(nil);
+  Dlg:=IDEOpenDialogClass.Create(nil);
   try
     Filename:='fpc'+GetExecutableExt;
     Dlg.Title:=SimpleFormat(lisSelectPathTo, [Filename]);
@@ -602,10 +657,10 @@ end;
 procedure TInitialSetupDialog.MakeExeBrowseButtonClick(Sender: TObject);
 var
   Filename: String;
-  Dlg: TOpenDialog;
+  Dlg: TIDEOpenDialog;
   Filter: String;
 begin
-  Dlg:=TOpenDialog.Create(nil);
+  Dlg:=IDEOpenDialogClass.Create(nil);
   try
     Filename:='make'+GetExecutableExt;
     Dlg.Title:=SimpleFormat(lisSelectPathTo, [Filename]);
@@ -690,11 +745,13 @@ begin
   s:=MakeExeComboBox.Text;
   if s<>'' then
     EnvironmentOptions.MakeFilename:=s;
-  s:=DebuggerComboBox.Text;
-  if s<>'' then begin
-    EnvironmentOptions.DebuggerFilename:=s;
-    if s <> FInitialDebuggerFileName then
-      EnvironmentOptions.DebuggerConfig.DebuggerClass := 'TGDBMIDebugger';
+  if not (FSkipDebugger and (EnvironmentOptions.CurrentDebuggerPropertiesConfig <> nil))
+  then begin
+    s:=DebuggerComboBox.Text;
+    if s<>'' then begin
+      EnvironmentOptions.CurrentDebuggerPropertiesConfig.DebuggerFilename:=s;
+      EnvironmentOptions.SaveDebuggerPropertiesList; // Update XML
+    end;
   end;
 
   ModalResult:=mrOk;
@@ -732,6 +789,10 @@ begin
   end else if sdfDebuggerFilenameNeedsUpdate in FFlags then begin
     UpdateDebuggerCandidates;
     UpdateDebuggerNote;
+  end else if sdfFppkgConfigFileNeedsUpdate in FFlags then begin
+    fLastParsedFppkgConfigFile := ' ';
+    UpdateFppkgCandidates;
+    UpdateFppkgNote;
   end else
     IdleConnected:=false;
 end;
@@ -749,16 +810,24 @@ begin
   FPCSourcesTabSheet.Caption:=lisFPCSources;
   MakeExeTabSheet.Caption:='Make';
   DebuggerTabSheet.Caption:=lisDebugger;
+  FppkgTabSheet.Caption:='Fppkg';
 
   TVNodeLazarus.Text:=LazarusTabSheet.Caption;
   TVNodeCompiler.Text:=CompilerTabSheet.Caption;
   TVNodeFPCSources.Text:=FPCSourcesTabSheet.Caption;
   TVNodeMakeExe.Text:=MakeExeTabSheet.Caption;
   TVNodeDebugger.Text:=DebuggerTabSheet.Caption;
+  {$IF FPC_FULLVERSION>30100}
+  TVNodeFppkg.Text:=FppkgTabSheet.Caption;
+  {$ENDIF FPC_FULLVERSION>30100}
 
   LazDirBrowseButton.Caption:=lisPathEditBrowse;
   LazDirLabel.Caption:=SimpleFormat(
     lisTheLazarusDirectoryContainsTheSourcesOfTheIDEAndTh, [PathDelim]);
+
+  FppkgLabel.Caption:=lisFppkgConfiguration;
+  FppkgBrowseButton.Caption:=lisPathEditBrowse;
+  FppkgWriteConfigButton.Caption:=lisCreateFppkgConfig;
 
   CompilerBrowseButton.Caption:=lisPathEditBrowse;
   CompilerLabel.Caption:=SimpleFormat(lisTheFreePascalCompilerExecutableTypicallyHasTheName,
@@ -845,7 +914,7 @@ var
   Files: TSDFileInfoList;
 begin
   Exclude(FFlags,sdfCompilerFilenameNeedsUpdate);
-  Files:=SearchCompilerCandidates(false,CodeToolBoss.CompilerDefinesCache.TestFilename);
+  Files:=SearchFPCExeCandidates(false,CodeToolBoss.CompilerDefinesCache.TestFilename);
   FreeAndNil(FCandidates[sddtCompilerFilename]);
   FCandidates[sddtCompilerFilename]:=Files;
   FillComboboxWithFileInfoList(CompilerComboBox,Files);
@@ -965,48 +1034,44 @@ end;
 
 procedure TInitialSetupDialog.UpdateCompilerNote;
 var
-  CurCaption: String;
-  Note: string;
+  CurCaption, ParsedC, Note, s: String;
   Quality: TSDFilenameQuality;
-  s: String;
   ImageIndex: Integer;
   CfgCache: TPCTargetConfigCache;
 begin
   if csDestroying in ComponentState then exit;
   CurCaption:=CompilerComboBox.Text;
   EnvironmentOptions.CompilerFilename:=CurCaption;
-  if fLastParsedCompiler=EnvironmentOptions.GetParsedCompilerFilename then exit;
-  fLastParsedCompiler:=EnvironmentOptions.GetParsedCompilerFilename;
-  //debugln(['TInitialSetupDialog.UpdateCompilerNote ',fLastParsedCompiler]);
-
-  Quality:=CheckCompilerQuality(fLastParsedCompiler,Note,
-                                CodeToolBoss.CompilerDefinesCache.TestFilename);
-  if Quality<>sddqInvalid then begin
-    CodeToolBoss.CompilerDefinesCache.ConfigCaches.Find(
-      fLastParsedCompiler,'','','',true);
+  ParsedC:=EnvironmentOptions.GetParsedCompilerFilename;
+  if fLastParsedCompiler=ParsedC then exit;
+  fLastParsedCompiler:=ParsedC;
+  Quality:=CheckFPCExeQuality(fLastParsedCompiler,Note,
+                              CodeToolBoss.CompilerDefinesCache.TestFilename);
+  if Quality=sddqCompatible then
+  begin
     // check compiler again
     CfgCache:=CodeToolBoss.CompilerDefinesCache.ConfigCaches.Find(
                                                fLastParsedCompiler,'','','',true);
-    CfgCache.Update(CodeToolBoss.CompilerDefinesCache.TestFilename);
+    CfgCache.CompilerDate:=0; // force update
+    if CfgCache.NeedsUpdate then
+      CfgCache.Update(CodeToolBoss.CompilerDefinesCache.TestFilename);
     BuildBoss.SetBuildTargetIDE;
   end;
-
   case Quality of
   sddqInvalid: s:=lisError;
   sddqCompatible: s:='';
   else s:=lisWarning;
   end;
-  if EnvironmentOptions.CompilerFilename<>EnvironmentOptions.GetParsedCompilerFilename
-  then
-    s:=lisFile2+EnvironmentOptions.GetParsedCompilerFilename+LineEnding+
-      LineEnding+s;
+  ParsedC:=EnvironmentOptions.GetParsedCompilerFilename;
+  if EnvironmentOptions.CompilerFilename<>ParsedC then
+    s:=lisFile2+ParsedC+LineEnding+LineEnding+s;
   CompilerMemo.Text:=s+Note;
 
   ImageIndex:=QualityToImgIndex(Quality);
   TVNodeCompiler.ImageIndex:=ImageIndex;
   TVNodeCompiler.SelectedIndex:=ImageIndex;
 
-  FFlags:=FFlags+[sdfFPCSrcDirNeedsUpdate,
+  FFlags:=FFlags+[sdfFPCSrcDirNeedsUpdate,sdfFppkgConfigFileNeedsUpdate,
                   sdfMakeExeFilenameNeedsUpdate,sdfDebuggerFilenameNeedsUpdate];
   IdleConnected:=true;
 end;
@@ -1085,25 +1150,25 @@ var
   CurCaption: String;
   Note: string;
   Quality: TSDFilenameQuality;
-  s: String;
+  s, ParsedFName: String;
   ImageIndex: Integer;
 begin
   if csDestroying in ComponentState then exit;
   CurCaption:=DebuggerComboBox.Text;
-  EnvironmentOptions.DebuggerFilename:=CurCaption;
-  if fLastParsedDebugger=EnvironmentOptions.GetParsedDebuggerFilename then exit;
-  fLastParsedDebugger:=EnvironmentOptions.GetParsedDebuggerFilename;
+  ParsedFName := EnvironmentOptions.GetParsedValue(eopDebuggerFilename, CurCaption);
+  if fLastParsedDebugger=ParsedFName then exit;
+  fLastParsedDebugger:=ParsedFName;
   //debugln(['TInitialSetupDialog.UpdateDebuggerNote ',fLastParsedDebugger]);
-  Quality:=CheckDebuggerQuality(fLastParsedDebugger,Note);
+  Quality:=CheckDebuggerQuality(fLastParsedDebugger,Note, FSkipDebugger);
 
   case Quality of
   sddqInvalid: s:=lisError;
   sddqCompatible: s:='';
   else s:=lisWarning;
   end;
-  if EnvironmentOptions.DebuggerFilename<>EnvironmentOptions.GetParsedDebuggerFilename
+  if CurCaption<>ParsedFName
   then
-    s:=lisFile2+EnvironmentOptions.GetParsedDebuggerFilename+LineEnding+
+    s:=lisFile2+ParsedFName+LineEnding+
       LineEnding+s;
   DebuggerMemo.Text:=s+Note;
 
@@ -1124,12 +1189,6 @@ begin
     if Result.ImageIndex=ImgIDError then exit;
   end;
   Result:=nil;
-end;
-
-function TInitialSetupDialog.GetFPCVer: string;
-begin
-  Result:='$(FPCVer)';
-  GlobalMacroList.SubstituteStr(Result);
 end;
 
 function TInitialSetupDialog.GetFirstCandidate(Candidates: TSDFileInfoList;
@@ -1308,25 +1367,189 @@ begin
   fLastParsedMakeExe:='. .';
   UpdateMakeExeNote;
 
+  RegisterDebugger(TGDBMIDebugger); // make sure we can read the config
+  FSkipDebugger := EnvironmentOptions.HasActiveDebuggerEntry // There is a configured entry. Assume it is right, unless we can prove it is incorrect
+    and not (
+      (EnvironmentOptions.CurrentDebuggerPropertiesConfig <> nil) and    // The ACTIVE dbg is a known debugger
+      (EnvironmentOptions.CurrentDebuggerClass <> nil)     and           // with existing debugger class
+      (EnvironmentOptions.CurrentDebuggerPropertiesConfig.NeedsExePath)  // Does need an exe
+    );
   // Debugger
   FInitialDebuggerFileName := EnvironmentOptions.DebuggerFilename;
   UpdateDebuggerCandidates;
-  if IsFirstStart or (not FileExistsCached(EnvironmentOptions.GetParsedDebuggerFilename))
-  then begin
-    // first start => choose first best candidate
-    Candidate:=GetFirstCandidate(FCandidates[sddtDebuggerFilename]);
-    if Candidate<>nil then
-      EnvironmentOptions.DebuggerFilename:=Candidate.Caption;
+  if (not FSkipDebugger) then begin
+    if EnvironmentOptions.CurrentDebuggerPropertiesConfig = nil then
+      EnvironmentOptions.CurrentDebuggerPropertiesConfig :=
+        EnvironmentOptions.DebuggerPropertiesConfigList.EntryByName('', TGDBMIDebugger.ClassName);
+    if EnvironmentOptions.CurrentDebuggerPropertiesConfig = nil then
+      EnvironmentOptions.CurrentDebuggerPropertiesConfig :=
+        TDebuggerPropertiesConfig.CreateForDebuggerClass(TGDBMIDebugger);
+    if IsFirstStart or (not FileExistsCached(EnvironmentOptions.GetParsedDebuggerFilename))
+    then begin
+      // first start => choose first best candidate
+      Candidate:=GetFirstCandidate(FCandidates[sddtDebuggerFilename]);
+      if Candidate<>nil then begin
+        EnvironmentOptions.CurrentDebuggerPropertiesConfig.DebuggerFilename:=Candidate.Caption;
+      end;
+    end;
+    EnvironmentOptions.SaveDebuggerPropertiesList; // Update XML
   end;
+
   DebuggerComboBox.Text:=EnvironmentOptions.DebuggerFilename;
   fLastParsedDebugger:='. .';
   UpdateDebuggerNote;
+
+  // Fppkg
+  FppkgComboBox.Text := EnvironmentOptions.FppkgConfigFile;
+  fLastParsedFppkgConfigFile := ' ';
+  UpdateFppkgCandidates;
+  UpdateFppkgNote;
 
   // select first error
   Node:=FirstErrorNode;
   if Node=nil then
     Node:=TVNodeLazarus;
   PropertiesTreeView.Selected:=Node;
+end;
+
+procedure TInitialSetupDialog.UpdateFppkgNote;
+var
+  CurCaption: String;
+  FppkgMsg, Note: string;
+  Quality: TSDFilenameQuality;
+  ConfigFile: string;
+  {$IF FPC_FULLVERSION>30100}
+  ImageIndex: Integer;
+  {$ENDIF}
+begin
+  if csDestroying in ComponentState then exit;
+  CurCaption:=FppkgComboBox.Text;
+  EnvironmentOptions.FppkgConfigFile:=CurCaption;
+  if fLastParsedFppkgConfigFile=EnvironmentOptions.GetParsedFppkgConfig then exit;
+  fLastParsedFppkgConfigFile:=EnvironmentOptions.GetParsedFppkgConfig;
+
+  ConfigFile := fLastParsedFppkgConfigFile;
+  Quality := CheckFppkgConfigFile(ConfigFile, Note);
+  if Quality<>sddqCompatible then
+  begin
+    Note := lisError + Note + LineEnding;
+    FppkgWriteConfigButton.Enabled := (Quality=sddqIncomplete);
+  end
+  else
+  begin
+    Quality := CheckFppkgConfiguration(ConfigFile, FppkgMsg);
+
+    if Quality=sddqCompatible then
+    begin
+      Note := lisOk;
+      FppkgWriteConfigButton.Enabled := False;
+    end
+    else
+    begin
+      Note := lisError + Format(lisIncorrectFppkgConfiguration, [FppkgMsg]) + LineEnding;
+      Note := Note + LineEnding + lisFppkgFixConfiguration;
+      FppkgWriteConfigButton.Enabled := True;
+    end;
+  end;
+
+  FppkgMemo.Text := lisFile2 + ConfigFile + LineEnding + LineEnding + Note;
+
+  {$IF FPC_FULLVERSION>30100}
+  ImageIndex:=QualityToImgIndex(Quality);
+  TVNodeFppkg.ImageIndex:=ImageIndex;
+  TVNodeFppkg.SelectedIndex:=ImageIndex;
+  {$ENDIF FPC_FULLVERSION>30100}
+
+  IdleConnected:=true;
+end;
+
+procedure TInitialSetupDialog.FppkgComboBoxChange(Sender: TObject);
+begin
+  UpdateFppkgNote;
+end;
+
+procedure TInitialSetupDialog.UpdateFppkgCandidates;
+
+  function SearchFppkgFpcPrefixCandidates: TSDFileInfoList;
+
+    function CheckFile(AFile: string; var List: TSDFileInfoList): boolean;
+    var
+      Item: TSDFileInfo;
+    begin
+      Result:=false;
+      if AFile='' then exit;
+      ForcePathDelims(AFile);
+      // check if already checked
+      if Assigned(List) and List.CaptionExists(AFile) then exit;
+
+      if FileExistsUTF8(AFile) then
+      begin
+        if List=nil then
+          List:=TSDFileInfoList.create(true);
+        Item:=List.AddNewItem(AFile, AFile);
+        Item.Quality:=sddqCompatible;
+        Result := True;
+      end;
+    end;
+  begin
+    Result:=nil;
+
+    {$IF FPC_FULLVERSION>30100}
+    CheckFile(GetFppkgConfigFile(False, False), Result);
+    CheckFile(GetFppkgConfigFile(False, True), Result);
+    CheckFile(GetFppkgConfigFile(True, False), Result);
+    CheckFile(GetFppkgConfigFile(True, True), Result);
+    {$ENDIF}
+  end;
+
+var
+  Files: TSDFileInfoList;
+begin
+  Exclude(FFlags,sdfFppkgConfigFileNeedsUpdate);
+  Files:=SearchFppkgFpcPrefixCandidates;
+  FreeAndNil(FCandidates[sddtFppkgFpcPrefix]);
+  FCandidates[sddtFppkgFpcPrefix]:=Files;
+  FillComboboxWithFileInfoList(FppkgComboBox,Files,-1);
+end;
+
+procedure TInitialSetupDialog.FppkgBrowseButtonClick(Sender: TObject);
+var
+  Dlg: TIDEOpenDialog;
+begin
+  Dlg:=IDEOpenDialogClass.Create(nil);
+  try
+    Dlg.Title:=SimpleFormat(lisSelectPathTo, ['fppkg.cfg']);
+    Dlg.Options:=Dlg.Options+[ofPathMustExist];
+    if not Dlg.Execute then exit;
+    FppkgComboBox.Text:=Dlg.FileName;
+  finally
+    Dlg.Free;
+  end;
+  UpdateFppkgNote;
+end;
+
+procedure TInitialSetupDialog.FppkgWriteConfigButtonClick(Sender: TObject);
+{$IF FPC_FULLVERSION>30100}
+var
+  Dialog: TGenerateFppkgConfigurationDialog;
+{$ENDIF}
+begin
+  {$IF FPC_FULLVERSION>30100}
+  Dialog := TGenerateFppkgConfigurationDialog.Create(Self);
+  try
+    Dialog.Compiler := fLastParsedCompiler;
+    if fLastParsedFppkgConfigFile='' then
+      Dialog.FppkgCfgFilename := GetFppkgConfigFile(False, False)
+    else
+      Dialog.FppkgCfgFilename := fLastParsedFppkgConfigFile;
+    Dialog.ShowModal;
+  finally
+    Dialog.Free;
+  end;
+
+  fLastParsedFppkgConfigFile := ' ';
+  UpdateFppkgNote;
+  {$ENDIF}
 end;
 
 end.

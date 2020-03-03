@@ -68,6 +68,7 @@ type
     function GetFontName: String; override;
     function GetFontSize: Integer; override;
     function GetFontStyle: TChartFontStyles; override;
+    function GetPenColor: TChartColor;
     procedure Line(AX1, AY1, AX2, AY2: Integer);
     procedure Line(const AP1, AP2: TPoint);
     procedure LineTo(AX, AY: Integer); override;
@@ -88,6 +89,7 @@ type
     procedure SetAntialiasingMode(AValue: TChartAntialiasingMode);
     procedure SetBrushColor(AColor: TChartColor);
     procedure SetBrushParams(AStyle: TFPBrushStyle; AColor: TChartColor);
+    procedure SetPenColor(AColor: TChartColor);
     procedure SetPenParams(AStyle: TFPPenStyle; AColor: TChartColor);
   end;
 
@@ -107,8 +109,6 @@ uses
 const
   RECT_FMT =
     '<rect x="%d" y="%d" width="%d" height="%d" style="%s"/>';
-var
-  fmtSettings: TFormatSettings;
 
 function EscapeXML(const AText: String): String;
 var
@@ -139,18 +139,18 @@ end;
 
 function DP2S(AValue: TDoublePoint): String;
 begin
-  Result := Format('%g,%g', [AValue.X, AValue.Y], fmtSettings);
+  Result := Format('%g,%g', [AValue.X, AValue.Y], DefSeparatorSettings);
 end;
 
 function F2S(AValue: Double): String;
 begin
-  Result := FloatToStr(AValue, fmtSettings);
+  Result := FloatToStr(AValue, DefSeparatorSettings);
 end;
 
 function SVGGetFontOrientationFunc(AFont: TFPCustomFont): Integer;
 begin
   if AFont is TFont then
-    Result := (AFont as TFont).Orientation
+    Result := TFont(AFont).Orientation
   else
     Result := AFont.Orientation;
 end;
@@ -291,6 +291,11 @@ begin
   if ftsItalic in FFont.Style then Include(Result, cfsItalic);
   if FFont.UnderlineDecoration then Include(Result, cfsUnderline);
   if FFont.StrikeoutDecoration then Include(Result, cfsStrikeout);
+end;
+
+function TSVGDrawer.GetPenColor: TChartColor;
+begin
+  Result := FPColorToChartColor(FPen.FPColor);
 end;
 
 procedure TSVGDrawer.Line(AX1, AY1, AX2, AY2: Integer);
@@ -505,6 +510,11 @@ begin
   FPen.Width := APen.Width;
 end;
 
+procedure TSVGDrawer.SetPenColor(AColor: TChartColor);
+begin
+  FPen.FPColor := FChartColorToFPColorFunc(ColorOrMono(AColor));
+end;
+
 procedure TSVGDrawer.SetPenParams(AStyle: TFPPenStyle; AColor: TChartColor);
 begin
   FPen.FPColor := FChartColorToFPColorFunc(ColorOrMono(AColor));
@@ -534,7 +544,7 @@ begin
   stext := Format('x="%d" y="%d"', [p.X, p.Y]);
   if FFontOrientation <> 0 then
     stext := stext + Format(' transform="rotate(%g,%d,%d)"',
-      [-FFontOrientation*0.1, p.X, p.Y], fmtSettings);
+      [-FFontOrientation*0.1, p.X, p.Y], DefSeparatorSettings);
 
   sstyle := Format('fill:%s; font-family:''%s''; font-size:%dpt;',
     [ColorToHex(GetFontColor), GetFontName, round(FFont.SizeInPoints)]);
@@ -609,7 +619,7 @@ end;
 
 procedure TSVGDrawer.WriteFmt(const AFormat: String; AParams: array of const);
 begin
-  WriteStr(Format(AFormat, AParams, fmtSettings));
+  WriteStr(Format(AFormat, AParams, DefSeparatorSettings));
 end;
 
 procedure TSVGDrawer.WriteStr(const AString: String);
@@ -635,10 +645,6 @@ begin
   end;
 end;
 
-
-initialization
-  fmtSettings := DefaultFormatSettings;
-  fmtSettings.DecimalSeparator := '.';
 
 end.
 

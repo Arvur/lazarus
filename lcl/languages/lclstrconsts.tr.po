@@ -1,47 +1,47 @@
 msgid ""
 msgstr ""
-"Last-Translator: Hakan KIZILHAN <hakan486@yahoo.com>\n"
+"Last-Translator: Onur ERÇELEN <onur2x@gmail.com>\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Project-Id-Version: \n"
 "POT-Creation-Date: \n"
-"PO-Revision-Date: 2008-03-11 00:06+0200\n"
+"PO-Revision-Date: 2019-07-19 00:36+0300\n"
 "Language-Team: \n"
 "MIME-Version: 1.0\n"
+"Language: tr\n"
+"X-Generator: Poedit 2.2.3\n"
 
 #: lclstrconsts.hhshelpbrowsernotexecutable
-#, fuzzy,badformat
-#| msgid "Browser %s%s%s not executable."
+#, object-pascal-format
 msgid "Browser \"%s\" not executable."
-msgstr "%s%s%s tarayıcısı çalıştırılabilir değil."
+msgstr "\"%s\" tarayıcısı çalıştırılabilir değil."
 
 #: lclstrconsts.hhshelpbrowsernotfound
-#, fuzzy,badformat
-#| msgid "Browser %s%s%s not found."
+#, object-pascal-format
 msgid "Browser \"%s\" not found."
-msgstr "%s%s%s tarayıcısı bulunamadı."
+msgstr "\"%s\" tarayıcısı bulunamadı."
 
 #: lclstrconsts.hhshelperrorwhileexecuting
-#, fuzzy,badformat
-#| msgid "Error while executing %s%s%s:%s%s"
+#, object-pascal-format
 msgid "Error while executing \"%s\":%s%s"
-msgstr "%s%s%s:%s%s çalıştırılırken hata"
+msgstr "\"%s\" çalıştırılırken hata:%s%s"
 
 #: lclstrconsts.hhshelpnohtmlbrowserfound
 msgid "Unable to find a HTML browser."
 msgstr "HTML tarayıcı bulunamıyor."
 
 #: lclstrconsts.hhshelpnohtmlbrowserfoundpleasedefineone
+#, object-pascal-format
 msgid "No HTML Browser found.%sPlease define one in Tools -> Options -> Help -> Help Options"
-msgstr ""
+msgstr "HTML Tarayıcı bulunamadı.%sLütfen Araçlar -> Seçenekler -> Yardım -> Yardım Seçenekleri içinde bir tane tanımlayın"
 
 #: lclstrconsts.hhshelpthehelpdatabasewasunabletofindfile
-#, fuzzy,badformat
-#| msgid "The help database %s%s%s was unable to find file %s%s%s."
+#, object-pascal-format
 msgid "The help database \"%s\" was unable to find file \"%s\"."
-msgstr "%s%s%s yardım veritabanı, %s%s%s dosyasını bulamadı."
+msgstr "\"%s\" yardım veritabanı, \"%s\" dosyasını bulamadı."
 
 #: lclstrconsts.hhshelpthemacrosinbrowserparamswillbereplacedbytheurl
+#, object-pascal-format
 msgid "The macro %s in BrowserParams will be replaced by the URL."
 msgstr "BrowserParams içindeki %s betiği(makro) URL ile değiştirilecek."
 
@@ -53,260 +53,78 @@ msgstr "Alt"
 msgid "Ctrl"
 msgstr "Ctrl"
 
-#: lclstrconsts.ifsvk_accept
-msgid "Accept"
-msgstr "Kabul"
-
-#: lclstrconsts.ifsvk_apps
-msgid "application key"
-msgstr "uygulama tuşu"
-
-#: lclstrconsts.ifsvk_back
-msgid "Backspace"
-msgstr "Silme"
-
-#: lclstrconsts.ifsvk_cancel
-msgctxt "lclstrconsts.ifsvk_cancel"
-msgid "Cancel"
-msgstr ""
-
-#: lclstrconsts.ifsvk_capital
-msgid "Capital"
-msgstr "Büyük harf"
-
-#: lclstrconsts.ifsvk_clear
-msgid "Clear"
-msgstr "Temizle"
-
 #: lclstrconsts.ifsvk_cmd
 msgid "Cmd"
-msgstr ""
-
-#: lclstrconsts.ifsvk_control
-msgid "Control"
-msgstr "Kontrol"
-
-#: lclstrconsts.ifsvk_convert
-msgid "Convert"
-msgstr "Dönüştür"
-
-#: lclstrconsts.ifsvk_delete
-#, fuzzy
-msgctxt "lclstrconsts.ifsvk_delete"
-msgid "Delete"
-msgstr "Sil"
-
-#: lclstrconsts.ifsvk_down
-msgctxt "lclstrconsts.ifsvk_down"
-msgid "Down"
-msgstr "Aşağı"
-
-#: lclstrconsts.ifsvk_end
-msgctxt "lclstrconsts.ifsvk_end"
-msgid "End"
-msgstr "Sona git"
-
-#: lclstrconsts.ifsvk_escape
-msgid "Escape"
-msgstr "Çıkış karakteri"
-
-#: lclstrconsts.ifsvk_execute
-msgid "Execute"
-msgstr "Çalıştır"
-
-#: lclstrconsts.ifsvk_final
-msgid "Final"
-msgstr "Final"
-
-#: lclstrconsts.ifsvk_hanja
-msgid "Hanja"
-msgstr "Hanja"
+msgstr "Cmd"
 
 #: lclstrconsts.ifsvk_help
+msgctxt "lclstrconsts.ifsvk_help"
 msgid "Help"
 msgstr "Yardım"
 
-#: lclstrconsts.ifsvk_home
-msgctxt "lclstrconsts.ifsvk_home"
-msgid "Home"
-msgstr "Başa git"
-
-#: lclstrconsts.ifsvk_insert
-#, fuzzy
-msgctxt "lclstrconsts.ifsvk_insert"
-msgid "Insert"
-msgstr "Ekle"
-
-#: lclstrconsts.ifsvk_junja
-msgid "Junja"
-msgstr "Junja"
-
-#: lclstrconsts.ifsvk_kana
-msgid "Kana"
-msgstr "Kana"
-
-#: lclstrconsts.ifsvk_lbutton
-msgid "Mouse Button Left"
-msgstr "Sol fare düğmesi"
-
-#: lclstrconsts.ifsvk_left
-msgctxt "lclstrconsts.ifsvk_left"
-msgid "Left"
-msgstr "Sol"
-
-#: lclstrconsts.ifsvk_lwin
-msgid "left windows key"
-msgstr "sol windows tuşu"
-
-#: lclstrconsts.ifsvk_mbutton
-msgid "Mouse Button Middle"
-msgstr "Orta fare düğmesi"
-
-#: lclstrconsts.ifsvk_menu
-msgctxt "lclstrconsts.ifsvk_menu"
-msgid "Menu"
-msgstr "Menü"
-
 #: lclstrconsts.ifsvk_meta
 msgid "Meta"
-msgstr ""
-
-#: lclstrconsts.ifsvk_modechange
-msgid "Mode Change"
-msgstr "Kip değişimi"
-
-#: lclstrconsts.ifsvk_next
-#, fuzzy
-msgctxt "lclstrconsts.ifsvk_next"
-msgid "Next"
-msgstr "Sonraki"
-
-#: lclstrconsts.ifsvk_nonconvert
-msgid "Nonconvert"
-msgstr "Dönüştürme"
-
-#: lclstrconsts.ifsvk_numlock
-msgid "Numlock"
-msgstr "Numlock"
-
-#: lclstrconsts.ifsvk_numpad
-msgid "Numpad %d"
-msgstr "Nümerik %d"
-
-#: lclstrconsts.ifsvk_pause
-msgid "Pause key"
-msgstr "Durdurma tuşu"
-
-#: lclstrconsts.ifsvk_print
-msgid "Print"
-msgstr "Yazdır"
-
-#: lclstrconsts.ifsvk_prior
-msgctxt "lclstrconsts.ifsvk_prior"
-msgid "Prior"
-msgstr ""
-
-#: lclstrconsts.ifsvk_rbutton
-msgid "Mouse Button Right"
-msgstr "Sağ fare düğmesi"
-
-#: lclstrconsts.ifsvk_return
-msgid "Return"
-msgstr "Giriş"
-
-#: lclstrconsts.ifsvk_right
-msgctxt "lclstrconsts.ifsvk_right"
-msgid "Right"
-msgstr "Sağ"
-
-#: lclstrconsts.ifsvk_rwin
-msgid "right windows key"
-msgstr "sağ windows tuşu"
-
-#: lclstrconsts.ifsvk_scroll
-msgid "Scroll"
-msgstr "Kaydırma"
-
-#: lclstrconsts.ifsvk_select
-msgid "Select"
-msgstr "Seçim"
+msgstr "Meta"
 
 #: lclstrconsts.ifsvk_shift
 msgid "Shift"
 msgstr "Üstkarakter"
 
-#: lclstrconsts.ifsvk_snapshot
-msgid "Snapshot"
-msgstr "Kare yakala"
-
-#: lclstrconsts.ifsvk_space
-msgid "Space key"
-msgstr "Boşluk tuşu"
-
 #: lclstrconsts.ifsvk_super
 msgid "Super"
-msgstr ""
-
-#: lclstrconsts.ifsvk_tab
-msgctxt "lclstrconsts.ifsvk_tab"
-msgid "Tab"
-msgstr "Sekme"
+msgstr "Süper"
 
 #: lclstrconsts.ifsvk_unknown
 msgid "Unknown"
 msgstr "Bilinmeyen"
 
-#: lclstrconsts.ifsvk_up
-msgctxt "lclstrconsts.ifsvk_up"
-msgid "Up"
-msgstr "Yukarı"
-
 #: lclstrconsts.lislclresourcesnotfound
+#, object-pascal-format
 msgctxt "lclstrconsts.lislclresourcesnotfound"
 msgid "Resource %s not found"
 msgstr "%s adlı kaynak bulunamadı"
 
 #: lclstrconsts.rs3ddkshadowcolorcaption
 msgid "3D Dark Shadow"
-msgstr ""
+msgstr "3D Koyu Gölge"
 
 #: lclstrconsts.rs3dlightcolorcaption
 msgid "3D Light"
-msgstr ""
+msgstr "3D Light"
 
 #: lclstrconsts.rsacontrolcannothaveitselfasparent
-#, fuzzy
-#| msgid "A control can't have itself as parent"
 msgid "A control can't have itself as a parent"
-msgstr "Bir denetim, kendikendini üstdenetim(parent) olarak gösteremez"
+msgstr "Bir denetim, kendi kendini üstdenetim(parent) olarak gösteremez"
 
 #: lclstrconsts.rsactivebordercolorcaption
 msgid "Active Border"
-msgstr ""
+msgstr "Etkin Kenarlık"
 
 #: lclstrconsts.rsactivecaptioncolorcaption
 msgid "Active Caption"
-msgstr ""
+msgstr "Etkin Başlık"
 
 #: lclstrconsts.rsallfiles
+#, object-pascal-format
 msgid "All files (%s)|%s|%s"
 msgstr "Tüm dosyalar (%s)|%s|%s"
 
 #: lclstrconsts.rsappworkspacecolorcaption
 msgid "Application Workspace"
-msgstr ""
+msgstr "Uygulama Çalışma Alanı"
 
 #: lclstrconsts.rsaquacolorcaption
 msgid "Aqua"
-msgstr ""
+msgstr "Su Rengi"
 
 #: lclstrconsts.rsascannothaveasparent
+#, object-pascal-format
 msgid "Class %s cannot have %s as parent."
-msgstr ""
+msgstr "%s sınıfında ata olarak %s olamaz."
 
 #: lclstrconsts.rsbackgroundcolorcaption
 msgid "Desktop"
-msgstr ""
+msgstr "Masaüstü"
 
 #: lclstrconsts.rsbackward
 msgid "Backward"
@@ -318,7 +136,7 @@ msgstr "Bitmap resimleri"
 
 #: lclstrconsts.rsblackcolorcaption
 msgid "Black"
-msgstr ""
+msgstr "Siyah"
 
 #: lclstrconsts.rsblank
 msgid "Blank"
@@ -326,23 +144,23 @@ msgstr "Boş"
 
 #: lclstrconsts.rsbluecolorcaption
 msgid "Blue"
-msgstr ""
+msgstr "Mavi"
 
 #: lclstrconsts.rsbtnfacecolorcaption
 msgid "Button Face"
-msgstr ""
+msgstr "Düğme Yüzü"
 
 #: lclstrconsts.rsbtnhighlightcolorcaption
 msgid "Button Highlight"
-msgstr ""
+msgstr "Düğme Vurgusu"
 
 #: lclstrconsts.rsbtnshadowcolorcaption
 msgid "Button Shadow"
-msgstr ""
+msgstr "Dürme Gölgesi"
 
 #: lclstrconsts.rsbtntextcolorcaption
 msgid "Button Text"
-msgstr ""
+msgstr "Düğme Metni"
 
 #: lclstrconsts.rscalculator
 msgid "Calculator"
@@ -351,7 +169,7 @@ msgstr "Hesap makinesi"
 #: lclstrconsts.rscancelrecordhint
 msgctxt "lclstrconsts.rscancelrecordhint"
 msgid "Cancel"
-msgstr ""
+msgstr "İptal"
 
 #: lclstrconsts.rscannotfocus
 msgid "Can not focus"
@@ -363,47 +181,47 @@ msgstr "Tuval(canvas) çizmeye izin vermiyor"
 
 #: lclstrconsts.rscaptiontextcolorcaption
 msgid "Caption Text"
-msgstr ""
+msgstr "Başlık Metni"
 
 #: lclstrconsts.rscasesensitive
 msgid "Case sensitive"
 msgstr "Büyük/küçük harfe duyarlı"
 
 #: lclstrconsts.rscontrolclasscantcontainchildclass
+#, object-pascal-format
 msgid "Control of class '%s' can't have control of class '%s' as a child"
-msgstr ""
+msgstr "'%s' sınıfının kontrolünü çocuk olarak '%s' sınıfının kontrolüne sahip olamaz"
 
 #: lclstrconsts.rscontrolhasnoparentformorframe
+#, object-pascal-format
 msgid "Control '%s' has no parent form or frame"
-msgstr ""
+msgstr "'%s' kontrolü bir üst pencereye ya da çerçeveye sahip değil"
 
 #: lclstrconsts.rscontrolhasnoparentwindow
+#, object-pascal-format
 msgid "Control '%s' has no parent window"
-msgstr ""
+msgstr "'%s' kontrolü bir üst pencereye sahip değil"
 
 #: lclstrconsts.rscontrolisnotaparent
+#, object-pascal-format
 msgid "'%s' is not a parent of '%s'"
-msgstr ""
+msgstr "'%s', '%s' nin atası değil"
 
 #: lclstrconsts.rscreamcolorcaption
 msgid "Cream"
-msgstr ""
-
-#: lclstrconsts.rscreatinggdbcatchableerror
-msgid "Creating gdb catchable error:"
-msgstr "gdb catchable yaratma hatası:"
+msgstr "Krem"
 
 #: lclstrconsts.rscursor
 msgid "Cursor"
-msgstr ""
+msgstr "İmleç"
 
 #: lclstrconsts.rscustomcolorcaption
 msgid "Custom ..."
-msgstr ""
+msgstr "Özel ..."
 
 #: lclstrconsts.rsdefaultcolorcaption
 msgid "Default"
-msgstr ""
+msgstr "Varsayılan"
 
 #: lclstrconsts.rsdefaultfileinfovalue
 msgid "permissions user group size date time"
@@ -426,44 +244,38 @@ msgstr "Yön"
 msgid "&Directory"
 msgstr "&Dizin"
 
-#: lclstrconsts.rsdocking
-msgid "Docking"
-msgstr "Gömme"
-
 #: lclstrconsts.rsdocopy
 msgid "Copy"
-msgstr ""
+msgstr "Kopyala"
 
 #: lclstrconsts.rsdopaste
 msgid "Paste"
-msgstr ""
+msgstr "Yapıştır"
 
 #: lclstrconsts.rsduplicateiconformat
 msgid "Duplicate icon format."
-msgstr ""
+msgstr "Tekrarlanan simge biçimi."
 
 #: lclstrconsts.rseditrecordhint
 msgid "Edit"
-msgstr ""
+msgstr "Düzenle"
 
 #: lclstrconsts.rsentirescope
 msgid "Search entire file"
-msgstr ""
+msgstr "Tüm dosyada ara"
 
 #: lclstrconsts.rserror
 msgctxt "lclstrconsts.rserror"
 msgid "Error"
-msgstr ""
+msgstr "Hata"
 
 #: lclstrconsts.rserrorcreatingdevicecontext
+#, object-pascal-format
 msgid "Error creating device context for %s.%s"
 msgstr "%s için aygıt bağlamı oluşturulurken hata.%s"
 
-#: lclstrconsts.rserrorinlcl
-msgid "ERROR in LCL: "
-msgstr "LCL'de HATA:"
-
 #: lclstrconsts.rserroroccurredinataddressframe
+#, object-pascal-format
 msgid "Error occurred in %s at %sAddress %s%s Frame %s"
 msgstr "%s @ %s içinde hata oluştu. Adres %s%s Çerçeve %s"
 
@@ -480,10 +292,12 @@ msgid "Directory must exist"
 msgstr "Dizin var olmak zorunda"
 
 #: lclstrconsts.rsfddirectorynotexist
+#, object-pascal-format
 msgid "The directory \"%s\" does not exist."
 msgstr "\"%s\" dizini mevcut değil."
 
 #: lclstrconsts.rsfdfilealreadyexists
+#, object-pascal-format
 msgid "The file \"%s\" already exists. Overwrite ?"
 msgstr "\"%s\" adlı dosya zaten var. Üzerine yazılsın mı?"
 
@@ -492,10 +306,12 @@ msgid "File must exist"
 msgstr "Dosya var olmak zorunda"
 
 #: lclstrconsts.rsfdfilenotexist
+#, object-pascal-format
 msgid "The file \"%s\" does not exist."
 msgstr "\"%s\" dosyası mevcut değil."
 
 #: lclstrconsts.rsfdfilereadonly
+#, object-pascal-format
 msgid "The file \"%s\" is not writable."
 msgstr "\"%s\" dosyası yazılabilir değil."
 
@@ -520,6 +336,7 @@ msgid "Path must exist"
 msgstr "Yol var olmak zorunda"
 
 #: lclstrconsts.rsfdpathnoexist
+#, object-pascal-format
 msgid "The path \"%s\" does not exist."
 msgstr "\"%s\" yolu mevcut değil."
 
@@ -528,6 +345,7 @@ msgid "Select Directory"
 msgstr "Dizin seç"
 
 #: lclstrconsts.rsfileinfofilenotfound
+#, object-pascal-format
 msgid "(file not found: \"%s\")"
 msgstr "(dosya bulunamadı: \"%s\")"
 
@@ -538,7 +356,7 @@ msgstr "Dosya bilgisi"
 #: lclstrconsts.rsfilter
 msgctxt "lclstrconsts.rsfilter"
 msgid "(filter)"
-msgstr ""
+msgstr "(süzgeç)"
 
 #: lclstrconsts.rsfind
 msgid "Find"
@@ -550,29 +368,27 @@ msgstr "Daha fazla ara"
 
 #: lclstrconsts.rsfirstrecordhint
 msgid "First"
-msgstr ""
+msgstr "İlk"
 
 #: lclstrconsts.rsfixedcolstoobig
-#, fuzzy
-#| msgid "FixedCols can't be >= ColCount"
 msgid "FixedCols can't be > ColCount"
-msgstr "FixedCols >= ColCount olamaz"
+msgstr "Sabit sütun, sütün sayısından büyük olamaz"
 
 #: lclstrconsts.rsfixedrowstoobig
-#, fuzzy
-#| msgid "FixedRows can't be >= RowCount"
 msgid "FixedRows can't be > RowCount"
-msgstr "FixedRows >= RowCount olamaz"
+msgstr "Sabit satır, satır sayısından büyük olamaz"
 
 #: lclstrconsts.rsformcolorcaption
 msgid "Form"
-msgstr ""
+msgstr "Form"
 
 #: lclstrconsts.rsformresourcesnotfoundforresourcelessformscreatenew
+#, object-pascal-format
 msgid "Form resource %s not found. For resourceless forms CreateNew constructor must be used. See the global variable RequireDerivedFormResource."
-msgstr ""
+msgstr "Form kaynağı %s bulunamadı. Kaynak dosyası olmayan formlar için CreateNew constructor mutlaka kullanılmalı. RequireDerivedFormResource adlı global değişkene bakın."
 
 #: lclstrconsts.rsformstreamingerror
+#, object-pascal-format
 msgid "Form streaming \"%s\" error: %s"
 msgstr "Form akışı \"%s\" hatası: %s"
 
@@ -582,7 +398,7 @@ msgstr "İleriye doğru"
 
 #: lclstrconsts.rsfuchsiacolorcaption
 msgid "Fuchsia"
-msgstr ""
+msgstr "Fuchsia"
 
 #: lclstrconsts.rsgdkoptiondebug
 msgid "--gdk-debug flags     Turn on specific GDK trace/debug messages."
@@ -594,7 +410,7 @@ msgstr "-gdk-no-debug flags  GDK'ya özgü izleme/hata ayıklama iletilerini kap
 
 #: lclstrconsts.rsgif
 msgid "Graphics Interchange Format"
-msgstr ""
+msgstr "Grafik Değişim Biçimi"
 
 #: lclstrconsts.rsgoptionfatalwarnings
 msgid "--g-fatal-warnings    Warnings and errors generated by Gtk+/GDK will halt the application."
@@ -602,39 +418,39 @@ msgstr "--g-fatal-warnings    Gtk+/GDK tarafından üretilen hatalar ve uyarıla
 
 #: lclstrconsts.rsgradientactivecaptioncolorcaption
 msgid "Gradient Active Caption"
-msgstr ""
+msgstr "Graident Etkin Başlık"
 
 #: lclstrconsts.rsgradientinactivecaptioncolorcaption
 msgid "Gradient Inactive Caption"
-msgstr ""
+msgstr "Graident pasif Başlık"
 
 #: lclstrconsts.rsgraphic
 msgid "Graphic"
-msgstr ""
+msgstr "Grafik"
 
 #: lclstrconsts.rsgraycolorcaption
 msgid "Gray"
-msgstr ""
+msgstr "Gri"
 
 #: lclstrconsts.rsgraytextcolorcaption
 msgid "Gray Text"
-msgstr ""
+msgstr "Gri Metin"
 
 #: lclstrconsts.rsgreencolorcaption
 msgid "Green"
-msgstr ""
+msgstr "Yeşil"
 
 #: lclstrconsts.rsgridfiledoesnotexist
 msgid "Grid file doesn't exist"
-msgstr ""
+msgstr "Izgara dosyası mevcut değil"
 
 #: lclstrconsts.rsgridhasnocols
 msgid "Cannot insert rows into a grid when it has no columns"
-msgstr ""
+msgstr "Izgarada sütun yokken satır eklenemiyor"
 
 #: lclstrconsts.rsgridhasnorows
 msgid "Cannot insert columns into a grid when it has no rows"
-msgstr ""
+msgstr "Izgarada satır yokken sütün eklenemiyor"
 
 #: lclstrconsts.rsgridindexoutofrange
 msgid "Grid index out of range."
@@ -654,7 +470,7 @@ msgstr "Geçmiş:"
 
 #: lclstrconsts.rsgtkoptionclass
 msgid "--class classname     Following Xt conventions, the class of a program is the program name with the initial character capitalized. For example, the classname for gimp is \"Gimp\". If --class is specified, the class of the program will be set to \"classname\"."
-msgstr "--class classname     Bir programın sınıfı büyük harfle başlayan program adıyla aynı ise, Xt geleneklerini izler. Örneğin, gimp için sınıf adı \"Gimp\". Eğer --class belirtilmişse, program sınıfı \"classname\" olacak şekilde ayarlanacaktır."
+msgstr "--class sınıfadı     Bir programın sınıfı büyük harfle başlayan program adıyla aynı ise, Xt geleneklerini izler. Örneğin, gimp için sınıf adı \"Gimp\". Eğer --class belirtilmişse, program sınıfı \"sınıfadı\" olacak şekilde ayarlanacaktır."
 
 #: lclstrconsts.rsgtkoptiondebug
 msgid "--gtk-debug flags     Turn on specific Gtk+ trace/debug messages."
@@ -666,11 +482,11 @@ msgstr "--display h:s:d       Belirtilen X sunucusuna bağlanır, \"h\" bilgisay
 
 #: lclstrconsts.rsgtkoptionmodule
 msgid "--gtk-module module   Load the specified module at startup."
-msgstr "--gtk-module module   Belirtilen modülü başlangıçta yükler."
+msgstr "--gtk-module modül   Belirtilen modülü başlangıçta yükler."
 
 #: lclstrconsts.rsgtkoptionname
 msgid "--name programe       Set program name to \"progname\". If not specified, program name will be set to ParamStrUTF8(0)."
-msgstr ""
+msgstr "--name programadı       Program adını \"programadı\" şeklinde ayarla. Belirtilmezse, program adı ParamStrUTF8(0) olarak ayarlanacak."
 
 #: lclstrconsts.rsgtkoptionnodebug
 msgid "--gtk-no-debug flags  Turn off specific Gtk+ trace/debug messages."
@@ -685,135 +501,126 @@ msgid "--no-xshm             Disable use of the X Shared Memory Extension."
 msgstr "--no-xshm             X paylaşımlı bellek genişletmesini kullanmayı kapatır."
 
 #: lclstrconsts.rsgtkoptionsync
-#, fuzzy
-#| msgid "--sync                Call XSynchronize (display, True) after the Xserver connection has been established. This makes debugging X protocol errors easier, because X request buffering will be disabled and X errors will be received immediatey after the protocol request that generated the error has been processed by the X server."
 msgid "--sync                Call XSynchronize (display, True) after the Xserver connection has been established. This makes debugging X protocol errors easier, because X request buffering will be disabled and X errors will be received immediately after the protocol request that generated the error has been processed by the X server."
 msgstr "--sync                Xserver bağlantısı sağlandıktan sonra XSynchronize (display, True) işlevini çağırır. Bu X protokol hatalarını ayıklamayı kolaylaştırır, çünkü X istek tamponlama kapalı olacaktır ve X hataları hata oluşturan protokol isteği X sunucu tarafından işlendikten hemen sonra alınacaktır."
 
+#: lclstrconsts.rshelp
+msgctxt "lclstrconsts.rshelp"
+msgid "Help"
+msgstr "Yardım"
+
 #: lclstrconsts.rshelpalreadyregistered
+#, object-pascal-format
 msgid "%s: Already registered"
 msgstr "%s: Zaten kaydedilmiş"
 
 #: lclstrconsts.rshelpcontextnotfound
-#, fuzzy
-#| msgid "Help Context not found"
 msgid "A help database was found for this topic, but this topic was not found"
-msgstr "Yardım bağlamı bulunamadı"
+msgstr "Bu konu için bir yardım veritabanı bulundu, fakat konu bulunamadı"
 
 #: lclstrconsts.rshelpdatabasenotfound
-#, fuzzy
-#| msgid "Help Database not found"
 msgid "There is no help database installed for this topic"
-msgstr "Yardım veritabanı bulunamadı"
+msgstr "Bu konu için bir yardım veritabanı yüklü değil"
 
 #: lclstrconsts.rshelperror
 msgid "Help Error"
 msgstr "Yardım hatası"
 
 #: lclstrconsts.rshelphelpcontextnotfound
+#, object-pascal-format
 msgid "Help context %s not found."
 msgstr "%s yardım bağlamı bulunamadı."
 
 #: lclstrconsts.rshelphelpcontextnotfoundindatabase
-#, fuzzy,badformat
-#| msgid "Help context %s not found in Database %s%s%s."
+#, object-pascal-format
 msgid "Help context %s not found in Database \"%s\"."
-msgstr "%s yardım bağlamı, %s%s%s veritabanı içinde bulunamadı."
+msgstr "%s yardım bağlamı, \"%s\" veritabanı içinde bulunamadı."
 
 #: lclstrconsts.rshelphelpdatabasedidnotfoundaviewerforahelppageoftype
-#, fuzzy,badformat
-#| msgid "Help Database \"%s\" did not found a viewer for a help page of type %s"
+#, object-pascal-format
 msgid "Help Database \"%s\" did not find a viewer for a help page of type %s"
-msgstr "%s%s%s yardım veritabanı %s türündeki yardım sayfası için bir görüntüleyici bulamadı"
+msgstr "Yardım Veritabanı \"%s\", \"%s\" türündeki yardım sayfası için bir görüntüleyici bulamadı"
 
 #: lclstrconsts.rshelphelpdatabasenotfound
-#, fuzzy,badformat
-#| msgid "Help Database %s%s%s not found"
+#, object-pascal-format
 msgid "Help Database \"%s\" not found"
-msgstr "%s%s%s Yardım veritabanı bulunamadı"
+msgstr "Yardım Veritabanı \"%s\" bulunamadı"
 
 #: lclstrconsts.rshelphelpfordirectivenotfound
+#, object-pascal-format
 msgid "Help for directive \"%s\" not found."
-msgstr ""
+msgstr "Direktif \"%s\" için yardım bulunamadı."
 
 #: lclstrconsts.rshelphelpfordirectivenotfoundindatabase
+#, object-pascal-format
 msgid "Help for directive \"%s\" not found in Database \"%s\"."
-msgstr ""
+msgstr "Direktif \"%s\" için yardım, \"%s\" Veritabanında bulunamadı."
 
 #: lclstrconsts.rshelphelpkeywordnotfound
-#, fuzzy,badformat
-#| msgid "Help keyword %s%s%s not found."
+#, object-pascal-format
 msgid "Help keyword \"%s\" not found."
-msgstr "%s%s%s yardım anahtar sözcüğü bulunamadı."
+msgstr "Yardım anahtar sözcüğü \"%s\" bulunamadı."
 
 #: lclstrconsts.rshelphelpkeywordnotfoundindatabase
-#, fuzzy,badformat
-#| msgid "Help keyword %s%s%s not found in Database %s%s%s."
+#, object-pascal-format
 msgid "Help keyword \"%s\" not found in Database \"%s\"."
-msgstr "%s%s%s Yardım anahtar sözcüğü %s%s%s veritabanı içinde bulunamadı."
+msgstr "Yardım anahtar sözcüğü \"%s\", \"%s\" veritabanı içinde bulunamadı."
 
 #: lclstrconsts.rshelphelpnodehasnohelpdatabase
-#, fuzzy,badformat
-#| msgid "Help node %s%s%s has no Help Database"
+#, object-pascal-format
 msgid "Help node \"%s\" has no Help Database"
-msgstr "%s%s%s yardım düğümü yardım veritabanına sahip değil"
+msgstr "Yardım düğümü \"%s\" Yardım Veritabanına sahip değil"
 
 #: lclstrconsts.rshelpnohelpfoundforsource
-#, fuzzy,badformat
+#, object-pascal-format, fuzzy, badformat
 msgid "No help found for line %d, column %d of %s."
-msgstr "%s'nin satır %d, sütun %d için yardım bulunamadı."
+msgstr "%s satırı için yardım bulunamadı,%s sütunu %d."
 
 #: lclstrconsts.rshelpnohelpnodesavailable
-#, fuzzy
-#| msgid "No help nodes available"
 msgid "No help entries available for this topic"
-msgstr "Kullanılabilir yardım düğümü yok"
+msgstr "Bu konu için kullanılabilir yardım girdisi yok"
 
 #: lclstrconsts.rshelpnotfound
-#, fuzzy
-#| msgid "Help not found"
 msgid "No help found for this topic"
-msgstr "Yardım bulunamadı"
+msgstr "Bu konu için yardım bulunamadı"
 
 #: lclstrconsts.rshelpnotregistered
+#, object-pascal-format
 msgid "%s: Not registered"
-msgstr "%s: kaydedilmemiş"
+msgstr "%s: Kaydedilmemiş"
 
 #: lclstrconsts.rshelpselectorerror
 msgid "Help Selector Error"
-msgstr "Yardım seçici hatası"
+msgstr "Yardım Seçici Hatası"
 
 #: lclstrconsts.rshelpthereisnoviewerforhelptype
-#, fuzzy,badformat
-#| msgid "There is no viewer for help type %s%s%s"
+#, object-pascal-format
 msgid "There is no viewer for help type \"%s\""
-msgstr "%s%s%s yardım türü için bir görüntüleyici yok"
+msgstr "\"%s\" yardım türü için bir görüntüleyici yok"
 
 #: lclstrconsts.rshelpviewererror
 msgid "Help Viewer Error"
-msgstr "Yardım görüntüleyici hatası"
+msgstr "Yardım Görüntüleyici Hatası"
 
 #: lclstrconsts.rshelpviewernotfound
-#, fuzzy
-#| msgid "Help Viewer not found"
 msgid "No viewer was found for this type of help content"
-msgstr "Yardım görüntüleyici bulunamadı"
+msgstr "Bu türdeki yardım içeriği için görüntüleyici bulunamadı"
 
 #: lclstrconsts.rshighlightcolorcaption
 msgid "Highlight"
-msgstr ""
+msgstr "Vurgulu"
 
 #: lclstrconsts.rshighlighttextcolorcaption
 msgid "Highlight Text"
-msgstr ""
+msgstr "Vurgulu Metin"
 
 #: lclstrconsts.rshotlightcolorcaption
 msgid "Hot Light"
-msgstr ""
+msgstr "Hot Light"
 
 #: lclstrconsts.rsicns
 msgid "Mac OS X Icon"
-msgstr ""
+msgstr "Mac OS X Simgesi"
 
 #: lclstrconsts.rsicon
 msgid "Icon"
@@ -821,57 +628,59 @@ msgstr "Simge"
 
 #: lclstrconsts.rsiconimageempty
 msgid "Icon image cannot be empty"
-msgstr ""
+msgstr "Simge imajı boş olamaz"
 
 #: lclstrconsts.rsiconimageformat
 msgid "Icon image must have the same format"
-msgstr ""
+msgstr "Simge imajı aynı biçimde olmak zorunda"
 
 #: lclstrconsts.rsiconimageformatchange
 msgid "Cannot change format of icon image"
-msgstr ""
+msgstr "Simge imajının biçimi değiştirilemiyor"
 
 #: lclstrconsts.rsiconimagesize
 msgid "Icon image must have the same size"
-msgstr ""
+msgstr "Simge imajı aynı boyutta olmak zorunda"
 
 #: lclstrconsts.rsiconimagesizechange
 msgid "Cannot change size of icon image"
-msgstr ""
+msgstr "Simge imajının boyutu değiştirilemiyor"
 
 #: lclstrconsts.rsiconnocurrent
 msgid "Icon has no current image"
-msgstr ""
+msgstr "Simgeye imaj atanmamış"
 
 #: lclstrconsts.rsinactivebordercolorcaption
 msgid "Inactive Border"
-msgstr ""
+msgstr "Etkin Olmayan Kenarlık"
 
 #: lclstrconsts.rsinactivecaptioncolorcaption
 msgctxt "lclstrconsts.rsinactivecaptioncolorcaption"
 msgid "Inactive Caption"
-msgstr ""
+msgstr "Etkin Olmayan Başlık"
 
 #: lclstrconsts.rsinactivecaptiontext
 msgctxt "lclstrconsts.rsinactivecaptiontext"
 msgid "Inactive Caption"
-msgstr ""
+msgstr "Etkin Olmayan Başlık"
 
 #: lclstrconsts.rsindexoutofbounds
+#, object-pascal-format
 msgid "%s Index %d out of bounds 0 .. %d"
 msgstr "%s Dizin %d sınırların dışında 0.. %d"
 
 #: lclstrconsts.rsindexoutofrange
+#, object-pascal-format
 msgid "Index Out of range Cell[Col=%d Row=%d]"
 msgstr "Tanımlayıcı sınırın dışında Cell[Col=%d Row=%d]"
 
 #: lclstrconsts.rsinfobkcolorcaption
 msgid "Info Background"
-msgstr ""
+msgstr "Bilgi Arka Planı"
 
 #: lclstrconsts.rsinfotextcolorcaption
 msgid "Info Text"
-msgstr ""
+msgstr "Bilgi Metni"
 
 #: lclstrconsts.rsinsertrecordhint
 msgctxt "lclstrconsts.rsinsertrecordhint"
@@ -879,16 +688,18 @@ msgid "Insert"
 msgstr "Ekle"
 
 #: lclstrconsts.rsinvaliddate
+#, object-pascal-format
 msgid "Invalid Date : %s"
 msgstr "Geçersiz tarih : %s"
 
 #: lclstrconsts.rsinvaliddaterangehint
+#, object-pascal-format
 msgid "Invalid Date: %s. Must be between %s and %s"
 msgstr "Geçersiz tarih : %s. %s ve %s arasında olmalı"
 
 #: lclstrconsts.rsinvalidformobjectstream
 msgid "invalid Form object stream"
-msgstr "Geçersiz Form nesnesi akışı"
+msgstr "geçersiz Form nesnesi akışı"
 
 #: lclstrconsts.rsinvalidpropertyvalue
 msgid "Invalid property value"
@@ -899,6 +710,7 @@ msgid "Invalid stream format"
 msgstr "Geçersiz akış biçimi"
 
 #: lclstrconsts.rsisalreadyassociatedwith
+#, object-pascal-format
 msgid "%s is already associated with %s"
 msgstr "%s, zaten %s ile birleştirilmiş durumda"
 
@@ -908,23 +720,46 @@ msgstr "Joint Picture Expert Group"
 
 #: lclstrconsts.rslastrecordhint
 msgid "Last"
-msgstr ""
+msgstr "Son"
 
 #: lclstrconsts.rslimecolorcaption
 msgid "Lime"
-msgstr ""
+msgstr "Limon"
 
 #: lclstrconsts.rslistindexexceedsbounds
+#, object-pascal-format
 msgid "List index exceeds bounds (%d)"
 msgstr "Liste tanımlayıcısı sınırları aşıyor (%d)"
 
+#: lclstrconsts.rsmacosmenuhide
+#, object-pascal-format
+msgid "Hide %s"
+msgstr ""
+
+#: lclstrconsts.rsmacosmenuhideothers
+msgid "Hide Others"
+msgstr ""
+
+#: lclstrconsts.rsmacosmenuquit
+#, object-pascal-format
+msgid "Quit %s"
+msgstr ""
+
+#: lclstrconsts.rsmacosmenuservices
+msgid "Services"
+msgstr ""
+
+#: lclstrconsts.rsmacosmenushowall
+msgid "Show All"
+msgstr ""
+
 #: lclstrconsts.rsmarooncolorcaption
 msgid "Maroon"
-msgstr ""
+msgstr "Kestane Rengi"
 
 #: lclstrconsts.rsmbabort
 msgid "Abort"
-msgstr "Vazgeç"
+msgstr "İptal"
 
 #: lclstrconsts.rsmball
 msgid "&All"
@@ -937,19 +772,19 @@ msgstr "İptal"
 
 #: lclstrconsts.rsmbclose
 msgid "&Close"
-msgstr "Kapa&t"
+msgstr "Kapat"
 
 #: lclstrconsts.rsmbhelp
 msgid "&Help"
-msgstr "&Yardım"
+msgstr "Yardım"
 
 #: lclstrconsts.rsmbignore
 msgid "&Ignore"
-msgstr "&Yoksay"
+msgstr "Yoksay"
 
 #: lclstrconsts.rsmbno
 msgid "&No"
-msgstr "&Hayır"
+msgstr "Hayır"
 
 #: lclstrconsts.rsmbnotoall
 msgid "No to all"
@@ -957,11 +792,11 @@ msgstr "Tümüne hayır"
 
 #: lclstrconsts.rsmbok
 msgid "&OK"
-msgstr "&Tamam"
+msgstr "Tamam"
 
 #: lclstrconsts.rsmbopen
 msgid "&Open"
-msgstr ""
+msgstr "Aç"
 
 #: lclstrconsts.rsmbretry
 msgid "&Retry"
@@ -969,11 +804,11 @@ msgstr "Tek&rar dene"
 
 #: lclstrconsts.rsmbsave
 msgid "&Save"
-msgstr ""
+msgstr "Kaydet"
 
 #: lclstrconsts.rsmbunlock
 msgid "&Unlock"
-msgstr ""
+msgstr "Kilit çöz"
 
 #: lclstrconsts.rsmbyes
 msgid "&Yes"
@@ -985,11 +820,11 @@ msgstr "Tümüne evet"
 
 #: lclstrconsts.rsmedgraycolorcaption
 msgid "Medium Gray"
-msgstr ""
+msgstr "Orta Gri"
 
 #: lclstrconsts.rsmenubarcolorcaption
 msgid "Menu Bar"
-msgstr ""
+msgstr "Menü Çubuğu"
 
 #: lclstrconsts.rsmenucolorcaption
 msgctxt "lclstrconsts.rsmenucolorcaption"
@@ -998,11 +833,11 @@ msgstr "Menü"
 
 #: lclstrconsts.rsmenuhighlightcolorcaption
 msgid "Menu Highlight"
-msgstr ""
+msgstr "Menü Vurgusu"
 
 #: lclstrconsts.rsmenutextcolorcaption
 msgid "Menu Text"
-msgstr ""
+msgstr "Menü Metni"
 
 #: lclstrconsts.rsmodified
 msgid "  modified "
@@ -1010,11 +845,11 @@ msgstr "  değiştirilmiş "
 
 #: lclstrconsts.rsmoneygreencolorcaption
 msgid "Money Green"
-msgstr ""
+msgstr "Para yeşili"
 
 #: lclstrconsts.rsmtauthentication
 msgid "Authentication"
-msgstr ""
+msgstr "Doğrulama"
 
 #: lclstrconsts.rsmtconfirmation
 msgid "Confirmation"
@@ -1039,7 +874,7 @@ msgstr "Dikkat"
 
 #: lclstrconsts.rsnavycolorcaption
 msgid "Navy"
-msgstr ""
+msgstr "Deniz Mavisi"
 
 #: lclstrconsts.rsnextrecordhint
 msgctxt "lclstrconsts.rsnextrecordhint"
@@ -1048,7 +883,7 @@ msgstr "Sonraki"
 
 #: lclstrconsts.rsnonecolorcaption
 msgid "None"
-msgstr ""
+msgstr "Yok"
 
 #: lclstrconsts.rsnotavalidgridfile
 msgid "Not a valid grid file"
@@ -1056,11 +891,11 @@ msgstr "Geçerli bir ızgara dosyası değil"
 
 #: lclstrconsts.rsnowidgetset
 msgid "No widgetset object. Please check if the unit \"interfaces\" was added to the programs uses clause."
-msgstr "Parçacık nesnesi yok. Lütfen  \"interfaces\" biriminin programın uses bölümüne eklenip eklenmediğini denetleyin."
+msgstr "Parçacık nesnesi yok. Lütfen \"interfaces\" biriminin programın uses bölümüne eklenip eklenmediğini denetleyin."
 
 #: lclstrconsts.rsolivecolorcaption
 msgid "Olive"
-msgstr ""
+msgstr "Zeytin Yeşili"
 
 #: lclstrconsts.rspickdate
 msgid "Select a date"
@@ -1080,7 +915,7 @@ msgstr "Taşınabilir GrayMap"
 
 #: lclstrconsts.rsportablenetworkgraphic
 msgid "Portable Network Graphic"
-msgstr "Taşınabilir ağ grafiği"
+msgstr "Taşınabilir Ağ Grafiği"
 
 #: lclstrconsts.rsportablepixmap
 msgid "Portable PixMap"
@@ -1088,11 +923,12 @@ msgstr "Taşınabilir PixMap"
 
 #: lclstrconsts.rspostrecordhint
 msgid "Post"
-msgstr ""
+msgstr "Gönder"
 
 #: lclstrconsts.rspressoktoignoreandriskdatacorruptionpressaborttok
+#, object-pascal-format
 msgid "%s%sPress OK to ignore and risk data corruption.%sPress Abort to kill the program."
-msgstr ""
+msgstr "%s%sYok saymak için OK düğmesine basın ve veri bozulmasını göze alın.%sProgramı sonlandırmak için Sonlandır düğmesine basın."
 
 #: lclstrconsts.rspriorrecordhint
 msgctxt "lclstrconsts.rspriorrecordhint"
@@ -1101,123 +937,124 @@ msgstr "Önceki"
 
 #: lclstrconsts.rspromptonreplace
 msgid "Prompt on replace"
-msgstr ""
+msgstr "Değiştirirken sor"
 
 #: lclstrconsts.rspropertydoesnotexist
+#, object-pascal-format
 msgid "Property %s does not exist"
 msgstr "%s özelliği mevcut değil"
 
 #: lclstrconsts.rspurplecolorcaption
 msgid "Purple"
-msgstr ""
+msgstr "Mor"
 
 #: lclstrconsts.rsqtoptiondograb
 msgid "-dograb (only under X11), running under a debugger can cause an implicit -nograb, use -dograb to override. Need QT_DEBUG."
-msgstr ""
+msgstr "-dograb (yalnızca X11), hata ayıklayıcı altında çalışma -nograb seçeneğini etkinleştirebilir, bunu geçersiz kılmak için -dograb kullan. QT_DEBUG gerektirir."
 
 #: lclstrconsts.rsqtoptiongraphicsstyle
 msgid "-graphicssystem param, sets the backend to be used for on-screen widgets and QPixmaps. Available options are native, raster and opengl. OpenGL is still unstable."
-msgstr ""
+msgstr "-graphicssystem parametre, ekranda görünen parçacıklar(widgets) ve QPixmap'lar için kullanılcak arka ucu ayarlar. Kullanılabilir seçenekler: native, raster ve opengl. OpenGL hala kararsızdır."
 
 #: lclstrconsts.rsqtoptionnograb
 msgid "-nograb, tells Qt that it must never grab the mouse or the keyboard. Need QT_DEBUG."
-msgstr ""
+msgstr "-nograb, Qt'ye fare ya da klavye girdilerini asla yakalamamasını söyler. QT_DEBUG gerektirir."
 
 #: lclstrconsts.rsqtoptionreverse
 msgid "-reverse, sets the application's layout direction to Qt::RightToLeft."
-msgstr ""
+msgstr "-reverse, uygulamanın diziliş yönünü Qt::RightToLeft olarak ayarlar."
 
 #: lclstrconsts.rsqtoptionsession
 msgid "-session session, restores the application from an earlier session."
-msgstr ""
+msgstr "-session oturum, uygulamayı önceki bir oturumdan geri yükler."
 
 #: lclstrconsts.rsqtoptionstyle
 msgid "-style style or -style=style, sets the application GUI style. Possible values are motif, windows, and platinum. If you compiled Qt with additional styles or have additional styles as plugins these will be available to the -style  command line option. NOTE: Not all styles are available on all platforms. If style param does not exist Qt will start an application with default common style (windows)."
-msgstr ""
+msgstr "-style stil ya da -style=stil, uygulamanın GUI stilini ayarlar. Olası değerler motif, windows ve platinum'dur. Eğer Qt'yi ek stillerle derlediyseniz ya da eklenti(plugin) şeklinde ek stiller var ise bunlar -style komut satırı seçeneği ile kullanılabilir durumdadır. NOT: Tüm stiller tüm platformlarda kullanılabilir değildir. Eğer stil parametresi yoksa Qt varsayılan stil ile (windows) bir uygulama başlatır."
 
 #: lclstrconsts.rsqtoptionstylesheet
 msgid "-stylesheet stylesheet or -stylesheet=stylesheet, sets the application Style Sheet. The value must be a path to a file that contains the Style Sheet. Note: Relative URLs in the Style Sheet file are relative to the Style Sheet file's path."
-msgstr ""
+msgstr "-stylesheet stil sayfası ya da -stylesheet=stil sayfası, Uygulamanın stil sayfasını ayarlar. Değer, stil sayfasını barındıran bir dosya yolu olmalıdır. Not: Stil sayfası içindeki göreli URL'ler, stil sayfası dosyasının yoluna göredir."
 
 #: lclstrconsts.rsqtoptionsync
 msgid "-sync (only under X11), switches to synchronous mode for debugging."
-msgstr ""
+msgstr "-sync (sadece X11'de), hata ayıklama için eşzamanlı(senkronize) kipe geçer."
 
 #: lclstrconsts.rsqtoptionwidgetcount
 msgid "-widgetcount, prints debug message at the end about number of widgets left undestroyed and maximum number of widgets existed at the same time."
-msgstr ""
+msgstr "-widgetcount, en sonda, yok edilmemiş parçacıkların sayısı ve aynı anda var olabilecek parçacık sayısı hakkında hata ayıklama iletisi yazdırır."
 
 #: lclstrconsts.rsqtoptionx11bgcolor
 msgid "-bg or -background color, sets the default background color and an application palette (light and dark shades are calculated)."
-msgstr ""
+msgstr "-bg ya da -background renk, bir uygulama paleti ve varsayılan arka plan rengini ayarlar (açık ve koyu gölgelikler hesaplanır)."
 
 #: lclstrconsts.rsqtoptionx11btncolor
 msgid "-btn or -button color, sets the default button color."
-msgstr ""
+msgstr "-btn ya da -button renk, varsayılan düğme rengini ayarlar."
 
 #: lclstrconsts.rsqtoptionx11cmap
 msgid "-cmap, causes the application to install a private color map on an 8-bit display."
-msgstr ""
+msgstr "-cmap, uygulamanın 8-bit ekranda özel renk haritası yüklemesine neden olur."
 
 #: lclstrconsts.rsqtoptionx11display
 msgid "-display display, sets the X display (default is $DISPLAY)."
-msgstr ""
+msgstr "-display ekran, X ekranını ayarlar (varsayılan $DISPLAY)."
 
 #: lclstrconsts.rsqtoptionx11fgcolor
 msgid "-fg or -foreground color, sets the default foreground color."
-msgstr ""
+msgstr "-fg ya da -foreground renk, varsayılan ön plan rengini ayarlar."
 
 #: lclstrconsts.rsqtoptionx11font
 msgid "-fn or -font font, defines the application font. The font should be specified using an X logical font description."
-msgstr ""
+msgstr "-fn ya da -font yazıtipi, uygulama yazıtipini belirler. Yazıtipi, X mantıksal yazıtipi tanımlaması şeklinde belirlenmelidir."
 
 #: lclstrconsts.rsqtoptionx11geometry
 msgid "-geometry geometry, sets the client geometry of the first window that is shown."
-msgstr ""
+msgstr "-geometry geometri, gösterilen ilk pencerenin istemci geometrisini ayarlar."
 
 #: lclstrconsts.rsqtoptionx11im
 msgid "-im, sets the input method server (equivalent to setting the XMODIFIERS environment variable)."
-msgstr ""
+msgstr "-im, giriş metodu sunucusunu ayarlar (XMODIFIERS ortam değişkeni ayarına eşittir)."
 
 #: lclstrconsts.rsqtoptionx11inputstyle
 msgid "-inputstyle, defines how the input is inserted into the given widget, e.g. onTheSpot makes the input appear directly in the widget, while overTheSpot makes the input appear in a box floating over the widget and is not inserted until the editing is done."
-msgstr ""
+msgstr "-inputstyle, belirlenmiş parçacığa(widget) girişin nasıl ekleneceğini tanımlar, ör. onTheSpot girişin doğrudan parçacık içinde görünmesini sağlar, overTheSpot ise girişin parçacık üzerinde konumlanan bir kutu içinde görünmesini sağlar ve düzenleme tamamlanıncaya kadar eklenmez."
 
 #: lclstrconsts.rsqtoptionx11name
 msgid "-name name, sets the application name."
-msgstr ""
+msgstr "-name ad, uygulama adını ayarlar."
 
 #: lclstrconsts.rsqtoptionx11ncols
 msgid "-ncols count, limits the number of colors allocated in the color cube on an 8-bit display, if the application is using the QApplication::ManyColor color specification. If count is 216 then a 6x6x6 color cube is used (i.e. 6 levels of red, 6 of green, and 6 of blue); for other values, a cube approximately proportional to a 2x3x1 cube is used."
-msgstr ""
+msgstr "-ncols sayı, Eğer uygulama QApplication::ManyColor renk tanımlamasını kullanıyorsa, 8-bit ekranda renk küpü içindeki ayrılmış renk sayısını sınırlandırır. Eğer sayı 216 ise 6x6x6 renk küpü kullanılır (ör: kırmızı 6 seviye, yeşil 6 seviye, ve mavi 6 seviye); diğer değerler için, aşağı yukarı 2x3x1'e orantılı bir küp kullanılır."
 
 #: lclstrconsts.rsqtoptionx11title
 msgid "-title title, sets the application title."
-msgstr ""
+msgstr "-title başlık, Uygulama başlığını ayarlar."
 
 #: lclstrconsts.rsqtoptionx11visual
 msgid "-visual TrueColor, forces the application to use a TrueColor visual on an 8-bit display."
-msgstr ""
+msgstr "-visual TrueColor, uygulamayı 8-bit ekranda Gerçek Renk(TrueColor) kullanmaya zorlar."
 
 #: lclstrconsts.rsrasterimageendupdate
 msgid "Endupdate while no update in progress"
-msgstr ""
+msgstr "Güncelleme devam ederken bitiş tarihi"
 
 #: lclstrconsts.rsrasterimagesaveinupdate
 msgid "Cannot save image while update in progress"
-msgstr ""
+msgstr "Güncelleme yapılıyorken görüntü kaydedilemiyor"
 
 #: lclstrconsts.rsrasterimageupdateall
 msgid "Cannot begin update all when canvas only update in progress"
-msgstr ""
+msgstr "Sadece tuval(canvas) güncellemesi işlemdeyken tümünü güncelle işlemi başlayamıyor"
 
 #: lclstrconsts.rsredcolorcaption
 msgid "Red"
-msgstr ""
+msgstr "Kırmızı"
 
 #: lclstrconsts.rsrefreshrecordshint
 msgid "Refresh"
-msgstr ""
+msgstr "Yenile"
 
 #: lclstrconsts.rsreplace
 msgid "Replace"
@@ -1228,13 +1065,14 @@ msgid "Replace all"
 msgstr "Tümünü değiştir"
 
 #: lclstrconsts.rsresourcenotfound
+#, object-pascal-format
 msgctxt "lclstrconsts.rsresourcenotfound"
 msgid "Resource %s not found"
 msgstr "%s adlı kaynak bulunamadı"
 
 #: lclstrconsts.rsscrollbarcolorcaption
 msgid "ScrollBar"
-msgstr ""
+msgstr "ScrollBar"
 
 #: lclstrconsts.rsscrollbaroutofrange
 msgid "ScrollBar property out of range"
@@ -1250,7 +1088,7 @@ msgstr "Yazıtipi seç"
 
 #: lclstrconsts.rssilvercolorcaption
 msgid "Silver"
-msgstr ""
+msgstr "Gümüş"
 
 #: lclstrconsts.rssize
 msgid "  size "
@@ -1258,15 +1096,15 @@ msgstr "  boyut "
 
 #: lclstrconsts.rsskybluecolorcaption
 msgid "Sky Blue"
-msgstr ""
+msgstr "Gök Mavisi"
 
 #: lclstrconsts.rstcustomtabcontrolaccessibilitydescription
 msgid "A control with tabs"
-msgstr ""
+msgstr "Sekme içeren kontrol"
 
 #: lclstrconsts.rstealcolorcaption
 msgid "Teal"
-msgstr ""
+msgstr "Turkuaz"
 
 #: lclstrconsts.rstext
 msgid "Text"
@@ -1274,26 +1112,26 @@ msgstr "Metin"
 
 #: lclstrconsts.rsthebuiltinurlisreadonlychangethebaseurlinstead
 msgid "The built-in URL is read only. Change the BaseURL instead."
-msgstr ""
+msgstr "Gömülü URL salt okunur. Bunu yerine BaseURL'i değiştirin."
 
 #: lclstrconsts.rstiff
 msgid "Tagged Image File Format"
-msgstr ""
+msgstr "Etiketlenmiş Görüntü Dosyası Formatı"
 
 #: lclstrconsts.rstpanelaccessibilitydescription
 msgctxt "lclstrconsts.rstpanelaccessibilitydescription"
 msgid "Panel"
-msgstr ""
+msgstr "Panel"
 
 #: lclstrconsts.rstsplitteraccessibilitydescription
 msgctxt "lclstrconsts.rstsplitteraccessibilitydescription"
 msgid "A grip to control how much size to give two parts of an area"
-msgstr ""
+msgstr "Bir alanın iki parçasına ne kadar yer verileceğini denetleyen bir tutamak"
 
 #: lclstrconsts.rsttreeviewaccessibilitydescription
 msgctxt "lclstrconsts.rsttreeviewaccessibilitydescription"
 msgid "A tree of items"
-msgstr ""
+msgstr "Öğe ağacı"
 
 #: lclstrconsts.rsunabletoloaddefaultfont
 msgid "Unable to load default font"
@@ -1309,39 +1147,45 @@ msgstr "Bilinmeyen resim genişletmesi"
 
 #: lclstrconsts.rsunknownpictureformat
 msgid "Unknown picture format"
-msgstr ""
+msgstr "Bilinmeyen resim biçimi"
 
 #: lclstrconsts.rsunsupportedbitmapformat
 msgid "Unsupported bitmap format."
 msgstr "Desteklenmeyen bitmap biçimi."
 
 #: lclstrconsts.rsunsupportedclipboardformat
+#, object-pascal-format
 msgid "Unsupported clipboard format: %s"
 msgstr "Desteklenmeyen pano biçimi: %s"
 
 #: lclstrconsts.rswarningunreleaseddcsdump
+#, object-pascal-format
 msgid " WARNING: There are %d unreleased DCs, a detailed dump follows:"
 msgstr " DİKKAT: %d adet serbest bırakılmamış DC var, ayrıntılı döküm aşağıda:"
 
 #: lclstrconsts.rswarningunreleasedgdiobjectsdump
+#, object-pascal-format
 msgid " WARNING: There are %d unreleased GDIObjects, a detailed dump follows:"
 msgstr " DİKKAT: %d adet serbest bırakılmamış GDIObject var, ayrıntılı döküm aşağıda:"
 
 #: lclstrconsts.rswarningunreleasedmessagesinqueue
+#, object-pascal-format
 msgid " WARNING: There are %d messages left in the queue! I'll free them"
 msgstr " DİKKAT: Kuyrukta %d adet mesaj kaldı! Onları serbest bırakacağım"
 
 #: lclstrconsts.rswarningunreleasedtimerinfos
+#, object-pascal-format
 msgid " WARNING: There are %d TimerInfo structures left, I'll free them"
 msgstr " DİKKAT: %d adet TimerInfo yapısı kaldı, onları serbest bırakacağım"
 
 #: lclstrconsts.rswarningunremovedpaintmessages
+#, object-pascal-format
 msgid " WARNING: There are %s unremoved LM_PAINT/LM_GtkPAINT message links left."
 msgstr " DİKKAT: %s adet kaldırılmamış LM_PAINT/LM_GtkPAINT mesaj bağlantısı kaldı."
 
 #: lclstrconsts.rswhitecolorcaption
 msgid "White"
-msgstr ""
+msgstr "Beyaz"
 
 #: lclstrconsts.rswholewordsonly
 msgid "Whole words only"
@@ -1357,27 +1201,23 @@ msgstr "Dikkat:"
 
 #: lclstrconsts.rswindowcolorcaption
 msgid "Window"
-msgstr ""
+msgstr "Pencere"
 
 #: lclstrconsts.rswindowframecolorcaption
 msgid "Window Frame"
-msgstr ""
+msgstr "Pencere Çerçevesi"
 
 #: lclstrconsts.rswindowtextcolorcaption
 msgid "Window Text"
-msgstr ""
+msgstr "Pencere Metni"
 
 #: lclstrconsts.rsyellowcolorcaption
 msgid "Yellow"
-msgstr ""
+msgstr "Sarı"
 
 #: lclstrconsts.scannotfocus
 msgid "Cannot focus a disabled or invisible window"
 msgstr "Etkisizleştirilmiş ya da görünmez pencerelere odaklanılamaz"
-
-#: lclstrconsts.scannotsetdesigntimeppi
-msgid "Cannot set design time PPI."
-msgstr ""
 
 #: lclstrconsts.sduplicatemenus
 msgid "Duplicate menus"
@@ -1400,8 +1240,9 @@ msgid "Invalid action unregistration"
 msgstr "Geçersiz eylem kaydı silme"
 
 #: lclstrconsts.sinvalidcharset
+#, object-pascal-format
 msgid "The char set in mask \"%s\" is not valid!"
-msgstr "maskede \"%s\" ile gösterilen karakter geçerli değil!"
+msgstr "Maskede \"%s\" ile gösterilen karakter geçerli değil!"
 
 #: lclstrconsts.sinvalidimagesize
 msgid "Invalid image size"
@@ -1413,7 +1254,7 @@ msgstr "Geçersiz ImageList tanımlayıcısı"
 
 #: lclstrconsts.smaskeditnomatch
 msgid "The current text does not match the specified mask."
-msgstr ""
+msgstr "Mevcut metin belirtilen maskeye uymuyor."
 
 #: lclstrconsts.smenuindexerror
 msgid "Menu index out of range"
@@ -1429,19 +1270,19 @@ msgstr "Alt-menü, menü içinde değil"
 
 #: lclstrconsts.smkcalt
 msgid "Alt+"
-msgstr ""
+msgstr "Alt+"
 
 #: lclstrconsts.smkcbksp
 msgid "BkSp"
-msgstr ""
+msgstr "BkSp"
 
 #: lclstrconsts.smkcctrl
 msgid "Ctrl+"
-msgstr ""
+msgstr "Ctrl+"
 
 #: lclstrconsts.smkcdel
 msgid "Del"
-msgstr ""
+msgstr "Del"
 
 #: lclstrconsts.smkcdown
 msgctxt "lclstrconsts.smkcdown"
@@ -1455,11 +1296,11 @@ msgstr "Sona git"
 
 #: lclstrconsts.smkcenter
 msgid "Enter"
-msgstr ""
+msgstr "Enter"
 
 #: lclstrconsts.smkcesc
 msgid "Esc"
-msgstr ""
+msgstr "Esc"
 
 #: lclstrconsts.smkchome
 msgctxt "lclstrconsts.smkchome"
@@ -1468,7 +1309,7 @@ msgstr "Başa git"
 
 #: lclstrconsts.smkcins
 msgid "Ins"
-msgstr ""
+msgstr "Ins"
 
 #: lclstrconsts.smkcleft
 msgctxt "lclstrconsts.smkcleft"
@@ -1477,15 +1318,15 @@ msgstr "Sol"
 
 #: lclstrconsts.smkcmeta
 msgid "Meta+"
-msgstr ""
+msgstr "Meta+"
 
 #: lclstrconsts.smkcpgdn
 msgid "PgDn"
-msgstr ""
+msgstr "PgDn"
 
 #: lclstrconsts.smkcpgup
 msgid "PgUp"
-msgstr ""
+msgstr "PgUp"
 
 #: lclstrconsts.smkcright
 msgctxt "lclstrconsts.smkcright"
@@ -1494,11 +1335,11 @@ msgstr "Sağ"
 
 #: lclstrconsts.smkcshift
 msgid "Shift+"
-msgstr ""
+msgstr "Shift+"
 
 #: lclstrconsts.smkcspace
 msgid "Space"
-msgstr ""
+msgstr "Boşluk"
 
 #: lclstrconsts.smkctab
 msgctxt "lclstrconsts.smkctab"
@@ -1510,99 +1351,133 @@ msgctxt "lclstrconsts.smkcup"
 msgid "Up"
 msgstr "Yukarı"
 
-#: lclstrconsts.snomdiform
-msgid "No MDI form present."
-msgstr "MDI Pencere mevcut değil."
-
 #: lclstrconsts.snotimers
 msgid "No timers available"
 msgstr "Kullanılabilir zamanlayıcı yok"
 
 #: lclstrconsts.sparentrequired
+#, object-pascal-format
 msgid "Control \"%s\" has no parent window."
-msgstr ""
+msgstr "\"%s\" Kontrolü bir üst pencereye sahip değil."
 
 #: lclstrconsts.sparexpected
+#, object-pascal-format
 msgid "Wrong token type: %s expected"
-msgstr ""
+msgstr "Yanlış işaret(token) türü: %s beklendi"
 
 #: lclstrconsts.sparinvalidfloat
+#, object-pascal-format
 msgid "Invalid floating point number: %s"
-msgstr ""
+msgstr "Geçersiz kayar nokta değeri: %s"
 
 #: lclstrconsts.sparinvalidinteger
+#, object-pascal-format
 msgid "Invalid integer number: %s"
-msgstr ""
+msgstr "Geçersiz tamsayı değeri: %s"
 
 #: lclstrconsts.sparlocinfo
+#, object-pascal-format
 msgid " (at %d,%d, stream offset %d)"
-msgstr ""
+msgstr " (%d,%d konumunda,%d ofset akışı)"
 
 #: lclstrconsts.sparunterminatedbinvalue
 msgid "Unterminated byte value"
-msgstr ""
+msgstr "Sonlandırılmamış byte değeri"
 
 #: lclstrconsts.sparunterminatedstring
 msgid "Unterminated string"
-msgstr ""
+msgstr "Sonlandırılmamış dizge(string)"
 
 #: lclstrconsts.sparwrongtokensymbol
+#, object-pascal-format
 msgid "Wrong token symbol: %s expected but %s found"
-msgstr ""
+msgstr "Yanlış işaret(token) sembolü: %s beklendi fakat %s bulundu"
 
 #: lclstrconsts.sparwrongtokentype
+#, object-pascal-format
 msgid "Wrong token type: %s expected but %s found"
-msgstr ""
+msgstr "Yanlış işaret(token) türü: %s beklendi fakat %s bulundu"
 
 #: lclstrconsts.sshellctrlsbytes
+#, object-pascal-format
 msgid "%s bytes"
-msgstr ""
+msgstr "%s byte"
 
 #: lclstrconsts.sshellctrlsinvalidpath
+#, object-pascal-format, fuzzy
+#| msgid ""
+#| "Invalid pathname:\n"
+#| "\"%s\"\n"
 msgctxt "lclstrconsts.sshellctrlsinvalidpath"
 msgid ""
 "Invalid pathname:\n"
-"\"%s\"\n"
+"\"%s\""
 msgstr ""
+"Geçersiz yol:\n"
+"\"%s\"\n"
 
 #: lclstrconsts.sshellctrlsinvalidpathrelative
+#, object-pascal-format, fuzzy
+#| msgid ""
+#| "Invalid relative pathname:\n"
+#| "\"%s\"\n"
+#| "in relation to rootpath:\n"
+#| "\"%s\"\n"
 msgid ""
 "Invalid relative pathname:\n"
 "\"%s\"\n"
 "in relation to rootpath:\n"
-"\"%s\"\n"
+"\"%s\""
 msgstr ""
+"Geçersiz göreli yol:\n"
+"\"%s\"\n"
+"kökyol ile ilişkili:\n"
+"\"%s\"\n"
 
 #: lclstrconsts.sshellctrlsinvalidroot
+#, object-pascal-format, fuzzy
+#| msgid ""
+#| "Invalid pathname:\n"
+#| "\"%s\"\n"
 msgctxt "lclstrconsts.sshellctrlsinvalidroot"
 msgid ""
 "Invalid pathname:\n"
-"\"%s\"\n"
+"\"%s\""
 msgstr ""
+"Geçersiz yol:\n"
+"\"%s\"\n"
 
 #: lclstrconsts.sshellctrlskb
+#, object-pascal-format
 msgid "%s kB"
-msgstr ""
+msgstr "%s kB"
 
 #: lclstrconsts.sshellctrlsmb
+#, object-pascal-format
 msgid "%s MB"
-msgstr ""
+msgstr "%s MB"
 
 #: lclstrconsts.sshellctrlsname
 msgid "Name"
-msgstr ""
+msgstr "Ad"
 
 #: lclstrconsts.sshellctrlsselecteditemdoesnotexists
+#, object-pascal-format, fuzzy
+#| msgid ""
+#| "The selected item does not exist on disk:\n"
+#| "\"%s\"\n"
 msgid ""
 "The selected item does not exist on disk:\n"
-"\"%s\"\n"
+"\"%s\""
 msgstr ""
+"Seçili öğe diskte mevcut değil:\n"
+"\"%s\"\n"
 
 #: lclstrconsts.sshellctrlssize
 msgid "Size"
-msgstr ""
+msgstr "Boyut"
 
 #: lclstrconsts.sshellctrlstype
 msgid "Type"
-msgstr ""
+msgstr "Tip"
 

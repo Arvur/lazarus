@@ -5,7 +5,7 @@ unit opkman_intf_packagelistfrm;
 interface
 
 uses
-   SysUtils, Classes, VirtualTrees,
+   SysUtils, Classes, laz.VirtualTrees,
   // LCL
   Forms, Controls, Buttons, Graphics, ExtCtrls, StdCtrls, LCLType, ButtonPanel,
   Menus,
@@ -13,7 +13,7 @@ uses
   PackageIntf,
   // OpkMan
   opkman_const, opkman_serializablepackages, opkman_options,
-  opkman_Common;
+  opkman_Common, opkman_maindm;
 
 type
 
@@ -21,7 +21,6 @@ type
 
   TIntfPackageListFrm = class(TForm)
     ButtonPanel1: TButtonPanel;
-    imTree: TImageList;
     pnExpCol: TPanel;
     pnInfo: TPanel;
     spCollapse: TSpeedButton;
@@ -31,9 +30,9 @@ type
     procedure spCollapseClick(Sender: TObject);
     procedure spExpandClick(Sender: TObject);
   private
-    FVST: TVirtualStringTree;
+    FVST: TLazVirtualStringTree;
     FSortCol: Integer;
-    FSortDir: VirtualTrees.TSortDirection;
+    FSortDir: laz.VirtualTrees.TSortDirection;
     procedure VSTGetText(Sender: TBaseVirtualTree; Node: PVirtualNode;
       Column: TColumnIndex; {%H-}TextType: TVSTTextType; var CellText: String);
     procedure VSTGetImageIndex(Sender: TBaseVirtualTree; Node: PVirtualNode;
@@ -74,6 +73,13 @@ type
     Button: TSpeedButton;
   end;
 
+const
+  IMAGE_INDEX_MAP: array[0..9] of Integer = (
+    IMG_PKG_FILE, IMG_DESCRIPTION, IMG_AUTHOR,                   // 0..2
+    IMG_LAZ_COMPATIBILITY, IMG_FPC_COMPATIBILITY, IMG_WIDGETSET, // 3..5
+    IMG_PKG_TYPE, IMG_LICENSE, IMG_DEPENDENCIES,                 // 6..8
+    IMG_FILE_VERSION);                                           // 9
+
 { TIntfPackageListFrm }
 
 procedure TIntfPackageListFrm.FormCreate(Sender: TObject);
@@ -82,31 +88,37 @@ begin
   pnInfo.Caption := '  ' + rsOPMIntfPackageListFrm_pnInfo;
   if not Options.UseDefaultTheme then
     Self.Color := clBtnFace;
-  FVST := TVirtualStringTree.Create(nil);
+  spExpand.Caption := '';
+  spExpand.Images := MainDM.Images;
+  spExpand.ImageIndex := IMG_EXPAND;
+  spCollapse.Caption := '';
+  spCollapse.Images := MainDM.Images;
+  spCollapse.ImageIndex := IMG_COLLAPSE;
+  FVST := TLazVirtualStringTree.Create(nil);
   with FVST do
   begin
     Parent := Self;
     Align := alClient;
     Anchors := [akLeft, akTop, akRight];
-    Images := ImTree;
-    DefaultNodeHeight := MulDiv(25, Screen.PixelsPerInch, 96);
-    Indent := 22;
+    Images := MainDM.Images;
+    DefaultNodeHeight := Scale96ToForm(25);
+    Indent := Scale96ToForm(22);
     TabOrder := 0;
     DefaultText := '';
     Header.AutoSizeIndex := 1;
     Header.SortColumn := 0;
-    Header.Height := MulDiv(25, Screen.PixelsPerInch, 96);
+    Header.Height := Scale96ToForm(25);
     Colors.DisabledColor := clBlack;
     with Header.Columns.Add do
     begin
       Position := 0;
-      Width := MulDiv(200, Screen.PixelsPerInch, 96);
+      Width := Scale96ToForm(200);
       Text := rsOPMIntfPackageListFrm_VSTHeaderColumn_LazarusPackage;
     end;
     with Header.Columns.Add do
     begin
       Position := 1;
-      Width := MulDiv(200, Screen.PixelsPerInch, 96);
+      Width := Scale96ToForm(200);
       Text := rsOPMIntfPackageListFrm_VSTHeaderColumn_Data;
     end;
     Header.Options := [hoAutoResize, hoColumnResize, hoRestrictDrag, hoShowSortGlyphs, hoVisible];
@@ -184,7 +196,7 @@ var
 begin
   Data := FVST.GetNodeData(Node);
   if Column = 0 then
-    ImageIndex := Data^.DataType
+    ImageIndex := IMAGE_INDEX_MAP[Data^.DataType];
 end;
 
 procedure TIntfPackageListFrm.VSTCompareNodes(Sender: TBaseVirtualTree; Node1,
@@ -210,14 +222,14 @@ begin
       if (SortColumn = NoColumn) or (SortColumn <> HitInfo.Column) then
       begin
         SortColumn    := HitInfo.Column;
-        SortDirection := VirtualTrees.sdAscending;
+        SortDirection := laz.VirtualTrees.sdAscending;
       end
       else
       begin
-        if SortDirection = VirtualTrees.sdAscending then
-          SortDirection := VirtualTrees.sdDescending
+        if SortDirection = laz.VirtualTrees.sdAscending then
+          SortDirection := laz.VirtualTrees.sdDescending
         else
-          SortDirection := VirtualTrees.sdAscending;
+          SortDirection := laz.VirtualTrees.sdAscending;
         FSortDir := SortDirection;
       end;
       SortTree(SortColumn, SortDirection, False);

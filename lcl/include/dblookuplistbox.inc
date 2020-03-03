@@ -27,7 +27,12 @@ procedure TDBLookupListBox.UpdateData(Sender: TObject);
 begin
   if (ItemIndex < 0) then
     Exit;
-  FLookup.UpdateData(ItemIndex, FScrollListDataset);
+  FLookup.UpdateData(ItemIndex);
+end;
+
+function TDBLookupListBox.IsUnbound: boolean;
+begin
+  Result := (FDataLink.DataSource = nil) or (DataField = '');
 end;
 
 procedure TDBLookupListBox.ActiveChange(Sender: TObject);
@@ -54,15 +59,18 @@ end;
 procedure TDBLookupListBox.DoSelectionChange(User: Boolean);
 begin
   if User then
-  begin
-    if FDataLink.CanModify then
-    begin
-      FDataLink.Modified;
-      FDataLink.UpdateRecord;
-    end
+    if IsUnbound then
+      UpdateData(Self)
     else
-      DataChange(Self);
-  end;
+    begin
+      if FDataLink.CanModify then
+      begin
+        FDataLink.Modified;
+        FDataLink.UpdateRecord;
+      end
+      else
+        DataChange(Self);
+    end;
   inherited DoSelectionChange(User);
 end;
 
@@ -126,6 +134,11 @@ begin
   Result := FLookup.NullValueKey;
 end;
 
+function TDBLookupListBox.GetScrollListDataset: Boolean;
+begin
+  Result := FLookup.ScrollListDataset;
+end;
+
 procedure TDBLookupListBox.SetKeyField(const Value: string);
 begin
   FLookup.KeyField:= Value;
@@ -164,6 +177,11 @@ end;
 procedure TDBLookupListBox.SetNullValueKey(const AValue: TShortCut);
 begin
   FLookup.NullValueKey := AValue;
+end;
+
+procedure TDBLookupListBox.SetScrollListDataset(AValue: Boolean);
+begin
+  FLookup.ScrollListDataset := AValue;
 end;
 
 procedure TDBLookupListBox.UpdateLookup;

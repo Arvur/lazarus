@@ -1,16 +1,16 @@
-# Олександр Пилипчук <lxlalexlxl@ukr.net>, 2017, 2018.
+# Олександр Пилипчук <lxlalexlxl@ukr.net>, 2017, 2018, 2019, 2020.
 msgid ""
 msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Last-Translator: Olexandr Pylypchuk <lxlalexlxl@ukr.net>\n"
-"PO-Revision-Date: 2018-01-01 15:57+0200\n"
+"PO-Revision-Date: 2020-02-18 22:35+0200\n"
 "Project-Id-Version: \n"
-"Language-Team: Ukrainian <trans-uk@lists.fedoraproject.org>\n"
+"Language-Team: Ukrainian <kde-i18n-doc@kde.org>\n"
 "Language: uk\n"
 "Content-Transfer-Encoding: 8bit\n"
 "MIME-Version: 1.0\n"
 "Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
-"X-Generator: Lokalize 2.0\n"
+"X-Generator: Lokalize 19.04.3\n"
 
 #: opkman_const.rsaddrepositorypackagefrm_bcancel_caption
 msgctxt "opkman_const.rsaddrepositorypackagefrm_bcancel_caption"
@@ -52,13 +52,26 @@ msgctxt "opkman_const.rscategoriesfrm_byes_caption"
 msgid "OK"
 msgstr "Гаразд"
 
-#: opkman_const.rscategoriesfrm_caption
+#: opkman_const.rscategoriesfrm_caption1
+msgctxt "opkman_const.rscategoriesfrm_caption1"
 msgid "List with categories"
-msgstr "Список категорій"
+msgstr "Список з категоріями"
+
+#: opkman_const.rscategoriesfrm_caption2
+msgid "List with Lazarus versions"
+msgstr "Список з версіями Lazarus"
+
+#: opkman_const.rscategoriesfrm_caption3
+msgid "List with FPC versions"
+msgstr "Список з версіями FPC"
+
+#: opkman_const.rscategoriesfrm_caption4
+msgid "List with supported widgetsets"
+msgstr "Список з підтримуваними бібліотеками віджетів"
 
 #: opkman_const.rscategoriesfrm_lbmessage_caption
-msgid "Please select (check) one or more categories"
-msgstr "Виберіть (позначте) одну або декілька категорій"
+msgid "Please select (check) one or more items"
+msgstr "Виберіть (позначте) один або декілька елементів"
 
 #: opkman_const.rscolors_caption
 msgctxt "opkman_const.rscolors_caption"
@@ -190,60 +203,68 @@ msgid "Create/Edit private repository"
 msgstr "Створити/змінити приватне сховище"
 
 #: opkman_const.rscreaterepositoryfrm_conf1
+#, object-pascal-format
 msgid "Are you sure you wish to delete package: \"%s\"?"
 msgstr "Справді видалити пакунок: \"%s\"?"
 
 #: opkman_const.rscreaterepositoryfrm_conf2
+#, object-pascal-format
 msgid "The following file: \"%s\" already exists in the current repository. Overwrite?"
 msgstr "Файл \"%s\" вже існує в поточному сховищі. Перезаписати?"
 
 #: opkman_const.rscreaterepositoryfrm_error1
+#, object-pascal-format
 msgid ""
 "Cannot open private repository: \"%s\". Error message: \n"
-"\"%s\"\n"
+"\"%s\""
 msgstr ""
 "Неможливо відкрити приватне сховище: \"%s\". Повідомлення про помилку: \n"
-"\"%s\"\n"
+"\"%s\""
 
 #: opkman_const.rscreaterepositoryfrm_error3
+#, object-pascal-format
 msgid ""
 "Cannot save private repository: \"%s\". Error message: \n"
-"\"%s\"\n"
+"\"%s\""
 msgstr ""
 "Неможливо записати приватне сховище \"%s\". Повідомлення про помилку: \n"
-"\"%s\"\n"
+"\"%s\""
 
 #: opkman_const.rscreaterepositoryfrm_error4
 msgid "Cannot add package to repository!"
 msgstr "Неможливо додати пакунок до сховища!"
 
 #: opkman_const.rscreaterepositoryfrm_error5
+#, object-pascal-format
 msgid "Cannot delete package: \"%s\"!"
 msgstr "Неможливо видалити пакунок: \"%s\"!"
 
 #: opkman_const.rscreaterepositoryfrm_info1
+#, object-pascal-format
 msgid ""
 "The following directory: \"%s\" is not empty.\n"
-"It's recommended to save the repository to an empty directory. Continue?\n"
+"It's recommended to save the repository to an empty directory. Continue?"
 msgstr ""
 "Тека \"%s\" - не порожня.\n"
-"Сховище бажано записувати в порожню теку. Продовжити?\n"
+"Сховище бажано записувати в порожню теку. Продовжити?"
 
 #: opkman_const.rscreaterepositoryfrm_info3
+#, object-pascal-format
 msgid ""
 "The following package: \"%s\" is already in the current repository.\n"
-"Each repository and Lazarus package must be unique!\n"
+"Each repository and Lazarus package must be unique!"
 msgstr ""
 "Пакунок \"%s\" вже є в поточному сховищі.\n"
-"Кожен пакунок сховища і Lazarus має бути унікальним!\n"
+"Кожен пакунок сховища і Lazarus має бути унікальним!"
 
 #: opkman_const.rscreaterepositoryfrm_info5
+#, object-pascal-format
 msgid ""
 "The following Lazarus package: \"%s\" is already in the current repository.\n"
-"Each repository and Lazarus package must be unique!\n"
+"Each repository and Lazarus package must be unique!"
 msgstr ""
 "Пакунок Lazarus \"%s\" вже є в поточному сховищі.\n"
-"Кожен пакунок сховища і Lazarus має бути унікальним!\n"
+"Кожен пакунок сховища і Lazarus має бути унікальним!"
 
 #: opkman_const.rscreaterepositoryfrm_info7
 msgid "Package successfully added to repository."
@@ -449,6 +470,7 @@ msgid "Cannot create JSON file:"
 msgstr "Неможливо створити файл JSON:"
 
 #: opkman_const.rscreaterepositorypackagefrm_error3
+#, object-pascal-format
 msgid "Cannot send file: \"%s\""
 msgstr "Неможливо надіслати файл: \"%s\""
 
@@ -528,16 +550,17 @@ msgid "Repository package successfully created."
 msgstr "Пакунок для сховища успішно створено."
 
 #: opkman_const.rscreaterepositorypackagefrm_message8
+#, object-pascal-format
 msgid "Sending files (\"%s\"). Please wait..."
 msgstr "Надсилання файлів (\"%s\"). Зачекайте..."
 
 #: opkman_const.rscreaterepositorypackagefrm_message9
 msgid ""
 "Files successfully sent. Thank you for submitting packages!\n"
-"Your request will be processed in 24 hours.\n"
+"Your request will be processed in 24 hours."
 msgstr ""
 "Файли успішно надіслано. Дякуємо за надіслані пакунки!\n"
-"Ваш запит буде опрацьовано протягом 24 годин.\n"
+"Ваш запит буде опрацьовано протягом 24 годин."
 
 #: opkman_const.rscreaterepositorypackagefrm_nopackage
 msgid "No packages found!"
@@ -572,6 +595,10 @@ msgstr "Виберіть теку пакунка"
 #: opkman_const.rslazaruspackagemanager
 msgid "Online Package Manager"
 msgstr "Мережевий диспетчер пакунків"
+
+#: opkman_const.rsmainfrm_breturn_caption
+msgid "Return"
+msgstr "Повернутися"
 
 #: opkman_const.rsmainfrm_cball_caption
 msgid "All/None"
@@ -627,6 +654,14 @@ msgstr "Створити пакунок для сховища"
 msgid "Descendent"
 msgstr "За спаданням"
 
+#: opkman_const.rsmainfrm_mifromexternalsource
+msgid "From third party repository"
+msgstr "Зі стороннього сховища"
+
+#: opkman_const.rsmainfrm_mifromrepository
+msgid "From official repository"
+msgstr "З офіційного сховища"
+
 #: opkman_const.rsmainfrm_mijsonhide
 msgid "Hide JSON"
 msgstr "Приховати JSON"
@@ -639,17 +674,26 @@ msgstr "Показати JSON"
 msgid "Sort"
 msgstr "Упорядкувати"
 
-#: opkman_const.rsmainfrm_miloadchecks
-msgid "Load checked packages"
-msgstr "Завантажити позначені пакунки"
+#: opkman_const.rsmainfrm_miload
+msgid "Load packages"
+msgstr "Завантажити пакунки"
+
+#: opkman_const.rsmainfrm_miloadinstalled
+msgctxt "opkman_const.rsmainfrm_miloadinstalled"
+msgid "Installed"
+msgstr "Встановлено"
 
 #: opkman_const.rsmainfrm_miresetrating
 msgid "Reset rating"
 msgstr "Скинути рейтинг"
 
-#: opkman_const.rsmainfrm_misavechecks
-msgid "Save checked packages"
-msgstr "Зберегти позначені пакунки"
+#: opkman_const.rsmainfrm_misave
+msgid "Save packages"
+msgstr "Зберегти пакунки"
+
+#: opkman_const.rsmainfrm_misavechecked
+msgid "Checked"
+msgstr "Позначено"
 
 #: opkman_const.rsmainfrm_misavetofile
 msgid "Save to file"
@@ -663,35 +707,46 @@ msgstr "Такі пакунки зі сховища вже є в цільові�
 msgid "The following packages are already installed. Continue anyway?"
 msgstr "Такі пакунки вже встановлено. Все одно продовжити?"
 
+#: opkman_const.rsmainfrm_packageincompatible
+msgid "The following packages are not tested and the install might fail. Continue anyway?"
+msgstr "Ці пакунки не випробувані, тому встановлення може не вдатись. Продовжити?"
+
 #: opkman_const.rsmainfrm_packagenamealreadyexists
 msgid "A package with the same name already exists!"
 msgstr "Пакунок з такою назвою вже є!"
 
 #: opkman_const.rsmainfrm_packageupdate0
-msgid "The following repository packages are not installed or don't have a valid external download link. The packages will be skipped. Continue?"
-msgstr "Такі пакунки зі сховища не встановлені або не мають коректного посилання для звантаження. Вони будуть пропущені. Продовжити?"
+msgid "The following repository packages are not available externally. The packages will be skipped. Continue?"
+msgstr "Такі пакунки зі сховища не доступні в зовнішніх джерелах. Вони будуть пропущені. Продовжити?"
 
 #: opkman_const.rsmainfrm_packageupdate1
-msgid "None of the checked repository packages is installed or has a valid external download link."
-msgstr "Жоден з позначених пакунків зі сховища не встановлений і не має коректного посилання для звантаження."
+#, fuzzy
+#| msgid "None of the checked repository packages are available externally."
+msgid ""
+"None of the checked repository packages are available externally. Please make sure that package updates are enabled by default:\n"
+"Options->General->Check for package updates."
+msgstr "Жоден з позначених пакунків зі сховища не доступний у зовнішніх джерелах."
 
 #: opkman_const.rsmainfrm_packageupdatewarning
 msgid ""
-"Updating packages from external link is not without a risk!\n"
-"Only update if you trust the package maintainer. Continue?\n"
+"Installing packages from external link is not without a risk!\n"
+"Only install if you trust the package maintainer. Continue?"
 msgstr ""
-"Оновлення пакунків з зовнішнього джерела ризиковане!\n"
-"Здійснюйте оновлення лише коли довіряєте постачальнику пакунка. Продовжити?\n"
+"Встановлення пакунків з зовнішнього джерела ризиковане!\n"
+"Встановлюйте лише коли довіряєте постачальнику пакунка. Продовжити?"
 
 #: opkman_const.rsmainfrm_resmessagechecksloaded
+#, object-pascal-format
 msgid "%s packages successfully loaded from file!"
 msgstr "Пакунки (%s шт.) успішно завантажено з файлу!"
 
 #: opkman_const.rsmainfrm_resmessagecheckssaved
+#, object-pascal-format
 msgid "%s packages successfully saved to file!"
 msgstr "Пакунки (%s шт.) успішно записано до файлу!"
 
 #: opkman_const.rsmainfrm_rsdestdirerror
+#, object-pascal-format
 msgid "Cannot create directory \"%s\". Operation aborted."
 msgstr "Неможливо створити каталог \"%s\". Операцію перервано."
 
@@ -722,14 +777,18 @@ msgstr "Немає пакунків для показу."
 #: opkman_const.rsmainfrm_rsmessagenorepository0
 msgid ""
 "Remote package repository not configured.\n"
-"Do you wish to configure it now?\n"
+"Do you wish to configure it now?"
 msgstr ""
 "Віддалене сховище не налаштовано.\n"
-"Бажаєте зробити це зараз?\n"
+"Бажаєте налаштувати зараз?"
 
 #: opkman_const.rsmainfrm_rsmessagenothingchacked
 msgid "Please check at least one package!"
 msgstr "Слід позначити принаймні один пакунок!"
+
+#: opkman_const.rsmainfrm_rsmessagenothinginstalled
+msgid "No packages are installed. Please install at least one package first."
+msgstr "Пакунки не встановлено. Слід позначити хоча б один пакунок."
 
 #: opkman_const.rsmainfrm_rsmessageparsingjson
 msgid "Parsing JSON. Please wait..."
@@ -740,6 +799,7 @@ msgid "Please check one or more packages!"
 msgstr "Позначте один або більше пакунків!"
 
 #: opkman_const.rsmainfrm_rspackagedependency0
+#, object-pascal-format
 msgid "Package \"%s\" depends on package \"%s\". Resolve dependency?"
 msgstr "Пакунок \"%s\" залежить від пакунка \"%s\". Розв'язати залежність?"
 
@@ -747,7 +807,13 @@ msgstr "Пакунок \"%s\" залежить від пакунка \"%s\". Р�
 msgid "Not resolving dependencies might lead to install failure! Continue?"
 msgstr "Нерозв'язані залежності можуть спричинити збій встановлення! Продовжити?"
 
+#: opkman_const.rsmainfrm_rspackageinformation
+#, object-pascal-format
+msgid "Quick package information for \"%s\""
+msgstr "Швидка інформація про пакунок \"%s\""
+
 #: opkman_const.rsmainfrm_rspackagerating
+#, object-pascal-format
 msgid "Your vote for package \"%s\" is: %s. Thank you for voting!"
 msgstr "Ваш голос за пакунок \"%s\": %s. Дякуємо за участь!"
 
@@ -756,18 +822,21 @@ msgid "This will delete all non-installed packages from local repository. Contin
 msgstr "Всі невстановлені пакунки з локального сховища будуть видалені. Продовжити?"
 
 #: opkman_const.rsmainfrm_rsrepositorycleanup1
+#, object-pascal-format
 msgid "%s packages deleted!"
 msgstr "Видалено %s пакунків!"
 
 #: opkman_const.rsmainfrm_rsuninstall
+#, object-pascal-format
 msgid ""
 "%sAre you sure you wish to uninstall the checked packages?\n"
-"Please note: in order for the changes to take effect you must rebuid the IDE.\n"
+"Please note: in order for the changes to take effect you must rebuid the IDE."
 msgstr ""
 "%sСправді деінсталювати позначені пакунки?\n"
-"Зауважте: щоб зміни набули чинності потрібно перезібрати ІСР.\n"
+"Зауважте: щоб зміни набули чинності потрібно перезібрати ІСР."
 
 #: opkman_const.rsmainfrm_rsuninstall_error
+#, object-pascal-format
 msgid "Cannot uninstall package \"%s\"!"
 msgstr "Неможливо деінсталювати пакунок \"%s\"!"
 
@@ -822,8 +891,8 @@ msgstr "Встановити пакунки"
 
 #: opkman_const.rsmainfrm_tbopenrepo_caption
 msgctxt "opkman_const.rsmainfrm_tbopenrepo_caption"
-msgid "Open"
-msgstr "Відкрити"
+msgid "Local repo"
+msgstr "Локальне сховище"
 
 #: opkman_const.rsmainfrm_tbopenrepo_hint
 msgid "Open local repository"
@@ -895,13 +964,21 @@ msgstr "Рейтинг"
 
 #: opkman_const.rsmainfrm_vstheadercolumn_repository
 msgctxt "opkman_const.rsmainfrm_vstheadercolumn_repository"
-msgid "Repository"
-msgstr "Сховище"
+msgid "OPM repository"
+msgstr "Сховище OPM"
+
+#: opkman_const.rsmainfrm_vstheadercolumn_repository_hint
+msgid "Packages available in the OPM repository (https://packages.lazarus-ide.org/)"
+msgstr "Пакунки, доступні у сховищі OPM (https://packages.lazarus-ide.org/)"
 
 #: opkman_const.rsmainfrm_vstheadercolumn_update
 msgctxt "opkman_const.rsmainfrm_vstheadercolumn_update"
-msgid "Update"
-msgstr "Оновити"
+msgid "External repository"
+msgstr "Зовнішнє сховище"
+
+#: opkman_const.rsmainfrm_vstheadercolumn_update_hint
+msgid "Packages available at the developer's webpage (see node \"External link (JSON)\" for more details)"
+msgstr "Пакунки, доступні на сторінці розробника (докладніше див. вузол \"Зовнішнє посилання (JSON)\")"
 
 #: opkman_const.rsmainfrm_vsttext_author
 msgctxt "opkman_const.rsmainfrm_vsttext_author"
@@ -912,6 +989,14 @@ msgstr "Автор"
 msgctxt "opkman_const.rsmainfrm_vsttext_category"
 msgid "Category"
 msgstr "Категорія"
+
+#: opkman_const.rsmainfrm_vsttext_comdesc
+msgid "Community description for metapackage"
+msgstr "Опис спільноти для метапакунка"
+
+#: opkman_const.rsmainfrm_vsttext_communitydescription
+msgid "Community description"
+msgstr "Опис спільноти"
 
 #: opkman_const.rsmainfrm_vsttext_dependecies
 msgctxt "opkman_const.rsmainfrm_vsttext_dependecies"
@@ -929,8 +1014,8 @@ msgstr "Опис"
 
 #: opkman_const.rsmainfrm_vsttext_downloadurl
 msgctxt "opkman_const.rsmainfrm_vsttext_downloadurl"
-msgid "Update link (JSON)"
-msgstr "Адреса оновлення (JSON)"
+msgid "External link (JSON)"
+msgstr "Зовнішнє посилання (JSON)"
 
 #: opkman_const.rsmainfrm_vsttext_fpccompatibility
 msgctxt "opkman_const.rsmainfrm_vsttext_fpccompatibility"
@@ -1112,15 +1197,14 @@ msgstr "Встановлено"
 msgid "Up to date"
 msgstr "Оновлень немає"
 
-#: opkman_const.rsmainfrm_vsttext_packagestate5
-msgctxt "opkman_const.rsmainfrm_vsttext_packagestate5"
-msgid "New version available (repository)"
-msgstr "Доступна нова версія (у сховищі)"
-
 #: opkman_const.rsmainfrm_vsttext_packagestate6
 msgctxt "opkman_const.rsmainfrm_vsttext_packagestate6"
-msgid "New updates available"
-msgstr "Доступні оновлення"
+msgid "New version available"
+msgstr "Доступна нова версія"
+
+#: opkman_const.rsmainfrm_vsttext_packagestate7
+msgid "Ahead of OPM"
+msgstr "Випереджає OPM"
 
 #: opkman_const.rsmainfrm_vsttext_packagestatus
 msgid "Package status"
@@ -1185,6 +1269,32 @@ msgstr "SVN"
 msgctxt "opkman_const.rsmainfrm_vsttext_version"
 msgid "Version"
 msgstr "Версія"
+
+#: opkman_const.rsopensslfrm_bp_cancelbutton_caption
+msgctxt "opkman_const.rsopensslfrm_bp_cancelbutton_caption"
+msgid "No"
+msgstr "Ні"
+
+#: opkman_const.rsopensslfrm_bp_okbutton_caption
+msgctxt "opkman_const.rsopensslfrm_bp_okbutton_caption"
+msgid "Yes"
+msgstr "Так"
+
+#: opkman_const.rsopensslfrm_caption
+msgid "Download OpenSSL libraries"
+msgstr "Звантажити бібліотеки OpenSSL"
+
+#: opkman_const.rsopensslfrm_chpermanent_caption
+msgid "Do not ask this question again"
+msgstr "Більше не питати про це"
+
+#: opkman_const.rsopensslfrm_lbmessage1_caption
+msgid "In order to work properly, OPM needs the OpenSSL libraries: \"libeay32.dll\" and \"ssleay32.dll\""
+msgstr "Для правильної роботи OPM потребує бібліотек OpenSSL: \"libeay32.dll\" і \"ssleay32.dll\""
+
+#: opkman_const.rsopensslfrm_lbmessage2_caption
+msgid "Download these files from \"https://packages.lazarus-ide.org/\"?"
+msgstr "Звантажити ці файли з \"https://packages.lazarus-ide.org/\"?"
 
 #: opkman_const.rsopminterfacerebuildconf
 msgid "In order for the changes to take effect you must rebuild the IDE. Rebuild now?"
@@ -1272,6 +1382,14 @@ msgstr "Завжди звантажувати і розпаковувати"
 msgid "If this option is checked the packages are always re-downloaded/extracted before install"
 msgstr "При вмиканні цього параметра пакунки завжди повторно звантажуються і розпаковуються перед встановленням"
 
+#: opkman_const.rsoptions_cbloadjsonlocally_caption
+msgid "If available, parse the JSON from local source"
+msgstr ""
+
+#: opkman_const.rsoptions_cbloadjsonlocally_hint
+msgid "If this option is checked the JSON is parsed from a local source (useful if the internet connection is slow). After 25 local parses, OPM will attempt a live update."
+msgstr ""
+
 #: opkman_const.rsoptions_cbproxy_caption
 msgid "Use proxy"
 msgstr "Використовувати проксі-сервер"
@@ -1324,10 +1442,12 @@ msgid "Add new exclusion"
 msgstr "Додати новий виняток"
 
 #: opkman_const.rsoptions_inputbox_conf0
+#, object-pascal-format
 msgid "Delete selected extension (\"%s\")?"
 msgstr "Видалити вибране розширення (\"%s\")?"
 
 #: opkman_const.rsoptions_inputbox_conf1
+#, object-pascal-format
 msgid "Delete selected folder (\"%s\")?"
 msgstr "Видалити вибрану теку (\"%s\")?"
 
@@ -1454,6 +1574,18 @@ msgstr "Перемикається SHIFT, рухається мишею"
 msgid "Off"
 msgstr "Вимкнути"
 
+#: opkman_const.rsoptions_rbopenssl_item0
+msgid "Automatically download files from \"https://packages.lazarus-ide.org/\""
+msgstr "Автоматично звантажити файли з \"https://packages.lazarus-ide.org/\""
+
+#: opkman_const.rsoptions_rbopenssl_item1
+msgid "Show confirmation dialog before download"
+msgstr "Показати перед звантаженням діалог для підтвердження"
+
+#: opkman_const.rsoptions_rbopenssl_item2
+msgid "Never download files"
+msgstr "Не звантажувати файлів"
+
 #: opkman_const.rsoptions_remoterepository_information
 msgid "Please enter the remote repository address!"
 msgstr "Введіть адресу віддаленого сховища!"
@@ -1477,6 +1609,22 @@ msgstr "Профілі"
 #: opkman_const.rsoptions_tsproxy_caption
 msgid "Proxy"
 msgstr "Проксі-сервер"
+
+#: opkman_const.rsoption_cbcbalreadyinstalledpackages_caption
+msgid "Warn me about already installed packages"
+msgstr "Попереджувати про вже встановлені пакунки"
+
+#: opkman_const.rsoption_cbcbalreadyinstalledpackages_hint
+msgid "If a package is already installed, OPM will show a warning message"
+msgstr "Якщо пакунок вже встановлено, OPM покаже попередження"
+
+#: opkman_const.rsoption_cbincompatiblepackage_caption
+msgid "Warn me about incompatible/untested packages"
+msgstr "Попереджувати про несумісні/невипробувані пакунки"
+
+#: opkman_const.rsoption_cbincompatiblepackage_hint
+msgid "If a package is not compatible with the current widgetset or Lazarus/FPC version, OPM will show a warning message"
+msgstr "Якщо пакунок не сумісний з поточною бібліотекою віджетів або версією Lazarus/FPC version, OPM покаже попередження"
 
 #: opkman_const.rspackagelistfrm_bno_caption
 msgctxt "opkman_const.rspackagelistfrm_bno_caption"
@@ -1505,7 +1653,44 @@ msgstr "Список звантажених пакунків"
 msgid "Update package list"
 msgstr "Список оновлюваних пакунків"
 
+#: opkman_const.rspackagelistfrm_caption3
+msgid "Incompatible package list"
+msgstr "Список несумісних пакунків"
+
+#: opkman_const.rspackagelistfrm_curfpcver
+msgid "Current FPC version: "
+msgstr "Поточна версія FPC: "
+
+#: opkman_const.rspackagelistfrm_curlazver
+msgid "Current Lazarus version: "
+msgstr "Поточна версія Lazarus: "
+
+#: opkman_const.rspackagelistfrm_curws
+msgid "Current widgetset: "
+msgstr "Поточна бібліотека віджетів:"
+
+#: opkman_const.rspackagelistfrm_incompatible
+msgid "Not tested"
+msgstr "Не випробуваний"
+
+#: opkman_const.rspackagelistfrm_lbhint_caption
+msgid "Hint: for more details move the mouse over the problematic column."
+msgstr "Підказка: щоб дізнатись подробиці, на ведіть вказівник на проблемний стовпець."
+
+#: opkman_const.rspackagelistfrm_supfpcvers
+msgid "Supported FPC versions: "
+msgstr "Підтримувана версія FPC: "
+
+#: opkman_const.rspackagelistfrm_suplazvers
+msgid "Supported Lazarus versions: "
+msgstr "Підтримувана версія Lazarus: "
+
+#: opkman_const.rspackagelistfrm_supwss
+msgid "Supported widgetsets: "
+msgstr "Підтримувані бібліотеки віджетів:"
+
 #: opkman_const.rspackagesfound
+#, object-pascal-format
 msgid "(%s repository packages found, containing %s lpk files, total size %s)"
 msgstr "(знайдено %s пакунків сховища, які містять %s lpk-файлів, загальний розмір %s)"
 
@@ -1562,6 +1747,7 @@ msgid "Cannot install package:"
 msgstr "Неможливо встановити пакунок:"
 
 #: opkman_const.rsprogressfrm_error4
+#, object-pascal-format
 msgctxt "opkman_const.rsprogressfrm_error4"
 msgid "Dependency \"%s\" not found!"
 msgstr "Залежність \"%s\" не знайдено!"
@@ -1598,6 +1784,7 @@ msgid "Success."
 msgstr "Успішно."
 
 #: opkman_const.rsprogressfrm_info2
+#, object-pascal-format
 msgid "Contacting download site for \"%s\" (%s)"
 msgstr "З'єднання з сайтом для звантаження \"%s\" (%s)"
 
@@ -1684,10 +1871,12 @@ msgid "Repositories"
 msgstr "Сховища"
 
 #: opkman_const.rsrepositories_confirmation0
+#, object-pascal-format
 msgid "Delete selected repository \"%s\"?"
 msgstr "Видалити вибране сховище \"%s\"?"
 
 #: opkman_const.rsrepositories_info1
+#, object-pascal-format
 msgid "The following repository: \"%s\" is already in the list."
 msgstr "Сховище \"%s\" вже в списку."
 

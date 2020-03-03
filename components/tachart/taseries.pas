@@ -32,6 +32,8 @@ const
 type
   EBarError = class(EChartError);
 
+  TBarShape = (bsRectangular, bsCylindrical, bsHexPrism, bsPyramid, bsConical);
+
   TBarWidthStyle = (bwPercent, bwPercentMin);
 
   TBarSeries = class;
@@ -39,47 +41,66 @@ type
   TBeforeDrawBarEvent = procedure (
     ASender: TBarSeries; ACanvas: TCanvas; const ARect: TRect;
     APointIndex, AStackIndex: Integer; var ADoDefaultDrawing: Boolean
-  ) of object;
+  ) of object; deprecated;
+
+  TCustomDrawBarEvent = procedure (
+    ASeries: TBarSeries; ADrawer: IChartDrawer; const ARect: TRect;
+    APointIndex, AStackIndex: Integer) of object;
 
   { TBarSeries }
 
   TBarSeries = class(TBasicPointSeries)
   private
+    type
+       TDrawBarProc = procedure (ADrawer: IChartDrawer; const ARect: TRect; ADepth: Integer) of object;
+  private
     FBarBrush: TBrush;
     FBarOffsetPercent: Integer;
     FBarPen: TPen;
+    FBarShape: TBarShape;
     FBarWidthPercent: Integer;
     FBarWidthStyle: TBarWidthStyle;
     FOnBeforeDrawBar: TBeforeDrawBarEvent;
+    FOnCustomDrawBar: TCustomDrawBarEvent;
+    FUseZeroLevel: Boolean;
     FZeroLevel: Double;
+    FDrawBarProc: TDrawBarProc;
 
     function IsZeroLevelStored: boolean;
     procedure SetBarBrush(Value: TBrush);
     procedure SetBarOffsetPercent(AValue: Integer);
     procedure SetBarPen(Value: TPen);
+    procedure SetBarShape(AValue: TBarShape);
     procedure SetBarWidthPercent(Value: Integer);
     procedure SetBarWidthStyle(AValue: TBarWidthStyle);
     procedure SetOnBeforeDrawBar(AValue: TBeforeDrawBarEvent);
+    procedure SetOnCustomDrawBar(AValue: TCustomDrawBarEvent);
     procedure SetSeriesColor(AValue: TColor);
+    procedure SetUseZeroLevel(AValue: Boolean);
     procedure SetZeroLevel(AValue: Double);
-  strict protected
-    function GetLabelDataPoint(AIndex: Integer): TDoublePoint; override;
-    function ToolTargetDistance(const AParams: TNearestPointParams;
-      AGraphPt: TDoublePoint; APointIdx, AXIdx, AYIdx: Integer): Integer; override;
   protected
     procedure BarOffsetWidth(
       AX: Double; AIndex: Integer; out AOffset, AWidth: Double);
+    procedure DrawConicalBar(ADrawer: IChartDrawer; const ARect: TRect; ADepth: Integer);
+    procedure DrawCylinderBar(ADrawer: IChartDrawer; const ARect: TRect; ADepth: Integer);
+    procedure DrawHexPrism(ADrawer: IChartDrawer; const ARect: TRect; ADepth: Integer);
+    procedure DrawPyramidBar(ADrawer: IChartDrawer; const ARect: TRect; ADepth: Integer);
+    procedure DrawRectBar(ADrawer: IChartDrawer; const ARect: TRect; ADepth: Integer);
+    function GetLabelDataPoint(AIndex, AYIndex: Integer): TDoublePoint; override;
     procedure GetLegendItems(AItems: TChartLegendItems); override;
     function GetSeriesColor: TColor; override;
     function GetZeroLevel: Double; override;
+    function ToolTargetDistance(const AParams: TNearestPointParams;
+      AGraphPt: TDoublePoint; APointIdx, AXIdx, AYIdx: Integer): Integer; override;
+    procedure UpdateMargins(ADrawer: IChartDrawer; var AMargins: TRect); override;
   public
     procedure Assign(ASource: TPersistent); override;
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
   public
-    function GetBarWidth(AIndex: Integer): Integer;
     procedure Draw(ADrawer: IChartDrawer); override;
     function Extent: TDoubleRect; override;
+    function GetBarWidth(AIndex: Integer): Integer;
     function GetNearestPoint(const AParams: TNearestPointParams;
       out AResults: TNearestPointResults): Boolean; override;
   published
@@ -89,23 +110,32 @@ type
     property BarOffsetPercent: Integer
       read FBarOffsetPercent write SetBarOffsetPercent default 0;
     property BarPen: TPen read FBarPen write SetBarPen;
+    property BarShape: TBarShape read FBarshape write SetBarShape default bsRectangular;
     property BarWidthPercent: Integer
       read FBarWidthPercent write SetBarWidthPercent default DEF_BAR_WIDTH_PERCENT;
     property BarWidthStyle: TBarWidthStyle
       read FBarWidthStyle write SetBarWidthStyle default bwPercent;
     property Depth;
+    property DepthBrightnessDelta;
+    property MarkPositionCentered;
     property MarkPositions;
+    property Marks;
     property SeriesColor: TColor
       read GetSeriesColor write SetSeriesColor stored false default clRed;
     property Source;
+    property Stacked default true;
+    property StackedNaN;
     property Styles;
     property ToolTargets default [nptPoint, nptYList, nptCustom];
-    property UseReticule;
+    property UseZeroLevel: Boolean
+      read FUseZeroLevel write SetUseZeroLevel default true;
     property ZeroLevel: Double
       read FZeroLevel write SetZeroLevel stored IsZeroLevelStored;
   published
     property OnBeforeDrawBar: TBeforeDrawBarEvent
-      read FOnBeforeDrawBar write SetOnBeforeDrawBar;
+      read FOnBeforeDrawBar write SetOnBeforeDrawBar; deprecated 'Use OnCustomDrawBar instead';
+    property OnCustomDrawBar: TCustomDrawBarEvent
+      read FOnCustomDrawBar write SetOnCustomDrawBar;
   end;
 
 
@@ -115,13 +145,23 @@ type
   public
     property Radius;
   published
+    property AngleRange;
     property EdgePen;
     property Depth;
+    property DepthBrightnessDelta;
     property Exploded;
     property FixedRadius;
+    property InnerRadiusPercent;
+    property MarkDistancePercent;
+    property MarkPositionCentered;
     property MarkPositions;
+    property Marks;
+    property Orientation;
     property RotateLabels;
+    property StartAngle;
     property Source;
+    property ViewAngle;
+    property OnCustomDrawPie;
   end;
 
   TConnectType = (ctLine, ctStepXY, ctStepYX);
@@ -133,6 +173,7 @@ type
     FAreaBrush: TBrush;
     FAreaContourPen: TPen;
     FAreaLinesPen: TPen;
+    FBanded: Boolean;
     FConnectType: TConnectType;
     FUseZeroLevel: Boolean;
     FZeroLevel: Double;
@@ -141,6 +182,7 @@ type
     procedure SetAreaBrush(AValue: TBrush);
     procedure SetAreaContourPen(AValue: TPen);
     procedure SetAreaLinesPen(AValue: TPen);
+    procedure SetBanded(AValue: Boolean);
     procedure SetConnectType(AValue: TConnectType);
     procedure SetSeriesColor(AValue: TColor);
     procedure SetUseZeroLevel(AValue: Boolean);
@@ -149,6 +191,7 @@ type
     procedure GetLegendItems(AItems: TChartLegendItems); override;
     function GetSeriesColor: TColor; override;
     function GetZeroLevel: Double; override;
+    function SkipMissingValues(AIndex: Integer): Boolean; override;
   public
     procedure Assign(ASource: TPersistent); override;
     constructor Create(AOwner: TComponent); override;
@@ -162,17 +205,21 @@ type
     property AreaBrush: TBrush read FAreaBrush write SetAreaBrush;
     property AreaContourPen: TPen read FAreaContourPen write SetAreaContourPen;
     property AreaLinesPen: TPen read FAreaLinesPen write SetAreaLinesPen;
+    property Banded: Boolean read FBanded write SetBanded default false;
     property ConnectType: TConnectType
       read FConnectType write SetConnectType default ctLine;
     property Depth;
+    property DepthBrightnessDelta;
+    property MarkPositionCentered;
     property MarkPositions;
+    property Marks;
     property SeriesColor: TColor
       read GetSeriesColor write SetSeriesColor stored false default clWhite;
     property Source;
     property Stacked default true;
+    property StackedNaN;
     property Styles;
     property ToolTargets;
-    property UseReticule;
     property UseZeroLevel: Boolean
       read FUseZeroLevel write SetUseZeroLevel default false;
     property ZeroLevel: Double
@@ -185,6 +232,9 @@ type
 
   TLineType = (ltNone, ltFromPrevious, ltFromOrigin, ltStepXY, ltStepYX);
 
+  TColorEachMode = (ceNone, cePoint, ceLineBefore, ceLineAfter,
+    cePointAndLineBefore, cePointAndLineAfter);
+
   { TLineSeries }
 
   TLineSeries = class(TBasicPointSeries)
@@ -192,10 +242,12 @@ type
     FLinePen: TPen;
     FLineType: TLineType;
     FOnDrawPointer: TSeriesPointerDrawEvent;
-    FShowPoints: Boolean;
+    FColorEach: TColorEachMode;
 
     procedure DrawSingleLineInStack(ADrawer: IChartDrawer; AIndex: Integer);
     function GetShowLines: Boolean;
+    function GetShowPoints: Boolean;
+    procedure SetColorEach(AValue: TColorEachMode);
     procedure SetLinePen(AValue: TPen);
     procedure SetLineType(AValue: TLineType);
     procedure SetSeriesColor(AValue: TColor);
@@ -214,33 +266,33 @@ type
   published
     property AxisIndexX;
     property AxisIndexY;
+    property ColorEach: TColorEachMode
+      read FColorEach write SetColorEach default cePoint;
     property Depth;
+    property DepthBrightnessDelta;
     property LinePen: TPen read FLinePen write SetLinePen;
     property LineType: TLineType
       read FLineType write SetLineType default ltFromPrevious;
     property MarkPositions;
+    property Marks;
     property Pointer;
     property SeriesColor: TColor
       read GetSeriesColor write SetSeriesColor stored false default clBlack;
     property ShowLines: Boolean
       read GetShowLines write SetShowLines stored false default true;
     property ShowPoints: Boolean
-      read FShowPoints write SetShowPoints default false;
+      read GetShowPoints write SetShowPoints default false;
     property Stacked default false;
+    property StackedNaN;
     property Source;
     property Styles;
     property ToolTargets;
-    property UseReticule default true;
+    property XErrorBars;
+    property YErrorBars;
     // Events
-    property OnDrawPointer: TSeriesPointerDrawEvent
-      read FOnDrawPointer write FOnDrawPointer; deprecated 'Use OnCustomDrawPointer';
     property OnCustomDrawPointer;
     property OnGetPointerStyle;
   end;
-
-  // 'TSerie' alias is for compatibility with older versions of TAChart.
-  // Use TLineSeries instead.
-  TSerie = TLineSeries deprecated;
 
   // Scatter plot displaying a single pixel per data point.
   // Optimized to work efficiently for millions of points.
@@ -261,7 +313,6 @@ type
     property SeriesColor: TColor
       read FSeriesColor write SetSeriesColor default clBlack;
     property Source;
-    property UseReticule;
   end;
 
   TLineStyle = (lsVertical, lsHorizontal);
@@ -276,10 +327,11 @@ type
     FPosition: Double; // Graph coordinate of line
     FUseBounds: Boolean;
 
+    function GetAxisIndex: TChartAxisIndex;
     function GetSeriesColor: TColor;
     procedure SavePosToCoord(var APoint: TDoublePoint);
     procedure SetArrow(AValue: TChartArrow);
-    procedure SetAxisIndexX(AValue: TChartAxisIndex);
+    procedure SetAxisIndex(AValue: TChartAxisIndex);
     procedure SetLineStyle(AValue: TLineStyle);
     procedure SetPen(AValue: TPen);
     procedure SetPosition(AValue: Double);
@@ -301,11 +353,12 @@ type
     function IsEmpty: Boolean; override;
     procedure MovePoint(var AIndex: Integer; const ANewPos: TDoublePoint); override;
     procedure UpdateBiDiMode; override;
-
   published
     property Active default true;
     property Arrow: TChartArrow read FArrow write SetArrow;
-    property AxisIndexX write SetAxisIndexX;
+    property AxisIndex: TChartAxisIndex
+      read GetAxisIndex write SetAxisIndex default DEF_AXIS_INDEX;
+    property AxisIndexX stored false; deprecated 'Use "AxisIndex"';
     property LineStyle: TLineStyle
       read FLineStyle write SetLineStyle default lsHorizontal;
     property Pen: TPen read FPen write SetPen;
@@ -317,10 +370,6 @@ type
     property UseBounds: Boolean read FUseBounds write SetUseBounds default true;
     property ZPosition;
   end;
-
-  // 'TLine' alias is for compatibility with older versions of TAChart.
-  // Use TConstantLine instead.
-  TLine = class(TConstantLine) end deprecated;
 
   TSeriesDrawEvent = procedure (ACanvas: TCanvas; const ARect: TRect) of object;
   TSeriesGetBoundsEvent = procedure (var ABounds: TDoubleRect) of object;
@@ -353,7 +402,8 @@ implementation
 
 uses
   GraphMath, GraphType, IntfGraphics, LResources, Math, PropEdits, SysUtils,
-  TAChartStrConsts, TADrawerCanvas, TAGeometry, TAGraph, TAMath, TAStyles;
+  TAChartStrConsts, TADrawerCanvas, TAGeometry, TACustomSource, TAGraph,
+  TAMath, TAStyles;
 
 { TLineSeries }
 
@@ -373,7 +423,7 @@ begin
       Self.LinePen := FLinePen;
       Self.FLineType := FLineType;
       Self.FOnDrawPointer := FOnDrawPointer;
-      Self.FShowPoints := FShowPoints;
+      Self.FColorEach := FColorEach;
     end;
   inherited Assign(ASource);
 end;
@@ -381,11 +431,11 @@ end;
 constructor TLineSeries.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-
+  FColorEach := cePoint;
   FLinePen := TPen.Create;
   FLinePen.OnChange := @StyleChanged;
   FPointer := TSeriesPointer.Create(FChart);
-  SetPropDefaults(Self, ['LineType', 'ShowPoints', 'UseReticule']);
+  SetPropDefaults(Self, ['LineType']);
 end;
 
 destructor TLineSeries.Destroy;
@@ -395,10 +445,32 @@ begin
 end;
 
 procedure TLineSeries.Draw(ADrawer: IChartDrawer);
+
+  procedure RemoveStackedNaN;
+  var
+    i, j: Integer;
+    item: PChartDataItem;
+  begin
+    if FStacked and (FStackedNaN = snDoNotDraw) then
+      for i := 0 to High(FGraphPoints) do begin
+        item := Source.Item[i + FLoBound];
+        if not IsNaN(item^.X) then
+          if IsNaN(item^.Y) then
+            FGraphPoints[i].X := NaN
+          else
+            for j := 0 to Source.YCount-2 do
+              if IsNaN(item^.YList[j]) then begin
+                FGraphPoints[i].X := NaN;
+                break;
+              end;
+      end;
+  end;
+
 var
   ext: TDoubleRect;
   i: Integer;
 begin
+  if IsEmpty or (not Active) then exit;
   with Extent do begin
     ext.a := AxisToGraph(a);
     ext.b := AxisToGraph(b);
@@ -410,9 +482,12 @@ begin
   if not RectIntersectsRect(ext, ParentChart.CurrentExtent) then exit;
 
   PrepareGraphPoints(ext, LineType <> ltFromOrigin);
+  RemoveStackedNaN;
   DrawSingleLineInStack(ADrawer, 0);
   for i := 0 to Source.YCount - 2 do begin
+    if Source.IsYErrorIndex(i+1) then Continue;
     UpdateGraphPoints(i, FStacked);
+    RemoveStackedNaN;
     DrawSingleLineInStack(ADrawer, i + 1);
   end;
 end;
@@ -494,7 +569,7 @@ var
     CacheLine(m, AP2);
   end;
 
-  procedure DrawLines;
+  procedure DrawDefaultLines;
   var
     i, j: Integer;
     p, pPrev: TDoublePoint;
@@ -540,13 +615,14 @@ var
     ADrawer.SetBrushParams(bsClear, clTAColor);
     ADrawer.Pen := LinePen;
     if Styles <> nil then
-      Styles.Apply(ADrawer, AIndex);
+      Styles.Apply(ADrawer, AIndex, true);
+      // "true" avoids painting of spaces in non-solid lines in brush color
     if Depth = 0 then
       for i := 0 to High(breaks) - 1 do
         ADrawer.Polyline(points, breaks[i], breaks[i + 1] - breaks[i])
     else begin
       if Styles = nil then begin
-        ADrawer.SetBrushParams(bsSolid, LinePen.Color);
+        ADrawer.SetBrushParams(bsSolid, GetDepthColor(LinePen.Color));
         ADrawer.SetPenParams(LinePen.Style, clBlack);
       end;
       scaled_depth := ADrawer.Scale(Depth);
@@ -556,11 +632,104 @@ var
     end;
   end;
 
+  function GetPtColor(AIndex: Integer): TColor;
+  begin
+    Result := Source[AIndex]^.Color;
+    if Result = clTAColor then Result := SeriesColor;
+  end;
+
+  procedure DrawColoredLines;
+  var
+    i, n: Integer;
+    gp: TDoublepoint;
+    col, col1, col2: TColor;
+    imgPt1, imgPt2: TPoint;
+    pt, origin: TPoint;
+    hasBreak: Boolean;
+  begin
+    if LineType = ltNone then exit;
+
+    n := Length(FGraphPoints);
+
+    // Find first point
+    i := 0;
+    while (i < n) do begin
+      gp := FGraphPoints[i];
+      if not IsNaN(gp) then break;
+      inc(i);
+    end;
+    if i = n then
+      exit;
+
+    ADrawer.Pen := LinePen;
+    imgPt1 := ParentChart.GraphToImage(gp);
+    col1 := GetPtColor(i);
+
+    // First line for line type ltFromOrigin
+    if LineType = ltFromOrigin then begin
+      origin := ParentChart.GraphToImage(AxisToGraph(ZeroDoublePoint));
+      ADrawer.SetPenParams(FLinePen.Style, col1);
+      ADrawer.Line(origin, imgPt1);
+    end;
+
+    // iterate through all other points
+    hasBreak := false;
+    while (i < n) do begin
+      gp := FGraphPoints[i];
+      if IsNaN(gp) then begin
+        hasBreak := true;
+      end else begin
+        if hasBreak then begin
+          imgPt1 := ParentChart.GraphToImage(gp);
+          hasBreak := false;
+        end;
+        imgPt2 := ParentChart.GraphToImage(gp);
+        col2 := GetPtColor(i);
+        if imgPt1 <> imgPt2 then begin
+          case FColorEach of
+            ceLineBefore, cePointAndLineBefore: col := col2;
+            ceLineAfter, cePointAndLineAfter: col := col1;
+            else raise Exception.Create('TLineSeries: ColorEach error');
+          end;
+          ADrawer.SetPenParams(FLinePen.Style, col);
+          case LineType of
+            ltFromPrevious:
+              ADrawer.Line(imgPt1, imgPt2);
+            ltStepXY:
+              begin
+                pt := Point(imgPt2.x, imgPt1.Y);
+                ADrawer.Line(imgPt1, pt);
+                ADrawer.Line(pt, imgPt2);
+              end;
+            ltStepYX:
+              begin
+                pt := Point(imgPt1.x, imgPt2.Y);
+                ADrawer.Line(imgPt1, pt);
+                ADrawer.Line(pt, imgPt2);
+              end;
+            ltFromOrigin:
+              ADrawer.Line(origin, imgPt2);
+          end;
+        end;
+        imgPt1 := imgPt2;
+        col1 := col2;
+      end;
+      inc(i);
+    end;
+  end;
+
 begin
-  DrawLines;
-  DrawLabels(ADrawer);
+  case FColorEach of
+    ceNone, cePoint:
+      DrawDefaultLines;
+    else
+      DrawColoredLines;
+  end;
+  if AIndex = 0 then
+    DrawErrorBars(ADrawer);
+  DrawLabels(ADrawer, AIndex);
   if ShowPoints then
-    DrawPointers(ADrawer, AIndex);
+    DrawPointers(ADrawer, AIndex, FColorEach in [cePoint, cePointAndLineBefore, cePointAndLineAfter]);
 end;
 
 procedure TLineSeries.GetLegendItems(AItems: TChartLegendItems);
@@ -613,6 +782,18 @@ begin
   Result := FLineType <> ltNone;
 end;
 
+function TLineSeries.GetShowPoints: Boolean;
+begin
+  Result := FPointer.Visible;
+end;
+
+procedure TLineSeries.SetColorEach(AValue: TColorEachMode);
+begin
+  if FColorEach = AValue then exit;
+  FColorEach := AValue;
+  UpdateParentChart;
+end;
+
 procedure TLineSeries.SetLinePen(AValue: TPen);
 begin
   FLinePen.Assign(AValue);
@@ -643,7 +824,7 @@ end;
 procedure TLineSeries.SetShowPoints(AValue: Boolean);
 begin
   if ShowPoints = AValue then exit;
-  FShowPoints := AValue;
+  FPointer.Visible := AValue;
   UpdateParentChart;
 end;
 
@@ -675,6 +856,7 @@ var
   end;
 
 begin
+  if IsEmpty or (not Active) then exit;
   with Extent do begin
     ext.a := AxisToGraph(a);
     ext.b := AxisToGraph(b);
@@ -766,6 +948,7 @@ procedure TConstantLine.Draw(ADrawer: IChartDrawer);
 var
   p: Integer;
 begin
+  if IsEmpty or (not Active) then exit;
   if Pen.Style = psClear then exit;
 
   ADrawer.SetBrushParams(bsClear, clTAColor);
@@ -796,6 +979,11 @@ begin
           Arrow.Draw(ADrawer, Point(p, ClipRect.Top), -Pi / 2, Pen);
       end;
     end;
+end;
+
+function TConstantLine.GetAxisIndex: TChartAxisIndex;
+begin
+  Result := inherited AxisIndexX;
 end;
 
 procedure TConstantLine.GetBounds(var ABounds: TDoubleRect);
@@ -859,7 +1047,7 @@ begin
   UpdateParentChart;
 end;
 
-procedure TConstantLine.SetAxisIndexX(AValue: TChartAxisIndex);
+procedure TConstantLine.SetAxisIndex(AValue: TChartAxisIndex);
 begin
   inherited AxisIndexX := AValue;
   AxisIndexY := AValue;
@@ -919,6 +1107,7 @@ begin
       Self.FBarWidthPercent := FBarWidthPercent;
       Self.FBarWidthStyle := FBarWidthStyle;
       Self.FOnBeforeDrawBar := FOnBeforeDrawBar;
+      Self.FUseZeroLevel := FUseZeroLevel;
       Self.FZeroLevel := FZeroLevel;
     end;
   inherited Assign(ASource);
@@ -943,6 +1132,7 @@ constructor TBarSeries.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   ToolTargets := [nptPoint, nptYList, nptCustom];
+  FDrawBarProc := @DrawRectBar;
 
   FBarWidthPercent := DEF_BAR_WIDTH_PERCENT;
 
@@ -956,6 +1146,8 @@ begin
 
   FStacked := true;
   FOptimizeX := false;
+  FSupportsZeroLevel := true;
+  FUseZeroLevel := true;
 end;
 
 destructor TBarSeries.Destroy;
@@ -977,30 +1169,29 @@ var
     c: TColor;
     ic: IChartTCanvasDrawer;
   begin
-    ADrawer.Brush := BarBrush;
     ADrawer.Pen := BarPen;
-    if Styles <> nil then
-      Styles.Apply(ADrawer, stackIndex);
+    ADrawer.Brush := BarBrush;
     c := Source[pointIndex]^.Color;
     if c <> clTAColor then
       ADrawer.BrushColor := c;
+    if Styles <> nil then
+      Styles.Apply(ADrawer, stackIndex);
     sz := Size(AR);
-    if (sz.cx <= 2) or (sz.cy <= 2) then begin
+    if (sz.cx <= 2*BarPen.Width) or (sz.cy <= 2*BarPen.Width) then begin
       // Bars are too small to distinguish the border from the interior.
       ADrawer.SetPenParams(psSolid, ADrawer.BrushColor);
+    end;
+
+    if Assigned(FOnCustomDrawBar) then begin
+      FOnCustomDrawBar(Self, ADrawer, AR, pointIndex, stackIndex);
+      exit;
     end;
 
     if Supports(ADrawer, IChartTCanvasDrawer, ic) and Assigned(OnBeforeDrawBar) then
       OnBeforeDrawBar(Self, ic.Canvas, AR, pointIndex, stackIndex, defaultDrawing);
     if not defaultDrawing then exit;
 
-    ADrawer.Rectangle(AR);
-
-    if Depth = 0 then exit;
-
-    ADrawer.DrawLineDepth(AR.Left, AR.Top, AR.Right - 1, AR.Top, scaled_depth);
-    ADrawer.DrawLineDepth(
-      AR.Right - 1, AR.Top, AR.Right - 1, AR.Bottom - 1, scaled_depth);
+    FDrawBarProc(ADrawer, AR, scaled_depth);
   end;
 
 var
@@ -1009,13 +1200,12 @@ var
   p: TDoublePoint;
   heights: TDoubleDynArray;
 
-  procedure BuildBar;
+  procedure BuildBar(x, y1, y2: Double);
   var
     graphBar: TDoubleRect;
     imageBar: TRect;
   begin
-    graphBar :=
-      DoubleRect(p.X - w, heights[stackIndex], p.X + w, heights[stackIndex + 1]);
+    graphBar := DoubleRect(x - w, y1, x + w, y2);
     if IsRotated then
       with graphBar do begin
         Exchange(a.X, a.Y);
@@ -1030,16 +1220,17 @@ var
       TAGeometry.NormalizeRect(imageBar);
 
       // Draw a line instead of an empty rectangle.
-   //   if Bottom = Top then Dec(Top);
-   //   if Left = Right then Inc(Right);
+      if (Bottom = Top) and IsRotated then Dec(Top);
+      if (Left = Right) and not IsRotated then Inc(Right);
     end;
     DrawBar(imageBar);
   end;
 
 var
   ofs, y: Double;
+  zero: Double;
 begin
-  if IsEmpty then exit;
+  if IsEmpty or (not Active) then exit;
 
   if BarWidthStyle = bwPercentMin then
     UpdateMinXRange;
@@ -1048,29 +1239,276 @@ begin
   ExpandRange(ext2.a.Y, ext2.b.Y, 1.0);
 
   scaled_depth := ADrawer.Scale(Depth);
+  if UseZeroLevel then
+    zero := ZeroLevel
+  else
+    zero := IfThen(IsRotated, ext2.a.X, ext2.a.Y);
 
   PrepareGraphPoints(ext2, true);
   SetLength(heights, Source.YCount + 1);
   for pointIndex := FLoBound to FUpBound do begin
     p := Source[pointIndex]^.Point;
-    if IsNan(p.X) then continue;
+    if Source.XCount = 0 then p.X := pointIndex + FLoBound;
+    if SkipMissingValues(pointIndex) then
+      continue;
     p.X := AxisToGraphX(p.X);
     BarOffsetWidth(p.X, pointIndex, ofs, w);
     p.X += ofs;
-    heights[0] := ZeroLevel;
-    heights[1] := NumberOr(p.Y, ZeroLevel);
-    for stackIndex := 1 to Source.YCount - 1 do begin
-      y := Source[pointIndex]^.YList[stackIndex - 1];
-      if not IsNan(y) then
+    heights[0] := zero;
+    if FStacked then begin
+      heights[1] := NumberOr(p.Y, zero);
+      for stackIndex := 1 to Source.YCount - 1 do begin
+        y := NumberOr(Source[pointIndex]^.YList[stackIndex - 1], 0);
         heights[stackIndex + 1] := heights[stackIndex] + y;
+      end;
+      for stackIndex := 0 to High(heights) do
+        heights[stackindex] := AxisToGraphY(heights[stackindex]);
+      for stackIndex := 0 to Source.YCount - 1 do
+        BuildBar(p.X, heights[stackindex], heights[stackIndex+1]);
+    end else begin
+      for stackIndex := 0 to Source.YCount - 1 do begin
+        y := Source[pointIndex]^.GetY(stackIndex);
+        if not IsNaN(y) then
+          heights[stackIndex + 1] := AxisToGraphY(y)
+        else
+          heights[stackIndex + 1] := zero;
+      end;
+      p.X -= w;
+      w := w / High(heights);
+      p.X += w;
+      for stackIndex := 0 to Source.YCount - 1 do begin
+        BuildBar(p.X, heights[0], heights[stackIndex+1]);
+        p.X += 2*w;
+      end;
     end;
-    for stackIndex := 0 to High(heights) do
-      heights[stackindex] := AxisToGraphY(heights[stackindex]);
-    for stackIndex := 0 to Source.YCount - 1 do
-      BuildBar;
   end;
 
   DrawLabels(ADrawer);
+end;
+
+procedure TBarSeries.DrawConicalBar(ADrawer: IChartDrawer; const ARect: TRect;
+  ADepth: Integer);
+var
+  depth2: Integer;
+  pts: array[0..2] of TPoint;
+  w, h: Integer;
+  a, b, factor: Double;
+  x1, x2, cx: Integer;
+  i: Integer;
+  c: TChartColor;
+begin
+  if Depth = 0 then begin
+    pts[0] := Point(ARect.Left, ARect.Bottom);
+    if IsRotated then begin
+      pts[1] := Point(ARect.Left, ARect.Top);
+      pts[2] := Point(ARect.Right, (ARect.Top + ARect.Bottom) div 2);
+    end else begin
+      pts[1] := Point(ARect.Right, ARect.Bottom);
+      pts[2] := Point((ARect.Left + ARect.Right) div 2, ARect.Top);
+    end;
+    ADrawer.Polygon(pts, 0, 3);
+    exit;
+  end;
+
+  depth2 := ADepth div 2;
+  if IsRotated then begin
+    ADrawer.Ellipse(ARect.Left, ARect.Top, ARect.Left + ADepth, ARect.Bottom);
+    h := ARect.Right - ARect.Left;
+    if h <= depth2 then
+      exit;
+    x1 := ARect.Top;
+    x2 := ARect.Bottom;
+  end else begin
+    ADrawer.Ellipse(ARect.Left, ARect.Bottom, ARect.Right, ARect.Bottom - ADepth);
+    h := ARect.Bottom - ARect.Top;
+    if h <= depth2 then
+      exit;
+    x1 := ARect.Left;
+    x2 := ARect.Right;
+  end;
+
+  // Calculate the tangent points (x1, y1) of a line to an ellipse with
+  // half axes a, b through a point (0, h) outside the ellipse
+  // https://www.emathzone.com/tutorials/geometry/equation-of-tangent-and-normal-to-ellipse.html
+  //    (x1 x) / a² + (y1 x) / b² = 1       (x, y are points on line)
+  //       --> x1 = +/- a sqrt(1 - (b/h)²),  y1 = b² / h
+  w := x2 - x1;
+  cx := (x1 + x2) div 2;
+  a := w * 0.5;
+  b := depth2;
+  factor := sqrt(1.0 - sqr(b / h));
+  pts[0] := Point(round(-a*factor), round(sqr(b) / h));
+  pts[1] := Point(0, h);
+  pts[2] := Point(round(+a*factor), pts[0].Y);
+  if IsRotated then
+    for i := 0 to 2 do
+      pts[i] := Point(ARect.Left + depth2 + pts[i].Y, cx - pts[i].X)
+  else
+    for i := 0 to 2 do
+      pts[i] := Point(cx + pts[i].X, ARect.Bottom - depth2 - pts[i].Y);
+
+  c := ADrawer.GetPenColor;
+  ADrawer.SetPenColor(ADrawer.BrushColor);
+  ADrawer.Polygon(pts, 0, 3);
+  ADrawer.SetPenColor(c);
+  ADrawer.PolyLine(pts, 0, 3);
+end;
+
+procedure TBarSeries.DrawCylinderBar(ADrawer: IChartDrawer;
+  const ARect: TRect; ADepth: Integer);
+var
+  depth2: Integer;
+begin
+  if ADepth = 0 then begin
+    ADrawer.Rectangle(ARect);
+    exit;
+  end;
+
+  depth2 := ADepth div 2;
+  if IsRotated then begin
+    ADrawer.Ellipse(ARect.Left, ARect.Top, ARect.Left + ADepth, ARect.Bottom);
+    ADrawer.FillRect(ARect.Left + depth2, ARect.Top, ARect.Right + depth2, ARect.Bottom);
+    ADrawer.Line(ARect.Left + depth2, ARect.Top, ARect.Right + depth2, ARect.Top);
+    ADrawer.Line(ARect.Left + depth2, ARect.Bottom, ARect.Right + depth2, ARect.Bottom);
+    ADrawer.BrushColor := GetDepthColor(ADrawer.BrushColor, false);
+    ADrawer.Ellipse(ARect.Right, ARect.Top, ARect.Right + ADepth, ARect.Bottom);
+  end else begin
+    ADrawer.Ellipse(ARect.Left, ARect.Bottom, ARect.Right, ARect.Bottom - ADepth);
+    ADrawer.FillRect(ARect.Left, ARect.Bottom - depth2, ARect.Right, ARect.Top - depth2);
+    ADrawer.Line(ARect.Left, ARect.Bottom - depth2, ARect.Left, ARect.Top - depth2);
+    ADrawer.Line(ARect.Right, ARect.Bottom - depth2, ARect.Right, ARect.Top - depth2);
+    ADrawer.BrushColor := GetDepthColor(ADrawer.BrushColor, true);
+    ADrawer.Ellipse(ARect.Left, ARect.Top, ARect.Right, ARect.Top - depth);
+  end;
+end;
+
+procedure TBarSeries.DrawHexPrism(ADrawer: IChartDrawer;
+  const ARect: TRect; ADepth: Integer);
+const
+  HEXAGON: array[0..5] of TDoublePoint = (                         {    5  4    }
+    (X: -1; Y: 0.5), (X: -sin(pi/6); Y: 0), (X: +sin(pi/6); Y: 0), { 0        3 }
+    (x: +1; Y: 0.5), (X: +sin(pi/6); Y: 1), (X: -sin(pi/6); Y: 1)  {    1  2    }
+  );
+var
+  a, b: double;
+  cx, cy: Integer;
+  w, h: Integer;
+  c: TColor;
+  pts: array of TPoint;
+  i, j: Integer;
+begin
+  if IsRotated then begin
+    w := ARect.Bottom - ARect.Top;
+    h := ARect.Right - ARect.Left;
+    cx := (ARect.Top + ARect.Bottom) div 2;
+    cy := ARect.Left;
+  end else begin
+    w := ARect.Right - ARect.Left;
+    h := ARect.Bottom - ARect.Top;
+    cx := (ARect.Left + ARect.Right) div 2;
+    cy := ARect.Top;
+  end;
+  a := w div 2;
+  b := IfThen(ADepth = 0, 0, ADepth div 2);
+  if IsRotated then b := -b;
+
+  c := ADrawer.BrushColor;
+  SetLength(pts, 4);
+  for i:=0 to 2 do begin
+    ADrawer.BrushColor := c;
+    if (ADepth > 0) then begin
+      if IsRotated then begin
+        if i <> 1 then ADrawer.BrushColor := GetDepthColor(c, i = 0);
+      end else
+        if i <> 1 then ADrawer.BrushColor := GetDepthColor(c);
+    end;
+    pts[0] := Point(cx + round(HEXAGON[i].X * a + HEXAGON[i].Y * b), cy - round(HEXAGON[i].Y * b));
+    pts[1] := Point(cx + round(HEXAGON[i+1].X * a + HEXAGON[i+1].Y * b), cy - round(HEXAGON[i+1].Y * b));
+    pts[2] := Point(pts[1].X, pts[1].Y + h);
+    pts[3] := Point(pts[0].X, pts[0].Y + h);
+    if IsRotated then
+      for j := 0 to High(pts) do Exchange(pts[j].X, pts[j].Y);
+    ADrawer.Polygon(pts, 0, 4);
+  end;
+  if ADepth > 0 then begin
+    SetLength(pts, 6);
+    ADrawer.BrushColor := GetDepthColor(c, not IsRotated);
+    if IsRotated then cy := cy + h;
+    for i := 0 to 5 do begin
+      pts[i] := Point(cx + round(HEXAGON[i].X * a + HEXAGON[i].Y * b), cy - round(HEXAGON[i].Y * b));
+      if IsRotated then Exchange(pts[i].X, pts[i].Y);
+    end;
+    ADrawer.Polygon(pts, 0, 6);
+  end;
+end;
+
+procedure TBarSeries.DrawPyramidBar(ADrawer: IChartDrawer;
+  const ARect: TRect; ADepth: Integer);
+const
+  PYRAMID_2D: array[0..2] of TDoublePoint = ((X:0; Y:0), (X:1; Y:0), (X:0.5; Y:1));
+  PYRAMID_3D: array[0..3] of TPoint = ((X:0; Y:0), (X:1; Y:0), (X:1; Y:1), (X:0; Y:1));
+var
+  c: TColor;
+  pts: TPointArray;
+  i: Integer;
+  depth2: Integer;
+  w, h: Integer;
+begin
+  w := ARect.Right - ARect.Left;
+  h := ARect.Bottom - ARect.Top;
+
+  if ADepth = 0 then begin
+    SetLength(pts, 3);
+    for i := 0 to High(pts) do
+      pts[i] := Point(
+        ARect.Left + round(TDoublePointBoolArr(PYRAMID_2D[i])[IsRotated] * w),
+        ARect.Bottom - round(TDoublePointBoolArr(PYRAMID_2D[i])[not IsRotated] * h)
+      );
+    ADrawer.Polygon(pts, 0, 3);
+    exit;
+  end;
+
+  c := ADrawer.BrushColor;
+  depth2 := ADepth div 2;
+  SetLength(pts, 5);
+  if IsRotated then begin
+    for i := 0 to High(pts) - 1 do
+      pts[i] := Point(
+        ARect.Left + PYRAMID_3D[i].Y * ADepth,
+        ARect.Bottom - PYRAMID_3D[i].X * h - PYRAMID_3D[i].Y * ADepth
+      );
+    pts[High(pts)] := Point(ARect.Right + depth2, (pts[0].Y + pts[2].Y) div 2);
+  end else begin
+    for i := 0 to High(pts) - 1 do
+      pts[i] := Point(
+        ARect.Left + PYRAMID_3D[i].X * w + PYRAMID_3D[i].Y * ADepth,
+        ARect.Bottom - PYRAMID_3D[i].Y * ADepth
+      );
+    pts[High(pts)] := Point((pts[0].X + pts[2].X) div 2, ARect.Top - depth2);
+  end;
+  ADrawer.BrushColor := GetDepthColor(c);
+  ADrawer.Polygon([pts[2], pts[3], pts[4]], 0, 3);
+  ADrawer.Polygon([pts[3], pts[0], pts[4]], 0, 3);
+  ADrawer.Polygon([pts[1], pts[2], pts[4]], 0, 3);
+  ADrawer.BrushColor := c;
+  ADrawer.Polygon([pts[0], pts[1], pts[4]], 0, 3);
+end;
+
+procedure TBarSeries.DrawRectBar(ADrawer: IChartDrawer;
+  const ARect: TRect; ADepth: Integer);
+var
+  c: TColor;
+begin
+  ADrawer.Rectangle(ARect);
+  if ADepth > 0 then begin
+    c := ADrawer.BrushColor;
+    ADrawer.BrushColor := GetDepthColor(c, true);
+    ADrawer.DrawLineDepth(
+      ARect.Left, ARect.Top, ARect.Right - 1, ARect.Top, ADepth);
+    ADrawer.BrushColor := GetDepthColor(c, false);
+    ADrawer.DrawLineDepth(
+      ARect.Right - 1, ARect.Top, ARect.Right - 1, ARect.Bottom - 1, ADepth);
+  end;
 end;
 
 function TBarSeries.Extent: TDoubleRect;
@@ -1079,24 +1517,36 @@ var
   i: Integer;
 begin
   Result := inherited Extent;
+
+  if FChart = nil then
+    raise EChartError.Create('Calculation of TBarSeries.Extent is not possible when the series is not added to a chart.');
+
   if IsEmpty then exit;
   if BarWidthStyle = bwPercentMin then
     UpdateMinXRange;
-  UpdateMinMax(ZeroLevel, Result.a.Y, Result.b.Y);
+  if UseZeroLevel then
+    UpdateMinMax(GraphToAxisY(ZeroLevel), Result.a.Y, Result.b.Y);
+
   // Show first and last bars fully.
-  i := 0;
-  x := NearestXNumber(i, +1);       // --> x is in graph units
-  if not IsNan(x) then begin
-    BarOffsetWidth(x, i, ofs, w);
-    x := GraphToAxisX(x + ofs - w); // x is in graph units, Extent in axis units!
-    Result.a.X := Min(Result.a.X, x);
-  end;
-  i := Count - 1;
-  x := NearestXNumber(i, -1);
-  if not IsNan(x) then begin
-    BarOffsetWidth(x, i, ofs, w);
-    x := GraphToAxisX(x + ofs + w);
-    Result.b.X := Max(Result.b.X, x);
+  if Source.XCount = 0 then begin
+    BarOffsetWidth(0.0, 0, ofs, w);
+    Result.a.X -= (ofs + w);
+    Result.b.X += (ofs + w);
+  end else begin
+    i := 0;
+    x := NearestXNumber(i, +1);       // --> x is in graph units
+    if not IsNan(x) then begin
+      BarOffsetWidth(x, i, ofs, w);
+      x := GraphToAxisX(x + ofs - w); // x is in graph units, Extent in axis units!
+      Result.a.X := Min(Result.a.X, x);
+    end;
+    i := Count - 1;
+    x := NearestXNumber(i, -1);
+    if not IsNan(x) then begin
+      BarOffsetWidth(x, i, ofs, w);
+      x := GraphToAxisX(x + ofs + w);
+      Result.b.X := Max(Result.b.X, x);
+    end;
   end;
 end;
 
@@ -1113,13 +1563,19 @@ begin
   Result := Abs(f(2 * w) - f(0));
 end;
 
-function TBarSeries.GetLabelDataPoint(AIndex: Integer): TDoublePoint;
+function TBarSeries.GetLabelDataPoint(AIndex, AYIndex: Integer): TDoublePoint;
 var
-  ofs, w: Double;
+  ofs, w, wbar: Double;
 begin
-  Result := inherited GetLabelDataPoint(AIndex);
+  Result := inherited GetLabelDataPoint(AIndex, AYIndex);
   BarOffsetWidth(TDoublePointBoolArr(Result)[IsRotated], AIndex, ofs, w);
   TDoublePointBoolArr(Result)[IsRotated] += ofs;
+
+  // Find x centers of bars in non-stacked bar series with multiple y values.
+  if (not FStacked) and (Source.YCount > 1) then begin
+    wbar := 2 * w / Source.YCount;
+    TDoublePointboolArr(Result)[IsRotated] += (wbar * (AYIndex + 0.5) - w);
+  end;
 end;
 
 procedure TBarSeries.GetLegendItems(AItems: TChartLegendItems);
@@ -1160,6 +1616,8 @@ begin
   // Iterate through all points of the series
   for pointIndex := 0 to Count - 1 do begin
     sp := Source[pointindex]^.Point;
+    if Source.XCount = 0 then
+      sp.X := pointIndex;
     if IsNan(sp) then
       continue;
     sp.X := AxisToGraphX(sp.X);
@@ -1204,7 +1662,7 @@ end;
 
 function TBarSeries.GetZeroLevel: Double;
 begin
-  Result := ZeroLevel;
+  Result := IfThen(UseZeroLevel, ZeroLevel, 0.0);
 end;
 
 function TBarSeries.IsZeroLevelStored: boolean;
@@ -1229,6 +1687,27 @@ begin
   FBarPen.Assign(Value);
 end;
 
+procedure TBarSeries.SetBarShape(AValue: TBarshape);
+begin
+  if FBarshape = AValue then exit;
+  FBarShape := AValue;
+  case FBarShape of
+    bsRectangular:
+      FDrawBarProc := @DrawRectBar;
+    bsPyramid:
+      FDrawBarProc := @DrawPyramidBar;
+    bsCylindrical:
+      FDrawBarProc := @DrawCylinderBar;
+    bsConical:
+      FDrawBarProc := @DrawConicalBar;
+    bsHexPrism:
+      FDrawBarProc := @DrawHexPrism;
+    else
+      raise EBarError.Create('[TBarSeries.SetBarShape] No drawing procedure for bar shape.');
+  end;
+  UpdateParentChart;
+end;
+
 procedure TBarSeries.SetBarWidthPercent(Value: Integer);
 begin
   if (Value < 1) or (Value > 100) then
@@ -1251,9 +1730,24 @@ begin
   UpdateParentChart;
 end;
 
+procedure TBarSeries.SetOnCustomDrawBar(AValue: TCustomDrawBarEvent);
+begin
+  if TMethod(FOnCustomDrawBar) = TMethod(AValue) then exit;
+  FOnCustomDrawBar := AValue;
+  UpdateParentChart;
+end;
+
 procedure TBarSeries.SetSeriesColor(AValue: TColor);
 begin
   FBarBrush.Color := AValue;
+end;
+
+procedure TBarSeries.SetUseZeroLevel(AValue: Boolean);
+begin
+  if FUseZeroLevel = AValue then exit;
+  FUseZeroLevel := AValue;
+//  FSupportsZeroLevel := FUseZeroLevel;
+  UpdateParentChart;
 end;
 
 procedure TBarSeries.SetZeroLevel(AValue: Double);
@@ -1262,6 +1756,29 @@ begin
   FZeroLevel := AValue;
   UpdateParentChart;
 end;
+
+procedure TBarSeries.UpdateMargins(
+  ADrawer: IChartDrawer; var AMargins: TRect);
+const
+  // bsRectangular, bsCylindrical, bsHexPrism, bsPyramid, bsConical
+  DELTA: array[TBarShape] of TDoublePoint = (
+    (X:1; Y:1), (X:0; Y:1), (X:0.5; Y:0.5), (X:1; Y:0.5), (X:0; Y:0.5)
+  );
+var
+  scaled_depth: Integer;
+begin
+  inherited UpdateMargins(ADrawer, AMargins);
+  if FDepth <> 0 then begin
+    scaled_depth := ADrawer.Scale(FDepth);
+    if IsRotated then begin
+      AMargins.Right += round(DELTA[FBarShape].Y * scaled_depth);
+      AMargins.Top += round(DELTA[FBarShape].X * scaled_depth);
+    end else begin
+      AMargins.Right += round(DELTA[FBarShape].X * scaled_depth);
+      AMargins.Top += round(DELTA[FBarShape].Y * scaled_depth);
+    end;
+  end;
+ end;
 
 function TBarSeries.ToolTargetDistance(const AParams: TNearestPointParams;
   AGraphPt: TDoublePoint; APointIdx, AXIdx, AYIdx: Integer): Integer;
@@ -1331,6 +1848,7 @@ begin
   FAreaLinesPen := TPen.Create;
   FAreaLinesPen.OnChange := @StyleChanged;
   FStacked := true;
+  FSupportsZeroLevel := true; //FUseZeroLevel;
 end;
 
 destructor TAreaSeries.Destroy;
@@ -1343,9 +1861,45 @@ end;
 
 procedure TAreaSeries.Draw(ADrawer: IChartDrawer);
 var
-  pts: TPointArray;
-  numPts: Integer;
+  pts, basePts: TPointArray;
+  numPts, numBasePts: Integer;
   scaled_depth: Integer;
+  missing: array of Integer;
+  numMissing: Integer;
+  zero: Double;
+  ext, ext2: TDoubleRect;
+
+  procedure CollectMissingItem(AIndex: Integer);
+  begin
+    missing[numMissing] := AIndex;
+    inc(numMissing);
+  end;
+
+  { Collects the indexes of data points having NaN as x or any of the y values }
+  procedure CollectMissing;
+  var
+    i, j: Integer;
+    item: PChartDataItem;
+  begin
+    SetLength(missing, Length(FGraphPoints));
+    numMissing := 0;
+    for i := 0 to High(FGraphPoints) do begin
+      item := Source.Item[i + FLoBound];
+      if IsNaN(item^.X) then
+        CollectMissingItem(i)
+      else
+      if FBanded and IsNaN(item^.Y) then
+        CollectMissingItem(i)
+      else
+      if FStacked and (FStackedNaN = snDoNotDraw) then
+        if IsNaN(item^.Y) then
+          CollectMissingItem(i)
+        else
+          for j := 0 to Source.YCount-2 do
+            if IsNaN(item^.YList[j]) then CollectMissingItem(i);
+    end;
+    SetLength(missing, numMissing);
+  end;
 
   procedure PushPoint(const AP: TPoint); overload;
   begin
@@ -1359,6 +1913,18 @@ var
     PushPoint(ParentChart.GraphToImage(AP));
   end;
 
+  procedure PushBasePoint(AP: TDoublePoint; AIndex: Integer);
+  var
+    p: TPoint;
+  begin
+    p := ParentChart.GraphToImage(AP);
+    if IsRotated then
+      p.X := basePts[IfThen(FBanded, AIndex, 1)].X
+    else
+      p.Y := basePts[IfThen(FBanded, AIndex, 1)].Y;
+    PushPoint(p);
+  end;
+
   function ProjToLine(const APt: TDoublePoint; ACoord: Double): TDoublePoint;
   begin
     Result := APt;
@@ -1368,92 +1934,212 @@ var
       Result.Y := ACoord;
   end;
 
-var
-  ext, ext2: TDoubleRect;
-  prevPts: TPointArray;
+  // Widens zero-width area to see at least a narrow stripe.
+  procedure FixZeroWidth;
+  var
+    p1, p2, p3: TPoint;
+    delta: Integer;
+  begin
+    delta := ADrawer.Scale(1);
+    if numPts = 1 then begin
+      p1 := pts[0];
+      if IsRotated then begin
+        dec(pts[0].Y, delta);
+        inc(p1.Y, delta);
+      end else begin
+        dec(pts[0].X, delta);
+        inc(p1.X, delta);
+      end;
+      PushPoint(p1);
+    end else
+    if numPts = 2 then begin
+      p1 := pts[numpts-1];
+      p2 := pts[numpts-2];
+      if IsRotated and (p1.Y = p2.Y) then begin
+        pts[0] := p1;
+        pts[1] := p2;
+        inc(p1.Y, 2*delta);
+        inc(p2.Y, 2*delta);
+        PushPoint(p2);
+        PushPoint(p1);
+      end else
+      if not IsRotated and (p1.X = p2.X) then begin
+        pts[0] := p1;
+        pts[1] := p2;
+        inc(p1.X, 2*delta);
+        inc(p2.X, 2*delta);
+        PushPoint(p2);
+        PushPoint(p1);
+      end;
+    end else
+    if numPts > 2 then begin
+      p1 := pts[numpts-1];
+      p2 := pts[numpts-2];
+      p3 := pts[numpts-3];
+      if IsRotated and (p1.Y = p2.Y) and (p2.Y = p3.Y) then begin
+        dec(pts[numpts-3].Y, delta);
+        dec(pts[numpts-2].Y, delta);
+        inc(pts[numpts-1].Y, delta);
+        pts[numpts-1].X := p2.X;
+        inc(p3.Y, delta);
+        PushPoint(p3);
+      end else
+      if not IsRotated and (p1.X = p2.X) and (p2.X = p3.X) then begin
+        dec(pts[numpts-3].X, delta);
+        dec(pts[numpts-2].X, delta);
+        inc(pts[numpts-1].X, delta);
+        pts[numpts-1].Y := p2.Y;
+        inc(p3.X, delta);
+        PushPoint(p3);
+      end;
+    end;
+  end;
+
+  procedure CollectPoints(AStart, AEnd: Integer);
+  var
+    i: Integer;
+    a, b: TDoublePoint;
+    singlePoint: Boolean;
+  begin
+    singlepoint := AStart = AEnd;
+    if singlepoint then inc(AEnd);
+    for i := AStart to AEnd - 1 do begin
+      a := FGraphPoints[i];
+      if singlePoint then b := a else b := FGraphPoints[i + 1];
+
+      case ConnectType of
+        ctLine: ;
+        ctStepXY:
+          if IsRotated then
+            b.X := a.X
+          else
+            b.Y := a.Y;
+        ctStepYX:
+          if IsRotated then
+            a.X := b.X
+          else
+            a.Y := b.Y;
+      end;
+
+      if IsNaN(a) and IsNaN(b) then begin
+        PushBasePoint(a, i);
+        if i < AEnd then PushBasePoint(b, i+1) else PushBasePoint(b, i);
+      end else
+      if IsNaN(b) then begin
+        PushPoint(a);
+        PushBasePoint(a, i);
+        FixZeroWidth;
+        if i < AEnd then PushBasePoint(b, i+1) else PushBasePoint(b, i);
+      end else
+      if IsNaN(a) then begin
+        PushBasepoint(a, i);
+        FixZeroWidth;
+        if i < AEnd then PushBasePoint(b, i+1) else PushBasePoint(b, i);
+        PushPoint(b);
+      end else begin
+        PushPoint(a);
+        PushPoint(b);
+      end;
+    end;
+    FixZeroWidth;
+  end;
+
+  procedure CopyPoints(var ADest: TPointArray; ASource: TPointArray;
+    ANumPts: Integer);
+  var
+    i: Integer;
+  begin
+    for i:=0 to ANumPts - 1 do
+      ADest[i] := ASource[i];
+  end;
 
   procedure DrawSegment(AStart, AEnd: Integer);
   var
-    i, j, n2, numPrevPts: Integer;
-    a, b: TDoublePoint;
-    z, z1, z2: Double;
+    numDataPts: Integer;
+    p: TDoublePoint;
+    i, j, j0: Integer;
+    zeroPt: TPoint;
+    c: TColor;
   begin
-    numPts := 0;
-    numPrevPts := 0;
-
-    if UseZeroLevel then
-      z := AxisToGraphY(ZeroLevel)
-    else
-      z := IfThen(IsRotated, ext2.a.X, ext2.a.Y);
-    z1 := z;
-    z2 := z;
-
-    for j := 0 to Source.YCount - 1 do begin
-      if j > 0 then
-        UpdateGraphPoints(j - 1, AStart, AEnd, FStacked);
+    // Get baseline of area series: this is the curve of the 1st y value in case
+    // of banded, or the zero level in case for normal area series.
+    if FBanded then begin
+      UpdateGraphPoints(-1, FLoBound, FUpBound, FStacked);
       numPts := 0;
-      a := ProjToRect(FGraphPoints[AStart], ext2);
-      PushPoint(ProjToLine(a, z1));
-      z1 := IfThen(IsRotated, a.X, a.Y);
-      for i := AStart to AEnd - 1 do begin
-        a := FGraphPoints[i];
-        b := FGraphPoints[i + 1];
-        case ConnectType of
-          ctLine: ;
-          ctStepXY:
-            if IsRotated then
-              b.X := a.X
-            else
-              b.Y := a.Y;
-          ctStepYX:
-            if IsRotated then
-              a.X := b.X
-            else
-              a.Y := b.Y;
-        end;
-        if not IsRotated then begin
-          PushPoint(a);
-          PushPoint(b);
-        end else begin
-          PushPoint(a);
-          PushPoint(b);
-        end
-      end;
-      a := ProjToRect(FGraphPoints[AEnd], ext2);
-      PushPoint(ProjToLine(a, z2));
-      z2 := IfThen(IsRotated, a.X, a.Y);
-      n2 := numPts;
+      CollectPoints(AStart, AEnd);
+      numBasePts := numPts;
+    end else begin
+      numPts := 0;
+      p := ProjToRect(FGraphPoints[AStart], ext2);
+      PushPoint(ProjToLine(p, zero));
+      p := ProjToRect(FGraphPoints[AEnd], ext2);
+      PushPoint(ProjToLine(p, zero));
+      FixZeroWidth;
+      numBasePts := numPts;
+    end;
+    SetLength(basePts, numBasePts);
+    CopyPoints(basePts, pts, numBasePts);
 
-      for i := 0 to numPrevPts - 1 do
-        PushPoint(prevPts[numPrevPts - i - 1]);
-      for i := 0 to n2 - 1 do
-        prevPts[i] := pts[i];
-      numPrevPts := n2;
+    // Iterate through y values
+    j0 := IfThen(FBanded and (Source.YCount > 1), 0, -1);
+    for j := Source.YCount - 2 downto j0 do begin
+      // Stack level points
+      numPts := 0;
+      UpdateGraphPoints(j, FLoBound, FUpBound, FStacked);
+      CollectPoints(AStart, AEnd);
+      numDataPts := numPts;
 
+      // Base points
+      for i:=numBasePts-1 downto 0 do
+        PushPoint(basepts[i]);
+
+      // Prepare painting
       ADrawer.Brush := AreaBrush;
       ADrawer.Pen := AreaContourPen;
       if Styles <> nil then
-        Styles.Apply(ADrawer, j);
-      if Depth > 0 then
-        // Rendering is incorrect when values cross zero level.
-        for i := 1 to n2 - 2 do
-          ADrawer.DrawLineDepth(pts[i], pts[i + 1], scaled_depth);
+        Styles.Apply(ADrawer, j - j0);
+
+      // Draw 3D sides
+      // Note: Rendering is often incorrect, e.g. when values cross zero level
+      // or when values are not stacked!
+      if (Depth > 0) then begin
+        c := ADrawer.BrushColor;
+        ADrawer.BrushColor := GetDepthColor(c);
+        // Top sides
+        if (Source.YCount = 1) or (not FStacked) or (j = Source.YCount-2) then
+          for i := 0 to numDataPts-2 do
+            ADrawer.DrawLineDepth(pts[i], pts[i+1], scaled_depth);
+        // Sides at the right
+        ADrawer.DrawLineDepth(pts[numdataPts-1], pts[numDataPts], scaled_depth);
+        ADrawer.BrushColor := c;
+      end;
+
+      // Fill polygon of current level
       ADrawer.Polygon(pts, 0, numPts);
-    end;
-    if AreaLinesPen.Style <> psClear then begin
-      ADrawer.Pen := AreaLinesPen;
-      for i := AStart + 1 to AEnd - 1 do begin
-        a := ProjToRect(FGraphPoints[i], ext2);
-        b := ProjToLine(a, z);
-        ADrawer.Line(ParentChart.GraphToImage(a), ParentChart.GraphToImage(b));
+
+      // Draw drop-lines
+      if AreaLinesPen.Style <> psClear then begin
+        if FBanded and (j > -1) then begin
+          ADrawer.Pen := AreaLinesPen;
+          for i := 1 to numDataPts-2 do
+            ADrawer.Line(pts[i], pts[numpts - 1 - i]);
+        end else
+        if not FBanded then begin
+          ADrawer.Pen := AreaLinesPen;
+          zeroPt := pts[numDataPts];
+          for i := 1 to numDataPts-2 do begin
+            if IsRotated then zeroPt.Y := pts[i].Y else zeroPt.X := pts[i].X;
+            ADrawer.Line(pts[i], zeroPt);
+          end;
+        end;
       end;
     end;
   end;
 
 var
-  i, j: Integer;
+  j, k: Integer;
 begin
-  if IsEmpty then exit;
+  if IsEmpty or (not Active) then exit;
 
   ext := ParentChart.CurrentExtent;
   ext2 := ext;
@@ -1461,23 +2147,40 @@ begin
   ExpandRange(ext2.a.Y, ext2.b.Y, 0.1);
 
   PrepareGraphPoints(ext, true);
-  if Length(FGraphPoints) = 0 then exit;
+  if Length(FGraphPoints) = 0 then
+    exit;
 
+  if UseZeroLevel then
+    zero := AxisToGraphY(ZeroLevel)
+  else
+    zero := IfThen(IsRotated, ext2.a.X, ext2.a.Y);
   scaled_depth := ADrawer.Scale(Depth);
-
   SetLength(pts, Length(FGraphPoints) * 4 + 4);
-  SetLength(prevPts, Length(pts));
-  j := -1;
-  for i := 0 to High(FGraphPoints) do
-    if IsNan(FGraphPoints[i]) = (j >= 0) then
-      if j >= 0 then begin
-        DrawSegment(j, i - 1);
-        j := -1;
-      end
-      else
-        j := i;
-  if j >= 0 then
-    DrawSegment(j, High(FGraphPoints));
+
+  CollectMissing;
+  if Length(missing) = 0 then
+    DrawSegment(0, High(FGraphPoints))
+  else begin
+    j := 0;
+    k := 0;
+    while j < Length(missing) do begin
+      while (missing[j] = k) do begin
+        inc(k);
+        inc(j);
+        if j = Length(missing) then
+          break;
+      end;
+      if j <= High(missing) then begin
+        DrawSegment(k, missing[j]-1);
+        k := missing[j]+1;
+      end else
+        DrawSegment(k, High(FGraphPoints));
+      inc(j);
+    end;
+    if k <= High(FGraphPoints) then
+      DrawSegment(k, High(FGraphPoints));
+  end;
+
   DrawLabels(ADrawer);
 end;
 
@@ -1485,7 +2188,7 @@ function TAreaSeries.Extent: TDoubleRect;
 begin
   Result := inherited Extent;
   if not IsEmpty and UseZeroLevel then
-    UpdateMinMax(ZeroLevel, Result.a.Y, Result.b.Y);
+    UpdateMinMax(GraphToAxisY(ZeroLevel), Result.a.Y, Result.b.Y);
 end;
 
 procedure TAreaSeries.GetLegendItems(AItems: TChartLegendItems);
@@ -1526,6 +2229,13 @@ begin
   UpdateParentChart;
 end;
 
+procedure TAreaSeries.SetBanded(AValue: Boolean);
+begin
+  if FBanded = AValue then exit;
+  FBanded := AValue;
+  UpdateParentChart;
+end;
+
 procedure TAreaSeries.SetConnectType(AValue: TConnectType);
 begin
   if FConnectType = AValue then exit;
@@ -1542,6 +2252,7 @@ procedure TAreaSeries.SetUseZeroLevel(AValue: Boolean);
 begin
   if FUseZeroLevel = AValue then exit;
   FUseZeroLevel := AValue;
+//  FSupportsZeroLevel := FUseZeroLevel;
   UpdateParentChart;
 end;
 
@@ -1551,6 +2262,14 @@ begin
   FZeroLevel := AValue;
   UpdateParentChart;
 end;
+
+function TAreaSeries.SkipMissingValues(AIndex: Integer): Boolean;
+begin
+  Result := inherited;
+  if not Result then
+    Result := FBanded and IsNaN(Source.Item[AIndex]^.Y);
+end;
+
 
 { TUserDrawnSeries }
 
@@ -1568,6 +2287,7 @@ procedure TUserDrawnSeries.Draw(ADrawer: IChartDrawer);
 var
   ic: IChartTCanvasDrawer;
 begin
+  if IsEmpty or (not Active) then exit;
   if Supports(ADrawer, IChartTCanvasDrawer, ic) and Assigned(FOnDraw) then
     FOnDraw(ic.Canvas, FChart.ClipRect);
 end;
@@ -1605,11 +2325,13 @@ end;
 procedure SkipObsoleteProperties;
 const
   STAIRS_NOTE = 'Obsolete, use ConnectType instead';
+  DRAWPOINTER_NOTE = 'Obsolete, use OnCustomDrawPointer instead';
 begin
   RegisterPropertyEditor(
-    TypeInfo(Boolean), TLineSeries, 'ShowLines', THiddenPropertyEditor);
+    TypeInfo(TChartAxisIndex), TConstantLine, 'AxisIndexX', THiddenPropertyEditor);
   RegisterPropertyToSkip(TAreaSeries, 'Stairs', STAIRS_NOTE, '');
   RegisterPropertyToSkip(TAreaSeries, 'InvertedStairs', STAIRS_NOTE, '');
+  RegisterPropertyToSkip(TLineSeries, 'OnDrawPointer', DRAWPOINTER_NOTE, '');
 end;
 
 initialization

@@ -50,6 +50,8 @@ type
 
   TGtk3WSCustomSplitter = class(TWSCustomSplitter)
   published
+    class function CreateHandle(const AWinControl: TWinControl;
+      const AParams: TCreateParams): TLCLIntfHandle; override;
   end;
 
   { TGtk3WSSplitter }
@@ -123,6 +125,7 @@ type
   TGtk3WSCustomPanel = class(TWSCustomPanel)
   published
     class function CreateHandle(const AWinControl: TWinControl; const AParams: TCreateParams): TLCLIntfHandle; override;
+    class procedure SetBorderStyle(const AWinControl: TWinControl; const ABorderStyle: TBorderStyle); override;
   end;
 
   { TGtk3WSPanel }
@@ -146,6 +149,17 @@ implementation
 uses
   gtk3widgets;
 
+{ TGtk3WSCustomSplitter }
+
+class function TGtk3WSCustomSplitter.CreateHandle(
+  const AWinControl: TWinControl; const AParams: TCreateParams): TLCLIntfHandle;
+var
+  ASplitter: TGtk3Splitter;
+begin
+  ASplitter := TGtk3Splitter.Create(AWinControl, AParams);
+  Result := TLCLIntfHandle(ASplitter);
+end;
+
 { TGtk3WSCustomPanel }
 
 class function TGtk3WSCustomPanel.CreateHandle(const AWinControl: TWinControl;
@@ -156,11 +170,18 @@ begin
   APanel := TGtk3Panel.Create(AWinControl, AParams);
 
   APanel.BorderStyle := TCustomControl(AWinControl).BorderStyle;
-  APanel.BevelInner := TCustomPanel(AWinControl).BevelInner;
-  APanel.BevelOuter := TCustomPanel(AWinControl).BevelOuter;
   APanel.Text := AWinControl.Caption;
 
   Result := TLCLIntfHandle(APanel);
+end;
+
+class procedure TGtk3WSCustomPanel.SetBorderStyle(
+  const AWinControl: TWinControl; const ABorderStyle: TBorderStyle);
+var
+  APanel: TGtk3Panel;
+begin
+  APanel := TGtk3Panel(AWinControl.Handle);
+  APanel.BorderStyle := ABorderStyle;
 end;
 
 { TGtk3WSCustomTrayIcon }

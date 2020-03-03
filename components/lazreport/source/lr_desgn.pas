@@ -148,6 +148,7 @@ type
   end;
 
   TPaintSel = class;
+  TAlignGuides = class;
 
   { TfrDesignerPage }
 
@@ -170,6 +171,7 @@ type
     fPaintSel: TPaintSel;
     fPainting: boolean;
     fResizeDialog:boolean;
+    fGuides: TAlignGuides;
 
     procedure NormalizeRect(var r: TRect);
     procedure NormalizeCoord(t: TfrView);
@@ -215,6 +217,7 @@ type
     procedure Init;
     procedure SetPage;
     procedure GetMultipleSelected;
+    procedure CheckGuides;
   end;
 
   TPaintTimeStatusItem = (ptsFocusRect);
@@ -241,12 +244,41 @@ type
     procedure Paint;
   end;
 
+  { TAlignGuides }
+
+  TAlignGuides = class
+  private
+    fOwner: TfrDesignerPage;
+    fSelBounds: TRect;
+    fSelMouse: TPoint;
+    fX,fY: Integer;
+    px,py: PInteger;
+    fMoveSelectionTracking: boolean;
+    procedure InvalidateHorzGuide;
+    procedure InvalidateVertGuide;
+    procedure PaintGuides;
+    procedure ChangeGuide(vert, show: boolean; value:Integer);
+    function  FindAnyGuide(const vert: boolean; const ax,ay:Integer; out snap: Integer;
+                           skipSel:boolean; skipTyp:TfrSetOfTyp): boolean;
+  public
+    constructor Create(aOwner: TfrDesignerPage);
+    procedure Paint;
+    procedure FindGuides(ax, ay:Integer; skipSel:boolean=false; skipTyp:TfrSetOfTyp=[]);
+    function  SnapToGuide(var ax, ay: Integer): boolean;
+    function  SnapSelectionToGuide(const kx, ky: Integer; var ax, ay:Integer): boolean;
+    procedure HideGuides;
+    procedure ResetMoveSelection(ax, ay: Integer);
+    //property X: PInteger read px;
+    //property Y: PInteger read py;
+  end;
+
   { TfrDesignerForm }
 
   TfrDesignerForm = class(TfrReportDesigner)
     acDuplicate: TAction;
     edtRedo: TAction;
     edtUndo: TAction;
+    btnGuides: TSpeedButton;
     MenuItem2: TMenuItem;
     IEPopupMenu: TPopupMenu;
     IEButton: TSpeedButton;
@@ -433,6 +465,7 @@ type
     StB1: TSpeedButton;
     procedure acDuplicateExecute(Sender: TObject);
     procedure acToggleFramesExecute(Sender: TObject);
+    procedure btnGuidesClick(Sender: TObject);
     procedure C2GetItems(Sender: TObject);
     procedure edtRedoExecute(Sender: TObject);
     procedure edtUndoExecute(Sender: TObject);
@@ -527,7 +560,7 @@ type
     ItemWidths: TStringList;
     FCurPage: Integer;
     FGridSize: Integer;
-    FGridShow, FGridAlign: Boolean;
+    FGridShow, FGridAlign, FGuidesShow: Boolean;
     FUnits: TfrReportUnits;
     FGrayedButtons: Boolean;
     FUndoBuffer, FRedoBuffer: TfrUndoBuffer;
@@ -553,6 +586,7 @@ type
     procedure DuplicateSelection;
     procedure ObjInspSelect(Obj:TObject);
     procedure ObjInspRefresh;
+    procedure DataInspectorRefresh;
 
     procedure GetFontList;
     procedure SetMenuBitmaps;
@@ -560,6 +594,7 @@ type
     procedure SetGridSize(Value: Integer);
     procedure SetGridShow(Value: Boolean);
     procedure SetGridAlign(Value: Boolean);
+    procedure SetGuidesShow(AValue: boolean);
     procedure SetUnits(Value: TfrReportUnits);
     procedure SetGrayedButtons(Value: Boolean);
     procedure SetCurDocName(Value: String);
@@ -671,6 +706,7 @@ type
     property GridSize: Integer read FGridSize write SetGridSize;
     property ShowGrid: Boolean read FGridShow write SetGridShow;
     property GridAlign: Boolean read FGridAlign write SetGridAlign;
+    property ShowGuides: boolean read FGuidesShow write SetGuidesShow;
     property Units: TfrReportUnits read FUnits write SetUnits;
     property GrayedButtons: Boolean read FGrayedButtons write SetGrayedButtons;
   end;
@@ -749,6 +785,318 @@ begin
   tr := t.GetClipRgn(rtExtended);
   CombineRgn(HR, HR, TR, RGN_OR);
   DeleteObject(TR);
+end;
+
+function SelectionBounds(out r: TRect): boolean;
+var
+  i: Integer;
+  t: TfrView;
+begin
+  r := rect(Maxint, MaxInt, 0 , 0);
+  result := false;
+  with r do
+    for i:=0 to Objects.Count-1 do
+    begin
+      t := TfrView(Objects[i]);
+      if t.Selected then begin
+        if t.x<left then left := t.x;
+        if t.x+t.dx>right then right := t.x+t.dx;
+        if t.y<top then top := t.y;
+        if t.y+t.dy>bottom then bottom := t.y+t.dy;
+        result := true;
+      end;
+    end;
+end;
+
+{ TAlignGuides }
+
+procedure TAlignGuides.InvalidateHorzGuide;
+var
+  r: TRect;
+begin
+  if (px<>nil) then
+  begin
+    r := Rect(px^-4, 0 , px^+4, fOwner.ClientHeight-1);
+    InvalidateRect(fOwner.Handle, @r, false);
+  end;
+end;
+
+procedure TAlignGuides.InvalidateVertGuide;
+var
+  r: TRect;
+begin
+  if (py<>nil) then
+  begin
+    r := Rect(0, py^-4, fOwner.ClientWidth-1, py^+4);
+    InvalidateRect(fOwner.Handle, @r, false);
+  end;
+end;
+
+procedure TAlignGuides.PaintGuides;
+var
+  oldStyle: TPenStyle;
+  oldColor: TColor;
+  oldCosmetic: Boolean;
+  i, v, oldWidth: Integer;
+  t: TfrView;
+begin
+  if (px<>nil) or (py<>nil) then
+    with fOwner.Canvas do
+    begin
+      oldStyle := Pen.Style;
+      oldColor := Pen.Color;
+      oldCosmetic := Pen.Cosmetic;
+      oldWidth := Pen.Width;
+
+      // paint object's aligned sides
+      // TODO: make an option for the fixed values
+      // TODO: a different visualization hint could be having
+      //       the view redraw itself in a distinctive color?
+
+      Pen.Cosmetic := true;
+      Pen.Style := psSolid;
+      Pen.Width := 5;
+      Pen.Color := clSkyBlue;
+
+      for i:=0 to Objects.Count-1 do
+      begin
+        t := TfrView(Objects[i]);
+        if px<>nil then
+          if t.FindAlignSide(false, px^, v) and (v=px^) then
+          begin
+            MoveTo(px^, t.y);
+            LineTo(px^, t.y + t.dy);
+          end;
+        if py<>nil then
+          if t.FindAlignSide(true, py^, v) and (v=py^) then
+          begin
+            MoveTo(t.x, py^);
+            LineTo(t.x + t.dx, py^);
+          end;
+      end;
+
+      // paint guides
+      // TODO: make an option for the fixed values
+
+      Pen.Style := psDash;
+      Pen.Cosmetic := false;
+      Pen.Width := 1;
+
+      if px<>nil then
+      begin
+        Pen.Color := clRed;
+        MoveTo(px^, 0);
+        LineTo(px^, fOwner.ClientHeight);
+      end;
+      if py<>nil then
+      begin
+        Pen.Color := clBlue;
+        MoveTo(0, py^);
+        LineTo(fOwner.ClientWidth, py^);
+      end;
+
+      Pen.Cosmetic := oldCosmetic;
+      Pen.Style := oldStyle;
+      Pen.Color := oldColor;
+      Pen.Width := oldWidth;
+    end;
+end;
+
+procedure TAlignGuides.ChangeGuide(vert, show: boolean; value: Integer);
+begin
+  if vert then
+  begin
+    InvalidateVertGuide;
+    if show then begin
+      fy := value;
+      py := @fy;
+      InvalidateVertGuide;
+    end else
+      py := nil;
+  end else
+  begin
+    InvalidateHorzGuide;
+    if show then begin
+      fx := value;
+      px := @fx;
+      InvalidateHorzGuide;
+    end else
+      px := nil;
+  end;
+end;
+
+procedure TAlignGuides.Paint;
+begin
+  PaintGuides;
+end;
+
+function TAlignGuides.FindAnyGuide(const vert: boolean; const ax, ay: Integer;
+  out snap: Integer; skipSel: boolean; skipTyp: TfrSetOfTyp): boolean;
+var
+  i, value: Integer;
+  t: TfrView;
+begin
+  result := false;
+
+  // TODO: start looking at the nearest object to (ax, ay)
+
+  if vert then  value := ay
+  else          value := ax;
+
+  for i := Objects.Count-1 downto 0 do
+  begin
+    t := TfrView(Objects[i]);
+    if (skipSel and t.Selected) or
+       (t.typ in skipTyp) then
+         continue;
+    if t.FindAlignSide(vert, value, snap) then begin
+      result := true;
+      break;
+    end;
+  end;
+
+  if vert then
+  begin
+    if result and (py<>nil) and (py^=snap) then
+      exit;
+    ChangeGuide(true, result, snap);
+  end else
+  begin
+    if result and (px<>nil) and (px^=snap) then 
+      exit;
+    ChangeGuide(false, result, snap);
+  end;
+end;
+
+constructor TAlignGuides.Create(aOwner: TfrDesignerPage);
+begin
+  inherited create;
+  fOwner := aOwner;
+end;
+
+procedure TAlignGuides.FindGuides(ax, ay: Integer; skipSel: boolean;
+  skipTyp: TfrSetOfTyp);
+var
+  dummy: Integer;
+begin
+  FindAnyGuide(true,  ax, ay, dummy, skipSel, skipTyp);
+  FindAnyGuide(false, ax, ay, dummy, skipSel, skipTyp);
+end;
+
+function TAlignGuides.SnapToGuide(var ax, ay: Integer): boolean;
+var
+  newX, newY: Integer;
+begin
+  newX := ax; newY := ay;
+  if (px<>nil) and (Abs(ax-px^)<=lrSnapDistance) then
+    newX := px^;
+  if (py<>nil) and (Abs(ay-py^)<=lrSnapDistance) then
+    newY := py^;
+  result := (newX<>ax) or (newY<>ay);
+  if result then
+  begin
+    ax := newX;
+    ay := newY;
+  end;
+end;
+
+function TAlignGuides.SnapSelectionToGuide(const kx, ky: Integer; var ax,
+  ay: Integer): boolean;
+var
+  moveBounds, displayedBounds: TRect;
+  snap, deltaX, deltaY, snapDeltaX, snapDeltaY: Integer;
+  pts: array[0..2] of TPoint;
+
+  procedure TestPoints(vert: boolean; var delta:integer);
+  var
+    p: TPoint;
+  begin
+    delta := 0;
+    for p in pts do
+    begin
+      if FindAnyGuide(vert, p.x, p.y, snap, true, []) then
+      begin
+        if vert then delta := snap - p.y
+        else         delta := snap - p.x;
+        result := true;
+        break;
+      end;
+    end;
+  end;
+
+begin
+  result := false;
+
+  if not fMoveSelectionTracking then begin
+    if not SelectionBounds(fSelBounds) then 
+      exit;
+    HideGuides;
+    fMoveSelectionTracking := true;
+  end;
+
+  // real bounds
+  moveBounds := fSelBounds;
+  deltaX := ax - fSelMouse.x;
+  deltaY := ay - fSelMouse.y;
+  moveBounds.Offset(deltaX, deltaY);
+
+  // find potential snap points
+  snapDeltaX := 0;
+  snapDeltaY := 0;
+
+  pts[2] := Point(ax, ay);  // could be ommited if less matching guides are needed
+
+  if deltaX<0 then
+  begin
+    pts[0] := Point(moveBounds.left, ay);
+    pts[1] := Point(moveBounds.right, ay);
+  end else
+  if deltaX>0 then
+  begin
+    pts[0] := Point(moveBounds.right, ay);
+    pts[1] := Point(moveBounds.left, ay);
+  end;
+  if deltaX<>0 then
+    TestPoints(false, snapDeltaX);
+
+  if deltaY<0 then
+  begin
+    pts[0] := Point(ax, moveBounds.top);
+    pts[1] := Point(ax, moveBounds.Bottom);
+  end else
+  if deltaY>0 then
+  begin
+    pts[0] := Point(ax, moveBounds.Bottom);
+    pts[1] := Point(ax, moveBounds.top);
+  end;
+  if deltaY<>0 then
+    TestPoints(true, snapDeltaY);
+
+  // adjust the moving bounds by the extra snapping if it exists
+  moveBounds.Offset(snapDeltaX, snapDeltaY);
+  // get displayed bounds
+  // TODO: Optmize: should not be necessary to compute displayed bounds for this
+  SelectionBounds(displayedBounds);
+  // cheating new mouse values
+  ax := (ax - kx) + (moveBounds.Left - displayedBounds.Left);
+  ay := (ay - ky) + (moveBounds.Top - displayedBounds.Top);
+
+  result := true; // either we snap to something or not, we always succeed
+end;
+
+procedure TAlignGuides.HideGuides;
+begin
+  InvalidateHorzGuide;
+  InvalidateVertGuide;
+  px := nil;
+  py := nil;
+  fMoveSelectionTracking := false;
+end;
+
+procedure TAlignGuides.ResetMoveSelection(ax, ay: Integer);
+begin
+  fMoveSelectionTracking := false;
+  fSelMouse := Point(ax, ay);
 end;
 
 { TPaintSel }
@@ -933,7 +1281,8 @@ begin
   Parent      := AOwner as TWinControl;
   Color       := clWhite;
   EnableEvents;
-  fPaintSel  := TPaintSel.Create(self);
+  fPaintSel   := TPaintSel.Create(self);
+  fGuides     := TAlignGuides.Create(self);
 end;
 
 destructor TfrDesignerPage.destroy;
@@ -980,6 +1329,7 @@ procedure TfrDesignerPage.Paint;
 begin
   fPainting := true;
   Draw(10000, 0);
+  fGuides.Paint;
   fPaintSel.Paint;
   fPainting := false;
 end;
@@ -1518,11 +1868,17 @@ end;
 procedure TfrDesignerPage.RoundCoord(var x, y: Integer);
 begin
   with FDesigner do
+  begin
+
+    if ShowGuides and fGuides.SnapToGuide(x, y) then
+      exit;
+
     if GridAlign then
     begin
       x := x div GridSize * GridSize;
       y := y div GridSize * GridSize;
     end;
+  end;
 end;
 
 procedure TfrDesignerPage.GetMultipleSelected;
@@ -1557,6 +1913,12 @@ begin
     OldRect1 := OldRect;
     TfrDesignerForm(frDesigner).MRFlag := True;
   end;
+end;
+
+procedure TfrDesignerPage.CheckGuides;
+begin
+  if not FDesigner.ShowGuides then
+    fGuides.HideGuides;
 end;
 
 procedure TfrDesignerPage.MDown(Sender: TObject; Button: TMouseButton;
@@ -1617,12 +1979,16 @@ begin
          begin
             with FDesigner do
             begin
-              if GridAlign then
-              begin
-                if not FindNearestEdge(x, y) then
+              if ShowGuides and fGuides.SnapToGuide(x, y) then
+                // x and/or y are at the right value now
+              else begin
+                if GridAlign then
                 begin
-                  x := Round(x / GridSize) * GridSize;
-                  y := Round(y / GridSize) * GridSize;
+                  if not FindNearestEdge(x, y) then
+                  begin
+                    x := Round(x / GridSize) * GridSize;
+                    y := Round(y / GridSize) * GridSize;
+                  end;
                 end;
               end;
             end;
@@ -1643,7 +2009,10 @@ begin
             Exit;
          end;
   end;
-  
+
+  if FDesigner.ShowGuides then
+    fGuides.ResetMoveSelection(x, y);
+
   if Cursor = crDefault then
   begin
     f := False;
@@ -2206,12 +2575,43 @@ var
       end;
     end;
   end;
+
+  function SnapCoords: boolean;
+  begin
+    result := true;
+    if FDesigner.ShowGuides and fGuides.SnapToGuide(x, y) then begin
+      kx := x - LastX;
+      ky := y - LastY;
+    end else begin
+      kx := x - LastX;
+      ky := y - LastY;
+      if FDesigner.GridAlign and not GridCheck then
+        result := false;
+    end;
+  end;
+
 begin
   {$IFDEF DebugLR}
   DebugLnEnter('TfrDesignerPage.MMove(X=%d,Y=%d)  INIT',[x,y]);
   {$ENDIF}
   Moved := True;
   w := 2;
+
+  if FDesigner.ShowGuides then
+  begin
+    if not down then
+      // normal snap guide to any object
+      fGuides.FindGuides(x, y)
+    else
+    if (Cursor = crPencil) or
+       (Cursor = crCross) then
+      // normal snap to guide for inserting objects or drawing lines
+      fGuides.FindGuides(x, y)
+    else
+    if (TfrDesignerForm(frDesigner).SelNum >= 1) then
+      // don't create a guide for the object(s) being resized
+      fGuides.FindGuides(x, y, true);
+  end;
 
   if FirstChange and Down and not RFlag then
   begin
@@ -2341,9 +2741,7 @@ begin
   //line drawing
   if Down and (Cursor = crPencil) then
   begin
-    kx := x - LastX;
-    ky := y - LastY;
-    if FDesigner.GridAlign and not GridCheck then begin
+    if not SnapCoords then begin
       {$IFDEF DebugLR}
       DebugLnExit('TfrDesignerPage.MMove DONE: not gridcheck and gridalign');
       {$ENDIF}
@@ -2436,9 +2834,7 @@ begin
   // sizing several objects
   if Down and TfrDesignerForm(frDesigner).MRFlag and (Mode = mdSelect) and (Cursor <> crDefault) then
   begin
-    kx := x - LastX;
-    ky := y - LastY;
-    if FDesigner.GridAlign and not GridCheck then begin
+    if not SnapCoords then begin
       {$IFDEF DebugLR}
       DebugLnExit('TfrDesignerPage.MMove DONE: sizing seveal, not gridcheck');
       {$ENDIF}
@@ -2501,11 +2897,17 @@ begin
   begin
     kx := x - LastX;
     ky := y - LastY;
-    if FDesigner.GridAlign and not GridCheck then begin
-      {$IFDEF DebugLR}
-      DebugLnExit('TfrDesignerPage.MMove DONE: moving');
-      {$ENDIF}
-      Exit;
+    if FDesigner.ShowGuides and fGuides.SnapSelectionToGuide(kx, ky, x, y) then
+    begin
+      kx := x - LastX;
+      ky := y - LastY;
+    end else begin
+      if FDesigner.GridAlign and not GridCheck then begin
+        {$IFDEF DebugLR}
+        DebugLnExit('TfrDesignerPage.MMove DONE: moving');
+        {$ENDIF}
+        Exit;
+      end;
     end;
     if FirstBandMove and (TfrDesignerForm(frDesigner).SelNum = 1) and ((kx <> 0) or (ky <> 0)) and
       not (ssAlt in Shift) then
@@ -2549,6 +2951,8 @@ begin
   //resizing
   if Down and (Mode = mdSelect) and (TfrDesignerForm(frDesigner).SelNum = 1) and (Cursor <> crDefault) then
   begin
+    if FDesigner.ShowGuides then
+      fGuides.SnapToGuide(x, y);
     kx := x - LastX;
     ky := y - LastY;
     if FDesigner.GridAlign and not GridCheck then begin
@@ -2875,6 +3279,7 @@ begin
     NPEraseFocusRect;
     OffsetRect(OldRect, -10000, -10000);
   end;
+  fGuides.HideGuides;
 end;
 
 {-----------------------------------------------------------------------------}
@@ -3531,6 +3936,11 @@ begin
     ViewsAction(nil, @ToggleFrames, -1);
 end;
 
+procedure TfrDesignerForm.btnGuidesClick(Sender: TObject);
+begin
+  ShowGuides := btnGuides.Down;
+end;
+
 procedure TfrDesignerForm.FormShow(Sender: TObject);
 var
   CursorImage: TCursorImage;
@@ -3669,6 +4079,7 @@ begin // setting curpage and do all manipulation
     ResetSelection;
     SendBandsToDown;
     PageView.Invalidate;
+    UpdScrollbars;
   finally
     fInBuildPage:=False;
   end;
@@ -3694,6 +4105,14 @@ begin
   if FGridAlign = Value then Exit;
   GB2.Down := Value;
   FGridAlign := Value;
+end;
+
+procedure TfrDesignerForm.SetGuidesShow(AValue: boolean);
+begin
+  if FGuidesShow = AValue then Exit;
+  FGuidesShow := AValue;
+  btnGuides.Down := AValue;
+  PageView.CheckGuides;
 end;
 
 procedure TfrDesignerForm.SetUnits(Value: TfrReportUnits);
@@ -4302,6 +4721,7 @@ begin
   ScrollBox1.VertScrollBar.Range := ScrollBox1.VertScrollBar.Range + 10;
 end;
 
+{$PUSH}
 {$HINTS OFF}
 {$ifdef sbod}
 procedure TfrDesignerForm.DrawStatusPanel(const ACanvas: TCanvas;
@@ -4707,7 +5127,7 @@ begin
   Result:=AppendPathDelim(lrConfigFolderName(false))+'lrDesigner.cfg';
 end;
 
-{$HINTS ON}
+{$POP}
 
 function TfrDesignerForm.RectTypEnabled: Boolean;
 begin
@@ -5312,6 +5732,12 @@ begin
   {$ENDIF}
 end;
 
+procedure TfrDesignerForm.DataInspectorRefresh;
+begin
+  if Assigned(lrFieldsList) then
+    lrFieldsList.RefreshDSList;
+end;
+
 procedure TfrDesignerForm.ClB1Click(Sender: TObject);
 var p  : TPoint;
     t  : TfrView;
@@ -5809,6 +6235,7 @@ begin
   PageView.NPDrawSelection;
   PageView.NPDrawLayerObjects(0, TopSelected);
   ObjInspRefresh;
+  DataInspectorRefresh;
 end;
 
 //Move selected object from front
@@ -6495,6 +6922,7 @@ const
   rsGridShow = 'GridShow';
   rsGridAlign = 'GridAlign';
   rsGridSize = 'GridSize';
+  rsGuidesShow = 'GuidesShow';
   rsUnits = 'Units';
   rsButtons = 'GrayButtons';
   rsEdit = 'EditAfterInsert';
@@ -6524,6 +6952,7 @@ begin
 
   Ini.WriteBool('frEditorForm', rsGridShow, ShowGrid);
   Ini.WriteBool('frEditorForm', rsGridAlign, GridAlign);
+  Ini.WriteBool('frEditorForm', rsGuidesShow, ShowGuides);
   Ini.WriteInteger('frEditorForm', rsGridSize, GridSize);
   Ini.WriteInteger('frEditorForm', rsUnits, Word(Units));
   Ini.WriteBool('frEditorForm', rsButtons, GrayedButtons);
@@ -6574,6 +7003,7 @@ begin
     GridSize := Ini.ReadInteger('frEditorForm', rsGridSize, 4);
     GridAlign := Ini.ReadBool('frEditorForm', rsGridAlign, True);
     ShowGrid := Ini.ReadBool('frEditorForm', rsGridShow, True);
+    ShowGuides := Ini.ReadBool('frEditorForm', rsGuidesShow, true);
     Units := TfrReportUnits(Ini.ReadInteger('frEditorForm', rsUnits, 0));
 //    GrayedButtons := Ini.ReadBool('frEditorForm', rsButtons, False);
     EditAfterInsert := Ini.ReadBool('frEditorForm', rsEdit, True);
@@ -7967,9 +8397,6 @@ var
   FSaveGetPValue:TGetPValueEvent;
   FSaveFunEvent:TFunctionEvent;
   FSaveReportEvent: TSaveReportEvent;
-
-  ///***DocMode: (dmDesigning, dmPrinting);             // current mode
-
 begin
   if (GetComponent(0) is TfrCustomMemoView) and Assigned(CurReport) then
   begin
@@ -7987,7 +8414,7 @@ begin
     FSaveView:=CurView;
     FSaveBand:=CurBand;
     FSavePage:=CurPage;
-  // DocMode: (dmDesigning, dmPrinting);             // current mode
+
     frDesigner:=nil;
 
     CurReport:=TfrReport.Create(nil);
@@ -8012,7 +8439,6 @@ begin
     FSaveReportEvent:=frDesignerComp.OnSaveReport;
     frDesignerComp.OnSaveReport:=@DoSaveReportEvent;
 
-    //FDetailReport:=TStringStream.Create(Trim(FEditView.DetailReport.Text));
     try
       FDetailRrep.ReportBody.Position:=0;
       if FDetailRrep.ReportBody.Size > 0 then

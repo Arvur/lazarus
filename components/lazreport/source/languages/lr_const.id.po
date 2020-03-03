@@ -184,9 +184,10 @@ msgid "Insert DB field"
 msgstr "Sisipkan field DB"
 
 #: lr_const.sbarcodeformopts
+#, fuzzy
 msgctxt "lr_const.sbarcodeformopts"
 msgid "Options"
-msgstr ""
+msgstr "Opsi"
 
 #: lr_const.sbarcodeformreadable
 msgid "&Human readable"
@@ -255,6 +256,7 @@ msgid "0"
 msgstr "0"
 
 #: lr_const.sclassobjectnotfound
+#, object-pascal-format
 msgid "Class Object \"%s\" not found"
 msgstr "Class Object \"%s\" tidak ditemukan"
 
@@ -485,6 +487,10 @@ msgstr "FORMATTEXT(<Mask>, <String>)/Menerapkan <Mask> ke <String> dan mengembal
 msgid "FRAC(<Value>)/Returns the fractional part of floating point <Value>."
 msgstr ""
 
+#: lr_const.sdescriptionif
+msgid "IF(<expression>, <Value1>, <Value2>)/Returns <Value1>, if <expression> is true; otherwise returns <Value2>."
+msgstr ""
+
 #: lr_const.sdescriptioninc
 msgid "INC(<Value>)/Increment <Value>."
 msgstr ""
@@ -650,9 +656,10 @@ msgid "Object moving"
 msgstr "Pemindahan obyek"
 
 #: lr_const.sdesoptionsformopt
+#, fuzzy
 msgctxt "lr_const.sdesoptionsformopt"
 msgid "Options"
-msgstr ""
+msgstr "Opsi"
 
 #: lr_const.sdesoptionsformother
 msgctxt "lr_const.sdesoptionsformother"
@@ -748,6 +755,7 @@ msgid "Version"
 msgstr ""
 
 #: lr_const.sduplicatedobjectname
+#, object-pascal-format
 msgid "An object named \"%s\" already exists"
 msgstr ""
 
@@ -936,9 +944,10 @@ msgid "Search text not found."
 msgstr ""
 
 #: lr_const.sfindtextoptions
+#, fuzzy
 msgctxt "lr_const.sfindtextoptions"
 msgid "Options"
-msgstr ""
+msgstr "Opsi"
 
 #: lr_const.sfindtextorg
 msgid "Origin"
@@ -980,9 +989,10 @@ msgid "Font ..."
 msgstr "Font..."
 
 #: lr_const.sformat11
+#, fuzzy
 msgctxt "lr_const.sformat11"
 msgid "[None]"
-msgstr ""
+msgstr "[Tidak ada]"
 
 #: lr_const.sformat21
 msgid "1234,5"
@@ -1001,9 +1011,10 @@ msgid "1 234,50"
 msgstr "1 234,50"
 
 #: lr_const.sformat25
+#, fuzzy
 msgctxt "lr_const.sformat25"
 msgid "Custom"
-msgstr ""
+msgstr "Kustom"
 
 #: lr_const.sformat31
 msgid "11.15.98"
@@ -1022,9 +1033,10 @@ msgid "15 november 1998"
 msgstr "15 november 1998"
 
 #: lr_const.sformat35
+#, fuzzy
 msgctxt "lr_const.sformat35"
 msgid "Custom"
-msgstr ""
+msgstr "Kustom"
 
 #: lr_const.sformat41
 msgid "02:43:35"
@@ -1043,9 +1055,10 @@ msgid "2:43"
 msgstr "2:43"
 
 #: lr_const.sformat45
+#, fuzzy
 msgctxt "lr_const.sformat45"
 msgid "Custom"
-msgstr ""
+msgstr "Kustom"
 
 #: lr_const.sformat51
 msgid "0;1"
@@ -1064,9 +1077,10 @@ msgid "False;True"
 msgstr "False;True"
 
 #: lr_const.sformat55
+#, fuzzy
 msgctxt "lr_const.sformat55"
 msgid "Custom"
-msgstr ""
+msgstr "Kustom"
 
 #: lr_const.sformfile
 msgid "FastReport form"
@@ -1216,9 +1230,10 @@ msgid "Grid align"
 msgstr "Jajar grid"
 
 #: lr_const.sfrdesignerformhightlight
+#, fuzzy
 msgctxt "lr_const.sfrdesignerformhightlight"
 msgid "Highlight attributes"
-msgstr ""
+msgstr "Atribut penerang"
 
 #: lr_const.sfrdesignerforminsband
 msgid "Insert band"
@@ -1276,9 +1291,10 @@ msgid "Paste"
 msgstr "Paste"
 
 #: lr_const.sfrdesignerformpgoption
+#, fuzzy
 msgctxt "lr_const.sfrdesignerformpgoption"
 msgid "Page options"
-msgstr ""
+msgstr "Opsi halaman"
 
 #: lr_const.sfrdesignerformpreview
 msgid "Preview report"
@@ -1763,6 +1779,7 @@ msgid "Invalid report format"
 msgstr ""
 
 #: lr_const.sinvalidvariablename
+#, object-pascal-format
 msgid "\"%s\" is not a valid variable name."
 msgstr ""
 
@@ -1820,6 +1837,7 @@ msgid "Object inspector"
 msgstr "Inspektor obyek"
 
 #: lr_const.sobjectnotfound
+#, object-pascal-format
 msgid "Object \"%s\" not found"
 msgstr ""
 
@@ -2566,10 +2584,12 @@ msgid "Report file"
 msgstr "File laporan"
 
 #: lr_const.sreportcorruptoldknowversion
+#, object-pascal-format
 msgid "This report is corrupt, it probably needs \"LRE_OLDV%d_FRF_READ\"=true"
 msgstr ""
 
 #: lr_const.sreportcorruptunknownversion
+#, object-pascal-format
 msgid "This report is corrupt, frVersion=%d"
 msgstr ""
 

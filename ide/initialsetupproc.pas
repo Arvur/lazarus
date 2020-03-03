@@ -37,10 +37,10 @@ uses
   // CodeTools
   DefineTemplates, CodeToolManager, FileProcs,
   // LazUtils
-  LazFileCache, LazUTF8, LazUTF8Classes, LazFileUtils,
-  LazLoggerBase, LazLogger, Laz2_XMLCfg,
+  LazFileCache, LazUTF8, LazUTF8Classes, LazFileUtils, FileUtil,
+  LazLoggerBase, Laz2_XMLCfg,
   // IDE
-  LazarusIDEStrConsts, LazConf, EnvironmentOpts, IDEProcs;
+  LazarusIDEStrConsts, LazConf, EnvironmentOpts, FppkgHelper;
 
 type
   TSDFilenameQuality = (
@@ -71,14 +71,16 @@ type
     sddtCompilerFilename,
     sddtFPCSrcDir,
     sddtMakeExeFilename,
-    sddtDebuggerFilename
+    sddtDebuggerFilename,
+    sddtFppkgFpcPrefix
     );
 
   TSDFlag = (
     sdfCompilerFilenameNeedsUpdate,
     sdfFPCSrcDirNeedsUpdate,
     sdfMakeExeFilenameNeedsUpdate,
-    sdfDebuggerFilenameNeedsUpdate
+    sdfDebuggerFilenameNeedsUpdate,
+    sdfFppkgConfigFileNeedsUpdate
     );
   TSDFlags = set of TSDFlag;
 
@@ -88,11 +90,11 @@ function SearchLazarusDirectoryCandidates(StopIfFits: boolean): TSDFileInfoList;
 procedure SetupLazarusDirectory;
 
 // FreePascal Compiler
-function CheckCompilerQuality(AFilename: string; out Note: string;
+function CheckFPCExeQuality(AFilename: string; out Note: string;
   TestSrcFilename: string): TSDFilenameQuality;
-function SearchCompilerCandidates(StopIfFits: boolean;
+function SearchFPCExeCandidates(StopIfFits: boolean;
   const TestSrcFilename: string): TSDFileInfoList;
-procedure SetupCompilerFilename;
+procedure SetupFPCExeFilename;
 
 // Pas2js compiler
 function CheckPas2jsQuality(AFilename: string; out Note: string;
@@ -103,6 +105,10 @@ function CheckFPCSrcDirQuality(ADirectory: string; out Note: string;
   const FPCVer: String; aUseFileCache: Boolean = True): TSDFilenameQuality;
 function SearchFPCSrcDirCandidates(StopIfFits: boolean;
   const FPCVer: string): TSDFileInfoList;
+
+// Fppkg
+function CheckFppkgConfiguration(var ConfigFile: string; out Msg: string): TSDFilenameQuality;
+function CheckFppkgConfigFile(const AFilename: string; out Note: string): TSDFilenameQuality;
 
 // Make
 // Checks a given file to see if it is a valid make executable
@@ -239,7 +245,7 @@ begin
     if CheckDir(EnvironmentOptions.LazarusDirectory,Result) then exit;
 
     // then check the directory of the executable
-    Dir:=ProgramDirectory(true);
+    Dir:=ProgramDirectoryWithBundle;
     if CheckDir(Dir,Result) then exit;
     ResolvedDir:=GetPhysicalFilenameCached(Dir,false);
     if (ResolvedDir<>Dir) and (CheckDir(ResolvedDir,Result)) then exit;
@@ -313,14 +319,15 @@ begin
   end;
 end;
 
-function CheckCompilerQuality(AFilename: string; out Note: string;
+function CheckFPCExeQuality(AFilename: string; out Note: string;
   TestSrcFilename: string): TSDFilenameQuality;
 var
   CfgCache: TPCTargetConfigCache;
 
   function CheckPPU(const AnUnitName: string): boolean;
   begin
-    if CompareFileExt(CfgCache.Units[AnUnitName],'ppu',false)<>0 then
+    if (CfgCache.Units=nil)
+    or (CompareFileExt(CfgCache.Units[AnUnitName],'ppu',false)<>0) then
     begin
       Note:=Format(lisPpuNotFoundCheckYourFpcCfg, [AnUnitName]);
       Result:=false;
@@ -368,7 +375,7 @@ begin
     i:=CfgCache.IndexOfUsedCfgFile;
     if i<0 then
     begin
-      Note:=lisFpcCfgIsMissing;
+      Note:=SafeFormat(lisCompilerCfgIsMissing,['fpc.cfg']);
       exit;
     end;
     if not CfgCache.HasPPUs then
@@ -388,7 +395,7 @@ begin
   Result:=sddqCompatible;
 end;
 
-function SearchCompilerCandidates(StopIfFits: boolean;
+function SearchFPCExeCandidates(StopIfFits: boolean;
   const TestSrcFilename: string): TSDFileInfoList;
 var
   ShortCompFile: String;
@@ -413,7 +420,7 @@ var
     if List=nil then
       List:=TSDFileInfoList.create(true);
     Item:=List.AddNewItem(RealFilename, AFilename);
-    Item.Quality:=CheckCompilerQuality(RealFilename, Item.Note, TestSrcFilename);
+    Item.Quality:=CheckFPCExeQuality(RealFilename, Item.Note, TestSrcFilename);
     Result:=(Item.Quality=sddqCompatible) and StopIfFits;
   end;
 
@@ -528,14 +535,14 @@ begin
   end;
 end;
 
-procedure SetupCompilerFilename;
+procedure SetupFPCExeFilename;
 var
   Filename, Note: String;
   Quality: TSDFilenameQuality;
   List: TSDFileInfoList;
 begin
   Filename:=EnvironmentOptions.GetParsedCompilerFilename;
-  Quality:=CheckCompilerQuality(Filename,Note,'');
+  Quality:=CheckFPCExeQuality(Filename,Note,'');
   if Quality<>sddqInvalid then exit;
   // bad compiler
   dbgout('SetupCompilerFilename:');
@@ -549,7 +556,7 @@ begin
   end else begin
     debugln(' Searching compiler ...');
   end;
-  List:=SearchCompilerCandidates(true, CodeToolBoss.CompilerDefinesCache.TestFilename);
+  List:=SearchFPCExeCandidates(true, CodeToolBoss.CompilerDefinesCache.TestFilename);
   try
     if (List=nil) or (List.BestDir.Quality=sddqInvalid) then begin
       debugln(['SetupCompilerFilename: no proper compiler found.']);
@@ -628,7 +635,7 @@ begin
     i:=CfgCache.IndexOfUsedCfgFile;
     if i<0 then
     begin
-      Note:=lisFpcCfgIsMissing;
+      Note:=SafeFormat(lisCompilerCfgIsMissing,['pas2js.cfg']);
       exit;
     end;
     //if not CheckPas('classes') then exit;
@@ -823,6 +830,47 @@ begin
     end;
   finally
     EnvironmentOptions.FPCSourceDirectory:=OldFPCSrcDir;
+  end;
+end;
+
+function CheckFppkgConfiguration(var ConfigFile: string; out Msg: string): TSDFilenameQuality;
+var
+  Fppkg: TFppkgHelper;
+begin
+  Fppkg := TFppkgHelper.Instance;
+  Fppkg.OverrideConfigurationFilename := ConfigFile;
+
+  if Fppkg.IsProperlyConfigured(Msg) then
+    Result := sddqCompatible
+  else
+    Result := sddqInvalid;
+  ConfigFile := Fppkg.GetConfigurationFileName;
+end;
+
+function CheckFppkgConfigFile(const AFilename: string; out Note: string): TSDFilenameQuality;
+begin
+  Note := '';
+  if AFilename='' then
+  begin
+    Result := sddqCompatible;
+  end
+  else
+  begin
+    if not FileExistsCached(AFilename) then
+    begin
+      Result := sddqIncomplete;
+      Note:=lisFileNotFound;
+    end
+    else
+    begin
+      if DirectoryExists(AFilename) then
+      begin
+        Result := sddqInvalid;
+        Note:=lisFileIsDirectory;
+      end
+      else
+        Result := sddqCompatible;
+    end;
   end;
 end;
 

@@ -32,17 +32,17 @@ uses
   InterfaceBase;
 
 type
-  { TWinCEWSDragImageList }
+  { TWinCEWSDragImageListResolution }
 
-  TWinCEWSDragImageList = class(TWSDragImageList)
+  TWinCEWSDragImageListResolution = class(TWSDragImageListResolution)
   published
-    class function BeginDrag(const ADragImageList: TDragImageList; Window: HWND;
+    class function BeginDrag(const ADragImageList: TDragImageListResolution; Window: HWND;
       AIndex, X, Y: Integer): Boolean; override;
-    class function DragMove(const ADragImageList: TDragImageList; X, Y: Integer): Boolean; override;
-    class procedure EndDrag(const ADragImageList: TDragImageList); override;
-    class function HideDragImage(const ADragImageList: TDragImageList;
+    class function DragMove(const ADragImageList: TDragImageListResolution; X, Y: Integer): Boolean; override;
+    class procedure EndDrag(const ADragImageList: TDragImageListResolution); override;
+    class function HideDragImage(const ADragImageList: TDragImageListResolution;
       ALockedWindow: HWND; DoUnLock: Boolean): Boolean; override;
-    class function ShowDragImage(const ADragImageList: TDragImageList;
+    class function ShowDragImage(const ADragImageList: TDragImageListResolution;
       ALockedWindow: HWND; X, Y: Integer; DoLock: Boolean): Boolean; override;
   end;
 
@@ -164,7 +164,7 @@ begin
     Width := CreateParams.Width;
     Height := CreateParams.Height;
 
-    LCLBoundsToWin32Bounds(AWinControl, Left, Top, Width, Height);
+    LCLBoundsToWin32Bounds(AWinControl, Left, Top);
     if AWinControl is TCustomControl then
       if TCustomControl(AWinControl).BorderStyle = bsSingle then
         FlagsEx := FlagsEx or WS_EX_CLIENTEDGE;
@@ -392,7 +392,7 @@ var
 begin
   IntfLeft := ALeft; IntfTop := ATop;
   IntfWidth := AWidth; IntfHeight := AHeight;
-  LCLBoundsToWin32Bounds(AWinControl, IntfLeft, IntfTop, IntfWidth, IntfHeight);
+  LCLBoundsToWin32Bounds(AWinControl, IntfLeft, IntfTop);
   {$IFDEF VerboseSizeMsg}
   Debugln('TWinCEWSWinControl.ResizeWindow A ',AWinControl.Name,':',AWinControl.ClassName,
     ' LCL=',dbgs(ALeft),',',dbgs(ATop),',',dbgs(AWidth)+','+dbgs(AHeight),
@@ -458,28 +458,28 @@ begin
       SW_INVALIDATE or SW_ERASE or SW_SCROLLCHILDREN);
 end;
 
-{ TWinCEWSDragImageList }
+{ TWinCEWSDragImageListResolution }
 
-class function TWinCEWSDragImageList.BeginDrag(
-  const ADragImageList: TDragImageList; Window: HWND; AIndex, X, Y: Integer): Boolean;
+class function TWinCEWSDragImageListResolution.BeginDrag(
+  const ADragImageList: TDragImageListResolution; Window: HWND; AIndex, X, Y: Integer): Boolean;
 begin
   // No check to Handle should be done, because if there is no handle (no needed)
   // we must create it here. This is normal for imagelist (we can never need handle)
   Result := ImageList_BeginDrag(ADragImageList.Reference.Handle, AIndex, X, Y);
 end;
 
-class function TWinCEWSDragImageList.DragMove(const ADragImageList: TDragImageList;
+class function TWinCEWSDragImageListResolution.DragMove(const ADragImageList: TDragImageListResolution;
   X, Y: Integer): Boolean;
 begin
   Result := ImageList_DragMove(X, Y);
 end;
 
-class procedure TWinCEWSDragImageList.EndDrag(const ADragImageList: TDragImageList);
+class procedure TWinCEWSDragImageListResolution.EndDrag(const ADragImageList: TDragImageListResolution);
 begin
   ImageList_EndDrag;
 end;
 
-class function TWinCEWSDragImageList.HideDragImage(const ADragImageList: TDragImageList;
+class function TWinCEWSDragImageListResolution.HideDragImage(const ADragImageList: TDragImageListResolution;
   ALockedWindow: HWND; DoUnLock: Boolean): Boolean;
 begin
   if DoUnLock then
@@ -488,7 +488,7 @@ begin
     Result := ImageList_DragShowNolock(False);
 end;
 
-class function TWinCEWSDragImageList.ShowDragImage(const ADragImageList: TDragImageList;
+class function TWinCEWSDragImageListResolution.ShowDragImage(const ADragImageList: TDragImageListResolution;
   ALockedWindow: HWND; X, Y: Integer; DoLock: Boolean): Boolean;
 begin
   if DoLock then

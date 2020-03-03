@@ -5,10 +5,19 @@ unit project_application_options;
 interface
 
 uses
-  Classes, SysUtils, LCLProc, FileUtil, Forms, Controls, Graphics, Dialogs,
-  ExtCtrls, StdCtrls, Buttons, ComCtrls, ExtDlgs, Math, LCLType, IDEOptionsIntf,
-  LazIDEIntf, IDEImagesIntf, IDEDialogs, DividerBevel, Project, LazarusIDEStrConsts,
-  EnvironmentOpts, ApplicationBundle, ProjectIcon, W32Manifest, CompilerOptions;
+  Classes, SysUtils, Math,
+  // LazUtils
+  FileUtil,
+  // LCL
+  LCLProc, LCLType, Controls, Graphics, Dialogs, ExtCtrls, StdCtrls, Buttons,
+  ComCtrls, ExtDlgs,
+  // LazControls
+  DividerBevel,
+  // IdeIntf
+  IDEOptionsIntf, IDEOptEditorIntf, LazIDEIntf, IDEImagesIntf, IDEDialogs,
+  // IDE
+  LazarusIDEStrConsts, Project, ProjectIcon, CompilerOptions,
+  ApplicationBundle, W32Manifest;
 
 type
 
@@ -16,14 +25,17 @@ type
 
   TProjectApplicationOptionsFrame = class(TAbstractIDEOptionsEditor)
     AppSettingsGroupBox: TGroupBox;
+    DefaultIconButton: TBitBtn;
+    LongPathCheckBox: TCheckBox;
     DarwinDividerBevel: TDividerBevel;
+    AnsiUTF8CheckBox: TCheckBox;
     NameEdit: TEdit;
     DescriptionEdit: TEdit;
     NameLabel: TLabel;
     DescriptionLabel: TLabel;
+    IconBtnsPanel: TPanel;
     UseLCLScalingCheckBox: TCheckBox;
     CreateAppBundleButton: TBitBtn;
-    DefaultIconButton: TButton;
     DpiAwareLabel: TLabel;
     DpiAwareComboBox: TComboBox;
     WindowsDividerBevel: TDividerBevel;
@@ -144,8 +156,8 @@ end;
 
 procedure TProjectApplicationOptionsFrame.ClearIconButtonClick(Sender: TObject);
 begin
-  fIconChanged:=true;
   IconImage.Picture.Clear;
+  fIconChanged:=true;
 end;
 
 procedure TProjectApplicationOptionsFrame.CreateAppBundleButtonClick(Sender: TObject);
@@ -161,6 +173,8 @@ end;
 
 procedure TProjectApplicationOptionsFrame.LoadIconButtonClick(Sender: TObject);
 begin
+  if OpenPictureDialog1.InitialDir='' then
+    OpenPictureDialog1.InitialDir:=FProject.Directory;
   if not OpenPictureDialog1.Execute then exit;
   try
     IconImage.Picture.LoadFromFile(OpenPictureDialog1.FileName);
@@ -184,6 +198,8 @@ begin
   ExecutionLevelLabel.Enabled := aEnable;
   ExecutionLevelComboBox.Enabled := aEnable;
   UIAccessCheckBox.Enabled := aEnable;
+  LongPathCheckBox.Enabled := aEnable;
+  AnsiUTF8CheckBox.Enabled := aEnable;
   NameEdit.Enabled := aEnable;
   DescriptionEdit.Enabled := aEnable;
 end;
@@ -252,13 +268,15 @@ begin
   for DpiLevel in TXPManifestDpiAware do
     DpiAwareComboBox.Items.Add(DpiLevelNames[DpiLevel] + ' (' + ManifestDpiAwareValues[DpiLevel] + ')');
   UIAccessCheckBox.Caption := dlgPOUIAccess;
+  LongPathCheckBox.Caption := dlgPOLongPathAware;
+  AnsiUTF8CheckBox.Caption := dlgPOAnsiUTF8;
   NameLabel.Caption := lisName;
   DescriptionLabel.Caption := lisCodeHelpDescrTag;
 
   // Darwin specific, Application Bundle
   DarwinDividerBevel.Caption := lisForMacOSDarwin;
   CreateAppBundleButton.Caption := dlgPOCreateAppBundle;
-  TIDEImages.AssignImage(CreateAppBundleButton.Glyph, 'pkg_compile');
+  IDEImages.AssignImage(CreateAppBundleButton, 'pkg_compile');
 
   // Icon
   IconLabel.Caption := dlgPOIcon;
@@ -268,11 +286,12 @@ begin
   ClearIconButton.Caption := dlgPOClearIcon;
   LoadIconButton.LoadGlyphFromStock(idButtonOpen);
   if LoadIconButton.Glyph.Empty then
-    TIDEImages.AssignImage(LoadIconButton.Glyph, 'laz_open');
+    IDEImages.AssignImage(LoadIconButton, 'laz_open');
   SaveIconButton.LoadGlyphFromStock(idButtonSave);
+  IDEImages.AssignImage(DefaultIconButton, 'restore_default');
   if SaveIconButton.Glyph.Empty then
-    TIDEImages.AssignImage(SaveIconButton.Glyph, 'laz_save');
-  TIDEImages.AssignImage(ClearIconButton.Glyph, 'menu_clean');
+    IDEImages.AssignImage(SaveIconButton, 'laz_save');
+  IDEImages.AssignImage(ClearIconButton, 'menu_clean');
   IconImage.KeepOriginXWhenClipped := True;
   IconImage.KeepOriginYWhenClipped := True;
   IconImagePictureChanged(nil);
@@ -286,7 +305,10 @@ begin
   with FProject do
   begin
     TitleEdit.Text := Title;
-    UseLCLScalingCheckBox.Checked := Scaled;
+    if TProjectIDEOptions(AOptions).LclApp then
+      UseLCLScalingCheckBox.Checked := Scaled
+    else
+      UseLCLScalingCheckBox.Enabled := False; // Disable for a console program.
     UseAppBundleCheckBox.Checked := UseAppBundle;
     // Manifest
     with ProjResources.XPManifest do
@@ -295,6 +317,8 @@ begin
       DpiAwareComboBox.ItemIndex := Ord(DpiAware);
       ExecutionLevelComboBox.ItemIndex := Ord(ExecutionLevel);
       UIAccessCheckBox.Checked := UIAccess;
+      LongPathCheckBox.Checked := LongPathAware;
+      AnsiUTF8CheckBox.Checked := AnsiUTF8;
       NameEdit.Text := TextName;
       DescriptionEdit.Text := TextDesc;
     end;
@@ -334,6 +358,8 @@ begin
       DpiAware := TXPManifestDpiAware(DpiAwareComboBox.ItemIndex);
       ExecutionLevel := TXPManifestExecutionLevel(ExecutionLevelComboBox.ItemIndex);
       UIAccess := UIAccessCheckBox.Checked;
+      LongPathAware := LongPathCheckBox.Checked;
+      AnsiUTF8 := AnsiUTF8CheckBox.Checked;
       TextName := NameEdit.Text;
       TextDesc := DescriptionEdit.Text;
     end;

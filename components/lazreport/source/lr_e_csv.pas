@@ -73,11 +73,6 @@ begin
   BandTypes := [btMasterHeader,btMasterData,btColumnHeader];
 end;
 
-function CompareIntervals(Item1, Item2: Pointer): Integer;
-begin
-  result := {%H-}PtrInt(Item1)-{%H-}PtrInt(Item2);
-end;
-
 procedure TfrCSVExportFilter.OnEndPage;
 var
   i,n: Integer;
@@ -103,9 +98,9 @@ var
     end else
     begin
       if s = '' then
-        s := LazUTF8.UTF8Quotedstr(aStr, QuoteChar)
+        s := UTF8Quotedstr(aStr, QuoteChar)
       else
-        s := s + Separator + LazUTF8.UTF8Quotedstr(aStr, QuoteChar);
+        s := s + Separator + UTF8Quotedstr(aStr, QuoteChar);
     end;
   end;
 

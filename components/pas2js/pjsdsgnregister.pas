@@ -5,8 +5,15 @@ unit PJSDsgnRegister;
 interface
 
 uses
-  Classes, SysUtils, Forms, Controls, ProjectIntf, CompOptsIntf, LazIDEIntf, IDEOptionsIntf,
-  PJSDsgnOptions, PJSDsgnOptsFrame, LazLogger;
+  Classes, SysUtils,
+  // LCL
+  Forms, Controls,
+  // LazUtils
+  LazLoggerBase,
+  // IdeIntf
+  ProjectIntf, CompOptsIntf, LazIDEIntf, IDEOptionsIntf, IDEOptEditorIntf,
+  // Pas2js
+  PJSDsgnOptions, PJSDsgnOptsFrame;
 
 const
   ProjDescNamePas2JSWebApp = 'Web Application';
@@ -31,11 +38,11 @@ type
     FOptions: TBrowserApplicationOptions;
     FProjectPort: integer;
     FProjectURL: String;
-    function CreateHTMLFile(AProject: TLazProject; AFileName: String
-      ): TLazProjectFile;
-    function CreateProjectSource: String;
-    function GetNextPort: Word;
   protected
+    function CreateHTMLFile(AProject: TLazProject; AFileName: String
+      ): TLazProjectFile; virtual;
+    function CreateProjectSource: String; virtual;
+    function GetNextPort: Word; virtual;
     function ShowOptionsDialog: TModalResult; virtual;
   public
     constructor Create; override;
@@ -85,7 +92,7 @@ uses
   frmpas2jsnodejsprojectoptions,
   frmpas2jsbrowserprojectoptions,
   pjsprojectoptions,
-  pjscontroller, strpas2jsdesign, MenuIntf;
+  pjscontroller, strpas2jsdesign, IDECommands, ToolbarIntf, MenuIntf;
 
 procedure ShowServerDialog(Sender: TObject);
 begin
@@ -93,7 +100,14 @@ begin
   TPasJSWebserverProcessesForm.Instance.BringToFront;
 end;
 
+Const
+  sPas2JSWebserverName = 'Pas2JSWebservers';
+
 procedure Register;
+
+Var
+  ViewCategory : TIDECommandCategory;
+  IDECommand : TIDECommand;
 
 begin
   PJSOptions:=TPas2jsOptions.Create;
@@ -105,10 +119,17 @@ begin
   // add IDE options frame
   PJSOptionsFrameID:=RegisterIDEOptionsEditor(GroupEnvironment,TPas2jsOptionsFrame,
                                               PJSOptionsFrameID)^.Index;
-  RegisterIdeMenuCommand(itmViewDebugWindows,'Pas2JSWebservers',SPasJSWebserversCaption,nil,@ShowServerDialog);
+  ViewCategory := IDECommandList.FindCategoryByName(CommandCategoryViewName);
+  if ViewCategory <> nil then
+    begin
+    IDECommand := RegisterIDECommand(ViewCategory,sPas2JSWebserverName,SPasJSWebserverCaption,
+                                     CleanIDEShortCut,CleanIDEShortCut,Nil,@ShowServerDialog);
+    if IDECommand <> nil then
+      RegisterIDEButtonCommand(IDECommand);
+    end;
+  RegisterIdeMenuCommand(itmViewDebugWindows,sPas2JSWebserverName,SPasJSWebserverCaption,nil,@ShowServerDialog);
   // Add project options frame
   RegisterIDEOptionsEditor(GroupProject,TPas2JSProjectOptionsFrame, Pas2JSOptionsIndex);
-
 end;
 
 { TProjectPas2JSNodeJSApp }
@@ -240,25 +261,25 @@ function TProjectPas2JSNodeJSApp.InitProject(AProject: TLazProject ): TModalResu
 var
   MainFile : TLazProjectFile;
   CompOpts : TLazCompilerOptions;
+
 begin
   Result:=inherited InitProject(AProject);
-
   MainFile:=AProject.CreateProjectFile('project1.lpr');
   MainFile.IsPartOfProject:=true;
   AProject.AddFile(MainFile,false);
   AProject.MainFileID:=0;
   CompOpts:=AProject.LazBuildModes.BuildModes[0].LazCompilerOptions;
+  SetDefaultNodeJSCompileOptions(CompOpts);
   CompOpts.TargetFilename:='project1';
-  SetDefaultNodeJSCompileOptions(AProject.LazCompilerOptions);
 
   SetDefaultNodeRunParams(AProject.RunParameters.GetOrCreate('Default'));
 
   // create program source
   AProject.MainFile.SetSourceText(CreateProjectSource,true);
 
-  AProject.AddPackageDependency('pas2js_rtl');
-  if naoUseNodeJSApp in Options then
-    AProject.AddPackageDependency('fcl_base_pas2js');
+  //AProject.AddPackageDependency('pas2js_rtl');
+  //if naoUseNodeJSApp in Options then
+  //  AProject.AddPackageDependency('fcl_base_pas2js');
 end;
 
 function TProjectPas2JSNodeJSApp.CreateStartFiles(AProject: TLazProject
@@ -277,16 +298,14 @@ begin
   Flags:=DefaultProjectNoApplicationFlags-[pfRunnable];
 end;
 
-(*function TProjectPas2JSWebApp.GetBrowserCommand(AFileName : string): String;
-
-begin
-  Result:='$(Pas2JSBrowser) $(Pas2JSProjectURL)'
-end;               *)
-
 function TProjectPas2JSWebApp.GetNextPort : Word;
 
 begin
-  Result:=PJSOptions.StartAtPort+1;
+  Result:=PJSOptions.StartAtPort;
+  if Result>=$ffff then
+    Result:=1024
+  else
+    inc(Result);
   PJSOptions.StartAtPort:=Result;
   PJSOptions.Save;
 end;
@@ -378,7 +397,8 @@ Const
      '<!doctype html>'+LineEnding
     +'<html lang="en">'+LineEnding
     +'<head>'+LineEnding
-    +'  <meta charset="utf-8">'+LineEnding
+    +'  <meta http-equiv="Content-type" content="text/html; charset=utf-8">'+LineEnding
+    +'  <meta name="viewport" content="width=device-width, initial-scale=1">'+LineEnding
     +'  <title>Project1</title>'+LineEnding
     +'  <script src="%s"></script>'+LineEnding
     +'</head>'+LineEnding
@@ -491,6 +511,7 @@ function TProjectPas2JSWebApp.InitProject(AProject: TLazProject): TModalResult;
 var
   MainFile,
   HTMLFile : TLazProjectFile;
+  CompOpts: TLazCompilerOptions;
 
 begin
   Result:=inherited InitProject(AProject);
@@ -498,7 +519,9 @@ begin
   MainFile.IsPartOfProject:=true;
   AProject.AddFile(MainFile,false);
   AProject.MainFileID:=0;
-  SetDefaultWebCompileOptions(AProject.LazCompilerOptions);
+  CompOpts:=AProject.LazCompilerOptions;
+  SetDefaultWebCompileOptions(CompOpts);
+  CompOpts.TargetFilename:='project1';
   SetDefaultWebRunParams(AProject.RunParameters.GetOrCreate('Default'));
   AProject.MainFile.SetSourceText(CreateProjectSource,true);
   AProject.CustomData.Values[PJSProjectWebBrowser]:='1';
@@ -513,16 +536,17 @@ begin
     AProject.CustomData.Remove(PJSProjectURL);
     end;
   With AProject.CustomData do
-     begin
-     DebugLN([PJSProjectWebBrowser,': ',Values[PJSProjectWebBrowser]]);
-     DebugLN([PJSProjectPort,': ',Values[PJSProjectPort]]);
-     DebugLN([PJSProjectURL,': ',Values[PJSProjectURL]]);
-     end;
+    begin
+    DebugLn(['Info: (pas2jsdsgn) ',PJSProjectWebBrowser,': ',Values[PJSProjectWebBrowser]]);
+    DebugLn(['Info: (pas2jsdsgn) ',PJSProjectPort,': ',Values[PJSProjectPort]]);
+    DebugLn(['Info: (pas2jsdsgn) ',PJSProjectURL,': ',Values[PJSProjectURL]]);
+    end;
   // create html source
   if baoCreateHtml in Options then
     begin
+    debugln(['AAA2 TProjectPas2JSWebApp.InitProject ']);
     HTMLFile:=CreateHTMLFile(aProject,'project1.js');
-    HTMLFIle.CustomData[PJSIsProjectHTMLFile]:='1';
+    HTMLFile.CustomData[PJSIsProjectHTMLFile]:='1';
     if baoMaintainHTML in Options then
       AProject.CustomData.Values[PJSProjectMaintainHTML]:='1';
     if baoUseBrowserConsole in Options then
@@ -530,9 +554,9 @@ begin
     if baoRunOnReady in options then
       AProject.CustomData[PJSProjectRunAtReady]:='1';
     end;
-  AProject.AddPackageDependency('pas2js_rtl');
-  if baoUseBrowserApp in Options then
-    AProject.AddPackageDependency('fcl_base_pas2js');
+  //AProject.AddPackageDependency('pas2js_rtl');
+  //if baoUseBrowserApp in Options then
+  //  AProject.AddPackageDependency('fcl_base_pas2js');
 end;
 
 function TProjectPas2JSWebApp.CreateStartFiles(AProject: TLazProject

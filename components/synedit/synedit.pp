@@ -61,6 +61,35 @@ unit SynEdit;
                            // gtk2.12 paints faster directly
 {$ENDIF}
 
+{$IFDEF Windows}
+  (* * On Windows 10 there is an issue, where under certain conditions a "ghost" of the text caret remains visible.
+     That is one or a series of vertical black lines remain on the screen.
+     * This can be reproduced, by moving part (eg bottom) of editor off screen (not just behind the taskbar, but
+     off screen). Then press caret down to scroll. Ghost carets will scroll in with the new text.
+     Similar move caret to a place off-screen, unfocus editor, and refocus by clicking into the editor (move caret
+     while setting focus).
+     To reproduce, the editor must have a visible gutter; and must not have "current line" highlight.
+     * The conditions to cause this:
+     - Caret must be in part of editor that is outside the screen.
+     - Carte must be destroyed (maybe only hidden?), or ScrollWindowEx must affect caret
+     - Caret must be in a part of the editor for which NO call to "invalidate" was made,
+       but which will be repainted.
+       E.g. the gutter, but not the line area received an invalidate, and another line above/below was invalidated
+       (can happen through ScrollWindowEx). -> In this case the paint message receives a rect, that contains the caret,
+       even though the part containing the caret was never explicitly invalidated.
+     If this happens, while the caret is on screen (even if hidden behind another window/taskbar) then all works ok.
+     But if the caret was off screen, a permanent image of the caret will remain (once scrolled/moved into the screen area).
+     It seem that in this case windows does not update the information, that the caret became "invisible" when paint did paint
+     over it. So if the already overpainted caret, is later (by Windows) attempted to be hidden by a final "xor", then it actually
+     is made permanently visible.
+
+     As a solution, in the above conditions, the full line (actually the text part with the caret) must be invalidated too.
+     Since this is hard to track, the workaround will invalidate the full line, in any case that potentially could meet the
+     conditions
+  *)
+  {$DEFINE Windows10GhostCaretIssue}
+{$ENDIF}
+
 interface
 
 { $DEFINE SYNSCROLLDEBUG}
@@ -82,8 +111,13 @@ uses
   {$IFDEF WithSynExperimentalCharWidth}
   SynEditTextSystemCharWidth,
   {$ENDIF}
-  Types, LCLIntf, LCLType, LMessages, LazUTF8, LCLProc, LazMethodList, LazLoggerBase,
-  SysUtils, Classes, Messages, Controls, Graphics, Forms, StdCtrls, ExtCtrls, Menus,
+  Types, SysUtils, Classes,
+  // LCL
+  LCLProc, LCLIntf, LCLType, LMessages, LResources, Messages, Controls, Graphics,
+  Forms, StdCtrls, ExtCtrls, Menus, Clipbrd, StdActns,
+  // LazUtils
+  LazMethodList, LazLoggerBase, LazUTF8,
+  // SynEdit
   SynEditTypes, SynEditSearch, SynEditKeyCmds, SynEditMouseCmds, SynEditMiscProcs,
   SynEditPointClasses, SynBeautifier, SynEditMarks,
   // Markup
@@ -97,8 +131,8 @@ uses
   // Gutter
   SynGutterBase, SynGutter, SynGutterCodeFolding, SynGutterChanges,
   SynGutterLineNumber, SynGutterMarks, SynGutterLineOverview,
-  SynEditMiscClasses, SynEditHighlighter, LazSynTextArea, SynTextDrawer, SynEditTextBidiChars,
-  LResources, Clipbrd, StdActns;
+  SynEditMiscClasses, SynEditHighlighter, LazSynTextArea, SynTextDrawer,
+  SynEditTextBidiChars;
 
 const
   ScrollBarWidth=0;
@@ -160,7 +194,8 @@ type
 
   TSynCaretAdjustMode = ( // used in TextBetweenPointsEx
     scamIgnore, // Caret stays at the same numeric values, if text is inserted before caret, the text moves, but the caret stays
-    scamAdjust, // Caret moves with text, if text is inserted
+    scamAdjust, // Caret moves with text. Except if it is at a selection boundary, in which case it stays with the selection (movement depends on setMoveBlock/setExtendBlock)
+    scamForceAdjust, // Caret moves with text. Can be used if the caret should move away from the bound of a persistent selection
     scamEnd,
     scamBegin
   );
@@ -185,6 +220,7 @@ type
   TSynStateFlag = (sfCaretChanged, sfHideCursor,
     sfEnsureCursorPos, sfEnsureCursorPosAtResize,
     sfExplicitTopLine, sfExplicitLeftChar,  // when doing EnsureCursorPos keep top/Left, if they where set explicitly after the caret (only applies before handle creation)
+    sfPreventScrollAfterSelect,
     sfIgnoreNextChar, sfPainting, sfHasPainted, sfHasScrolled,
     sfScrollbarChanged, sfHorizScrollbarVisible, sfVertScrollbarVisible,
     sfAfterLoadFromFileNeeded,
@@ -241,6 +277,9 @@ type
 
   TSynEditorOption2 = (
     eoCaretSkipsSelection,     // Allows <Left> and <Right> keys to move caret to selected block edges, without deselecting the block
+    eoCaretMoveEndsSelection,  // <Left> and <Right> will clear the selection, but the caret will NOT move.
+                               // Combine with eoCaretSkipsSelection, and the caret will move to the other selection bound, if needed
+                               // Kind of overrides eoPersistentBlock
     eoCaretSkipTab,            // Disables caret positioning inside tab-characters internal area
     eoAlwaysVisibleCaret,      // Keeps caret on currently visible control area, when scrolling control
     eoEnhanceEndKey,           // Toggles behaviour of <End> key on line with trailing spaces. If turned on, key will jump to last non-spacing char, if it's nearer to caret position.
@@ -248,7 +287,9 @@ type
     eoPersistentBlock,         // Keeps selection, even if caret moves away or text is edited
     eoOverwriteBlock,          // Allows to overwrite currently selected block, when pasting or typing new text
     eoAutoHideCursor,          // Hide mouse cursor, when new text is typed
-    eoColorSelectionTillEol    // Colorize selection background only till EOL of each line, not till edge of control
+    eoColorSelectionTillEol,   // Colorize selection background only till EOL of each line, not till edge of control
+    eoPersistentCaretStopBlink,// only if eoPersistentCaret > do not blink, draw fixed line
+    eoNoScrollOnSelectRange    // SelectALl, SelectParagraph, SelectToBrace will not scroll
   );
   TSynEditorOptions2 = set of TSynEditorOption2;
 
@@ -421,7 +462,8 @@ type
     swbWordEnd,
     swbTokenBegin,
     swbTokenEnd,
-    swbCaseChange
+    swbCaseChange,
+    swbWordSmart // begin or end of word with smart gaps (1 char)
   );
 
   { TCustomSynEdit }
@@ -449,6 +491,7 @@ type
     procedure WMKillFocus(var Msg: TWMKillFocus); message WM_KILLFOCUS;
     procedure WMExit(var Message: TLMExit); message LM_EXIT;
     procedure WMMouseWheel(var Message: TLMMouseEvent); message LM_MOUSEWHEEL;
+    procedure WMMouseHorizWheel(var Message: TLMMouseEvent); message LM_MOUSEHWHEEL;
     //procedure WMMouseWheel(var Msg: TMessage); message WM_MOUSEWHEEL;
     procedure WMSetFocus(var Msg: TLMSetFocus); message WM_SETFOCUS;
     procedure WMVScroll(var Msg: TLMScroll); message WM_VSCROLL;
@@ -462,6 +505,7 @@ type
     FInternalCaret: TSynEditCaret;
     //FScreenCaret: TSynEditScreenCaret;
     FInternalBlockSelection: TSynEditSelection;
+    FLastCaretXForMoveSelection: Integer;
     FOnChangeUpdating: TChangeUpdatingEvent;
     FMouseSelectionMode: TSynSelectionMode;
     FMouseSelectionCmd: TSynEditorMouseCommand;
@@ -527,7 +571,7 @@ type
     FConfirmMouseDownMatchAct: TSynEditMouseAction;
     FConfirmMouseDownMatchFound: Boolean;
     fBookMarkOpt: TSynBookMarkOpt;
-    FMouseWheelAccumulator, FMouseWheelLinesAccumulator: integer;
+    FMouseWheelAccumulator, FMouseWheelLinesAccumulator: Array [Boolean] of integer;
     fHideSelection: boolean;
     fOverwriteCaret: TSynEditCaretType;
     fInsertCaret: TSynEditCaretType;
@@ -585,6 +629,7 @@ type
     FOnMouseLink: TSynMouseLinkEvent;
     FPendingFoldState: String;
 
+    procedure UpdateScreenCaret;
     procedure AquirePrimarySelection;
     function GetChangeStamp: int64;
     function GetCharsInWindow: Integer;
@@ -754,6 +799,7 @@ type
     procedure InternalBeginUndoBlock(aList: TSynEditUndoList = nil); // includes paintlock
     procedure InternalEndUndoBlock(aList: TSynEditUndoList = nil);
   protected
+    FScreenCaretPainterClass: TSynEditScreenCaretPainterClass deprecated 'need refactor';
     {$IFDEF EnableDoubleBuf}
     BufferBitmap: TBitmap; // the double buffer
     SavedCanvas: TCanvas; // the normal TCustomControl canvas during paint
@@ -791,6 +837,7 @@ type
     procedure CreateParams(var Params: TCreateParams); override;
     procedure CreateWnd; override;
     procedure DestroyWnd; override;
+    procedure VisibleChanged; override;
     procedure Loaded; override;
     function  GetChildOwner: TComponent; override;
 
@@ -1589,8 +1636,12 @@ end;
 
 procedure TSynEditMouseGlobalActions.InitForOptions(AnOptions: TSynEditorMouseOptions);
 begin
+  // Normal wheel: scroll dependent on visible scroll-bars
   AddCommand(emcWheelScrollDown,       False,  mbXWheelDown, ccAny, cdDown, [], []);
   AddCommand(emcWheelScrollUp,         False,  mbXWheelUp, ccAny, cdDown, [], []);
+
+  AddCommand(emcWheelHorizScrollDown,       False,  mbXWheelLeft, ccAny, cdDown, [], []);
+  AddCommand(emcWheelHorizScrollUp,         False,  mbXWheelRight, ccAny, cdDown, [], []);
 
   if emCtrlWheelZoom in AnOptions then begin
     AddCommand(emcWheelZoomOut,        False,  mbXWheelDown, ccAny, cdDown, [ssCtrl], [ssCtrl]);
@@ -1734,12 +1785,18 @@ end;
 
 function TCustomSynEdit.GetCharsInWindow: Integer;
 begin
-  Result := FTextArea.CharsInWindow;
+  if not Assigned(FTextArea) then
+    Result := -1
+  else
+    Result := FTextArea.CharsInWindow;
 end;
 
 function TCustomSynEdit.GetCharWidth: integer;
 begin
-  Result := FTextArea.CharWidth;
+  if not Assigned(FTextArea) then
+    Result := -1
+  else
+    Result := FTextArea.CharWidth;
 end;
 
 function TCustomSynEdit.GetDefSelectionMode: TSynSelectionMode;
@@ -1764,17 +1821,26 @@ end;
 
 function TCustomSynEdit.GetLeftChar: Integer;
 begin
-  Result := FTextArea.LeftChar;
+  if not Assigned(FTextArea) then
+    Result := -1
+  else
+    Result := FTextArea.LeftChar;
 end;
 
 function TCustomSynEdit.GetLineHeight: integer;
 begin
-  Result := FTextArea.LineHeight;
+  if not Assigned(FTextArea) then
+    Result := -1
+  else
+    Result := FTextArea.LineHeight;
 end;
 
 function TCustomSynEdit.GetLinesInWindow: Integer;
 begin
-  Result := FTextArea.LinesInWindow;
+  if not Assigned(FTextArea) then
+    Result := -1
+  else
+    Result := FTextArea.LinesInWindow;
 end;
 
 function TCustomSynEdit.GetModified: Boolean;
@@ -1809,12 +1875,18 @@ end;
 
 function TCustomSynEdit.GetRightEdge: Integer;
 begin
-  Result := FTextArea.RightEdgeColumn;
+  if not Assigned(FTextArea) then
+    Result := -1
+  else
+    Result := FTextArea.RightEdgeColumn;
 end;
 
 function TCustomSynEdit.GetRightEdgeColor: TColor;
 begin
-  Result := FTextArea.RightEdgeColor;
+  if not Assigned(FTextArea) then
+    Result := clNone
+  else
+    Result := FTextArea.RightEdgeColor;
 end;
 
 function TCustomSynEdit.GetTextBetweenPoints(aStartPoint, aEndPoint: TPoint): String;
@@ -1827,7 +1899,10 @@ end;
 
 function TCustomSynEdit.GetTopLine: Integer;
 begin
-  Result := FFoldedLinesView.ViewPosToTextIndex(FTextArea.TopLine) + 1;
+  if not Assigned(FTextArea) then
+    Result := -1
+  else
+    Result := FFoldedLinesView.ViewPosToTextIndex(FTextArea.TopLine) + 1;
 end;
 
 procedure TCustomSynEdit.SetBlockTabIndent(AValue: integer);
@@ -2015,6 +2090,7 @@ begin
   FCaret.AddChangeHandler(@CaretChanged);
   FInternalCaret := TSynEditCaret.Create;
   FInternalCaret.MaxLeftChar := @CurrentMaxLineLen;
+  FScreenCaretPainterClass{%H-} := TSynEditScreenCaretPainterSystem;
 
   // Create the lines/views
   FTrimmedLinesView := TSynEditStringTrimmingList.Create(fLines, fCaret);
@@ -2092,6 +2168,7 @@ begin
   FBlockSelection.Caret := FCaret;
   FBlockSelection.InvalidateLinesMethod := @InvalidateLines;
   FBlockSelection.AddChangeHandler(@DoBlockSelectionChanged);
+  FBlockSelection.{%H-}FoldedView := FFoldedLinesView;
 
   FInternalBlockSelection := TSynEditSelection.Create(FTheLinesView, False);
   FInternalBlockSelection.InvalidateLinesMethod := @InvalidateLines;
@@ -2102,10 +2179,6 @@ begin
   FWordBreaker := TSynWordBreaker.Create;
 
   RecreateMarkList;
-
-  {$IFNDEF EnableDoubleBuf}
-  DoubleBuffered := True;
-  {$ENDIF}
 
   fTextDrawer := TheTextDrawer.Create([fsBold], fFontDummy);
   {$IFDEF WithSynExperimentalCharWidth}
@@ -2119,9 +2192,11 @@ begin
   FLeftGutter := CreateGutter(self, gsLeft, FTextDrawer);
   FLeftGutter.RegisterChangeHandler(@GutterChanged);
   FLeftGutter.RegisterResizeHandler(@GutterResized);
+  FLeftGutter.DoAutoSize;
   FRightGutter := CreateGutter(self, gsRight, FTextDrawer);
   FRightGutter.RegisterChangeHandler(@GutterChanged);
   FRightGutter.RegisterResizeHandler(@GutterResized);
+  FRightGutter.DoAutoSize;
 
   ControlStyle := ControlStyle + [csOpaque, csSetCaption, csTripleClicks, csQuadClicks];
   Height := 150;
@@ -2414,8 +2489,8 @@ begin
         EnsureCursorPosVisible;              // TODO: This may call SetTopLine, change order
                                              // This does Paintlock, should be before final decrease
       // Must be after EnsureCursorPosVisible (as it does MoveCaretToVisibleArea)
-      if FCaret.LinePos > FLines.Count then
-        FCaret.LinePos := FLines.Count;
+      if FCaret.LinePos > Max(FLines.Count, 1) then
+        FCaret.LinePos := Max(FLines.Count, 1);
       if sfCaretChanged in fStateFlags then
         UpdateCaret;
       //if sfScrollbarChanged in fStateFlags then
@@ -2787,6 +2862,10 @@ begin
     {$IFDEF VerboseSynEditInvalidate}
     DebugLnEnter(['TCustomSynEdit.InvalidateGutterLines ',DbgSName(self), ' FirstLine=',FirstLine, ' LastLine=',LastLine]);
     {$ENDIF}
+    {$IFDEF Windows10GhostCaretIssue}
+    if (FLeftGutter.Visible or FRightGutter.Visible) and (sfCaretChanged in fStateFlags) then
+      InvalidateLines(FirstLine, LastLine);
+    {$ENDIF}
     if (FirstLine = -1) and (LastLine = -1) then begin
       FPaintArea.InvalidateGutterLines(-1, -1);
     end else begin
@@ -3054,13 +3133,15 @@ var
     //WHEEL_PAGESCROLL = MAXDWORD;
   var
     WClicks, WLines: Integer;
+    IsHoriz: Boolean;
   begin
-    Inc(FMouseWheelAccumulator, AnInfo.WheelDelta);
-    Inc(FMouseWheelLinesAccumulator, MinMax(Mouse.WheelScrollLines, 1, APageSize) * AnInfo.WheelDelta);
-    WClicks := FMouseWheelAccumulator div WHEEL_DELTA;
-    WLines  := FMouseWheelLinesAccumulator div WHEEL_DELTA;
-    dec(FMouseWheelAccumulator, WClicks * WHEEL_DELTA);
-    dec(FMouseWheelLinesAccumulator, WLines * WHEEL_DELTA);
+    IsHoriz := AnInfo.Button in [mbXWheelLeft, mbXWheelRight];
+    Inc(FMouseWheelAccumulator[IsHoriz], AnInfo.WheelDelta);
+    Inc(FMouseWheelLinesAccumulator[IsHoriz], MinMax(Mouse.WheelScrollLines, 1, APageSize) * AnInfo.WheelDelta);
+    WClicks := FMouseWheelAccumulator[IsHoriz] div WHEEL_DELTA;
+    WLines  := FMouseWheelLinesAccumulator[IsHoriz] div WHEEL_DELTA;
+    dec(FMouseWheelAccumulator[IsHoriz], WClicks * WHEEL_DELTA);
+    dec(FMouseWheelLinesAccumulator[IsHoriz], WLines * WHEEL_DELTA);
 
     case AnAction.Option of
       emcoWheelScrollSystem:
@@ -3231,7 +3312,9 @@ begin
                 if (AnAction.Option <> emcoSelectionContinue) or (not SelAvail) then
                   FBlockSelection.StartLineBytePos := FCaret.LineBytePos;
                 FBlockSelection.ActiveSelectionMode := smLine;
+                FBlockSelection.AutoExtend := True;
                 FBlockSelection.ForceSingleLineSelected := True;
+                FBlockSelection.AutoExtend := AnAction.Option = emcoSelectionContinue;
               end;
             emcStartSelectTokens, emcStartSelectWords, emcStartSelectLines: begin
                 FMouseSelectionCmd := ACommand;
@@ -3457,6 +3540,8 @@ begin
   inherited UpdateShowing;
   if fMarkupManager <> nil then
     fMarkupManager.DoVisibleChanged(IsVisible);
+  if HandleAllocated then
+    UpdateScreenCaret;
 end;
 
 procedure TCustomSynEdit.SetColor(Value: TColor);
@@ -4056,6 +4141,16 @@ begin
         CX := WordBreaker.NextWordEnd(Line,  CX);
         if (CX <= 0) then CX := LineLen + 1;
       end;
+    swbWordSmart: begin
+        NX := WordBreaker.NextWordEnd(Line, CX);
+        if (NX <= 0) then NX := LineLen + 1;
+        CX := WordBreaker.NextWordStart(Line, CX, InclCurrent);
+        if (CX <= 0) and not InclCurrent then CX := LineLen + 1;
+        if (CX <= 0) and InclCurrent then CX := 1;
+
+        if ((ABoundary=swbWordSmart) and (NX<CX-1)) then // step over 1 char gap
+          CX := NX;
+      end;
     swbTokenBegin: begin
         if not (   InclCurrent and
                    ((CX <= 1) or (Line[CX-1] in FWordBreaker.WhiteChars)) and
@@ -4160,6 +4255,18 @@ begin
         CX := WordBreaker.PrevWordEnd(Line,  Min(CX, Length(Line) + 1));
         CheckLineStart(CX, CY);
       end;
+    swbWordSmart: begin
+        Dec(CX); // step over 1 char gap
+        if WordBreaker.IsAtWordStart(Line, CX) then
+          NX := CX
+        else
+          NX := WordBreaker.PrevWordStart(Line,  Min(CX, Length(Line) + 1));
+        CX := WordBreaker.PrevWordEnd(Line,  Min(CX, Length(Line) + 1));
+
+        if (NX>CX-1) then // select the nearest
+          CX := NX;
+        CheckLineStart(CX, CY);
+    end;
     swbTokenBegin: begin
         CX := WordBreaker.PrevBoundary(Line,  Min(CX, Length(Line) + 1));
         if (CX > 0) and (Line[CX] in FWordBreaker.WhiteChars) then
@@ -4331,6 +4438,8 @@ begin
     LastPt.y  := 1;
   SetCaretAndSelection(LogicalToPhysicalPos(LastPt), Point(1, 1), LastPt);
   FBlockSelection.ActiveSelectionMode := smNormal;
+  if eoNoScrollOnSelectRange in FOptions2 then
+    Include(fStateFlags, sfPreventScrollAfterSelect);
   DoDecPaintLock(Self);
 end;
 
@@ -4343,7 +4452,11 @@ end;
 
 procedure TCustomSynEdit.SelectToBrace;
 begin
+  DoIncPaintLock(Self); // No editing is taking place
   FindMatchingBracket(CaretXY,true,true,true,false);
+  if eoNoScrollOnSelectRange in FOptions2 then
+    Include(fStateFlags, sfPreventScrollAfterSelect);
+  DoDecPaintLock(Self);
 end;
 
 procedure TCustomSynEdit.SelectWord;
@@ -4543,6 +4656,7 @@ begin
     inherited CreateHandle;   //SizeOrFontChanged will be called
     FLeftGutter.RecalcBounds;
     FRightGutter.RecalcBounds;
+    fStateFlags := fStateFlags - [sfHorizScrollbarVisible, sfVertScrollbarVisible];
     UpdateScrollBars;
   finally
     DoDecPaintLock(nil);
@@ -4766,22 +4880,30 @@ begin
         else include(fStateFlags, sfHorizScrollbarVisible);
       if fStateFlags * [sfEnsureCursorPos, sfEnsureCursorPosAtResize] <> [] then
         include(fStateFlags, sfEnsureCursorPosAtResize);
+
+      {$IFDEF LCLWin32}
+      // Some bug in Windows? ShowScrollBar will not always remove the scrollbar
+      // This will make the scrollbar un-scrollable, after that it can be hidden
+      if not (sfHorizScrollbarVisible in fStateFlags) then begin
+        ScrollInfo.nMax  := 99;
+        ScrollInfo.nPage := ScrollInfo.nMax-1;
+        ScrollInfo.nPos  := 1;
+        SetScrollInfo(Handle, SB_HORZ, ScrollInfo, False);
+      end;
+      {$ENDIF}
+
       ShowScrollBar(Handle, SB_Horz, sfHorizScrollbarVisible in fStateFlags);
       RecalcCharsAndLinesInWin(True);
     end;
-    {$IFnDEF SynNewScrollBarUpdate}
     if (sfHorizScrollbarVisible in fStateFlags) then begin
-    {$ENDIF}
-    ScrollInfo.nPage := CharsInWindow;
-    ScrollInfo.nPos := LeftChar;
-    SetScrollInfo(Handle, SB_HORZ, ScrollInfo, True);
-    {$IFNDEF LCLWin32} {$IFnDEF SynScrollBarWorkaround}
-    if not (sfHorizScrollbarVisible in fStateFlags) then
-      ShowScrollBar(Handle, SB_Horz, False);
-    {$ENDIF} {$ENDIF}
-    {$IFnDEF SynNewScrollBarUpdate}
+      ScrollInfo.nPage := CharsInWindow;
+      ScrollInfo.nPos := LeftChar;
+      SetScrollInfo(Handle, SB_HORZ, ScrollInfo, True);
+      {$IFNDEF LCLWin32} {$IFnDEF SynScrollBarWorkaround}
+      if not (sfHorizScrollbarVisible in fStateFlags) then
+        ShowScrollBar(Handle, SB_Horz, False);
+      {$ENDIF} {$ENDIF}
     end;
-    {$ENDIF}
     //DebugLn('[TCustomSynEdit.UpdateScrollbars] nMin=',ScrollInfo.nMin,' nMax=',ScrollInfo.nMax,
     //' nPage=',ScrollInfo.nPage,' nPos=',ScrollInfo.nPos,' ClientW=',ClientWidth);
 
@@ -4798,22 +4920,30 @@ begin
         else include(fStateFlags, sfVertScrollbarVisible);
       if fStateFlags * [sfEnsureCursorPos, sfEnsureCursorPosAtResize] <> [] then
         include(fStateFlags, sfEnsureCursorPosAtResize);
+
+      {$IFDEF LCLWin32}
+      // Some bug in Windows? ShowScrollBar will not always remove the scrollbar
+      // This will make the scrollbar un-scrollable, after that it can be hidden
+      if not (sfVertScrollbarVisible in fStateFlags) then begin
+        ScrollInfo.nMax  := 99;
+        ScrollInfo.nPage := ScrollInfo.nMax-1;
+        ScrollInfo.nPos  := 1;
+        SetScrollInfo(Handle, SB_Vert, ScrollInfo, False);
+      end;
+      {$ENDIF}
+
       ShowScrollBar(Handle, SB_Vert, sfVertScrollbarVisible in fStateFlags);
       RecalcCharsAndLinesInWin(True);
     end;
-    {$IFnDEF SynNewScrollBarUpdate}
-    if (sfVertScrollbarVisible in fStateFlags) then begin
-    {$ENDIF}
-    ScrollInfo.nPage := LinesInWindow;
-    ScrollInfo.nPos := TopView;
-    SetScrollInfo(Handle, SB_VERT, ScrollInfo, True);
-    {$IFNDEF LCLWin32} {$IFnDEF SynScrollBarWorkaround}
-    if not (sfVertScrollbarVisible in fStateFlags) then
-      ShowScrollBar(Handle, SB_Vert, False);
-    {$ENDIF} {$ENDIF}
-    {$IFnDEF SynNewScrollBarUpdate}
+      if (sfVertScrollbarVisible in fStateFlags) then begin
+      ScrollInfo.nPage := LinesInWindow;
+      ScrollInfo.nPos := TopView;
+      SetScrollInfo(Handle, SB_VERT, ScrollInfo, True);
+      {$IFNDEF LCLWin32} {$IFnDEF SynScrollBarWorkaround}
+      if not (sfVertScrollbarVisible in fStateFlags) then
+        ShowScrollBar(Handle, SB_Vert, False);
+      {$ENDIF} {$ENDIF}
     end;
-    {$ENDIF}
   end;
 end;
 
@@ -4912,10 +5042,8 @@ begin
   {$ENDIF}
   LastMouseCaret:=Point(-1,-1);
   // Todo: Under Windows, keeping the Caret only works, if no other component creates a caret
-  if not (eoPersistentCaret in fOptions) then begin
-    FScreenCaret.Visible := False;
-    FScreenCaret.DestroyCaret;
-  end;
+  FScreenCaretPainterClass{%H-} := TSynEditScreenCaretPainterClass(ScreenCaret.Painter.ClassType);
+  UpdateScreenCaret;
   if FHideSelection and SelAvail then
     Invalidate;
   {$IFDEF WinIME}
@@ -4934,7 +5062,11 @@ begin
   DebugLn(['[TCustomSynEdit.WMSetFocus] A ',DbgSName(Self), ' time=', dbgs(Now*86640)]);
   {$ENDIF}
   FScreenCaret.DestroyCaret; // Ensure recreation. On Windows only one caret exists, and it must be moved to the focused editor
-  FScreenCaret.Visible := not(eoNoCaret in FOptions);
+  if ScreenCaret.Painter.ClassType <> FScreenCaretPainterClass{%H-} then
+    ScreenCaret.ChangePainter(FScreenCaretPainterClass{%H-});
+  if ScreenCaret.Painter.ClassType <> TSynEditScreenCaretPainterSystem then // system painter does not use timer
+    FScreenCaret.PaintTimer.ResetInterval;
+  FScreenCaret.Visible := not(eoNoCaret in FOptions) and IsVisible;
   //if FHideSelection and SelAvail then
   //  Invalidate;
   inherited;
@@ -5056,6 +5188,37 @@ begin
     inherited;
 end;
 
+procedure TCustomSynEdit.UpdateScreenCaret;
+begin
+  if not HandleAllocated then
+    exit;
+  if (not IsVisible) or
+     ( (not Focused) and (not (eoPersistentCaret in fOptions)) ) or
+     (eoNoCaret in FOptions)
+  then begin
+    FScreenCaret.Hide;
+    FScreenCaret.DestroyCaret;
+    exit;
+  end;
+
+  if Focused then begin
+    // everything else is done in WM_SETFOCUS;
+    FScreenCaret.Visible := True;
+  end
+  else begin
+    // eoPersistentCaret is set
+    if ScreenCaret.Painter.ClassType <> TSynEditScreenCaretPainterInternal then
+      ScreenCaret.ChangePainter(TSynEditScreenCaretPainterInternal);
+
+    if (eoPersistentCaretStopBlink in FOptions2) then
+      FScreenCaret.PaintTimer.Interval := 0
+    else
+      ScreenCaret.PaintTimer.ResetInterval;
+
+    FScreenCaret.Visible := True;
+  end;
+end;
+
 procedure TCustomSynEdit.ScanRanges(ATextChanged: Boolean = True);
 begin
   if not HandleAllocated then begin
@@ -5064,6 +5227,7 @@ begin
       Application.AddOnIdleHandler(@IdleScanRanges, False);
     exit;
   end;
+//TODO: exit if in paintlock ???
   if not assigned(FHighlighter) then begin
     if ATextChanged then begin
       fMarkupManager.TextChanged(FChangedLinesStart, FChangedLinesEnd, FChangedLinesDiff);
@@ -5089,7 +5253,7 @@ begin
     exit;
 
   FHighlighter.CurrentLines := FLines; // Trailing spaces are not needed
-  if not FHighlighter.IdleScanRanges then
+  if not FHighlighter.IdleScanRanges{%H-} then
     exit;
 
   // Move to the end; give others a change too
@@ -5327,6 +5491,8 @@ begin
   FBlockSelection.ActiveSelectionMode := smNormal;
   CaretXY := FBlockSelection.EndLineBytePos;
   //DebugLn(' FFF3 ',Value.X,',',Value.Y,' BlockBegin=',BlockBegin.X,',',BlockBegin.Y,' BlockEnd=',BlockEnd.X,',',BlockEnd.Y);
+  if eoNoScrollOnSelectRange in FOptions2 then
+    Include(fStateFlags, sfPreventScrollAfterSelect);
   DoDecPaintLock(Self);
 end;
 
@@ -5888,11 +6054,26 @@ end;
 procedure TCustomSynEdit.SetTextBetweenPoints(aStartPoint, aEndPoint: TPoint;
   const AValue: String; aFlags: TSynEditTextFlags; aCaretMode: TSynCaretAdjustMode;
   aMarksMode: TSynMarksAdjustMode; aSelectionMode: TSynSelectionMode);
+var
+  CaretAtBlock: (cabNo, cabBegin, cabEnd);
 begin
   InternalBeginUndoBlock;
   try
-    if aCaretMode = scamAdjust then
-      FCaret.IncAutoMoveOnEdit;
+    CaretAtBlock := cabNo;
+    if aCaretMode = scamForceAdjust then
+      FCaret.IncAutoMoveOnEdit
+    else
+    if aCaretMode = scamAdjust then begin
+      if FBlockSelection.SelAvail then begin
+        if FCaret.IsAtLineByte(FBlockSelection.StartLineBytePos) then
+          CaretAtBlock := cabBegin
+        else
+        if FCaret.IsAtLineByte(FBlockSelection.EndLineBytePos) then
+          CaretAtBlock := cabEnd;
+      end;
+      if CaretAtBlock = cabNo then
+        FCaret.IncAutoMoveOnEdit;
+    end;
     if setPersistentBlock in aFlags then
       FBlockSelection.IncPersistentLock;
     if setMoveBlock in aFlags then
@@ -5925,13 +6106,19 @@ begin
         FBlockSelection.EndLineBytePos := Point(FBlockSelection.StartBytePos + 1, FBlockSelection.EndLinePos - 1);
     end;
   finally
+    if CaretAtBlock = cabBegin then
+      FCaret.LineBytePos := FBlockSelection.StartLineBytePos
+    else
+    if CaretAtBlock = cabEnd then
+      FCaret.LineBytePos := FBlockSelection.EndLineBytePos;
+
     if setPersistentBlock in aFlags then
       FBlockSelection.DecPersistentLock;
     if setMoveBlock in aFlags then
       FBlockSelection.DecPersistentLock;
     if setExtendBlock in aFlags then
       FBlockSelection.DecPersistentLock;
-    if aCaretMode = scamAdjust then
+    if (CaretAtBlock = cabNo) and (aCaretMode in [scamAdjust, scamForceAdjust]) then
       FCaret.DecAutoMoveOnEdit;
     InternalEndUndoBlock;
   end;
@@ -6363,28 +6550,31 @@ begin
           MaxX:=Min(PhysBlockEndXY.X,MinX+CharsInWindow-1);
       end;
     end;
-    if not (sfExplicitLeftChar in fStateFlags) then begin
-      {DebugLn('TCustomSynEdit.EnsureCursorPosVisible A CaretX=',dbgs(PhysCaretXY.X),
-        ' BlockX=',dbgs(PhysBlockBeginXY.X)+'-'+dbgs(PhysBlockEndXY.X),
-        ' CharsInWindow='+dbgs(CharsInWindow), MinX='+dbgs(MinX),' MaxX='+dbgs(MaxX),
-        ' LeftChar='+dbgs(LeftChar), '');}
-      if MinX < LeftChar then
-        LeftChar := MinX
-      else if LeftChar < MaxX - (Max(1, CharsInWindow) - 1 - FScreenCaret.ExtraLineChars) then
-        LeftChar := MaxX - (Max(1, CharsInWindow) - 1 - FScreenCaret.ExtraLineChars)
-      else
-        LeftChar := LeftChar;                                                     //mh 2000-10-19
+    if not (sfPreventScrollAfterSelect in fStateFlags) then begin
+      if not (sfExplicitLeftChar in fStateFlags) then begin
+        {DebugLn('TCustomSynEdit.EnsureCursorPosVisible A CaretX=',dbgs(PhysCaretXY.X),
+          ' BlockX=',dbgs(PhysBlockBeginXY.X)+'-'+dbgs(PhysBlockEndXY.X),
+          ' CharsInWindow='+dbgs(CharsInWindow), MinX='+dbgs(MinX),' MaxX='+dbgs(MaxX),
+          ' LeftChar='+dbgs(LeftChar), '');}
+        if MinX < LeftChar then
+          LeftChar := MinX
+        else if LeftChar < MaxX - (Max(1, CharsInWindow) - 1 - FScreenCaret.ExtraLineChars) then
+          LeftChar := MaxX - (Max(1, CharsInWindow) - 1 - FScreenCaret.ExtraLineChars)
+        else
+          LeftChar := LeftChar;                                                     //mh 2000-10-19
+      end;
+      if not (sfExplicitTopLine in fStateFlags) then begin
+        //DebugLn(['TCustomSynEdit.EnsureCursorPosVisible B LeftChar=',LeftChar,' MinX=',MinX,' MaxX=',MaxX,' CharsInWindow=',CharsInWindow]);
+        // Make sure Y is visible
+        if CaretY < TopLine then
+          TopLine := CaretY
+        else if CaretY > ScreenRowToRow(Max(1, LinesInWindow) - 1) then             //mh 2000-10-19
+          TopLine := FFoldedLinesView.TextPosAddLines(CaretY, -Max(0, LinesInWindow-1))
+        else
+          TopView := TopView;                                                       //mh 2000-10-19
+      end;
     end;
-    if not (sfExplicitTopLine in fStateFlags) then begin
-      //DebugLn(['TCustomSynEdit.EnsureCursorPosVisible B LeftChar=',LeftChar,' MinX=',MinX,' MaxX=',MaxX,' CharsInWindow=',CharsInWindow]);
-      // Make sure Y is visible
-      if CaretY < TopLine then
-        TopLine := CaretY
-      else if CaretY > ScreenRowToRow(Max(1, LinesInWindow) - 1) then             //mh 2000-10-19
-        TopLine := FFoldedLinesView.TextPosAddLines(CaretY, -Max(0, LinesInWindow-1))
-      else
-        TopView := TopView;                                                       //mh 2000-10-19
-    end;
+    Exclude(fStateFlags, sfPreventScrollAfterSelect);
   finally
     DoDecPaintLock(Self);
     //{BUG21996} DebugLnExit(['TCustomSynEdit.EnsureCursorPosVisible Caret=',dbgs(CaretXY),', BlockBegin=',dbgs(BlockBegin),' BlockEnd=',dbgs(BlockEnd), ' StateFlags=',dbgs(fStateFlags), ' paintlock', FPaintLock]);
@@ -6446,6 +6636,8 @@ begin
     DebugLn(['[TCustomSynEdit.CommandProcessor] ',Command
       ,' AChar=',AChar,' Data=',DbgS(Data)]);
     {$ENDIF}
+    if (Command <> ecMoveSelectUp) and (Command <> ecMoveSelectDown) then
+      FLastCaretXForMoveSelection := -1;
     // first the program event handler gets a chance to process the command
     InitialCmd := Command;
     if not(hcfInit in ASkipHooks) then
@@ -6510,7 +6702,7 @@ var
   Len: Integer;
   Temp: string;
   Helper: string;
-  moveBkm: boolean;
+  moveBkm, CurBack: boolean;
   WP: TPoint;
   Caret: TPoint;
   CaretNew: TPoint;
@@ -6518,6 +6710,7 @@ var
   LogCounter: integer;
   LogCaretXY: TPoint;
   CY: Integer;
+  CurSm: TSynSelectionMode;
 
 begin
   IncPaintLock;
@@ -6532,6 +6725,8 @@ begin
       FBlockSelection.ActiveSelectionMode := smColumn;
     if Command in [ecSelCmdRangeStart..ecSelCmdRangeEnd] then
       FBlockSelection.ActiveSelectionMode := FBlockSelection.SelectionMode;
+    if (Command <> ecMoveSelectUp) and (Command <> ecMoveSelectDown) then
+      FLastCaretXForMoveSelection := -1;
 
     FBlockSelection.AutoExtend := Command in [ecSelectionStart..ecSelectionEnd];
     FCaret.ChangeOnTouch;
@@ -6542,9 +6737,13 @@ begin
         begin
           if (eoCaretSkipsSelection in Options2) and (Command=ecLeft)
           and SelAvail and FCaret.IsAtLineByte(FBlockSelection.LastLineBytePos) then begin
-            FBlockSelection.IgnoreNextCaretMove;
+            if not (eoCaretMoveEndsSelection in Options2) then
+              FBlockSelection.IgnoreNextCaretMove;
             FCaret.LineBytePos := FBlockSelection.FirstLineBytePos;
           end
+          else
+          if (eoCaretMoveEndsSelection in Options2) and SelAvail then
+            FBlockSelection.Clear
           else
             MoveCaretHorz(-1);
         end;
@@ -6552,9 +6751,13 @@ begin
         begin
           if (eoCaretSkipsSelection in Options2) and (Command=ecRight)
           and SelAvail and FCaret.IsAtLineByte(FBlockSelection.FirstLineBytePos) then begin
-            FBlockSelection.IgnoreNextCaretMove;
+            if not (eoCaretMoveEndsSelection in Options2) then
+              FBlockSelection.IgnoreNextCaretMove;
             FCaret.LineBytePos := FBlockSelection.LastLineBytePos;
           end
+          else
+          if (eoCaretMoveEndsSelection in Options2) and SelAvail then
+            FBlockSelection.Clear
           else
             MoveCaretHorz(1);
         end;
@@ -6636,12 +6839,14 @@ begin
         end;
 // word selection
       ecWordLeft, ecSelWordLeft, ecColSelWordLeft,
-      ecWordEndLeft, ecSelWordEndLeft, ecHalfWordLeft, ecSelHalfWordLeft:
+      ecWordEndLeft, ecSelWordEndLeft, ecHalfWordLeft, ecSelHalfWordLeft,
+      ecSmartWordLeft, ecSelSmartWordLeft:
         begin
           case Command of
-            ecWordEndLeft, ecSelWordEndLeft:   CaretNew := PrevWordLogicalPos(swbWordEnd);
-            ecHalfWordLeft, ecSelHalfWordLeft: CaretNew := PrevWordLogicalPos(swbCaseChange);
-            else                               CaretNew := PrevWordLogicalPos;
+            ecWordEndLeft, ecSelWordEndLeft:     CaretNew := PrevWordLogicalPos(swbWordEnd);
+            ecHalfWordLeft, ecSelHalfWordLeft:   CaretNew := PrevWordLogicalPos(swbCaseChange);
+            ecSmartWordLeft, ecSelSmartWordLeft: CaretNew := PrevWordLogicalPos(swbWordSmart);
+            else                                 CaretNew := PrevWordLogicalPos;
           end;
           if FFoldedLinesView.FoldedAtTextIndex[CaretNew.Y - 1] then begin
             CY := FindNextUnfoldedLine(CaretNew.Y, False);
@@ -6650,12 +6855,14 @@ begin
           FCaret.LineBytePos := CaretNew;
         end;
       ecWordRight, ecSelWordRight, ecColSelWordRight,
-      ecWordEndRight, ecSelWordEndRight, ecHalfWordRight, ecSelHalfWordRight:
+      ecWordEndRight, ecSelWordEndRight, ecHalfWordRight, ecSelHalfWordRight,
+      ecSmartWordRight, ecSelSmartWordRight:
         begin
           case Command of
-            ecWordEndRight, ecSelWordEndRight:   CaretNew := NextWordLogicalPos(swbWordEnd);
-            ecHalfWordRight, ecSelHalfWordRight: CaretNew := NextWordLogicalPos(swbCaseChange);
-            else                                 CaretNew := NextWordLogicalPos;
+            ecWordEndRight, ecSelWordEndRight:     CaretNew := NextWordLogicalPos(swbWordEnd);
+            ecHalfWordRight, ecSelHalfWordRight:   CaretNew := NextWordLogicalPos(swbCaseChange);
+            ecSmartWordRight, ecSelSmartWordRight: CaretNew := NextWordLogicalPos(swbWordSmart);
+            else                                   CaretNew := NextWordLogicalPos;
           end;
           if FFoldedLinesView.FoldedAtTextIndex[CaretNew.Y - 1] then
             CaretNew := Point(1, FindNextUnfoldedLine(CaretNew.Y, True));
@@ -6714,7 +6921,7 @@ begin
             end;
           end;
         end;
-      ecDeleteChar:
+      ecDeleteChar, ecDeleteCharNoCrLf:
         if not ReadOnly then begin
           if SelAvail and (not FBlockSelection.Persistent) and (eoOverwriteBlock in fOptions2) then
             SetSelTextExternal('')
@@ -6728,7 +6935,9 @@ begin
               Counter:=GetCharLen(Temp,LogCaretXY.X);
               FTheLinesView.EditDelete(LogCaretXY.X, CaretY, Counter);
               SetLogicalCaretXY(LogCaretXY);
-            end else begin
+            end
+            else
+            if Command = ecDeleteChar then begin
               // join line with the line after
               if CaretY < FTheLinesView.Count then begin
                 Helper := StringOfChar(' ', LogCaretXY.X - 1 - Len);
@@ -6827,7 +7036,7 @@ begin
       ecMatchBracket:
         FindMatchingBracket;
       ecChar:
-        if not ReadOnly and (AChar >= #32) and (AChar <> #127) then begin
+        if not ReadOnly and ((AChar = #9) or (AChar >= #32)) and (AChar <> #127) then begin
           if SelAvail and (not FBlockSelection.Persistent) and (eoOverwriteBlock in fOptions2) then begin
             SetSelTextExternal(AChar);
           end else begin
@@ -6918,6 +7127,159 @@ begin
       ecPaste:
         begin
           if not ReadOnly then PasteFromClipboard;
+        end;
+      ecCopyAdd, ecCutAdd:
+        if SelAvail then begin
+          Temp := Clipboard.AsText;
+          Helper := SelText;
+          if (Temp <> '') and (not (Temp[Length(Temp)] in [#10,#13, #9, #32])) and
+             (not (Helper[1] in [#10,#13, #9, #32]))
+          then
+            Temp := Temp + ' ';
+          Clipboard.AsText := Temp + Helper;
+          if (not ReadOnly) and (Command = ecCutAdd) then
+            SelText := '';
+        end;
+      ecCopyCurrentLine, ecCutCurrentLine,
+      ecCopyAddCurrentLine, ecCutAddCurrentLine:
+        begin
+          FInternalBlockSelection.AssignFrom(FBlockSelection);
+          FInternalBlockSelection.ActiveSelectionMode := smLine;
+          FInternalBlockSelection.ForceSingleLineSelected := True;
+          Temp := '';
+          if (Command = ecCopyAddCurrentLine) or (Command = ecCutAddCurrentLine) then begin
+            Temp := Clipboard.AsText;
+            if (Temp <> '') and not (Temp[Length(Temp)] in [#10,#13]) then
+              Temp := Temp + LineEnding;
+          end;
+          Clipboard.AsText := Temp + FInternalBlockSelection.SelText;
+          if (not ReadOnly) and ((Command = ecCutCurrentLine) or (Command = ecCutAddCurrentLine)) then begin
+            FCaret.IncAutoMoveOnEdit;
+            FInternalBlockSelection.SelText := '';
+            FCaret.DecAutoMoveOnEdit;
+          end;
+          FInternalBlockSelection.ForceSingleLineSelected := False;
+        end;
+      ecMoveLineUp:
+        if (not ReadOnly) then begin
+          if FBlockSelection.SelAvail then
+            CY := BlockBegin.Y
+          else
+            CY := FCaret.LinePos;
+          if CY > 1 then begin
+            InternalBeginUndoBlock;
+            if not FBlockSelection.SelAvail then
+              FBlockSelection.Clear;
+            FBlockSelection.IncPersistentLock(sbpWeak);
+            if SelAvail and (BlockEnd.x = 1) then
+              FTheLinesView.EditLinesInsert(BlockEnd.y, 1, FTheLinesView[ToIdx(CY) - 1])
+            else
+              FTheLinesView.EditLinesInsert(BlockEnd.y + 1, 1, FTheLinesView[ToIdx(CY) - 1]);
+            FCaret.IncAutoMoveOnEdit;
+            FTheLinesView.EditLinesDelete(CY - 1, 1);
+            FCaret.DecAutoMoveOnEdit;
+            FBlockSelection.DecPersistentLock;
+            InternalEndUndoBlock;
+          end;
+        end;
+      ecMoveLineDown:
+        if (not ReadOnly) then begin
+          if FBlockSelection.SelAvail then begin
+            CY := BlockEnd.Y;
+            if (BlockEnd.x = 1) then
+              Dec(CY);
+          end
+          else
+            CY := FCaret.LinePos;
+          if CY < FTheLinesView.Count - 1 then begin
+            InternalBeginUndoBlock;
+            if not FBlockSelection.SelAvail then
+              FBlockSelection.Clear;
+            FBlockSelection.IncPersistentLock(sbpWeak);
+            FCaret.IncAutoMoveOnEdit;
+            FTheLinesView.EditLinesInsert(BlockBegin.y, 1, FTheLinesView[ToIdx(CY) + 1]);
+            FTheLinesView.EditLinesDelete(CY + 2, 1);
+            FCaret.DecAutoMoveOnEdit;
+            FBlockSelection.DecPersistentLock;
+            InternalEndUndoBlock;
+          end;
+        end;
+      ecDuplicateLine:
+        if (not ReadOnly) then begin
+          InternalBeginUndoBlock;
+          if not FBlockSelection.SelAvail then
+            FBlockSelection.Clear;
+          FBlockSelection.IncPersistentLock(sbpWeak);
+          FInternalBlockSelection.AssignFrom(FBlockSelection);
+          if FInternalBlockSelection.IsBackwardSel then begin
+            FInternalBlockSelection.StartLineBytePos := FBlockSelection.EndLineBytePos;
+            FInternalBlockSelection.EndLineBytePos   := FBlockSelection.StartLineBytePos;
+          end;
+          FInternalBlockSelection.ActiveSelectionMode := smLine;
+          FInternalBlockSelection.ForceSingleLineSelected := True;
+          If (FInternalBlockSelection.EndBytePos = 1) and
+             (FInternalBlockSelection.EndLinePos > FInternalBlockSelection.StartLinePos)
+          then
+            FInternalBlockSelection.EndLineBytePos := Point(1, FInternalBlockSelection.EndLinePos-1);
+          Temp := FInternalBlockSelection.SelText;
+          FInternalBlockSelection.ForceSingleLineSelected := False;
+          FInternalBlockSelection.StartLineBytePos := Point(1, FInternalBlockSelection.LastLineBytePos.y+1);
+          FInternalBlockSelection.SelText := Temp;
+          FBlockSelection.DecPersistentLock;
+          InternalEndUndoBlock;
+        end;
+      ecMoveSelectUp,
+      ecMoveSelectDown,
+      ecMoveSelectLeft,
+      ecMoveSelectRight:
+        if (not ReadOnly) and SelAvail then begin
+          InternalBeginUndoBlock;
+          if FLastCaretXForMoveSelection < 0 then
+            FLastCaretXForMoveSelection := FBlockSelection.FirstLineBytePos.x;
+          CurSm := FBlockSelection.ActiveSelectionMode;
+          CurBack := FBlockSelection.IsBackwardSel;
+          Temp := FBlockSelection.SelText;
+
+          if CurSm = smColumn then
+            FCaret.IncForcePastEOL;
+          SetSelTextExternal('');
+          FCaret.LineBytePos := FBlockSelection.StartLineBytePos;
+          if (Command = ecMoveSelectUp) or (Command = ecMoveSelectDown) then
+            FCaret.KeepCaretXPos := FLastCaretXForMoveSelection;
+          case Command of
+            ecMoveSelectUp:    MoveCaretVert(-1);
+            ecMoveSelectDown:  MoveCaretVert(1);
+            ecMoveSelectLeft:  FCaret.MoveHoriz(-1);
+            ecMoveSelectRight: FCaret.MoveHoriz(1);
+          end;
+          FBlockSelection.Clear;
+          FBlockSelection.SetSelTextPrimitive(CurSm, PChar(Temp), False, True);
+
+          if CurBack then begin
+            FBlockSelection.SortSelectionPoints(True);
+            FCaret.LineBytePos := FBlockSelection.EndLineBytePos;
+          end;
+          if (Command = ecMoveSelectUp) or (Command = ecMoveSelectDown) then
+            FCaret.KeepCaretXPos := FLastCaretXForMoveSelection;
+
+          if CurSm = smColumn then
+            FCaret.DecForcePastEOL;
+          InternalEndUndoBlock;
+        end;
+      ecDuplicateSelection:
+        if (not ReadOnly) and SelAvail then begin
+          InternalBeginUndoBlock;
+          FCaret.IncForcePastEOL;
+          CurSm := FBlockSelection.ActiveSelectionMode;
+          CurBack := FBlockSelection.IsBackwardSel;
+          Temp := FBlockSelection.SelText;
+          FCaret.LineBytePos := FBlockSelection.FirstLineBytePos;
+          FBlockSelection.Clear;
+          FBlockSelection.SetSelTextPrimitive(CurSm, PChar(Temp), False, True);
+          if CurBack then
+            FBlockSelection.SortSelectionPoints(True);
+          FCaret.DecForcePastEOL;
+          InternalEndUndoBlock;
         end;
       ecScrollUp:
         begin
@@ -7394,7 +7756,7 @@ end;
 procedure TCustomSynEdit.MarkTextAsSaved;
 begin
   TSynEditStringList(fLines).MarkSaved;
-  if FLeftGutter.Visible and FLeftGutter.ChangesPart(0).Visible then
+  if FLeftGutter.Visible and (FLeftGutter.ChangesPart(0) <> nil) and FLeftGutter.ChangesPart(0).Visible then
     InvalidateGutter; // Todo: Make the ChangeGutterPart an observer
 end;
 
@@ -7498,6 +7860,47 @@ begin
     else begin
       // send megative delta
       FindAndHandleMouseAction(mbXWheelDown, lState, Message.X, Message.Y, ccSingle, cdDown, AnActionResult, Message.WheelDelta);
+    end;
+  finally
+    DecPaintLock;
+  end;
+
+  DoHandleMouseActionResult(AnActionResult);
+
+  Message.Result := 1 // handled, skip further handling by interface
+end;
+
+procedure TCustomSynEdit.WMMouseHorizWheel(var Message: TLMMouseEvent);
+var
+  lState: TShiftState;
+  MousePos: TPoint;
+  AnActionResult: TSynEditMouseActionResult;
+begin
+  if ((sfHorizScrollbarVisible in fStateFlags) and (Message.Y > ClientHeight)) or
+     ((sfVertScrollbarVisible in fStateFlags) and (Message.X > ClientWidth))
+   then begin
+     // mouse is over scrollbar
+     inherited; // include OnMouseWheel...;
+     exit;
+   end;
+
+  MousePos.X := Message.X;
+  MousePos.Y := Message.Y;
+  if DoMouseWheelHorz(Message.State, Message.WheelDelta, MousePos) then begin
+    Message.Result := 1; // handled
+    exit;
+  end;
+
+  lState := Message.State - [ssCaps, ssNum, ssScroll]; // Remove unreliable states, see http://bugs.freepascal.org/view.php?id=20065
+
+  IncPaintLock;
+  try
+    if Message.WheelDelta > 0 then begin
+      FindAndHandleMouseAction(mbXWheelLeft, lState, Message.X, Message.Y, ccSingle, cdDown, AnActionResult, Message.WheelDelta);
+    end
+    else begin
+      // send megative delta
+      FindAndHandleMouseAction(mbXWheelRight, lState, Message.X, Message.Y, ccSingle, cdDown, AnActionResult, Message.WheelDelta);
     end;
   finally
     DecPaintLock;
@@ -7767,10 +8170,7 @@ begin
     ; // ToDo DragAcceptFiles
   if (ChangedOptions * [eoPersistentCaret, eoNoCaret] <> []) and HandleAllocated then begin
     UpdateCaret;
-    if Focused then
-      FScreenCaret.Visible := not(eoNoCaret in FOptions)
-    else
-      FScreenCaret.Visible := (eoPersistentCaret in FOptions) and not(eoNoCaret in FOptions);
+    UpdateScreenCaret;
   end;
   if (eoShowSpecialChars in ChangedOptions) then begin
     if eoShowSpecialChars in FOptions
@@ -7829,6 +8229,8 @@ begin
       MoveCaretToVisibleArea;
     if (eoAutoHideCursor in ChangedOptions) and not(eoAutoHideCursor in fOptions2) then
       UpdateCursor;
+    if (eoPersistentCaretStopBlink in ChangedOptions) then
+      UpdateScreenCaret;
     StatusChanged([scOptions]);
   end;
 end;
@@ -8083,8 +8485,7 @@ begin
         Style := [];        // Reserved for Highlighter
       end;
       //debugln(['TCustomSynEdit.RecalcCharExtent ',fFontDummy.Name,' ',fFontDummy.Size]);
-      //debugln('TCustomSynEdit.RecalcCharExtent A UseUTF8=',dbgs(UseUTF8),
-      //  ' Font.CanUTF8='+dbgs(Font.CanUTF8)+' CharHeight=',dbgs(CharHeight));
+      //debugln('TCustomSynEdit.RecalcCharExtent A UseUTF8=',dbgs(UseUTF8),' CharHeight=',dbgs(CharHeight));
 
       fTextDrawer.BaseFont := FFontDummy;
       if Assigned(fHighlighter) then
@@ -8111,7 +8512,7 @@ begin
   finally
     DecStatusChangeLock;
   end;
-  //debugln('TCustomSynEdit.RecalcCharExtent UseUTF8=',dbgs(UseUTF8),' Font.CanUTF8=',dbgs(Font.CanUTF8));
+  //debugln('TCustomSynEdit.RecalcCharExtent UseUTF8=',dbgs(UseUTF8));
 end;
 
 procedure TCustomSynEdit.HighlighterAttrChanged(Sender: TObject);
@@ -8229,6 +8630,12 @@ begin
   {$ENDIF}
   SurrenderPrimarySelection;
   inherited DestroyWnd;
+end;
+
+procedure TCustomSynEdit.VisibleChanged;
+begin
+  inherited VisibleChanged;
+  UpdateScreenCaret; // This may no longer be needed. It is now done in UpdateShowing
 end;
 
 procedure TCustomSynEdit.DoAutoAdjustLayout(

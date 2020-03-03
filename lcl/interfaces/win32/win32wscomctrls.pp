@@ -69,10 +69,10 @@ type
     class function GetNotebookMinTabWidth(const AWinControl: TWinControl): integer; override;
     class function GetTabIndexAtPos(const ATabControl: TCustomTabControl; const AClientPos: TPoint): integer; override;
     class function GetTabRect(const ATabControl: TCustomTabControl; const AIndex: Integer): TRect; override;
-    class function GetCapabilities: TCTabControlCapabilities;override;
+    class function GetCapabilities: TCTabControlCapabilities; override;
     class function GetDesignInteractive(const AWinControl: TWinControl; AClientPos: TPoint): Boolean; override;
     class procedure SetTabSize(const ATabControl: TCustomTabControl; const ATabWidth, ATabHeight: integer); override;
-    class procedure SetImageList(const ATabControl: TCustomTabControl; const AImageList: TCustomImageList); override;
+    class procedure SetImageList(const ATabControl: TCustomTabControl; const AImageList: TCustomImageListResolution); override;
     class procedure SetPageIndex(const ATabControl: TCustomTabControl; const AIndex: integer); override;
     class procedure SetTabPosition(const ATabControl: TCustomTabControl; const ATabPosition: TTabPosition); override;
     class procedure ShowTabs(const ATabControl: TCustomTabControl; AShowTabs: boolean); override;
@@ -137,6 +137,7 @@ type
     class procedure ColumnSetMinWidth(const ALV: TCustomListView; const AIndex: Integer; const AColumn: TListColumn; const AMinWidth: integer); override;
     class procedure ColumnSetWidth(const ALV: TCustomListView; const AIndex: Integer; const AColumn: TListColumn; const AWidth: Integer); override;
     class procedure ColumnSetVisible(const ALV: TCustomListView; const AIndex: Integer; const AColumn: TListColumn; const AVisible: Boolean); override;
+    class procedure ColumnSetSortIndicator(const ALV: TCustomListView; const AIndex: Integer; const AColumn: TListColumn; const AAndicator: TSortIndicator); override;
 
     // items
     class procedure ItemDelete(const ALV: TCustomListView; const AIndex: Integer); override;
@@ -182,7 +183,7 @@ type
     class procedure SetHotTrackStyles(const ALV: TCustomListView; const AValue: TListHotTrackStyles); override;
     class procedure SetHoverTime(const ALV: TCustomListView; const AValue: Integer); override;
     class procedure SetIconArrangement(const ALV: TCustomListView; const AValue: TIconArrangement); override;
-    class procedure SetImageList(const ALV: TCustomListView; const AList: TListViewImageList; const AValue: TCustomImageList); override;
+    class procedure SetImageList(const ALV: TCustomListView; const AList: TListViewImageList; const AValue: TCustomImageListResolution); override;
     class procedure SetItemsCount(const ALV: TCustomListView; const AValue: Integer); override;
     class procedure SetOwnerData(const ALV: TCustomListView; const AValue: Boolean); override;
     class procedure SetProperty(const ALV: TCustomListView; const AProp: TListViewProperty; const AIsSet: Boolean); override;
@@ -240,7 +241,7 @@ type
     class function  GetButtonCount(const AToolBar: TToolBar): integer; override;
     class procedure InsertToolButton(const AToolBar: TToolbar; const AControl: TControl); override;
     class procedure DeleteToolButton(const AToolBar: TToolbar; const AControl: TControl); override;
-{$endif}    
+{$endif}
   end;
 
   { TWin32WSTrackBar }
@@ -278,6 +279,7 @@ const
   DefMarqueeTime = 50; // ms
 
 {$I win32pagecontrol.inc}
+{$I win32treeview.inc}
 
 type
   TStatusPanelAccess = class(TStatusPanel);
@@ -736,9 +738,9 @@ begin
     MaxWidth := 0;
     MaxHeight := 0;
 
-    // The ProgressBar needs a minimum Height of 10 when themed,
+    // The ProgressBar needs a minimum Height of 10 on Windows XP when themed,
     // as required by Windows, otherwise it's image is corrupted
-    if ThemeServices.ThemesEnabled then
+    if (Win32MajorVersion < 6) and ThemeServices.ThemesEnabled then
       MinHeight := 10;
 
     SizeConstraints.SetInterfaceConstraints(MinWidth, MinHeight, MaxWidth, MaxHeight);
@@ -755,7 +757,7 @@ var
   Params: TCreateWindowExParams;
 begin
   // general initialization of Params
-  PrepareCreateWindow(AWinControl, Params);
+  PrepareCreateWindow(AWinControl, AParams, Params);
   // customization of Params
   with Params do
   begin
@@ -767,7 +769,7 @@ begin
   Result := Params.Window;
 end;
 
-function  TWin32WSToolbar.GetButtonCount(const AToolBar: TToolBar): integer;
+class function TWin32WSToolbar.GetButtonCount(const AToolBar: TToolBar): integer;
 begin
   Result := SendMessage(AToolbar.Handle, TB_BUTTONCOUNT, 0, 0)
 end;
@@ -968,6 +970,7 @@ class procedure TWin32WSTrackBar.ApplyChanges(const ATrackBar: TCustomTrackBar);
 var
   wHandle: HWND;
   NewStyle: integer;
+  lTickStyle: DWORD;
 const
   StyleMask = TBS_AUTOTICKS or TBS_NOTICKS or TBS_VERT or TBS_TOP or TBS_BOTH or
     TBS_ENABLESELRANGE or TBS_REVERSED;
@@ -981,7 +984,12 @@ begin
   begin
     { cache handle }
     wHandle := Handle;
-    NewStyle := TickStyleStyle[TickStyle] or OrientationStyle[Orientation] or
+    lTickStyle := TickStyleStyle[TickStyle];
+    {$IFNDEF WIN32}
+    if Max - Min > $7FFF then  // Workaround for #36046:
+      lTickStyle := 0;         // No ticks to avoid hanging if range is too large
+    {$ENDIF}
+    NewStyle := lTickStyle or OrientationStyle[Orientation] or
                 TickMarksStyle[TickMarks] or SelRangeStyle[ShowSelRange] or ReversedStyle[Reversed];
     UpdateWindowStyle(wHandle, NewStyle, StyleMask);
     Windows.SendMessage(wHandle, TBM_SETRANGEMAX, Windows.WPARAM(True), Max);

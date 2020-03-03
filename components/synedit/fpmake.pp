@@ -3,7 +3,7 @@
 
    fpmake.pp for SynEdit 1.0
 
-   This file was generated on 02-01-2015
+   This file was generated on 31.12.2018
 }
 
 {$ifndef ALLPACKAGES} 
@@ -22,13 +22,15 @@ var
 begin
   with Installer do
     begin
-    P:=AddPAckage('synedit');
+    P:=AddPackage('synedit');
     P.Version:='1.0';
 
     P.Directory:=ADirectory;
 
     P.Flags.Add('LazarusDsgnPkg');
 
+    P.Dependencies.Add('fcl-registry');
+    P.Dependencies.Add('regexpr');
     P.Dependencies.Add('lcl');
     P.Options.Add('-MObjFPC');
     P.Options.Add('-Scghi');
@@ -37,18 +39,17 @@ begin
     P.Options.Add('-g');
     P.Options.Add('-gl');
     P.Options.Add('-l');
-    P.Options.Add('-vi-');
-    P.Options.Add('-vewnhbq');
+    P.Options.Add('-vewnhibq');
     P.Options.Add('-vm5024,4055');
     P.Options.Add('-dLCL');
     P.Options.Add('-dLCL$(LCLWidgetType)');
-    P.Options.Add('-dNoCarbon');
     P.Options.Add('-CR');
     P.Options.Add('-dgc');
     P.UnitPath.Add('.');
     T:=P.Targets.AddUnit('allsynedit.pas');
     t.Dependencies.AddUnit('synbeautifier');
     t.Dependencies.AddUnit('syncompletion');
+    t.Dependencies.AddUnit('lazsynimm');
     t.Dependencies.AddUnit('synedit');
     t.Dependencies.AddUnit('syneditautocomplete');
     t.Dependencies.AddUnit('syneditexport');
@@ -125,10 +126,13 @@ begin
     t.Dependencies.AddUnit('synedittextdoublewidthchars');
     t.Dependencies.AddUnit('synedittextsystemcharwidth');
     t.Dependencies.AddUnit('syneditmarkupifdef');
+    t.Dependencies.AddUnit('synpluginmulticaret');
+    t.Dependencies.AddUnit('synhighlighterpike');
+    t.Dependencies.AddUnit('syneditmarkupfoldcoloring');
 
     T:=P.Targets.AddUnit('synbeautifier.pas');
     T:=P.Targets.AddUnit('syncompletion.pas');
-    P.Sources.AddSrc('lazsynimm.pas');
+    P.Targets.AddImplicitUnit('lazsynimm.pas');
     T:=P.Targets.AddUnit('synedit.pp');
     T:=P.Targets.AddUnit('syneditautocomplete.pp');
     T:=P.Targets.AddUnit('syneditexport.pas');
@@ -205,6 +209,9 @@ begin
     T:=P.Targets.AddUnit('synedittextdoublewidthchars.pas');
     T:=P.Targets.AddUnit('synedittextsystemcharwidth.pas');
     T:=P.Targets.AddUnit('syneditmarkupifdef.pp');
+    T:=P.Targets.AddUnit('synpluginmulticaret.pp');
+    T:=P.Targets.AddUnit('synhighlighterpike.pas');
+    T:=P.Targets.AddUnit('syneditmarkupfoldcoloring.pas');
 
     // copy the compiled file, so the IDE knows how the package was compiled
     P.InstallFiles.Add('SynEdit.compiled',AllOSes,'$(unitinstalldir)');

@@ -45,8 +45,6 @@ type
       AContentRect: PRect = nil); override;
     procedure DrawIcon(DC: HDC; Details: TThemedElementDetails; const R: TRect;
       himl: HIMAGELIST; Index: Integer); override;
-    procedure DrawIcon(ACanvas: TPersistent; Details: TThemedElementDetails;
-      const P: TPoint; AImageList: TPersistent; Index: Integer); override;
 
     procedure DrawText(DC: HDC; Details: TThemedElementDetails;
       const S: String; R: TRect; Flags, Flags2: Cardinal); override;
@@ -175,7 +173,7 @@ begin
     else
     if ((Details.Element = teTreeview) and (Details.Part in [TVP_GLYPH, TVP_HOTGLYPH])) or
        ((Details.Element = teWindow) and (Details.Part in [WP_SMALLCLOSEBUTTON])) or
-       (Details.Element = teTrackBar) then
+       (Details.Element = teTrackBar) or (Details.Element = teHeader) then
     begin
       R := Rect(0, 0, 800, 800);
       GetThemePartSize(GetTheme(Details.Element), 0, Details.Part, Details.State, @R, TS_TRUE, Result);
@@ -397,21 +395,6 @@ begin
     with Details do
       DrawThemeIcon(Theme[Element], DC, Part, State, R, himl, Index)
   else
-    inherited;
-end;
-
-procedure TWin32ThemeServices.DrawIcon(ACanvas: TPersistent;
-  Details: TThemedElementDetails; const P: TPoint; AImageList: TPersistent;
-  Index: Integer);
-{var
-  ImageList: TCustomImageList absolute AImageList;
-}
-begin
-{  if ThemesEnabled then
-    DrawIcon(TCanvas(ACanvas).Handle, Details,
-      Rect(P.X, P.Y, P.X + ImageList.Width, P.Y + ImageList.Width),
-      ImageList.Handle, Index)
-  else}
     inherited;
 end;
 

@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, Controls, ComCtrls, StdCtrls, Spin, PairSplitter,
-  Dialogs, ExtCtrls, Buttons, CheckLst, Forms, Menus,
+  Dialogs, ExtCtrls, Buttons, CheckLst, Forms, Menus, Calendar,
   WSLCLClasses,
   CocoaWSCommon,
   CocoaWSButtons,
@@ -17,12 +17,13 @@ uses
   CocoaWSComCtrls,
   CocoaWSDialogs,
   CocoaWSSpin,
-  CocoaWSCheckLst;
+  CocoaWSCheckLst,
+  CocoaWSDatePicker;
 
 // imglist
-function RegisterCustomImageList: Boolean;
+function RegisterCustomImageListResolution: Boolean;
 // controls
-function RegisterDragImageList: Boolean;
+function RegisterDragImageListResolution: Boolean;
 function RegisterLazAccessibleObject: Boolean;
 function RegisterControl: Boolean;
 function RegisterWinControl: Boolean;
@@ -113,13 +114,13 @@ implementation
 
 
 // imglist
-function RegisterCustomImageList: Boolean; alias : 'WSRegisterCustomImageList';
+function RegisterCustomImageListResolution: Boolean; alias : 'WSRegisterCustomImageListResolution';
 begin
   Result := False;
 end;
 
 // controls
-function RegisterDragImageList: Boolean; alias : 'WSRegisterDragImageList';
+function RegisterDragImageListResolution: Boolean; alias : 'WSRegisterDragImageListResolution';
 begin
   Result := False;
 end;
@@ -133,7 +134,8 @@ end;
 
 function RegisterControl: Boolean; alias : 'WSRegisterControl';
 begin
-  Result := False;
+  RegisterWSComponent(TControl, TCocoaWSControl);
+  Result := True;
 end;
 
 function RegisterWinControl: Boolean; alias : 'WSRegisterWinControl';
@@ -184,7 +186,8 @@ end;
 
 function RegisterCustomUpDown: Boolean; alias : 'WSRegisterCustomUpDown';
 begin
-  Result := False;
+  RegisterWSComponent(TCustomUpDown, TCocoaWSCustomUpDown);
+  Result := True;
 end;
 
 function RegisterCustomToolButton: Boolean; alias : 'WSRegisterCustomToolButton';
@@ -211,7 +214,8 @@ end;
 // calendar
 function RegisterCustomCalendar: Boolean; alias : 'WSRegisterCustomCalendar';
 begin
-  Result := False;
+  RegisterWSComponent(TCustomCalendar, TCocoaWSCustomCalendar);
+  Result := True;
 end;
 
 // dialogs
@@ -355,7 +359,8 @@ end;
 
 function RegisterCustomSplitter: Boolean; alias : 'WSRegisterCustomSplitter';
 begin
-  Result := False;
+  RegisterWSComponent(TCustomSplitter, TCocoaWSCustomSplitter);
+  Result := True;
 end;
 
 function RegisterPaintBox: Boolean; alias : 'WSRegisterPaintBox';

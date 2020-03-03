@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"X-Generator: Poedit 1.5.4\n"
+"X-Generator: Poedit 1.8.7.1\n"
 
 #: lazdatadeskstr.eoaddterminator
 msgid "Add terminator"
@@ -79,12 +79,13 @@ msgid "Enter a descriptive name for the connection"
 msgstr "Leíró jellegű név megadása a kapcsolathoz"
 
 #: lazdatadeskstr.sconnectionnameexists
+#, object-pascal-format
 msgid ""
 "There is already a connection named \"%s\"\n"
-"Would you like to override the connection data ?\n"
+"Would you like to override the connection data ?"
 msgstr ""
 "Már létezik \"%s\" nevű kapcsolat\n"
-"Felülírja a kapcsolat adatait?\n"
+"Felülírja a kapcsolat adatait?"
 
 #: lazdatadeskstr.screatecode
 msgid "Create code"
@@ -95,14 +96,16 @@ msgid "Would you like to create a new connection for this database ?"
 msgstr "Szeretne új kapcsolatot létrehozni ezen adatbázishoz?"
 
 #: lazdatadeskstr.sddmodified
+#, object-pascal-format
 msgid ""
 "Data dictionary \"%s\" has changed.\n"
-"What do you want to do with the changes?\n"
+"What do you want to do with the changes?"
 msgstr ""
 "A(z) \"%s\" adatszótár megváltozott.\n"
-"Mit szeretne tenni a változásokkal?\n"
+"Mit szeretne tenni a változásokkal?"
 
 #: lazdatadeskstr.sdeleteobject
+#, object-pascal-format
 msgid "Delete this %s"
 msgstr "Ezen %s törlése"
 
@@ -138,10 +141,10 @@ msgstr "Hiba az SQL szkriptben"
 #: lazdatadeskstr.serrinscriptchoice
 msgid ""
 "An error occurred in the SQL script.\n"
-"How would you like to continue ?\n"
+"How would you like to continue ?"
 msgstr ""
 "Hiba történt az SQL szkript közben.\n"
-"Hogyan szeretné folytatni?\n"
+"Hogyan szeretné folytatni?"
 
 #: lazdatadeskstr.serrnoengine
 msgid "No database engine !"
@@ -160,10 +163,12 @@ msgid "No table selected. Please select a table"
 msgstr "Nincs tábla kiválasztva. Válasszon egy táblát!"
 
 #: lazdatadeskstr.serrunknowndirective
+#, object-pascal-format
 msgid "Unknown directive: %s (args: %s)"
 msgstr "Ismeretlen direktíva: %s (paraméterek: %s)"
 
 #: lazdatadeskstr.serrunknowntype
+#, object-pascal-format
 msgid "Unknown object type: %d"
 msgstr "Ismeretlen objektum típus: %d"
 
@@ -172,14 +177,17 @@ msgid "Execute SQL"
 msgstr "SQL futtatása"
 
 #: lazdatadeskstr.sexecutingsqlstatement
+#, object-pascal-format
 msgid "%s : Executing SQL statement:"
 msgstr "%s: SQL állomány futtatása:"
 
 #: lazdatadeskstr.sexecutingsqlstatementcount
+#, object-pascal-format
 msgid "%s : Executing script SQL statement nr. %d:"
 msgstr "%s: SQL szkript %d. állományának futtatása:"
 
 #: lazdatadeskstr.sexecutiontime
+#, object-pascal-format
 msgid "Execution time: %s"
 msgstr "Futási idő: %s"
 
@@ -456,6 +464,7 @@ msgid "Connections/Dictionaries"
 msgstr "Kapcsolatok/Szótárak"
 
 #: lazdatadeskstr.sld_connecttoadatabase
+#, object-pascal-format
 msgid "Connect to a database of type %s"
 msgstr "Kapcsolódás %s típusú adatbázishoz"
 
@@ -671,10 +680,12 @@ msgid "Load SQL"
 msgstr "SQL betöltése"
 
 #: lazdatadeskstr.snamefor
+#, object-pascal-format
 msgid "Enter a name for the new %s"
 msgstr "Az új %s nevének megadása"
 
 #: lazdatadeskstr.snew
+#, object-pascal-format
 msgid "New %s"
 msgstr "Új %s"
 
@@ -695,6 +706,7 @@ msgid "Enter a name for the new domain:"
 msgstr "Az új tartomány nevének megadása:"
 
 #: lazdatadeskstr.snewfield
+#, object-pascal-format
 msgid "Create new field in table %s"
 msgstr "Új mező létrehozása a(z) %s táblában"
 
@@ -703,6 +715,7 @@ msgid "Enter a name for the new field:"
 msgstr "Az új mező nevének megadása:"
 
 #: lazdatadeskstr.snewforeignkey
+#, object-pascal-format
 msgid "Create new foreign key in table %s"
 msgstr "Új külső kulcs létrehozása a(z) %s táblában"
 
@@ -711,6 +724,7 @@ msgid "Enter a name for the new foreign key:"
 msgstr "Név megadása az új külső kulcs számára:"
 
 #: lazdatadeskstr.snewindex
+#, object-pascal-format
 msgid "Create new index on table %s"
 msgstr "Új index létrahozása a(z) %s táblához"
 
@@ -719,6 +733,7 @@ msgid "Enter a name for the new index:"
 msgstr "Az új index nevének megadása:"
 
 #: lazdatadeskstr.snewobject
+#, object-pascal-format
 msgid "Create new %s"
 msgstr "Új %s létrehozása"
 
@@ -803,10 +818,10 @@ msgstr "Előző"
 #: lazdatadeskstr.sql_noconnectionsfound
 msgid ""
 "No connections or data dictionaries were found.\n"
-" Start by creating a new connection or data dictionary.\n"
+" Start by creating a new connection or data dictionary."
 msgstr ""
 "Nem található kapcsolat vagy adatszótár.\n"
-" Egy új kapcsolat vagy adatszótár létrehozásával kell kezdeni.\n"
+" Egy új kapcsolat vagy adatszótár létrehozásával kell kezdeni."
 
 #: lazdatadeskstr.squery
 msgid "Run query"
@@ -817,6 +832,7 @@ msgid "Ready to execute SQL statements"
 msgstr "SQL állományok futtatása lehetséges"
 
 #: lazdatadeskstr.srecordsfetched
+#, object-pascal-format
 msgid "Records fetched: %d"
 msgstr "Lehívott rekordok: %d"
 
@@ -825,6 +841,7 @@ msgid "Retry the statement"
 msgstr "Állomány újrapróálása"
 
 #: lazdatadeskstr.srowsaffected
+#, object-pascal-format
 msgid "Query executed successfully: %d rows affected."
 msgstr "A lekérdezés sikeresen futott: %d sor érintett."
 
@@ -837,14 +854,17 @@ msgid "Save changes"
 msgstr "Változások mentése"
 
 #: lazdatadeskstr.sscriptaborted
+#, object-pascal-format
 msgid "Script was aborted after %d statements"
 msgstr "A szkript %d állomány után megszakadt"
 
 #: lazdatadeskstr.sscriptcompleted
+#, object-pascal-format
 msgid "Executed %d statements from script"
 msgstr "A szkript %d állománya futott le"
 
 #: lazdatadeskstr.sscripterrorcount
+#, object-pascal-format
 msgid "%d script statements resulted in errors"
 msgstr "A szkript %d állománya hibát eredményezett"
 
@@ -861,10 +881,12 @@ msgid "Sequence"
 msgstr "Sorozat"
 
 #: lazdatadeskstr.ssqlerrorcode
+#, object-pascal-format
 msgid "SQL Error code: %d"
 msgstr "SQL hibakód: %d"
 
 #: lazdatadeskstr.ssqlexecutedok
+#, object-pascal-format
 msgid "%s : Statement executed succesfully."
 msgstr "%s: Sikeresen futtatott állomány."
 
@@ -873,6 +895,7 @@ msgid "SQL files|*.sql|All files|*.*"
 msgstr "SQL fájlok|*.sql|Minden fájl|*.*"
 
 #: lazdatadeskstr.ssqlstatus
+#, object-pascal-format
 msgid "SQL State: %s"
 msgstr "SQL állapot: %s"
 
@@ -889,10 +912,12 @@ msgid "Table"
 msgstr "Tábla"
 
 #: lazdatadeskstr.sunknownconnection
+#, object-pascal-format
 msgid "Unknown connection: %s"
 msgstr "Ismeretlen kapcsolat: %s"
 
 #: lazdatadeskstr.sunknowndictionary
+#, object-pascal-format
 msgid "Unknown data dictionary: %s"
 msgstr "Ismeretlen adatszótár: %s"
 

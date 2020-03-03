@@ -13,7 +13,9 @@ unit LazClasses;
 interface
 
 uses
-  sysutils, Classes, LazMethodList;
+  sysutils, Classes,
+  // LazUtils
+  LazMethodList;
 
 type
 
@@ -24,8 +26,6 @@ type
     FFreeNotificationList: TMethodList;
   public
     destructor Destroy; override;
-    procedure AddFreeeNotification(ANotification: TNotifyEvent); deprecated;
-    procedure RemoveFreeeNotification(ANotification: TNotifyEvent); deprecated;
     procedure AddFreeNotification(ANotification: TNotifyEvent);
     procedure RemoveFreeNotification(ANotification: TNotifyEvent);
   end;
@@ -87,20 +87,6 @@ begin
     FFreeNotificationList.CallNotifyEvents(Self);
   inherited Destroy;
   FreeAndNil(FFreeNotificationList);
-end;
-
-procedure TFreeNotifyingObject.AddFreeeNotification(ANotification: TNotifyEvent);
-begin
-  if FFreeNotificationList = nil then
-    FFreeNotificationList := TMethodList.Create;
-  FFreeNotificationList.Add(TMethod(ANotification));
-end;
-
-procedure TFreeNotifyingObject.RemoveFreeeNotification(ANotification: TNotifyEvent);
-begin
-  if FFreeNotificationList = nil then
-    exit;
-  FFreeNotificationList.Remove(TMethod(ANotification));
 end;
 
 procedure TFreeNotifyingObject.AddFreeNotification(ANotification: TNotifyEvent);

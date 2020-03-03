@@ -19,8 +19,7 @@ interface
 uses
   Classes, Types, SysUtils,
   // LCL
-  LMessages, LCLType, LCLProc, Forms, Controls, Graphics,
-  HelpIntfs, LazHelpIntf, LCLIntf,
+  LMessages, LCLType, LCLIntf, Forms, Controls, Graphics, HelpIntfs, LazHelpIntf,
   // IdeIntf
   TextTools;
 
@@ -69,9 +68,6 @@ type
     procedure ShowHelpForMessage; virtual; abstract;
     procedure ShowHelpForObjectInspector(Sender: TObject); virtual; abstract;
     procedure ShowHelpForIDEControl(Sender: TControl); virtual; abstract;
-    function CreateHint(aHintWindow: THintWindow; ScreenPos: TPoint;
-      const BaseURL: string; var TheHint: string; out HintWinRect: TRect): boolean;
-      virtual; abstract; deprecated 'Use THintWindowManager class instead';
     function GetHintForSourcePosition(const ExpandedFilename: string;
       const CodePos: TPoint; out BaseURL, HTMLHint: string;
       Flags: TIDEHelpManagerCreateHintFlags = []): TShowHelpResult; virtual; abstract;

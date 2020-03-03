@@ -30,17 +30,18 @@ uses
   {$ENDIF}
   Classes, SysUtils, math, CustApp,
   Interfaces, // this includes the NoGUI widgetset
+  // LazUtils
+  Masks, LConvEncoding, FileUtil, LazFileUtils, LazLoggerBase, LazUtilities,
+  LazUTF8, Laz2_XMLCfg, UITypes, LazStringUtils,
   // LCL
-  LCLPlatformDef, LCLProc, Controls, Dialogs, Forms,
-  // codetools
+  LCLPlatformDef, Forms,
+  // Codetools
   CodeCache, CodeToolManager, DefineTemplates, FileProcs,
   // IDEIntf
-  MacroIntf, PackageIntf, IDEDialogs, ProjectIntf, IDEExternToolIntf,
-  CompOptsIntf, IDEOptionsIntf, LazIDEIntf,
-  // LazUtils
-  Masks, LConvEncoding, Laz2_XMLCfg, FileUtil, LazFileUtils, LazUTF8,
+  BaseIDEIntf, MacroIntf, PackageIntf, LazMsgDialogs, ProjectIntf, IDEExternToolIntf,
+  CompOptsIntf, IDEOptionsIntf, PackageDependencyIntf,
   // IDE
-  IDEProcs, IDEUtils, InitialSetupProc, ExtTools, CompilerOptions,
+  InitialSetupProc, ExtToolsConsole, CompilerOptions,
   ApplicationBundle, TransferMacros, EnvironmentOpts, IDETranslations,
   LazarusIDEStrConsts, IDECmdLine, MiscOptions, Project, LazConf, PackageDefs,
   PackageLinks, PackageSystem, InterPkgConflictFiles, BuildLazDialog,
@@ -326,8 +327,7 @@ begin
   if TheProject.IsVirtual then
     CodeToolBoss.SetGlobalValue(ExternalMacroStart+'ProjPath',VirtualDirectory)
   else
-    CodeToolBoss.SetGlobalValue(ExternalMacroStart+'ProjPath',
-                                Project1.Directory)
+    CodeToolBoss.SetGlobalValue(ExternalMacroStart+'ProjPath',Project1.Directory)
 end;
 
 function TLazBuildApplication.OnIDEMessageDialog(const aCaption, aMsg: string;
@@ -367,16 +367,19 @@ var
 begin
   Result:=false;
   OriginalFilename:=FileName;
+
   Filename:=CleanAndExpandFilename(Filename);
   if not FileExistsUTF8(Filename) then
   begin
+    // File doesn't exist.
+
     // Check for packages if the specified name is a valid identifier
-    if LazIsValidIdent(OriginalFileName) then begin
+    //debugln(['TLazBuildApplication.BuildFile ',OriginalFilename]);
+    if IsValidPkgName(OriginalFileName) then begin
       if PackageAction=lpaAddPkgLinks then begin
         Error(ErrorFileNotFound,'lpk file expected, but '+OriginalFilename+' found');
         Exit;
       end;
-
       // Initialize package graph with base packages etc:
       if not Init then exit;
       // Could be a known but not installed package
@@ -392,17 +395,25 @@ begin
       else begin
         // We found a package link
         case PackageAction of
-        lpaBuild: Result:=BuildPackage(Package.LPKFilename);
-        lpaInstall: Result:=true; // this is handled in AddPackagesToInstallList
+        lpaBuild:
+          begin
+            Result:=BuildPackage(Package.LPKFilename);
+            exit;
+          end;
+        lpaInstall:
+          exit(true); // this is handled in AddPackagesToInstallList
         end;
       end;
-    end
-    else begin
-      // File is not an identifier and doesn't exist.
-      Error(ErrorFileNotFound, 'package not found: '+OriginalFilename);
-      Exit;
     end;
+
+    Error(ErrorFileNotFound, 'file not found: '+OriginalFilename);
+    Exit;
   end
+  else if DirPathExists(Filename) then
+    begin
+    Error(ErrorFileNotFound,'file "'+Filename+'" is a directory');
+    Exit;
+    end
   else begin
     // File exists:
     if CompareFileExt(Filename,'.lpk')=0 then begin
@@ -486,11 +497,10 @@ begin
     XMLConfig.Free;
   end;
   // check Package Name
-  if (Result.Name='') or (not LazIsValidIdent(Result.Name)) then begin
+  if not IsValidPkgName(Result.Name) then
     Error(ErrorPackageNameInvalid,
           Format(lisPkgMangThePackageNameOfTheFileIsInvalid,
                  [Result.Name, LineEnding, Result.Filename]));
-  end;
   // check if Package with same name is already loaded
   ConflictPkg:=PackageGraph.FindPackageWithName(Result.Name,nil);
   if ConflictPkg<>nil then begin
@@ -1048,9 +1058,11 @@ begin
     // Look for package name in all known packages
     PackageName:='';
     PkgFilename:='';
+    if pvPkgSearch in fPkgGraphVerbosity then
+      debugln(['Info: (lazarus) [TLazBuildApplication.AddPackagesToInstallList] "',PackageNamesOrFiles[i],'"']);
     if CompareFileExt(PackageNamesOrFiles[i],'.lpk')=0 then
       PkgFilename:=ExpandFileNameUTF8(PackageNamesOrFiles[i])
-    else if LazIsValidIdent(PackageNamesOrFiles[i]) then begin
+    else if IsValidPkgName(PackageNamesOrFiles[i]) then begin
       PackageLink:=TLazPackageLink(LazPackageLinks.FindLinkWithPkgName(PackageNamesOrFiles[i]));
       if PackageLink=nil then
       begin
@@ -1152,9 +1164,9 @@ begin
   LoadMiscellaneousOptions;
   SetupLazarusDirectory;
   SetupCodetools;
-  SetupCompilerFilename;
+  SetupFPCExeFilename;
   SetupPackageSystem;
-  MainBuildBoss.SetupExternalTools;
+  MainBuildBoss.SetupExternalTools(TExternalToolsConsole);
   ExtToolConsole:=TLazExtToolConsole.Create(nil);
   MainBuildBoss.SetupCompilerInterface;
 
@@ -1192,7 +1204,8 @@ begin
     //debugln(['TLazBuildApplication.LoadEnvironmentOptions LazarusDirectory="',LazarusDirectory,'"']);
     if LazarusDirOverride<>'' then
       LazarusDirectory:=CleanAndExpandDirectory(LazarusDirOverride);
-    if MaxProcessCount>=0 then;
+    if MaxProcessCount>=0 then
+      // set command line override
       MaxExtToolsInParallel:=MaxProcessCount;
   end;
   if not FileExistsUTF8(EnvironmentOptions.GetParsedLazarusDirectory
@@ -1249,8 +1262,8 @@ end;
 
 procedure TLazBuildApplication.SetupDialogs;
 begin
-  IDEMessageDialog:=@OnIDEMessageDialog;
-  IDEQuestionDialog:=@OnIDEQuestionDialog;
+  LazMessageDialog:=@OnIDEMessageDialog;
+  LazQuestionDialog:=@OnIDEQuestionDialog;
 end;
 
 procedure TLazBuildApplication.StoreBaseSettings;
@@ -1762,7 +1775,7 @@ const
   end;
 
 begin
-  TranslateResourceStrings(ProgramDirectory(true),'');
+  TranslateResourceStrings(ProgramDirectoryWithBundle,'');
   writeln('');
   writeln('lazbuild [options] <project/package filename or package name>');
   writeln('');

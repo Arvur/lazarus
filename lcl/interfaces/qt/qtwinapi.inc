@@ -1512,8 +1512,7 @@ begin
   if not IsValidDC(DC) then Exit(False);
   R := NormalizeRect(Rect(X1, Y1, X2, Y2));
   if IsRectEmpty(R) then Exit(True);
-
-  TQtDeviceContext(DC).drawEllipse(R.Left, R.Top, R.Right - R.Left, R.Bottom - R.Top{ - 1});
+  TQtDeviceContext(DC).drawEllipse(R.Left, R.Top, R.Right - R.Left, R.Bottom - R.Top);
   Result := True;
 end;
 
@@ -2498,12 +2497,17 @@ var
 begin
   Result := 0;
   Widget := QApplication_activeWindow;
-  if Widget <> nil then
+  {return modal if activeWindow is nil issue #33409}
+  if Widget = nil then
+    Widget := QApplication_activeModalWidget;
+  if Widget = nil then
+    Widget := QApplication_activePopupWidget;
+  if Assigned(Widget) then
   begin
     W := QtObjectFromWidgetH(Widget);
-    if W <> nil then
+    if Assigned(W) and IsValidHandle(HWND(W)) then
     begin
-      if TQtMainWindow(W).MDIAreaHandle <> nil then
+      if (TQtWidget(W) is TQtMainWindow) and (TQtMainWindow(W).MDIAreaHandle <> nil) then
       begin
         Area := QMdiAreaH(TQtMainWindow(W).MDIAreaHandle.Widget);
         SubW := QtObjectFromWidgetH(QMdiArea_activeSubWindow(Area));
@@ -4858,10 +4862,18 @@ begin
       QtFont := QWidget_font(AMenu);
       QFont_family(QtFont, @AName);
       Font.Name := AName{%H-};
+      {$ifdef darwin}
+      // issue #34625
+      if QFont_pointSize(QtFont) > 0 then
+        Font.Height := -Round(QFont_pointSizeF(QtFont))
+      else
+        Font.Height := QFont_pixelSize(QtFont);
+      {$else}
       if QFont_pointSize(QtFont) > 0 then
         Font.Size := QFont_pointSize(QtFont)
       else
         Font.Height := QFont_pixelSize(QtFont);
+      {$endif}
       if QFont_bold(QtFont) then
         Font.Style := Font.Style + [fsBold];
       if QFont_italic(QtFont) then
@@ -4885,10 +4897,18 @@ begin
         QApplication_font(QtFont);
       QFont_family(QtFont, @AName);
       Font.Name := AName{%H-};
+      {$ifdef darwin}
+      // issue #34625
+      if QFont_pointSize(QtFont) > 0 then
+        Font.Height := -Round(QFont_pointSizeF(QtFont))
+      else
+        Font.Height := QFont_pixelSize(QtFont);
+      {$else}
       if QFont_pointSize(QtFont) > 0 then
         Font.Size := QFont_pointSize(QtFont)
       else
         Font.Height := QFont_pixelSize(QtFont);
+      {$endif}
       if QFont_bold(QtFont) then
         Font.Style := Font.Style + [fsBold];
       if QFont_italic(QtFont) then
@@ -5692,8 +5712,15 @@ begin
 
   W := TQtWidget(HWND);
   if ((Flags and SW_SCROLLCHILDREN) <> 0) then
-    W.scroll(dx, dy, nil)
-  else
+  begin
+    if Assigned(W.LCLObject) then {mantis #34589}
+      W.WidgetState := W.WidgetState + [qtwsForceSendMove];
+
+    W.scroll(dx, dy, nil);
+
+    if Assigned(W.LCLObject) then {mantis #34589}
+      W.WidgetState := W.WidgetState - [qtwsForceSendMove];
+  end else
   if (PrcScroll = nil) then
   begin
     R := W.getClientBounds;
@@ -6061,18 +6088,18 @@ begin
 end;
 
 function TQtWidgetSet.GetForegroundWindow: HWND;
-var
-  W: QWidgetH;
 begin
   {$IFDEF HASX11}
+  {$note this should return current system active window, not
+    application one, if our app isn''t active.
+    This is per MSDN and pretty win32 specific}
   if WindowManagerName = 'metacity' then
-    W := X11GetActivewindow
+    Result := HwndFromWidgetH(X11GetActivewindow)
   else
-    W := QApplication_activeWindow();
+    Result := GetActiveWindow;
   {$ELSE}
-  W := QApplication_activeWindow();
+  Result := GetActiveWindow;
   {$ENDIF}
-  Result := HwndFromWidgetH(W);
 end;
 
 function TQtWidgetSet.SetForegroundWindow(HWnd: HWND): boolean;

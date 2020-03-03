@@ -57,7 +57,7 @@ begin
   FLastMinimizeEvent := 0;
   FWindowManagerName := LowerCase(GetWindowManager);
   // metacity wm forks. marco = mint mate wm, gnome shell = gnome 3 wm
-  if (FWindowManagerName = 'marco') or (FWindowManagerName = 'gnome shell') or
+  if (FWindowManagerName = 'marco') or // issue #35782 (FWindowManagerName = 'gnome shell') or
     (UTF8Pos('mutter', FWindowManagerName) > 0) then
     FWindowManagerName := 'metacity';
   {$ENDIF}
@@ -207,13 +207,21 @@ begin
 
   ScreenDC := GetDC(0);
   try
+    {$IFDEF DARWIN}
+    // this code is removed in r57679, and cocoa/carbon are fixed separatelly, so
+    // qt/qt5 wasn't good with standard mac ppi 72. Cocoa ws uses CocoaBasePPI const.
+    // issue #34625
+    ScreenInfo.PixelsPerInchX := 96;
+    ScreenInfo.PixelsPerInchY := 96;
+	  {$ELSE}
     ScreenInfo.PixelsPerInchX := GetDeviceCaps(ScreenDC, LOGPIXELSX);
     ScreenInfo.PixelsPerInchY := GetDeviceCaps(ScreenDC, LOGPIXELSY);
+	  {$ENDIF}
     ScreenInfo.ColorDepth := GetDeviceCaps(ScreenDC, BITSPIXEL);
   finally
     ReleaseDC(0, ScreenDC);
   end;
-  
+
   QtDefaultPrinter;
   {$IFNDEF MSWINDOWS}
   // initialize clipboard
@@ -237,15 +245,23 @@ var
 {$ENDIF}
 begin
   {$IFDEF QtUseNativeEventLoop}
-  FMainTimerID := -1;
-  ATimer := QTimer_Create(QCoreApplication_instance());
-  if (StyleName = 'gtk') or (StyleName = 'gtk+') then
-    QTimer_setInterval(ATimer, 1) {issue #31191}
-  else
-    QTimer_setInterval(ATimer, 0);
-  QTimer_start(ATimer);
-  FMainTimerID := QTimer_timerId(ATimer);
-  QApplication_exec();
+  if Application.Terminated then
+  begin
+    // application can be terminated in show event of mainform (before AppRun is called - see TApplication.Run. related to #34982)
+    if Assigned(ALoop) then
+      ALoop;
+  end else
+  begin
+    FMainTimerID := -1;
+    ATimer := QTimer_Create(QCoreApplication_instance());
+    if (StyleName = 'gtk') or (StyleName = 'gtk+') then
+      QTimer_setInterval(ATimer, 1) {issue #31191}
+    else
+      QTimer_setInterval(ATimer, {$IFDEF QtCocoa}5{$ELSE} 0 {$ENDIF});
+    QTimer_start(ATimer);
+    FMainTimerID := QTimer_timerId(ATimer);
+    QApplication_exec();
+  end;
   {$ELSE}
   // use LCL loop
   if Assigned(ALoop) then
@@ -267,7 +283,10 @@ begin
   {we cannot call directly processEvents() with this flag
    since it produces AV's sometimes, so better check is there
    any pending event.}
-  QCoreApplication_processEvents(QEventLoopWaitForMoreEvents);
+  {$IF DEFINED(QtUseNativeEventLoop) AND DEFINED(QtCocoa)}
+  if not QCoreApplication_hasPendingEvents() then
+  {$ENDIF}
+    QCoreApplication_processEvents(QEventLoopWaitForMoreEvents);
 end;
 
 {------------------------------------------------------------------------------
@@ -292,8 +311,12 @@ end;
 procedure TQtWidgetSet.AppTerminate;
 begin
   // free hooks
-  QObject_hook_destroy(FAppEvenFilterHook);
-  QApplication_hook_destroy(FAppFocusChangedHook);
+  if Assigned(FAppEvenFilterHook) then
+    QObject_hook_destroy(FAppEvenFilterHook);
+  if Assigned(FAppFocusChangedHook) then
+    QApplication_hook_destroy(FAppFocusChangedHook);
+  FAppEvenFilterHook := nil;
+  FAppFocusChangedHook := nil;
   // do not quit application if we are library
   if not FIsLibraryInstance then
   begin
@@ -571,7 +594,7 @@ end;
 function TQtWidgetSet.EventFilter(Sender: QObjectH; Event: QEventH): Boolean; cdecl;
 var
   AObject: TQtObject;
-  W: TQtMainWindow;
+  W: TQtWidget;
   LCLEvent: QLCLMessageEventH;
   ASequence: QKeySequenceH;
   AKey: WideString;
@@ -761,7 +784,7 @@ begin
         // eat next appdeactivate & appactivate since we are changing form
         // flags !
         if (StayOnTopList <> nil) then
-          W := TQtMainWindow(HWNDFromWidgetH(QApplication_activeWindow()))
+          W := TQtWidget(GetActiveWindow)
         else
           W := nil;
         Application.IntfAppActivate;
@@ -1212,6 +1235,9 @@ begin
     lcReceivesLMClearCutCopyPasteReliably: Result := LCL_CAPABILITY_NO;
     lcRadialGradientBrush: Result := LCL_CAPABILITY_YES;
     lcTransparentWindow: Result := LCL_CAPABILITY_YES;
+    lcTextHint: Result := LCL_CAPABILITY_YES;
+    lcNativeTaskDialog: Result := {$ifdef MSWINDOWS} LCL_CAPABILITY_NO {$else} LCL_CAPABILITY_YES {$endif};
+    lcAllowChildControlsInNativeControls: Result := LCL_CAPABILITY_YES;
   else
     Result := inherited GetLCLCapability(ACapability);
   end;
@@ -1849,7 +1875,7 @@ var
   ATempWidget: QWidgetH;
   R: TRect;
   ASize, AFrameSize: TSize;
-  AID: LongWord;
+  AID: PtrUInt;
   I: integer;
   B: Boolean;
   ATicks: DWORD;

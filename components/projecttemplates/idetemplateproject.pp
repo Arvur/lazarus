@@ -5,8 +5,15 @@ unit IDETemplateProject;
 interface
 
 uses
-  Classes, SysUtils, LResources, Forms, Controls, Graphics, Dialogs,
-  ProjectTemplates, ProjectIntf, BaseIDEIntf, LazIDEIntf, LazFileUtils;
+  Classes, SysUtils, ContNrs,
+  // LCL
+  LResources, Forms, Controls, Graphics, Dialogs,
+  // LazUtils
+  LazFileUtils,
+  // IdeIntf
+  ProjectIntf, NewItemIntf, MenuIntf, BaseIDEIntf, LazIDEIntf,
+  // ProjectTemplates
+  ProjectTemplates, frmTemplateSettings, frmTemplateVariables;
 
 type
 
@@ -29,17 +36,11 @@ type
     function InitProject(AProject: TLazProject) : TModalResult; override;
     function CreateStartFiles({%H-}AProject: TLazProject) : TModalResult; override;
     Property template : TProjectTemplate Read FTemplate Write FTemplate;
-  published
-    { Published declarations }
   end;
   
 procedure Register;
 
 implementation
-
-uses
-  ContNrs, frmTemplateSettings, frmTemplateVariables,
-  NewItemIntf, MenuIntf;
 
 Var
   IDETemplates : TProjectTemplates = nil;
@@ -143,18 +144,18 @@ Var
 begin
   For I:=0 to IDETemplates.Count-1 do
     begin
-    Atemplate:=IDETemplates[i];
-    ProjDesc:=TTemplateProjectDescriptor.Create(Atemplate);
+    ATemplate:=IDETemplates[i];
+    ProjDesc:=TTemplateProjectDescriptor.Create(ATemplate);
     RegisterProjectDescriptor(ProjDesc,STemplateCategory);
     ProjMenu:=RegisterIDEMenuCommand(itmFileNewFromTemplate,
-                                     SItmtemplate+Atemplate.Name,
+                                     SItmtemplate+ATemplate.Name,
                                      ATemplate.Name,                                     
                                      Nil,@DoProject,Nil);
     MenuList.Add(TIDEObject.Create(ProjDesc,ProjMenu));
     end;
 end;
 
-procedure UnRegisterKnowntemplates;
+procedure UnRegisterKnownTemplates;
 
 Var
   I : Integer;
@@ -193,7 +194,7 @@ procedure Register;
 begin
   RegisterIdeMenuCommand(itmOptionsDialogs,STemplateSettings,SProjectTemplateSettings,nil,@ChangeSettings);
   itmFileNewFromTemplate:=RegisterIDESubMenu(itmFileNew,
-                                             'itmFileFromtemplate',
+                                             'itmFileFromTemplate',
                                              SNewFromTemplate);
   IDETemplates:=TProjectTemplates.Create(GetTemplateDir);
   RegisterTemplateCategory;
@@ -308,7 +309,7 @@ begin
         AFile.IsPartOfProject:=true;
         AProject.AddFile(AFile,Not B);
         AProject.MainFileID:=0;
-        L:=TstringList.Create;
+        L:=TStringList.Create;
         try
           FTemplate.CreateFile(I,L,FVariables);
           AFile.SetSourceText(L.Text);

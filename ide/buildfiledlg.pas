@@ -7,12 +7,17 @@ unit BuildFileDlg;
 interface
 
 uses
-  Classes, SysUtils, LCLProc, LCLType, Forms, Controls, Graphics, ComCtrls,
-  Dialogs, Buttons, ExtCtrls, StdCtrls, LazFileUtils, ButtonPanel,
+  Classes, SysUtils,
+  // LCL
+  LCLProc, LCLType, Forms, Controls, Graphics, ComCtrls, Dialogs, StdCtrls, ButtonPanel,
+  // LazUtils
+  LazFileUtils, LazStringUtils,
+  // CodeTools
   BasicCodeTools,
-  IDEHelpIntf,
-  IDEProcs, InputHistory, LazarusIDEStrConsts, EnvironmentOpts, TransferMacros,
-  MacroDefIntf, IDEUtils, LazIDEIntf;
+  // IdeIntf
+  IDEHelpIntf, MacroDefIntf, LazIDEIntf, IDEUtils,
+  // IDE
+  InputHistory, LazarusIDEStrConsts, EnvironmentOpts, TransferMacros;
 
 type
 
@@ -313,7 +318,7 @@ begin
     end;
   end;
   if ResultPos<>NewLength+1 then
-    RaiseException('Internal error');
+    RaiseGDBException('Internal error');
 end;
 
 function IDEDirectiveValueToString(const s: string): string;
@@ -352,7 +357,7 @@ begin
     end;
   end;
   if ResultPos<>NewLength+1 then
-    RaiseException('Internal error');
+    RaiseGDBException('Internal error');
 end;
 
 function IDEDirectiveNameToDirective(const DirectiveName: string): TIDEDirective;
@@ -523,6 +528,9 @@ begin
 
   ButtonPanel.HelpButton.OnClick := @HelpButtonClick;
   ButtonPanel.OKButton.OnClick := @OKButtonClick;
+
+  BuildWorkDirCombobox.DropDownCount:=EnvironmentOptions.DropDownCount;
+  RunWorkDirCombobox.DropDownCount:=EnvironmentOptions.DropDownCount;
 end;
 
 procedure TBuildFileDialog.BuildBrowseWorkDirButtonCLICK(Sender: TObject);

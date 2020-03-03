@@ -26,6 +26,8 @@ unit onlinepackagemanagerintf;
 
 interface
 
+{$R opkman.res}
+
 uses
   Classes,
   // LCL
@@ -36,7 +38,7 @@ uses
 procedure Register;
 
 implementation
-uses opkman_const, opkman_mainfrm, opkman_intf;
+uses opkman_const, opkman_mainfrm, opkman_maindm, opkman_intf;
 
 procedure IDEMenuSectionClicked(Sender: TObject);
 begin
@@ -55,21 +57,28 @@ var
   IDECommandCategory: TIDECommandCategory;
   IDECommand: TIDECommand;
 begin
-  IDEShortCutX := IDEShortCut(VK_O, [ssCtrl, ssAlt], VK_UNKNOWN, []);
+  IDEShortCutX := IDEShortCut(VK_O, [ssCtrl, ssAlt, ssShift], VK_UNKNOWN, []);
   IDECommandCategory := IDECommandList.FindCategoryByName('Components');
+  IDECommand := nil;
   if IDECommandCategory <> nil then
   begin
     IDECommand := RegisterIDECommand(IDECommandCategory, 'Online Package Manager', rsLazarusPackageManager, IDEShortCutX, nil, @IDEMenuSectionClicked);
     if IDECommand <> nil then
       RegisterIDEButtonCommand(IDECommand);
   end;
-  RegisterIDEMenuCommand(itmPkgGraphSection, 'Online Package Manager', rsLazarusPackageManager, nil, @IDEMenuSectionClicked, IDECommand);
+  RegisterIDEMenuCommand(itmPkgGraphSection, 'Online Package Manager',
+    rsLazarusPackageManager, nil, @IDEMenuSectionClicked, IDECommand, 'pkg_opm');
+
+  RegisterIDEMenuCommand(ComponentPalettePageDropDownExtraEntries, 'Online Package Manager',
+    rsLazarusPackageManager, nil, @IDEMenuSectionClicked, nil, 'pkg_opm');
 end;
 
 initialization
+  MainDM := TMainDM.Create(nil);
   OPMInterface := TOPMInterfaceEx.Create;
 
 finalization
   OPMInterface.Free;
+  MainDM.Free;
 end.
 

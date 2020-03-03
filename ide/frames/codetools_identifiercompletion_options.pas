@@ -25,16 +25,26 @@ unit codetools_identifiercompletion_options;
 interface
 
 uses
-  Classes, SysUtils, FileUtil, Forms, StdCtrls,
-  CodeToolsOptions, LazarusIDEStrConsts, IDEOptionsIntf, DividerBevel;
+  SysUtils,
+  // LCL
+  Forms, StdCtrls,
+  // LazControls
+  DividerBevel,
+  // IdeIntf
+  IDEOptionsIntf, IDEOptEditorIntf,
+  // IDE
+  CodeToolsOptions, LazarusIDEStrConsts;
 
 type
 
   { TCodetoolsIndentifierCompletionOptionsFrame }
 
   TCodetoolsIndentifierCompletionOptionsFrame = class(TAbstractIDEOptionsEditor)
+    ICAddWordsComboBox: TComboBox;
+    ICContainsFilterCheckBox: TCheckBox;
     ICAddDoCheckBox: TCheckBox;
     ICAutoAddParameterBracketsCheckBox: TCheckBox;
+    ICIncludeCodeTemplatesCheckBox: TCheckBox;
     ICMiscDividerBevel: TDividerBevel;
     ICOpenDividerBevel: TDividerBevel;
     ICAutoStartAfterPointCheckBox: TCheckBox;
@@ -46,8 +56,12 @@ type
     ICShowHelpCheckBox: TCheckBox;
     ICAutoUseSingleIdent: TCheckBox;
     ICSortDividerBevel: TDividerBevel;
+    ICAppearanceDividerBevel: TDividerBevel;
+    ICContentDividerBevel: TDividerBevel;
     ICSortForHistoryCheckBox: TCheckBox;
     ICSortForScopeCheckBox: TCheckBox;
+    ICUseIconsInCompletionBoxCheckBox: TCheckBox;
+    ICIncludeWordsLabel: TLabel;
   private
   public
     function GetTitle: String; override;
@@ -90,6 +104,18 @@ begin
   ICSortForScopeCheckBox.Caption:=lisSortForScope;
   ICSortForScopeCheckBox.Hint:=lisForExampleShowAtTopTheLocalVariablesThenTheMembers;
 
+  ICContentDividerBevel.Caption:=lisContents;
+  ICContainsFilterCheckBox.Caption := dlgIncludeIdentifiersContainingPrefix;
+  ICIncludeWordsLabel.Caption := dlgIncludeWordsToIdentCompl;
+  ICAddWordsComboBox.Items.Text:=
+    dlgIncludeWordsToIdentCompl_IncludeFromAllUnits+LineEnding+
+    dlgIncludeWordsToIdentCompl_IncludeFromCurrentUnit+LineEnding+
+    dlgIncludeWordsToIdentCompl_DontInclude;
+  ICIncludeCodeTemplatesCheckBox.Caption := dlgIncludeCodeTemplatesToIdentCompl;
+
+  ICAppearanceDividerBevel.Caption:=lisAppearance;
+  ICUseIconsInCompletionBoxCheckBox.Caption := dlgUseIconsInCompletionBox;
+
   ICMiscDividerBevel.Caption:=dlgEnvMisc;
   ICReplaceCheckBox.Caption:=lisReplaceWholeIdentifier;
   ICReplaceCheckBox.Hint:=lisEnableReplaceWholeIdentifierDisableReplacePrefix;
@@ -113,6 +139,15 @@ begin
     ICShowHelpCheckBox.Checked:=IdentComplShowHelp;
     ICSortForHistoryCheckBox.Checked:=IdentComplSortForHistory;
     ICSortForScopeCheckBox.Checked:=IdentComplSortForScope;
+    ICContainsFilterCheckBox.Checked:=IdentComplUseContainsFilter;
+    ICIncludeCodeTemplatesCheckBox.Checked:=IdentComplIncludeCodeTemplates;
+    ICUseIconsInCompletionBoxCheckBox.Checked:=IdentComplShowIcons;
+    case IdentComplIncludeWords of
+      icwIncludeFromAllUnits: ICAddWordsComboBox.ItemIndex:=0;
+      icwIncludeFromCurrentUnit: ICAddWordsComboBox.ItemIndex:=1;
+    else
+      ICAddWordsComboBox.ItemIndex:=2;
+    end;
   end;
 end;
 
@@ -132,6 +167,14 @@ begin
     IdentComplShowHelp:=ICShowHelpCheckBox.Checked;
     IdentComplSortForHistory:=ICSortForHistoryCheckBox.Checked;
     IdentComplSortForScope:=ICSortForScopeCheckBox.Checked;
+    IdentComplUseContainsFilter:=ICContainsFilterCheckBox.Checked;
+    IdentComplIncludeCodeTemplates:=ICIncludeCodeTemplatesCheckBox.Checked;
+    IdentComplShowIcons:=ICUseIconsInCompletionBoxCheckBox.Checked;
+    case ICAddWordsComboBox.ItemIndex of
+      0: IdentComplIncludeWords := icwIncludeFromAllUnits;
+      1: IdentComplIncludeWords := icwIncludeFromCurrentUnit;
+      2: IdentComplIncludeWords := icwDontInclude;
+    end;
   end;
 end;
 

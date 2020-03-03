@@ -26,7 +26,7 @@ uses
   // widgetset
   WSSpin, WSLCLClasses,
   // cocoa ws
-  CocoaPrivate, CocoaWSCommon;
+  CocoaPrivate, CocoaWSCommon, CocoaTextEdits;
 
 type
 
@@ -35,13 +35,18 @@ type
   TCocoaWSCustomFloatSpinEdit = class(TWSCustomFloatSpinEdit)
   published
     class function  CreateHandle(const AWinControl: TWinControl; const AParams: TCreateParams): TLCLIntfHandle; override;
+    class procedure DestroyHandle(const AWinControl: TWinControl); override;
     class function  GetValue(const ACustomFloatSpinEdit: TCustomFloatSpinEdit): Double; override;
     class procedure UpdateControl(const ACustomFloatSpinEdit: TCustomFloatSpinEdit); override;
-    //
     class procedure SetBounds(const AWinControl: TWinControl; const ALeft, ATop, AWidth, AHeight: Integer); override;
   end;
 
 implementation
+
+procedure UpdateControlLCLToCocoa(src: TCustomFloatSpinEdit; dst: TCocoaSpinEdit);
+begin
+  dst.UpdateControl(src.MinValue, src.MaxValue, src.Increment, src.Value, src.DecimalPlaces);
+end;
 
 { TCocoaWSCustomFloatSpinEdit }
 
@@ -61,10 +66,18 @@ begin
   lSpin := TCocoaSpinEdit.alloc.lclInitWithCreateParams(AParams);
   Result := TLCLIntfHandle(lSpin);
   if Result = 0 then Exit;
-
+  lSpin.decimalPlaces := -1;
+  lSpin.lclCreateSubcontrols(AParams);
   lSpin.callback := TLCLCommonCallback.Create(lSpin, AWinControl);
-  lSpin.CreateSubcontrols(TCustomFloatSpinEdit(AWinControl), AParams);
-  lSpin.UpdateControl(TCustomFloatSpinEdit(AWinControl));
+  if (lSpin.Stepper.isKindOfClass(TCocoaSpinEditStepper)) then
+    TCocoaSpinEditStepper(lSpin.Stepper).callback:=lSpin.callback;
+end;
+
+class procedure TCocoaWSCustomFloatSpinEdit.DestroyHandle(const AWinControl: TWinControl);
+begin
+  if not AWinControl.HandleAllocated then Exit;
+  TCocoaSpinEdit(AWinControl.Handle).lclReleaseSubcontrols;
+  TCocoaWSWinControl.DestroyHandle(AWinControl);
 end;
 
 {------------------------------------------------------------------------------
@@ -98,8 +111,7 @@ begin
   if ACustomFloatSpinEdit = nil then Exit;
   if not ACustomFloatSpinEdit.HandleAllocated then Exit;
   lSpin := TCocoaSpinEdit(ACustomFloatSpinEdit.Handle);
-
-  lSpin.UpdateControl(ACustomFloatSpinEdit);
+  UpdateControlLCLToCocoa(ACustomFloatSpinEdit, lSpin);
 end;
 
 class procedure TCocoaWSCustomFloatSpinEdit.SetBounds(

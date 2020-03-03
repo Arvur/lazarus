@@ -11,6 +11,7 @@ msgstr ""
 "X-Generator: Poedit 1.5.4\n"
 
 #: msgjsonviewer.sarray
+#, object-pascal-format
 msgid "Array (%d elements)"
 msgstr "Array (%d Elemente)"
 
@@ -36,18 +37,28 @@ msgid "JSON document modified"
 msgstr "JSON-Dokument geändert"
 
 #: msgjsonviewer.sdocumentmodifiedaction
+#, object-pascal-format, fuzzy, badformat
+#| msgid ""
+#| "The JSON data was changed but not saved.\n"
+#| "What do want to do ?\n"
 msgid ""
-"The JSON data was changed but not saved.\n"
-"What do want to do ?\n"
+"The JSON data in \"%s\" was changed but not saved.\n"
+"What do want to do ?"
 msgstr ""
 "Die JSON-Daten wurden geändert aber nicht gespeichert.\n"
 "Was wollen Sie tun ?\n"
 
 #: msgjsonviewer.sduplicatemembername
+#, object-pascal-format
 msgid "Duplicate member name \"%s\"."
 msgstr ""
 
+#: msgjsonviewer.sefilenameneeded
+msgid "Filename needed for generated code"
+msgstr ""
+
 #: msgjsonviewer.selement
+#, object-pascal-format
 msgid "Element nr. %d"
 msgstr "Element Nr. %d"
 
@@ -56,10 +67,12 @@ msgid "Empty document"
 msgstr "Leeres Dokument"
 
 #: msgjsonviewer.serrcreatingconfigdir
+#, object-pascal-format
 msgid "Could not create the configuration files directory \"%s\""
 msgstr "Kann das Konfigurationsdateien-Verzeichnis \"%s\" nicht erstellen"
 
 #: msgjsonviewer.serrinvalidvalue
+#, object-pascal-format
 msgid "Invalid value or wrong type: \"%s\""
 msgstr "Ungültiger Wert oder falscher Typ: \"%s\""
 
@@ -72,6 +85,7 @@ msgid "New object member"
 msgstr ""
 
 #: msgjsonviewer.snewmembername
+#, object-pascal-format
 msgid "Enter a name for the new member (type: %s)"
 msgstr ""
 
@@ -84,12 +98,110 @@ msgid "null"
 msgstr ""
 
 #: msgjsonviewer.sobject
+#, object-pascal-format
 msgid "Object (%d members)"
 msgstr ""
 
 #: msgjsonviewer.ssavedata
 msgid "Save the changes"
 msgstr "Änderungen speichern"
+
+#: msgjsonviewer.stabcaptionraw
+msgid "Raw"
+msgstr ""
+
+#: msgjsonviewer.stabcaptionvisual
+msgid "Visual"
+msgstr ""
+
+#: tauthenticationform.caption
+msgctxt "tauthenticationform.caption"
+msgid "HTTP Authentication"
+msgstr ""
+
+#: tauthenticationform.lcbusername.caption
+msgctxt "tauthenticationform.lcbusername.caption"
+msgid "&Username"
+msgstr ""
+
+#: tauthenticationform.lepassword.caption
+msgid "&Password"
+msgstr ""
+
+#: tcreatecodeform.caption
+msgctxt "tcreatecodeform.caption"
+msgid "Create pascal code"
+msgstr "Pascal Code erstellen"
+
+#: tcreatecodeform.cgoptions.caption
+msgid "Other options"
+msgstr ""
+
+#: tcreatecodeform.eextraunitnames.texthint
+msgid "Unit names, separated by commas"
+msgstr ""
+
+#: tcreatecodeform.leconstructorargslabel1.caption
+msgid "Constructor arguments"
+msgstr ""
+
+#: tcreatecodeform.lepropertytypesuffix.caption
+msgid "Property type suffix"
+msgstr ""
+
+#: tcreatecodeform.leunitname.caption
+msgid "Unit name"
+msgstr ""
+
+#: tcreatecodeform.leunitname1.caption
+msgid "Field Prefix"
+msgstr ""
+
+#: tcreatecodeform.lextraunitnames.caption
+msgid "Extra units in uses"
+msgstr ""
+
+#: tcreatecodeform.lfecode.caption
+msgid "File"
+msgstr ""
+
+#: tcreatecodeform.lparentname.caption
+msgid "Object Parent class"
+msgstr ""
+
+#: tcreatecodeform.lseindent.caption
+msgid "Indent"
+msgstr ""
+
+#: tcreatecodeform.tscode.caption
+msgid "Preview"
+msgstr ""
+
+#: tcreatecodeform.tsoptions.caption
+msgid "Options"
+msgstr ""
+
+#: theaderform.caption
+msgid "Request header"
+msgstr ""
+
+#: theaderform.lcbname.caption
+msgctxt "theaderform.lcbname.caption"
+msgid "&Name"
+msgstr ""
+
+#: theaderform.lcbvalue.caption
+msgctxt "theaderform.lcbvalue.caption"
+msgid "&Value"
+msgstr ""
+
+#: tmainform.aaddtofavourites.caption
+msgid "Add request to favourites"
+msgstr ""
+
+#: tmainform.aclose.caption
+msgid "&Close"
+msgstr ""
 
 #: tmainform.acopy.caption
 msgid "&Copy"
@@ -98,6 +210,11 @@ msgstr "Kopieren"
 #: tmainform.acopy.hint
 msgid "Copy selected node to clipboard as JSON"
 msgstr ""
+
+#: tmainform.acreatecode.caption
+msgctxt "tmainform.acreatecode.caption"
+msgid "Create pascal code"
+msgstr "Pascal Code erstellen"
 
 #: tmainform.acut.caption
 msgid "C&ut"
@@ -253,6 +370,10 @@ msgstr "JSON-Betrachter"
 msgid "&Edit"
 msgstr "B&earbeiten"
 
+#: tmainform.mfavourites.caption
+msgid "Favourites"
+msgstr ""
+
 #: tmainform.mfile.caption
 msgid "&File"
 msgstr "Datei"
@@ -282,6 +403,10 @@ msgstr "Werte"
 msgid "Quote string values"
 msgstr "Stringwerte in Anführungszeichen"
 
+#: tmainform.misaveformatted.caption
+msgid "Save Formatted JSON"
+msgstr "Fomatiertes JSON speichern"
+
 #: tmainform.misortmembers.caption
 msgid "Sort object members"
 msgstr "Objektfelder sortieren "
@@ -304,6 +429,10 @@ msgstr "JSON Dokument in Datei speichern"
 
 #: tmainform.tbjson.caption
 msgid "TBJSON"
+msgstr ""
+
+#: tmainform.tbshowrest.caption
+msgid "Show &REST query"
 msgstr ""
 
 #: tmainform.toolbutton1.caption
@@ -353,6 +482,92 @@ msgid "&Name"
 msgstr ""
 
 #: tnewstringform.label2.caption
+msgctxt "tnewstringform.label2.caption"
 msgid "&Value"
+msgstr ""
+
+#: trestframe.aaddheader.caption
+msgctxt "trestframe.aaddheader.caption"
+msgid "Add Header"
+msgstr ""
+
+#: trestframe.aaddheader.hint
+msgctxt "trestframe.aaddheader.hint"
+msgid "Add Header"
+msgstr ""
+
+#: trestframe.aaddtofavourites.caption
+msgid "Add to favourites..."
+msgstr ""
+
+#: trestframe.aauthentication.caption
+msgctxt "trestframe.aauthentication.caption"
+msgid "HTTP Basic authentication"
+msgstr ""
+
+#: trestframe.aauthentication.hint
+msgctxt "trestframe.aauthentication.hint"
+msgid "HTTP Basic authentication"
+msgstr ""
+
+#: trestframe.adeleteheader.caption
+msgctxt "trestframe.adeleteheader.caption"
+msgid "Delete Header"
+msgstr ""
+
+#: trestframe.adeleteheader.hint
+msgctxt "trestframe.adeleteheader.hint"
+msgid "Delete Header"
+msgstr ""
+
+#: trestframe.aeditheader.caption
+msgctxt "trestframe.aeditheader.caption"
+msgid "Edit Header"
+msgstr ""
+
+#: trestframe.aeditheader.hint
+msgctxt "trestframe.aeditheader.hint"
+msgid "Edit Header"
+msgstr ""
+
+#: trestframe.asend.caption
+msgid "&Send"
+msgstr ""
+
+#: trestframe.asend.hint
+msgid "Send request"
+msgstr ""
+
+#: trestframe.cbusecurrenttabcontent.caption
+msgctxt "trestframe.cbusecurrenttabcontent.caption"
+msgid "Use current tab as content"
+msgstr ""
+
+#: trestframe.lhttpstatus.caption
+msgid "HTTP"
+msgstr ""
+
+#: trestframe.tsheaders.caption
+msgid "Request headers"
+msgstr ""
+
+#: trestframe.tsrequestcontent.caption
+msgid "Request content"
+msgstr ""
+
+#: trestframe.tsresult.caption
+msgid "Request result"
+msgstr ""
+
+#: tsaverequestdataform.caption
+msgid "Save request data as favourite"
+msgstr ""
+
+#: tsaverequestdataform.cbsavecontent.caption
+msgid "Save request content"
+msgstr ""
+
+#: tsaverequestdataform.label1.caption
+msgid "Name"
 msgstr ""
 

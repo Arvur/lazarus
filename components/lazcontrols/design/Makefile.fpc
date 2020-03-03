@@ -2,7 +2,7 @@
 #
 #   Makefile.fpc for LazControlDsgn 0.0
 #
-#   This file was generated on 16.12.2016
+#   This file was generated on 12-7-18
 
 [package]
 name=lazcontroldsgn

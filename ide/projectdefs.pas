@@ -45,9 +45,9 @@ uses
   // LazUtils
   LazFileUtils, LazUTF8, Laz2_XMLCfg,
   // IdeIntf
-  ProjectIntf, LazIDEIntf,
+  ProjectIntf,
   // IDE
-  PublishModule, IDEProcs;
+  PublishModule;
 
 type
   TOnLoadSaveFilename = procedure(var Filename:string; Load:boolean) of object;
@@ -59,7 +59,8 @@ type
     pwfSkipJumpPoints,
     pwfSkipProjectInfo,         // do not write lpi file
     pwfSkipSeparateSessionInfo, // do not write lps file
-    pwfIgnoreModified  // write always even if nothing modified (e.g. to upgrade to a newer lpi version)
+    pwfIgnoreModified, // write always even if nothing modified (e.g. to upgrade to a newer lpi version)
+    pwfCompatibilityMode // maximize compatibility to open LPI files in legacy Lazarus installations
     );
   TProjectWriteFlags = set of TProjectWriteFlag;
 const
@@ -268,7 +269,7 @@ type
     procedure Insert(Index: integer; APosition: TProjectJumpHistoryPosition);
     procedure InsertSmart(Index: integer; APosition: TProjectJumpHistoryPosition);
     procedure LoadFromXMLConfig(XMLConfig: TXMLConfig; const Path: string);
-    procedure SaveToXMLConfig(XMLConfig: TXMLConfig; const Path: string);
+    procedure SaveToXMLConfig(XMLConfig: TXMLConfig; const Path: string; const ALegacyLists: Boolean);
     procedure WriteDebugReport;
     property HistoryIndex: integer read FHistoryIndex write SetHistoryIndex;
     property Items[Index:integer]:TProjectJumpHistoryPosition 
@@ -286,26 +287,9 @@ type
   { TPublishProjectOptions }
   
   TPublishProjectOptions = class(TPublishModuleOptions)
-  private
-    FSaveClosedEditorFilesInfo: boolean;
-    FSaveEditorInfoOfNonProjectFiles: boolean;
-    procedure SetSaveClosedEditorFilesInfo(const AValue: boolean);
-    procedure SetSaveEditorInfoOfNonProjectFiles(const AValue: boolean);
   public
-    procedure LoadDefaults; override;
-    procedure LoadFromXMLConfig(XMLConfig: TXMLConfig; const APath: string;
-                                AdjustPathDelims: boolean); override;
-    procedure SaveToXMLConfig(XMLConfig: TXMLConfig; const APath: string;
-                              UsePathDelim: TPathDelimSwitch); override;
+    function GetDefaultDestinationDir: string; override;
     function WriteFlags: TProjectWriteFlags;
-  public
-    // project info
-    property SaveEditorInfoOfNonProjectFiles: boolean
-                read FSaveEditorInfoOfNonProjectFiles
-                write SetSaveEditorInfoOfNonProjectFiles;
-    property SaveClosedEditorFilesInfo: boolean
-                read FSaveClosedEditorFilesInfo
-                write SetSaveClosedEditorFilesInfo;
   end;
 
 implementation
@@ -592,18 +576,22 @@ procedure TProjectJumpHistory.LoadFromXMLConfig(XMLConfig: TXMLConfig;
   const Path: string);
 var i, NewCount, NewHistoryIndex: integer;
   NewPosition: TProjectJumpHistoryPosition;
+  JmpPath, PosPath: string;
+  IsLegacyList: Boolean;
 begin
   Clear;
-  NewCount:=XMLConfig.GetValue(Path+'JumpHistory/Count',0);
-  NewHistoryIndex:=XMLConfig.GetValue(Path+'JumpHistory/HistoryIndex',0);
+  JmpPath := Path+'JumpHistory/';
+  IsLegacyList:=XMLConfig.IsLegacyList(JmpPath);
+  NewCount:=XMLConfig.GetListItemCount(JmpPath, 'Position', IsLegacyList);
+  NewHistoryIndex:=XMLConfig.GetValue(JmpPath+'HistoryIndex',0);
   NewPosition:=nil;
   for i:=0 to NewCount-1 do begin
     if NewPosition=nil then begin
       NewPosition:=TProjectJumpHistoryPosition.Create('',Point(0,0),0);
       NewPosition.OnLoadSaveFilename:=OnLoadSaveFilename;
     end;
-    NewPosition.LoadFromXMLConfig(XMLConfig,
-                                 Path+'JumpHistory/Position'+IntToStr(i+1)+'/');
+    PosPath := JmpPath+XMLConfig.GetListItemXPath('Position', i, IsLegacyList, True)+'/';
+    NewPosition.LoadFromXMLConfig(XMLConfig, PosPath);
     if (NewPosition.Filename<>'') and (NewPosition.CaretXY.Y>0)
     and (NewPosition.CaretXY.X>0) and (NewPosition.TopLine>0)
     and (NewPosition.TopLine<=NewPosition.CaretXY.Y) then begin
@@ -619,14 +607,16 @@ begin
 end;
 
 procedure TProjectJumpHistory.SaveToXMLConfig(XMLConfig: TXMLConfig;
-  const Path: string);
+  const Path: string; const ALegacyLists: Boolean);
 var i: integer;
+  JmpPath, PosPath: string;
 begin
-  XMLConfig.SetDeleteValue(Path+'JumpHistory/Count',Count,0);
-  XMLConfig.SetDeleteValue(Path+'JumpHistory/HistoryIndex',HistoryIndex,0);
+  JmpPath := Path+'JumpHistory/';
+  XMLConfig.SetListItemCount(JmpPath,Count,ALegacyLists);
+  XMLConfig.SetDeleteValue(JmpPath+'HistoryIndex',HistoryIndex,0);
   for i:=0 to Count-1 do begin
-    Items[i].SaveToXMLConfig(XMLConfig,
-                             Path+'JumpHistory/Position'+IntToStr(i+1)+'/');
+    PosPath := JmpPath+XMLConfig.GetListItemXPath('Position', i, ALegacyLists, True)+'/';
+    Items[i].SaveToXMLConfig(XMLConfig, PosPath);
   end;
 end;
 
@@ -752,66 +742,16 @@ end;
 
 { TPublishProjectOptions }
 
-procedure TPublishProjectOptions.SetSaveClosedEditorFilesInfo(
-  const AValue: boolean);
+function TPublishProjectOptions.GetDefaultDestinationDir: string;
 begin
-  if FSaveClosedEditorFilesInfo=AValue then exit;
-  FSaveClosedEditorFilesInfo:=AValue;
-end;
-
-procedure TPublishProjectOptions.SetSaveEditorInfoOfNonProjectFiles(
-  const AValue: boolean);
-begin
-  if FSaveEditorInfoOfNonProjectFiles=AValue then exit;
-  FSaveEditorInfoOfNonProjectFiles:=AValue;
-end;
-
-procedure TPublishProjectOptions.LoadDefaults;
-begin
-  inherited LoadDefaults;
-  DestinationDirectory:='$(TestDir)/publishedproject/';
-  CommandAfter:='';
-  UseIncludeFileFilter:=true;
-  IncludeFilterSimpleSyntax:=true;
-  IncludeFileFilter:=DefPublModIncFilter;
-  UseExcludeFileFilter:=false;
-  ExcludeFilterSimpleSyntax:=true;
-  ExcludeFileFilter:=DefPublModExcFilter;
-  SaveClosedEditorFilesInfo:=false;
-  SaveEditorInfoOfNonProjectFiles:=false;
-end;
-
-procedure TPublishProjectOptions.LoadFromXMLConfig(XMLConfig: TXMLConfig;
-  const APath: string; AdjustPathDelims: boolean);
-//var
-//  XMLVersion: integer;
-begin
-  inherited LoadFromXMLConfig(XMLConfig,APath,AdjustPathDelims);
-  //XMLVersion:=XMLConfig.GetValue(APath+'Version/Value',0);
-  FSaveClosedEditorFilesInfo:=XMLConfig.GetValue(
-             APath+'SaveClosedEditorFilesInfo/Value',SaveClosedEditorFilesInfo);
-  FSaveEditorInfoOfNonProjectFiles:=XMLConfig.GetValue(
-             APath+'SaveEditorInfoOfNonProjectFiles/Value',
-             SaveEditorInfoOfNonProjectFiles);
-end;
-
-procedure TPublishProjectOptions.SaveToXMLConfig(XMLConfig: TXMLConfig;
-  const APath: string; UsePathDelim: TPathDelimSwitch);
-begin
-  inherited SaveToXMLConfig(XMLConfig,APath,UsePathDelim);
-  XMLConfig.SetDeleteValue(APath+'SaveClosedEditorFilesInfo/Value',
-    SaveClosedEditorFilesInfo,false);
-  XMLConfig.SetDeleteValue(APath+'SaveEditorInfoOfNonProjectFiles/Value',
-    SaveEditorInfoOfNonProjectFiles,false);
+  Result:='$(TestDir)/publishedproject/';
 end;
 
 function TPublishProjectOptions.WriteFlags: TProjectWriteFlags;
 begin
   Result:=[];
-  if not SaveEditorInfoOfNonProjectFiles then
-    Include(Result,pwfSaveOnlyProjectUnits);
-  if not SaveClosedEditorFilesInfo then
-    Include(Result,pwfSkipClosedUnits);
+  Include(Result,pwfSaveOnlyProjectUnits);
+  Include(Result,pwfSkipClosedUnits);
 end;
 
 
@@ -969,9 +909,23 @@ end;
 destructor TLazProjectFileDescriptors.Destroy;
 var
   i: Integer;
+  Name: String;
+  Desc: TProjectFileDescriptor;
 begin
   fDestroying:=true;
-  for i:=Count-1 downto 0 do Items[i].Release;
+  //for i:=Count-1 downto 0 do
+  //  debugln(['TLazProjectFileDescriptors.Destroy ',Items[i].ClassName]);
+  for i:=Count-1 downto 0 do begin
+    Name:='Index '+IntToStr(i);
+    try
+      Desc:=Items[i];
+      Name:=Desc.Name+':'+Desc.ClassName;
+      Desc.Release;
+    except
+      on E: Exception do
+        debugln(['Error: (lazarus) [TLazProjectFileDescriptors.Destroy] ',Name]);
+    end;
+  end;
   FItems.Free;
   FItems:=nil;
   ProjectFileDescriptors:=nil;

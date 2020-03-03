@@ -90,6 +90,12 @@ begin
   Result := 0;
 end;
 
+function TWidgetSet.ClipboardFormatNeedsNullByte(
+  const AFormat: TPredefinedClipboardFormat): Boolean;
+begin
+  Result := AFormat = pcfText;
+end;
+
 //todo: remove ?
 function TWidgetSet.CreateEmptyRegion: hRGN;
 begin
@@ -325,12 +331,6 @@ end;
 function TWidgetSet.TextUTF8Out(DC: HDC; X, Y: Integer; Str: PChar; Count: Longint): Boolean;
 begin
   Result:=TextOut(DC,X,Y,Str,Count);
-end;
-
-
-function TWidgetSet.FontCanUTF8(Font: HFont): boolean;
-begin
-  Result:=false;
 end;
 
 function TWidgetSet.FontIsMonoSpace(Font: HFont): boolean;

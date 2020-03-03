@@ -12,34 +12,35 @@ msgstr ""
 "X-Generator: Poedit 1.7.7\n"
 
 #: anchordockstr.adrsafreesideofasplittermustnotbeanchorednodetypeancho
+#, object-pascal-format
 msgid "A free side of a splitter must not be anchored: Node=\"%s\" Type=%s Anchors[%s]=\"%s\""
 msgstr "Свободная сторона разделителя не должна иметь привязки: Узел=\"%s\" Тип=%s Anchors[%s]=\"%s\""
 
-#: anchordockstr.adrsallfiles
-msgid "All files"
-msgstr "Все файлы"
+#: anchordockstr.adrsallowdocksitestobeminimized
+msgid "Allow dock sites to be minimized"
+msgstr "Разрешать областям стыковки сворачиваться"
 
 #: anchordockstr.adrsamountofpixelthemousehastodragbeforedragstarts
 msgid "Amount of pixel the mouse has to drag before drag starts"
 msgstr "Число пикселов, на которые должна переместиться мышь для начала операции перетаскивания"
 
-#: anchordockstr.adrsanchordockinglayout
-msgid "Anchor Docking Layout"
-msgstr "Разбивка Anchor Docking"
-
 #: anchordockstr.adrsanchorisnotsplitternodeanchors
+#, object-pascal-format
 msgid "Anchor is not splitter: Node=\"%s\" Anchors[%s]=\"%s\""
 msgstr "Привязка не является разделителем: Узел=\"%s\" Anchors[%s]=\"%s\""
 
 #: anchordockstr.adrsanchornotfoundnodeanchors
+#, object-pascal-format
 msgid "Anchor not found: Node=\"%s\" Anchors[%s]=\"%s\""
 msgstr "Привязка не найдена: Узел=\"%s\" Anchors[%s]=\"%s\""
 
 #: anchordockstr.adrsanchortowrongsideofsplitternodeanchors
+#, object-pascal-format
 msgid "Anchor to wrong side of splitter: Node=\"%s\" Anchors[%s]=\"%s\""
 msgstr "Привязка к неверной стороне разделителя: Узел=\"%s\" Anchors[%s]=\"%s\""
 
 #: anchordockstr.adrsapagemustnotbeanchorednodeparentparenttypeanchors
+#, object-pascal-format
 msgid "A page must not be anchored: Node=\"%s\" Parent=%s ParentType=%s Anchors[%s]=\"%s\""
 msgstr "Вкладка не должна иметь привязок: Узел=\"%s\" Родитель=%s Тип родителя=%s Anchors[%s]=\"%s\""
 
@@ -60,6 +61,7 @@ msgid "control is already a docksite"
 msgstr "объект уже является областью стыковки"
 
 #: anchordockstr.adrscustomdocksitecanhaveonlyonesite
+#, object-pascal-format
 msgid "Custom dock site \"%s\" can have only one site."
 msgstr "Пользовательская область стыковки \"%s\" может иметь только один стыковочный элемент."
 
@@ -72,6 +74,7 @@ msgid "Docking options"
 msgstr "Параметры стыковки"
 
 #: anchordockstr.adrsdraganddockc
+#, object-pascal-format
 msgid "Use the mouse to drag and dock window \"%s\""
 msgstr "Используйте мышь для перетаскивания и стыковки окна \"%s\""
 
@@ -96,20 +99,9 @@ msgid "Enlarge"
 msgstr "Расширить"
 
 #: anchordockstr.adrsenlargeside
+#, object-pascal-format
 msgid "Enlarge %s side"
 msgstr "Расширить край %s"
-
-#: anchordockstr.adrserror
-msgid "Error"
-msgstr "Ошибка"
-
-#: anchordockstr.adrserrorloadingwindowlayoutfromfile
-msgid "Error loading window layout from file \"%s\"%s%s"
-msgstr "Ошибка загрузки разбивки окна из файла \"%s\"%s%s"
-
-#: anchordockstr.adrserrorwritingwindowlayouttofile
-msgid "Error writing window layout to file \"%s\"%s%s"
-msgstr "Ошибка записи разбивки окна в файл \"%s\"%s%s"
 
 #: anchordockstr.adrsfilledheaders
 msgid "Fill headers"
@@ -156,20 +148,12 @@ msgid "Highlight focused"
 msgstr "Выделять объект в фокусе"
 
 #: anchordockstr.adrshighlightfocusedhint
-msgid "Highlight focused docked controls"
-msgstr "Выделять пристыкованный объект в фокусе"
+msgid "Highlight header of focused docked control"
+msgstr "Выделять заголовок пристыкованного объекта в фокусе"
 
 #: anchordockstr.adrsleft
 msgid "left"
 msgstr "слева"
-
-#: anchordockstr.adrsloadwindowlayoutfromfile
-msgid "Load window layout from file ..."
-msgstr "Загрузить разбивку окна из файла ..."
-
-#: anchordockstr.adrsloadwindowlayoutfromfilexml
-msgid "Load window layout from file (*.xml)"
-msgstr "Загрузить разбивку окна из файла (*.xml)"
 
 #: anchordockstr.adrslocked
 msgid "Locked"
@@ -178,6 +162,10 @@ msgstr "Зафиксирован"
 #: anchordockstr.adrsmerge
 msgid "Merge"
 msgstr "Объединить"
+
+#: anchordockstr.adrsminimize
+msgid "Minimize"
+msgstr "Свернуть"
 
 #: anchordockstr.adrsmissingcontrolname
 msgid "missing control name"
@@ -216,40 +204,28 @@ msgid "No captions for floating sites"
 msgstr "Не показывать названия непристыкованных объектов"
 
 #: anchordockstr.adrsnochildrenallowedfornodetype
+#, object-pascal-format
 msgid "No children allowed for Node=\"%s\" Type=%s"
 msgstr "Не разрешается иметь потомков для Узла=\"%s\" Тип=%s"
 
 #: anchordockstr.adrsnotsupportedhasparent
+#, object-pascal-format
 msgid "Not supported: %s has parent %s"
 msgstr "Не поддерживается: %s имеет родителя %s"
 
 #: anchordockstr.adrsquit
+#, object-pascal-format
 msgid "Quit %s"
 msgstr "Выход из %s"
 
 #: anchordockstr.adrsrequestedbutcreated
+#, object-pascal-format
 msgid "%s requested, but %s created"
 msgstr "Запрошен %s, но создан %s"
-
-#: anchordockstr.adrsrestoredefaultlayout
-msgid "Restore default layout"
-msgstr "Восстановить разбивку окна по умолчанию"
 
 #: anchordockstr.adrsright
 msgid "right"
 msgstr "справа"
-
-#: anchordockstr.adrssavewindowlayoutasdefault
-msgid "Save window layout as default"
-msgstr "Сохранить разбивку окна как разбивку по умолчанию"
-
-#: anchordockstr.adrssavewindowlayouttofile
-msgid "Save window layout to file ..."
-msgstr "Сохранить разбивку окна в файл ..."
-
-#: anchordockstr.adrssavewindowlayouttofilexml
-msgid "Save window layout to file (*.xml)"
-msgstr "Сохранить разбивку окна в файл (*.xml)"
 
 #: anchordockstr.adrsscaleonresize
 msgid "Scale on resize"
@@ -284,6 +260,7 @@ msgid "Tab position"
 msgstr "Положение заголовков вкладок"
 
 #: anchordockstr.adrsthereisanotherdockmasterinstalledonlyonedockingpac
+#, object-pascal-format
 msgid "There is another dock master installed. Only one docking package can be installed at a time. Please uninstall the other dock master %s and restart the IDE"
 msgstr "Установленный диспетчер стыковки уже имеется. В каждый момент времени может быть установлен только один такой пакет. Удалите диспетчер стыковки %s и перезапустите IDE"
 
@@ -292,6 +269,7 @@ msgid "top"
 msgstr "сверху"
 
 #: anchordockstr.adrstouseanchordockingyoumustfirstuninstall
+#, object-pascal-format
 msgid "To use anchordocking you must first uninstall %s"
 msgstr "Для использования anchordocking сначала удалите %s"
 

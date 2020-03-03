@@ -29,6 +29,7 @@ type
     procedure AssertItemEquals(
       const AItem: TChartDataItem; AX, AY: Double; AText: String = '';
       AColor: TChartColor = clTAColor);
+    function Compare(AItem1, AItem2: Pointer): Integer;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -41,6 +42,7 @@ type
     procedure Enum;
     procedure Extent;
     procedure Multi;
+    procedure Sort;
   end;
 
   { TRandomSourceTest }
@@ -295,13 +297,30 @@ procedure TListSourceTest.Bounds;
 
   procedure CheckAll;
   begin
+    Check2(1, 2, 2, 3);
+    Check2(1, 2, 1.9, 3.1);
+    Check2(2, 1, 2.1, 2.9);
     Check(1, 1, 2);
     Check(1, 0, 1.9);
-    Check(0, -1, 0.9);
-    Check(5, 4, 5.1);
-    Check(4, 3, 4.9);
+    Check(0, -1, 0.9);          // below left-most point
+    Check(5, 4, 5.1);           // above right-most point
+    Check(4, 3, 4.9);           // just below right-most point
     Check2(2, 4, 3, 1e100);
     Check2(0, 1, -1e100, 2);
+  end;
+
+  procedure CheckAll_XCount0;
+  begin
+    Check2(2, 3, 2, 3);
+    Check2(2, 3, 1.9, 3.1);
+    Check2(3, 2, 2.1, 2.9);
+    Check(2, 2, 2);
+    Check(2, 1, 1.9);
+    Check(0, -1, -0.1);   // below left-most point
+    Check(5, 4, 4.1);     // above right-most point
+    Check(4, 3,  3.9);    // just below right-most point
+    Check2(2, 4, 2, 1e100);
+    Check2(0, 1, -1e100, 1);
   end;
 
 begin
@@ -315,6 +334,11 @@ begin
   CheckAll;
   FSource.Sorted := false;
   CheckAll;
+
+  FSource.XCount := 0;
+  CheckAll_XCount0;
+
+  FSource.XCount := 1;
   FSource.SetXValue(1, SafeNan);
   Check(2, 0, 2);
   FSource.SetXValue(0, SafeNan);
@@ -369,9 +393,9 @@ begin
   oldSeparator := DefaultFormatSettings.DecimalSeparator;
   try
     DefaultFormatSettings.DecimalSeparator := ':';
-    FSource.DataPoints.Add('3:5');
+    FSource.DataPoints.Add('3:5|?|?|');
     AssertEquals(3.5, FSource[0]^.X);
-    FSource.DataPoints[0] := '4.5';
+    FSource.DataPoints[0] := '4.5|?|?|';
     AssertEquals(4.5, FSource[0]^.X);
   finally
     DefaultFormatSettings.DecimalSeparator := oldSeparator;
@@ -453,9 +477,197 @@ procedure TListSourceTest.Multi;
 begin
   FSource.Clear;
   AssertEquals(1, FSource.YCount);
+  AssertEquals(1, FSource.YCount);
+
   FSource.Add(1, 2);
   FSource.YCount := 2;
   AssertEquals([0], FSource[0]^.YList);
+
+  FSource.SetYList(0, [3]);
+  AssertEquals(3, FSource[0]^.YList[0]);
+
+  FSource.DataPoints.Add('1|2|3|?|t');
+  AssertEquals(1, FSource.XCount);
+  AssertEquals(2, FSource.YCount);
+  AssertEquals(1, FSource[1]^.X);
+  AssertEquals(2, FSource[1]^.Y);
+  AssertEquals(3, FSource[1]^.YList[0]);
+
+  // Check too many parts
+  try
+    FSource.DataPoints.Add('10|20|30|40|?|');
+  except
+    on E: Exception do
+      AssertTrue('Too many values', E is EListSourceStringError);
+  end;
+  AssertEquals(2, FSource.Count);
+
+  // Check too few parts
+  try
+    FSource.DataPoints.Add('10|20|?|');
+  except
+    on E: Exception do
+      AssertTrue('Too few values', E is EListSourceStringError);
+  end;
+  AssertEquals(2, FSource.Count);
+
+  // Check text part missing
+  try
+    FSource.DataPoints.Add('10|20|30|?');
+  except
+    on E: Exception do
+      AssertTrue('Text field missing', E is EListSourceStringError);
+  end;
+  AssertEquals(2, FSource.Count);
+
+  // Check color part missing
+  try
+    FSource.DataPoints.Add('10|20|30|t');
+  except
+    on E: Exception do
+      AssertTrue('Color field missing', E is EListSourceStringError);
+  end;
+  AssertEquals(2, FSource.Count);
+
+  // Check non-numeric parts
+  try
+    FSource.DataPoints.Add('abc|20|30|?|t');
+  except
+    on E: Exception do
+      AssertTrue('Non-numeric X', E is EListSourceStringError);
+  end;
+  try
+    FSource.DataPoints.Add('10|abc|30|?|t');
+  except
+    on E: Exception do
+      AssertTrue('Non-numeric Y', E is EListSourceStringError);
+  end;
+  try
+    FSource.DataPoints.Add('10|20|abc|?|t');
+  except
+    on E: Exception do
+      AssertTrue('Non-numeric YList', E is EListSourceStringError);
+  end;
+  try
+    FSource.DataPoints.Add('10|20|30|abc|t');
+  except
+    on E: Exception do
+      AssertTrue('Non-numeric Color', E is EListSourceStringError);
+  end;
+
+  // check empty list
+  try
+    FSource.AddXYList(4, []);
+  except
+    on E: Exception do
+      AssertTrue('Empty YList', E is TListChartSource.EYListEmptyError);
+  end;
+  AssertEquals(2, FSource.Count);
+
+  // Check decimal separators
+  FSource.DataPoints.Add('1.23|2.34|3|?|t');
+  AssertEquals(1.23, FSource[2]^.X);
+  AssertEquals(2.34, FSource[2]^.Y);
+
+  FSource.DataPoints.Add('1,23|2,34|3|?|t');
+  AssertEquals(1.23, FSource[3]^.X);
+  AssertEquals(2.34, FSource[3]^.Y);
+
+  // Check missing values
+  FSource.DataPoints.Add('|2|3|?|t');
+  AssertTrue('IsNaN', IsNaN(FSource[4]^.X));
+  AssertEquals(2, FSource[4]^.Y);
+  AssertEquals(3, FSource[4]^.YList[0]);
+
+  FSource.DataPoints.Add('1||3|?|t');
+  AssertEquals(1, FSource[5]^.X);
+  AssertTrue('IsNaN', IsNaN(FSource[5]^.Y));
+  AssertEquals(3, FSource[5]^.YList[0]);
+
+  FSource.DataPoints.Add('1|2|3||t');
+  AssertEquals(clTAColor, FSource[6]^.Color);
+
+  // Check Text part containing '|' character(s)
+  FSource.DataPoints.Add('1|2|3|?|"a|b|c"');
+  AssertEquals('a|b|c', FSource[7]^.Text);
+
+  // Check Text part containing line ending
+  FSource.DataPoints.Add('1|2|3|?|"a'+LineEnding+'b"');
+  AssertEquals('a'+LineEnding+'b', FSource[8]^.Text);
+
+  // Check Text part containing quotes
+  FSource.DataPoints.Add('1|2|3|?|This is "quoted".');
+  AssertEquals('This is "quoted".', FSource[9]^.Text);
+
+  FSource.DataPoints.Add('1|2|3|?|"This is ""quoted""."');
+  AssertEquals('This is "quoted".', FSource[10]^.Text);
+
+  FSource.DataPoints.Add('1|2|3|?|"This is ""quoted"""');
+  AssertEquals('This is "quoted"', FSource[11]^.Text);
+
+  FSource.DataPoints.Add('1|2|3|?|Single ".');
+  AssertEquals('Single ".', FSource[12]^.Text);
+
+  FSource.DataPoints.Add('1|2|3|?|Two quotes "".');
+  AssertEquals('Two quotes "".', FSource[13]^.Text);
+
+  // Check Text part containing separator and quotes
+  FSource.DataPoints.Add('1|2|3|?|"Number of ""|"" items"');
+  AssertEquals('Number of "|" items', FSource[14]^.Text);
+
+  // Check multiple x and y values
+  FSource.Clear;
+  FSource.XCount := 2;
+  FSource.YCount := 3;
+  FSource.AddXListYList([1, 2], [3, 4, 5]);
+  AssertEquals(2, FSource.XCount);
+  AssertEquals(3, FSource.YCount);
+  AssertEquals(1, FSource[0]^.X);
+  AssertEquals(2, FSource[0]^.XList[0]);
+  AssertEquals(3, FSource[0]^.Y);
+  AssertEquals(4, FSource[0]^.YList[0]);
+  AssertEquals(5, FSource[0]^.YList[1]);
+
+  FSource.DataPoints.Add('10|20|30|40|50|?|t');
+  AssertEquals(10, FSource[1]^.X);
+  AssertEquals(20, FSource[1]^.XList[0]);
+  AssertEquals(30, FSource[1]^.Y);
+  AssertEquals(40, FSource[1]^.YList[0]);
+  AssertEquals(50, FSource[1]^.YList[1]);
+
+  // Add multiple strings in a single AddText command
+  FSource.Clear;
+  FSource.XCount := 2;
+  FSource.YCount := 3;
+  FSource.DataPoints.AddText('100|200|300|400|500|?|Data1' + LineEnding +
+                             '101|201|301|401|501|?|Data2');
+  AssertEquals(2, FSource.Count);
+  AssertEquals(2, FSource.XCount);
+  AssertEquals(3, FSource.YCount);
+  AssertEquals(100, FSource[0]^.X);
+  AssertEquals(200, FSource[0]^.XList[0]);
+  AssertEquals(300, FSource[0]^.Y);
+  AssertEquals(500, FSource[0]^.YList[1]);
+  AssertEquals('Data1', FSource[0]^.Text);
+  AssertEquals(101, FSource[1]^.X);
+  AssertEquals(501, FSource[1]^.YList[1]);
+  AssertEquals('Data2', FSource[1]^.Text);
+
+  // Add multiple strings in a single AddStrings command
+  FSource.Datapoints.AddStrings(['110|210|310|410|510|?|ABC', '111|211|311|411|511|?|abc']);
+  AssertEquals(4, FSource.Count);
+  AssertEquals(2, FSource.XCount);
+  AssertEquals(3, FSource.YCount);
+  AssertEquals(110, FSource[2]^.X);
+  AssertEquals(210, FSource[2]^.XList[0]);
+  AssertEquals(310, FSource[2]^.Y);
+  AssertEquals(510, FSource[2]^.YList[1]);
+  AssertEquals('ABC', FSource[2]^.Text);
+  AssertEquals(111, FSource[3]^.X);
+  AssertEquals(511, FSource[3]^.YList[1]);
+  AssertEquals('abc', FSource[3]^.Text);
+
+  (*
   FSource.SetYList(0, [3, 4]);
   AssertEquals('Extra items are chopped', [3], FSource[0]^.YList);
   FSource.DataPoints.Add('1|2|3|4|?|t');
@@ -478,6 +690,68 @@ begin
   except on E: Exception do
     AssertTrue('Empty YList', E is TListChartSource.EYListEmptyError);
   end;
+  *)
+end;
+
+function TListSourceTest.Compare(AItem1, AItem2: Pointer): Integer;
+var
+  item1: PChartDataItem absolute AItem1;
+  item2: PChartDataItem absolute AItem2;
+begin
+  Result := CompareValue(item1^.X + item1^.XList[0], item2^.X + item2^.XList[0]);
+end;
+
+procedure TListSourceTest.Sort;
+begin
+  FSource.Clear;
+  FSource.XCount := 2;
+  FSource.YCount := 2;
+  FSource.AddXListYList([1, -0.1], [10, 100], 'A');     // x1+x2 = 0.9
+  FSource.AddXListYList([9, 0.9], [90, -900], 'M');     // x1+x2 = 9.9
+  FSource.AddXListYList([5, -0.5], [50, 50], 'D');      // x1+x2 = 4.5
+
+  FSource.SortBy := sbX;
+  FSource.SortIndex := 0;
+  FSource.SortDir := sdAscending;
+  FSource.Sorted := true;
+  AssertEquals(1, FSource[0]^.X);
+  AssertEquals(5, FSource[1]^.X);
+  AssertEquals(9, FSource[2]^.X);
+
+  FSource.SortBy := sbX;
+  FSource.SortIndex := 1;
+  AssertEquals(-0.5, FSource[0]^.XList[0]);
+  AssertEquals(-0.1, FSource[1]^.XList[0]);
+  AssertEquals( 0.9, FSource[2]^.XList[0]);
+
+  FSource.SortBy := sbY;
+  FSource.SortIndex := 0;
+  AssertEquals(10, FSource[0]^.Y);
+  AssertEquals(50, FSource[1]^.Y);
+  AssertEquals(90, FSource[2]^.Y);
+
+  FSource.SortBy := sbY;
+  FSource.SortIndex := 1;
+  FSource.SortDir := sdDescending;
+  AssertEquals(100, FSource[0]^.YList[0]);
+  AssertEquals(50, FSource[1]^.YList[0]);
+  AssertEquals(-900, FSource[2]^.YList[0]);
+
+  FSource.SortBy := sbText;
+  FSource.SortDir := sdDescending;
+  AssertEquals('M', FSource[0]^.Text);
+  AssertEquals('D', FSource[1]^.Text);
+  AssertEquals('A', FSource[2]^.Text);
+
+  FSource.OnCompare := @Compare;
+  FSource.SortBy := sbCustom;
+  FSource.SortDir := sdAscending;
+  AssertEquals(1, FSource[0]^.X);
+  AssertEquals(5, FSource[1]^.X);
+  AssertEquals(9, FSource[2]^.X);
+
+  FSource.OnCompare := nil;
+  FSource.Sorted := false;
 end;
 
 procedure TListSourceTest.SetUp;

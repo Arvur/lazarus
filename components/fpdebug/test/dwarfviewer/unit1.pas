@@ -6,7 +6,7 @@ interface
 
 uses
   FpImgReaderWinPE, Classes, SysUtils, math, FileUtil, LazLogger, LazLoggerProfiling,
-  lazutf8sysutils, FpDbgLoader, FpDbgDwarf, FpDbgDwarfConst, FpPascalParser, FpDbgInfo,
+  LazSysUtils, FpDbgLoader, FpDbgDwarf, FpDbgDwarfConst, FpPascalParser, FpDbgInfo,
   FpDbgDwarfDataClasses, Forms, Controls, Graphics, Dialogs, StdCtrls, ComCtrls, EditBtn,
   Menus, Clipbrd, maps, types, strutils;
 
@@ -19,23 +19,28 @@ type
     btnLoad: TButton;
     btnShowUnit: TButton;
     btnCopyOne: TButton;
+    btnLines: TButton;
     FileNameEdit1: TFileNameEdit;
     CompUnitListBox: TListBox;
+    StatusBar1: TStatusBar;
     TreeView1: TTreeView;
     procedure btnCopyAllClick(Sender: TObject);
     procedure btnCopyOneClick(Sender: TObject);
     procedure btnLoadClick(Sender: TObject);
     procedure btnShowUnitClick(Sender: TObject);
+    procedure btnLinesClick(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
+    procedure FormDropFiles(Sender: TObject; const FileNames: array of String);
   private
     { private declarations }
     NameList: TStringList;
     FFileName: String;
     FTestCaseTexts: TStringList;
-    FImageLoader: TDbgImageLoader;
-    FDwarfInfo: TDbgDwarf;
+    FImageLoaderList: TDbgImageLoaderList;
+    FDwarfInfo: TFpDwarfInfo;
     FCUCount : Integer;
+    FShowingUnit: Boolean;
   public
     { public declarations }
     procedure LoadDwarf;
@@ -49,12 +54,21 @@ implementation
 
 {$R *.lfm}
 
+type
+  TDwarfCompilationUnitHack = class(TDwarfCompilationUnit)
+  public
+    property FirstScope;
+    property AbbrevList;
+  end;
+
 { TForm1 }
 
 procedure TForm1.btnLoadClick(Sender: TObject);
 var
   i: Integer;
 begin
+  if FileNameEdit1.FileName = '' then
+    FileNameEdit1.RunDialog;
   FFileName := FileNameEdit1.FileName;
   LoadDwarf;
 
@@ -79,6 +93,48 @@ begin
   if i < 0 then exit;
 debugln(['TForm1.MenuItem1Click ']);
   Clipboard.AsText := FTestCaseTexts[i];
+end;
+
+procedure TForm1.btnLinesClick(Sender: TObject);
+const
+  B: Array [Boolean] of string = ('F', 'T');
+var
+  i: Integer;
+  Node, ParentNode: TTreeNode;
+  CU: TDwarfCompilationUnitHack;
+  SM: TDwarfLineInfoStateMachine;
+begin
+  TreeView1.BeginUpdate;
+  try
+    TreeView1.Items.Clear;
+    i := CompUnitListBox.ItemIndex;
+    if i < 0 then exit;
+    CU := TDwarfCompilationUnitHack(CompUnitListBox.Items.Objects[i]);
+    if CU = nil then exit;
+
+    SM := CU.FLineInfo.StateMachine;
+    SM.Reset;
+    ParentNode := nil;
+
+    while SM.NextLine do
+    begin
+
+      Node := TreeView1.Items.AddChild(ParentNode,
+        Format('Line: %2d, Col: %2d, Addr: %s,  IsStmt: %s,  Basic: %s, EndSeq: %s, Prol: %s, Epil: %s, ISA: %u,  File: %s // Ended: %s',
+        [SM.Line, SM.Column, IntToHex(SM.Address,16), b[SM.IsStmt], b[SM.BasicBlock],
+        b[SM.EndSequence], b[SM.PrologueEnd], b[SM.EpilogueBegin], SM.Isa, sm.FileName, b[SM.Ended] ]));
+
+      if ParentNode = nil then ParentNode := Node;
+      if SM.EndSequence then begin
+        ParentNode := nil;
+        if not SM.NextLine then break;
+      end;
+    end;
+
+  finally
+    TreeView1.EndUpdate;
+  end;
+
 end;
 
 procedure TForm1.btnCopyAllClick(Sender: TObject);
@@ -139,28 +195,25 @@ debugln(['TForm1.MenuItem1Click ']);
 end;
 
 procedure TForm1.LoadDwarf;
+var
+  ImageLoader: TDbgImageLoader;
 begin
   UnLoadDwarf;
-  FImageLoader := TDbgImageLoader.Create(FFileName);
-  FDwarfInfo := TDbgDwarf.Create(FImageLoader);
+  ImageLoader := TDbgImageLoader.Create(FFileName);
+  FImageLoaderList := TDbgImageLoaderList.Create(True);
+  ImageLoader.AddToLoaderList(FImageLoaderList);
+
+  FDwarfInfo := TFpDwarfInfo.Create(FImageLoaderList);
   FCUCount := FDwarfInfo.LoadCompilationUnits;
 end;
 
-
-
-type
-  TDwarfCompilationUnitHack = class(TDwarfCompilationUnit)
-  public
-    property FirstScope;
-    property AbbrevList;
-  end;
 
 procedure TForm1.btnShowUnitClick(Sender: TObject);
 var
   CU: TDwarfCompilationUnitHack;
   BaseScopeAddr: Pointer;
 
-  function ToHex(var p: pbyte; l : integer):String;
+  function ToHex(var p: pbyte; l : integer):String; inline;
   begin
     Result := '';
     while l > 0 do begin
@@ -192,6 +245,7 @@ var
     MaxData: PByte;
     v: Int64;
   begin
+    Result:='';
     MaxData := AData + ASize - 1;
     while AData <= MaxData do
     begin
@@ -427,7 +481,7 @@ var
   end;
 
   function AddAbbrev(AParent: TTreeNode;   s: TDwarfScopeInfo; Def: TDwarfAbbrev;
-    var PascalTestCAseCode: String): String;
+    var PascalTestCAseCode: String; namePreFix: String = ''): String;
   var
     p: Pointer;
     Form: Cardinal;
@@ -453,9 +507,9 @@ var
 
         case Form of
           DW_FORM_addr     : begin
-            s3 := ToHex(p, 4 {FCU.FAddressSize});
+            s3 := ToHex(p, cu.AddressSize {4} {FCU.FAddressSize});
             PascalTestCAseCode := PascalTestCAseCode +
-              Format('XX_X_CurInfo992X.AddAddr(%s, %s, $%s);%s', [s1, s2, s3, LineEnding]);
+              Format(namePreFix+'AddAddr(%s, %s, $%s);%s', [s1, s2, s3, LineEnding]);
           end;
           DW_FORM_block    : begin
             p2 := p;
@@ -463,12 +517,12 @@ var
             stest := ToHexCommaList(p,ValueSize);
             p2 := p;
             s3 := IntToStr(ValueSize) + ': ' + ToHex(p, ValueSize);
-            if (Attribute = DW_AT_location) or (Attribute = DW_AT_data_member_location)  then
+            if (Attribute = DW_AT_location) or (Attribute = DW_AT_data_location) or (Attribute = DW_AT_data_member_location)  then
               PascalTestCAseCode := PascalTestCAseCode +
-                Format('XX_X_CurInfo992X.Add(%s, %s, BytesLenU([%s]));  // %s%s', [s1, s2, DecodeLocation(p2, ValueSize), stest, LineEnding])
+                Format(namePreFix+'Add(%s, %s, BytesLenU([%s]));  // %s%s', [s1, s2, DecodeLocation(p2, ValueSize), stest, LineEnding])
             else
               PascalTestCAseCode := PascalTestCAseCode +
-                Format('XX_X_CurInfo992X.Add(%s, %s, BytesLenU([%s]));%s', [s1, s2, stest, LineEnding]);
+                Format(namePreFix+'Add(%s, %s, BytesLenU([%s]));%s', [s1, s2, stest, LineEnding]);
           end;
           DW_FORM_block1   : begin
             ValueSize := PByte(p)^;
@@ -476,12 +530,12 @@ var
             p2 := p;
             stest := ToHexCommaList(p,ValueSize);
             s3 := IntToStr(ValueSize) + ': ' + ToHex(p, ValueSize);
-            if (Attribute = DW_AT_location) or (Attribute = DW_AT_data_member_location)  then
+            if (Attribute = DW_AT_location) or (Attribute = DW_AT_data_location) or (Attribute = DW_AT_data_member_location)  then
               PascalTestCAseCode := PascalTestCAseCode +
-                Format('XX_X_CurInfo992X.Add(%s, %s, BytesLen1([%s])); // %s%s', [s1, s2, DecodeLocation(p2, ValueSize), stest, LineEnding])
+                Format(namePreFix+'Add(%s, %s, BytesLen1([%s])); // %s%s', [s1, s2, DecodeLocation(p2, ValueSize), stest, LineEnding])
             else
               PascalTestCAseCode := PascalTestCAseCode +
-                Format('XX_X_CurInfo992X.Add(%s, %s, BytesLen1([%s]));%s', [s1, s2, stest, LineEnding]);
+                Format(namePreFix+'Add(%s, %s, BytesLen1([%s]));%s', [s1, s2, stest, LineEnding]);
           end;
           DW_FORM_block2   : begin
             ValueSize := PWord(p)^;
@@ -489,12 +543,12 @@ var
             p2 := p;
             stest := ToHexCommaList(p,ValueSize);
             s3 := IntToStr(ValueSize) + ': ' + ToHex(p, ValueSize);
-            if (Attribute = DW_AT_location) or (Attribute = DW_AT_data_member_location)  then
+            if (Attribute = DW_AT_location) or (Attribute = DW_AT_data_location) or (Attribute = DW_AT_data_member_location)  then
               PascalTestCAseCode := PascalTestCAseCode +
-                Format('XX_X_CurInfo992X.Add(%s, %s, BytesLen2([%s])); // %s%s', [s1, s2, DecodeLocation(p2, ValueSize), stest, LineEnding])
+                Format(namePreFix+'Add(%s, %s, BytesLen2([%s])); // %s%s', [s1, s2, DecodeLocation(p2, ValueSize), stest, LineEnding])
             else
               PascalTestCAseCode := PascalTestCAseCode +
-                Format('XX_X_CurInfo992X.Add(%s, %s, BytesLen2([%s]));%s', [s1, s2, stest, LineEnding]);
+                Format(namePreFix+'Add(%s, %s, BytesLen2([%s]));%s', [s1, s2, stest, LineEnding]);
           end;
           DW_FORM_block4   : begin
             ValueSize := PLongWord(p)^;
@@ -502,95 +556,95 @@ var
             p2 := p;
             stest := ToHexCommaList(p,ValueSize);
             s3 := IntToStr(ValueSize) + ': ' + ToHex(p, ValueSize);
-            if (Attribute = DW_AT_location) or (Attribute = DW_AT_data_member_location)  then
+            if (Attribute = DW_AT_location) or (Attribute = DW_AT_data_location) or (Attribute = DW_AT_data_member_location)  then
               PascalTestCAseCode := PascalTestCAseCode +
-                Format('XX_X_CurInfo992X.Add(%s, %s, BytesLen4([%s])); // %s%s', [s1, s2, DecodeLocation(p2, ValueSize), stest, LineEnding])
+                Format(namePreFix+'Add(%s, %s, BytesLen4([%s])); // %s%s', [s1, s2, DecodeLocation(p2, ValueSize), stest, LineEnding])
             else
               PascalTestCAseCode := PascalTestCAseCode +
-                Format('XX_X_CurInfo992X.Add(%s, %s, BytesLen4([%s]));%s', [s1, s2, stest, LineEnding]);
+                Format(namePreFix+'Add(%s, %s, BytesLen4([%s]));%s', [s1, s2, stest, LineEnding]);
           end;
           DW_FORM_data1    : begin
             stest := ToHexCommaList(p,1);
             s3 := ToHex(p, 1);
             PascalTestCAseCode := PascalTestCAseCode +
-              Format('XX_X_CurInfo992X.Add(%s, %s, [%s]);%s', [s1, s2, stest, LineEnding]);
+              Format(namePreFix+'Add(%s, %s, [%s]);%s', [s1, s2, stest, LineEnding]);
           end;
           DW_FORM_data2    : begin
             stest := ToHexCommaList(p,2);
             s3 := ToHex(p, 2);
             PascalTestCAseCode := PascalTestCAseCode +
-              Format('XX_X_CurInfo992X.Add(%s, %s, [%s]);%s', [s1, s2, stest, LineEnding]);
+              Format(namePreFix+'Add(%s, %s, [%s]);%s', [s1, s2, stest, LineEnding]);
           end;
           DW_FORM_data4    : begin
             stest := ToHexCommaList(p,4);
             s3 := ToHex(p, 4);
             PascalTestCAseCode := PascalTestCAseCode +
-              Format('XX_X_CurInfo992X.Add(%s, %s, [%s]);%s', [s1, s2, stest, LineEnding]);
+              Format(namePreFix+'Add(%s, %s, [%s]);%s', [s1, s2, stest, LineEnding]);
           end;
           DW_FORM_data8    : begin
             stest := ToHexCommaList(p,8);
             s3 := ToHex(p, 8);
             PascalTestCAseCode := PascalTestCAseCode +
-              Format('XX_X_CurInfo992X.Add(%s, %s, [%s]);%s', [s1, s2, stest, LineEnding]);
+              Format(namePreFix+'Add(%s, %s, [%s]);%s', [s1, s2, stest, LineEnding]);
           end;
           DW_FORM_sdata    : begin
             SValue := SLEB128toOrdinal(p);
             s3 := IntToStr(SValue);
             PascalTestCAseCode := PascalTestCAseCode +
-              Format('XX_X_CurInfo992X.AddSLEB(%s, %s, %d);%s', [s1, s2, SValue, LineEnding]);
+              Format(namePreFix+'AddSLEB(%s, %s, %d);%s', [s1, s2, SValue, LineEnding]);
           end;
           DW_FORM_udata    : begin
             Value := ULEB128toOrdinal(p);
             s3 := IntToStr(Value);
             PascalTestCAseCode := PascalTestCAseCode +
-              Format('XX_X_CurInfo992X.AddULEB(%s, %s, %u);%s', [s1, s2, Value, LineEnding]);
+              Format(namePreFix+'AddULEB(%s, %s, %u);%s', [s1, s2, Value, LineEnding]);
           end;
           DW_FORM_flag     : begin
             stest := ToHexCommaList(p,1);
             s3 := ToHex(p, 1);
             PascalTestCAseCode := PascalTestCAseCode +
-              Format('XX_X_CurInfo992X.Add(%s, %s, [%s]);%s', [s1, s2, stest, LineEnding]);
+              Format(namePreFix+'Add(%s, %s, [%s]);%s', [s1, s2, stest, LineEnding]);
           end;
           DW_FORM_ref1     : begin
             stest := ToHexCommaList(p,1);
             s3 := ToHex(p, 1);
             PascalTestCAseCode := PascalTestCAseCode +
-              Format('XX_X_CurInfo992X.AddRef(%s, %s, @Info__%s_); // %s  %s', [s1, s2, IntToStr(PByte(p-1)^), stest, LineEnding]);
-              //Format('XX_X_CurInfo992X.AddRef(%s, %s, FOO); // %s  %s', [s1, s2, stest, LineEnding]);
+              Format(namePreFix+'AddRef(%s, %s, @Info__%s_); // %s  %s', [s1, s2, IntToStr(PByte(p-1)^), stest, LineEnding]);
+              //Format(namePreFix+'AddRef(%s, %s, FOO); // %s  %s', [s1, s2, stest, LineEnding]);
           end;
           DW_FORM_ref2     : begin
             stest := ToHexCommaList(p,3);
             s3 := ToHex(p, 2);
             PascalTestCAseCode := PascalTestCAseCode +
-              Format('XX_X_CurInfo992X.AddRef(%s, %s, @Info__%s_); // %s  %s', [s1, s2, IntToStr(PWord(p-2)^), stest, LineEnding]);
-              //Format('XX_X_CurInfo992X.AddRef(%s, %s, FOO); // %s %s', [s1, s2, stest, LineEnding]);
+              Format(namePreFix+'AddRef(%s, %s, @Info__%s_); // %s  %s', [s1, s2, IntToStr(PWord(p-2)^), stest, LineEnding]);
+              //Format(namePreFix+'AddRef(%s, %s, FOO); // %s %s', [s1, s2, stest, LineEnding]);
           end;
           DW_FORM_ref4     : begin
             stest := ToHexCommaList(p,4);
             s4 := IntToHex(PInteger(p)^ -11, 8);;
             s3 := ToHex(p, 4) + '    // '+ s4;
             PascalTestCAseCode := PascalTestCAseCode +
-              Format('XX_X_CurInfo992X.AddRef(%s, %s, @Info__%s_); // %s  %s', [s1, s2, IntToStr(PDWord(p-4)^), stest, LineEnding]);
-              //Format('XX_X_CurInfo992X.AddRef(%s, %s, FOO); // %s %s', [s1, s2, stest, LineEnding]);
+              Format(namePreFix+'AddRef(%s, %s, @Info__%s_); // %s  %s', [s1, s2, IntToStr(PDWord(p-4)^), stest, LineEnding]);
+              //Format(namePreFix+'AddRef(%s, %s, FOO); // %s %s', [s1, s2, stest, LineEnding]);
           end;
           DW_FORM_ref8     : begin
             stest := ToHexCommaList(p,8);
             s3 := ToHex(p, 8);
             PascalTestCAseCode := PascalTestCAseCode +
-              Format('XX_X_CurInfo992X.AddRef(%s, %s, @Info__%s_); // %s  %s', [s1, s2, IntToStr(PQWord(p-8)^), stest, LineEnding]);
-              //Format('XX_X_CurInfo992X.AddRef(%s, %s, FOO); // %s %s', [s1, s2, stest, LineEnding]);
+              Format(namePreFix+'AddRef(%s, %s, @Info__%s_); // %s  %s', [s1, s2, IntToStr(PQWord(p-8)^), stest, LineEnding]);
+              //Format(namePreFix+'AddRef(%s, %s, FOO); // %s %s', [s1, s2, stest, LineEnding]);
           end;
           DW_FORM_ref_udata: begin
             Value := ULEB128toOrdinal(p);
             s3 := IntToStr(Value);
             PascalTestCAseCode := PascalTestCAseCode +
-              Format('XX_X_CurInfo992X.AddRef(%s, %s, FOO); // %u // ULEB %s', [s1, s2, Value, LineEnding]);
+              Format(namePreFix+'AddRef(%s, %s, FOO); // %u // ULEB %s', [s1, s2, Value, LineEnding]);
           end;
           DW_FORM_ref_addr : begin
             stest := ToHexCommaList(p,4);
             s3 := ToHex(p, 4 {FCU.FAddressSize});
             PascalTestCAseCode := PascalTestCAseCode +
-              Format('XX_X_CurInfo992X.AddRef(%s, %s, FOO); // %s // %s', [s1, s2, stest, LineEnding]);
+              Format(namePreFix+'AddRef(%s, %s, FOO); // %s // %s', [s1, s2, stest, LineEnding]);
           end;
           DW_FORM_string   : begin
             s3 := copy(pchar(p),1,1000);
@@ -599,13 +653,13 @@ var
             end;
             inc(pbyte(p));
             PascalTestCAseCode := PascalTestCAseCode +
-              Format('XX_X_CurInfo992X.Add(%s, %s, ''%s''+#0);%s', [s1, s2, s3, LineEnding]);
+              Format(namePreFix+'Add(%s, %s, ''%s''+#0);%s', [s1, s2, s3, LineEnding]);
           end;
           DW_FORM_strp     : begin
             stest := ToHexCommaList(p,4);
             s3 := ToHex(p, 4 {FCU.FAddressSize});
             PascalTestCAseCode := PascalTestCAseCode +
-              Format('XX_X_CurInfo992X.Add(%s, %s, [%s]);%s', [s1, s2, stest, LineEnding]);
+              Format(namePreFix+'Add(%s, %s, [%s]);%s', [s1, s2, stest, LineEnding]);
           end;
           DW_FORM_indirect : begin
             Value := ULEB128toOrdinal(p);
@@ -613,17 +667,19 @@ var
             //Form := ULEB128toOrdinal(p);
             //Continue;
             PascalTestCAseCode := PascalTestCAseCode +
-              Format('XX_X_CurInfo992X.AddULEB(%s, %s, %u);%s', [s1, s2, Value, LineEnding]);
+              Format(namePreFix+'AddULEB(%s, %s, %u);%s', [s1, s2, Value, LineEnding]);
           end;
         else
           s3 := '?????';
           PascalTestCAseCode := PascalTestCAseCode +
-            Format('XX_X_CurInfo992X.Add(%s, %s, %s);%s', [s1, s2, '???????????', LineEnding]);
+            Format(namePreFix+'Add(%s, %s, %s);%s', [s1, s2, '???????????', LineEnding]);
         end;
 
       if Attribute = DW_AT_name then Result := s3;
 
-      if (Attribute = DW_AT_location) or (Attribute = DW_AT_data_member_location)  then begin
+      if (Attribute = DW_AT_location) or (Attribute = DW_AT_data_location) or (Attribute = DW_AT_data_member_location)
+         or (Attribute = DW_AT_upper_bound) or (Attribute = DW_AT_lower_bound)
+      then begin
         stest := DecodeLocation(p2, ValueSize);
         s3 := s3 + ' // ' +stest;
       end;
@@ -645,15 +701,17 @@ var
     entryname: String;
     TestCaseText: String;
     NMLIdx: Integer;
-    pre: String;
+    pre, sName: String;
   begin
+     Result := nil;
      p := s.Entry;
      Abbrev := ULEB128toOrdinal(p);
      p := s.Entry;
      CU.GetDefinition(p, Def);
      Node := TreeView1.Items.AddChild(AParent, Format('Abr: %d Tag: %d %s ', [Abbrev, Def.tag, DwarfTagToString(Def.tag)]));
 
-     entryname := AddAbbrev(Node, s, Def, TestCaseText);
+     sName := 'Info__'+IntToStr(s.Entry - BaseScopeAddr + 11)+'_.';
+     entryname := AddAbbrev(Node, s, Def, TestCaseText, sName);
 
      pre := '';
      Case def.tag of
@@ -681,14 +739,10 @@ var
      i := 0;
      if s.HasChild then i := 1;
      TestCaseText :=
-              Format('XX_X_CurInfo992X.Tag := %s;%s',
-                     [DwarfTagToString(Def.tag), LineEnding])
-              + Format('XX_X_CurInfo992X.Children := %d;%s', [i, LineEnding])
+              Format('%sTag := %s;%s',
+                     [sName, DwarfTagToString(Def.tag), LineEnding])
+              + Format('%sChildren := %d;%s', [sName, i, LineEnding])
               + TestCaseText;
-     TestCaseText := AnsiReplaceStr(TestCaseText, 'XX_X_CurInfo992X.',
-                    'Info__'+IntToStr(s.Entry - BaseScopeAddr + 11)+'_.'
-                    //'Info'+IntToStr(FTestCaseTexts.Count+1)+entryname+'.'
-                    );
      node.Data := pointer(ptruint(FTestCaseTexts.Add(TestCaseText)+1));
 
      i := 0;
@@ -696,9 +750,14 @@ var
        n:=nil;
        s2 := s.Child;
        while s2.IsValid do begin
-          n := AddNode(Node,n,s2);
-          s2.GoNext;
-          inc(i);
+         n := AddNode(Node,n,s2);
+         s2.GoNext;
+         inc(i);
+         if (i and 31) = 0 then begin
+           StatusBar1.SimpleText := IntToHex(s2.Index,8) + ' / '+ IntToHex(CU.InfoDataLength,8);
+           Application.ProcessMessages;
+           if not FShowingUnit then break;
+         end;
        end;
      end;
 
@@ -711,6 +770,8 @@ var
   Node: TTreeNode;
   rs: TDwarfScopeInfo;
 begin
+  FShowingUnit := not FShowingUnit;//////////////////
+  if not FShowingUnit then exit;/////////////////
   TreeView1.BeginUpdate;
   try
     TreeView1.Items.Clear;
@@ -729,6 +790,7 @@ begin
     end;
   finally
     TreeView1.EndUpdate;
+    FShowingUnit := False; ////////////////////
   end;
 end;
 
@@ -745,10 +807,17 @@ begin
   FTestCaseTexts.Free;
 end;
 
+procedure TForm1.FormDropFiles(Sender: TObject; const FileNames: array of String
+  );
+begin
+  if Length(FileNames) > 0 then
+    FileNameEdit1.Text := FileNames[0];
+end;
+
 procedure TForm1.UnLoadDwarf;
 begin
   FreeAndNil(FDwarfInfo);
-  FreeAndNil(FImageLoader);
+  FreeAndNil(FImageLoaderList);
   FCUCount := 0;
 end;
 

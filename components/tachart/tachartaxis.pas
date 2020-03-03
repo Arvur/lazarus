@@ -81,6 +81,10 @@ type
 
   { TChartAxis }
 
+  TChartAxisHitTest = (ahtTitle, ahtLine, ahtLabels, ahtGrid,
+    ahtAxisStart, ahtAxisCenter, ahtAxisEnd);
+  TChartAxisHitTests = set of TChartAxisHitTest;
+
   TChartAxis = class(TChartBasicAxis)
   strict private
     FListener: TListener;
@@ -92,6 +96,7 @@ type
     FAxisRect: TRect;
     FGroupIndex: Integer;
     FTitleRect: TRect;
+    FTitlePolygon: TPointArray;
     function MakeValuesInRangeParams(AMin, AMax: Double): TValuesInRangeParams;
   strict private
     FAlignment: TChartAxisAlignment;
@@ -104,6 +109,7 @@ type
     FMargin: TChartDistance;
     FMarginsForMarks: Boolean;
     FMinors: TChartMinorAxisList;
+    FOnGetMarkText: TChartGetAxisMarkTextEvent;
     FOnMarkToText: TChartAxisMarkToTextEvent;
     FPosition: Double;
     FPositionUnits: TChartUnits;
@@ -125,6 +131,7 @@ type
     procedure SetMarginsForMarks(AValue: Boolean);
     procedure SetMarks(AValue: TChartAxisMarks);
     procedure SetMinors(AValue: TChartMinorAxisList);
+    procedure SetOnGetMarkText(AValue: TChartGetAxisMarkTextEvent);
     procedure SetOnMarkToText(AValue: TChartAxisMarkToTextEvent);
     procedure SetPosition(AValue: Double);
     procedure SetPositionUnits(AValue: TChartUnits);
@@ -144,6 +151,7 @@ type
     destructor Destroy; override;
   public
     procedure Assign(ASource: TPersistent); override;
+    function GetHitTestInfoAt(APoint: TPoint; ADelta: Integer): TChartAxisHitTests; virtual;
     procedure Draw;
     procedure DrawTitle(ASize: Integer);
     function GetChart: TCustomChart; inline;
@@ -154,6 +162,7 @@ type
     function IsVertical: Boolean; inline;
     procedure Measure(
       const AExtent: TDoubleRect; var AMeasureData: TChartAxisGroup);
+    function MeasureLabelSize(ADrawer: IChartDrawer): Integer;
     function PositionToCoord(const ARect: TRect): Integer;
     procedure PrepareHelper(
       ADrawer: IChartDrawer; const ATransf: ICoordTransformer;
@@ -169,7 +178,6 @@ type
     property AtDataOnly: Boolean read FAtDataOnly write SetAtDataOnly default false;
     property AxisPen: TChartAxisPen read FAxisPen write SetAxisPen;
     property Group: Integer read FGroup write SetGroup default 0;
-    // Inverts the axis scale from increasing to decreasing.
     property Inverted: boolean read FInverted write SetInverted default false;
     property LabelSize: Integer read FLabelSize write SetLabelSize default 0;
     property Margin: TChartDistance read FMargin write SetMargin default 0;
@@ -187,8 +195,10 @@ type
       read FTransformations write SetTransformations;
     property ZPosition: TChartDistance read FZPosition write SetZPosition default 0;
   published
+    property OnGetMarkText: TChartGetAxisMarkTextEvent
+      read FOnGetMarkText write SetOnGetMarkText;
     property OnMarkToText: TChartAxisMarkToTextEvent
-      read FOnMarkToText write SetOnMarkToText;
+      read FOnMarkToText write SetOnMarkToText; deprecated 'Use "OnGetMarkText';
   end;
 
   TChartOnSourceVisitor =
@@ -244,15 +254,15 @@ type
   { TAxisCoeffHelper }
 
   TAxisCoeffHelper = object
-    FAxis: TChartAxis;
+    FAxisIsFlipped: Boolean;
     FImageLo, FImageHi: Integer;
     FLo, FHi: Integer;
     FMin, FMax: PDouble;
     function CalcOffset(AScale: Double): Double;
     function CalcScale(ASign: Integer): Double;
-    constructor Init(
-      AAxis: TChartAxis; AImageLo, AImageHi, AMarginLo, AMarginHi: Integer;
-      AMin, AMax: PDouble);
+    constructor Init(AAxis: TChartAxis; AImageLo, AImageHi: Integer;
+      AMarginLo, AMarginHi, ARequiredMarginLo, ARequiredMarginHi, AMinDataSpace: Integer;
+      AAxisIsVertical: Boolean; AMin, AMax: PDouble);
     procedure UpdateMinMax(AConv: TAxisConvFunc);
   end;
 
@@ -427,6 +437,7 @@ begin
       Self.FTransformations := Transformations;
       Self.FZPosition := ZPosition;
       Self.FMarginsForMarks := MarginsForMarks;
+      Self.FOnGetMarkText := OnGetMarkText;
       Self.FOnMarkToText := OnMarkToText;
     end;
   inherited Assign(ASource);
@@ -459,6 +470,95 @@ begin
   inherited;
 end;
 
+function TChartAxis.GetHitTestInfoAt(APoint: TPoint;
+  ADelta: Integer): TChartAxisHitTests;
+var
+  R: TRect;
+  w, h, loc: Integer;
+  p: Integer;
+  t: TChartValueText;
+begin
+  Result := [];
+  if IsPointInPolygon(APoint, FTitlePolygon) then
+    Include(Result, ahtTitle)
+  else begin
+    R := FAxisRect;
+    case FAlignment of
+      calLeft:
+        begin
+          R.Right := R.Left + Max(ADelta, TickInnerLength);
+          R.Left := R.Left - Max(ADelta, TickLength);
+        end;
+      calRight:
+        begin
+          R.Left := R.Right - Max(ADelta, TickInnerLength);
+          R.Right := R.Right + Max(ADelta, TickLength);
+        end;
+      calTop:
+        begin
+          R.Bottom := R.Top + Max(ADelta, TickInnerLength);
+          R.Top := R.Top - Max(ADelta, TickLength);
+        end;
+      calBottom:
+        begin
+          R.Top := R.Bottom - Max(ADelta, TickInnerLength);
+          R.Bottom := R.Bottom + Max(ADelta, TickLength);
+        end;
+    end;
+    if IsPointInRect(APoint, R) then
+      Include(Result, ahtLine)
+    else if IsPointInside(APoint) then
+      Include(Result, ahtLabels)
+    else begin
+      R := FHelper.FClipRect^;
+      for t in FMarkValues do begin
+        p := FHelper.GraphToImage(FHelper.FAxisTransf(t.FValue));
+        if IsVertical then begin
+          R.Top := p - ADelta;
+          R.Bottom := p + ADelta;
+        end else begin
+          R.Left := p - ADelta;
+          R.Right := p + ADelta;
+        end;
+        if IsPointInRect(APoint, R) then begin
+          Include(Result, ahtGrid);
+          break;
+        end;
+      end;
+    end;
+
+    if Result = [] then
+      exit;
+
+    R := FHelper.FClipRect^;
+    if IsVertical then begin
+      h := R.Bottom - R.Top;
+      p := APoint.Y - R.Top;
+      if p < h div 4 then
+        loc := +1
+      else if p > h - h div 4 then
+        loc := -1
+      else
+        loc := 0;
+    end else begin
+      w := abs(R.Right - R.Left);
+      p := abs(APoint.X - R.Left);
+      if p < w div 4 then
+        loc := -1
+      else if p > w - w div 4 then
+        loc := +1
+      else
+        loc := 0;
+    end;
+    if IsFlipped then loc := -loc;
+    case loc of
+      -1: Include(Result, ahtAxisStart);
+       0: Include(Result, ahtAxisCenter);
+      +1: Include(Result, ahtAxisEnd);
+    end;
+  end;
+end;
+
 procedure TChartAxis.Draw;
 
   procedure DrawMinors(AFixedCoord: Integer; AMin, AMax: Double);
@@ -473,23 +573,26 @@ procedure TChartAxis.Draw;
     for j := 0 to Minors.Count - 1 do begin
       minorMarks := Minors[j].GetMarkValues(AMin, AMax);
       if minorMarks = nil then continue;
-      with FHelper.Clone do begin
-        FAxis := Minors[j];
-        // Only draw minor marks strictly inside the major mark interval.
-        FValueMin := Max(FAxisTransf(AMin), FValueMin);
-        FValueMax := Min(FAxisTransf(AMax), FValueMax);
-        if FValueMax <= FValueMin then continue;
-        ExpandRange(FValueMin, FValueMax, -EPS);
-        FClipRangeDelta := 1;
+      with FHelper.Clone do
         try
-          BeginDrawing;
-          for m in minorMarks do
-            DrawMark(AFixedCoord, FHelper.FAxisTransf(m.FValue), m.FText);
-          EndDrawing;
+          FAxis := Minors[j];
+          // Only draw minor marks strictly inside the major mark interval.
+          FValueMin := Max(FAxisTransf(AMin), FValueMin);
+          FValueMax := Min(FAxisTransf(AMax), FValueMax);
+          if FValueMax <= FValueMin then
+            continue;
+          ExpandRange(FValueMin, FValueMax, -EPS);
+          FClipRangeDelta := 1;
+          try
+            BeginDrawing;
+            for m in minorMarks do
+              DrawMark(AFixedCoord, FHelper.FAxisTransf(m.FValue), m.FText);
+          finally
+            EndDrawing;
+          end;
         finally
           Free;
         end;
-      end;
     end;
   end;
 
@@ -518,7 +621,6 @@ end;
 procedure TChartAxis.DrawTitle(ASize: Integer);
 var
   p: TPoint;
-  dummy: TPointArray = nil;
   d: Integer;
 begin
   if not Visible or (ASize = 0) or (FTitlePos = MaxInt) then exit;
@@ -534,7 +636,7 @@ begin
   end;
   TPointBoolArr(p)[IsVertical] := FTitlePos;
   p += FHelper.FZOffset;
-  Title.DrawLabel(FHelper.FDrawer, p, p, Title.Caption, dummy);
+  Title.DrawLabel(FHelper.FDrawer, p, p, Title.Caption, FTitlePolygon);
 end;
 
 function TChartAxis.GetAlignment: TChartAxisAlignment;
@@ -607,6 +709,11 @@ begin
     FRotationCenter := Marks.RotationCenter;
   end;
 
+  if Assigned(FOnGetMarkText) then
+    for i := 0 to High(FMarkValues) do
+      FOnGetMarkText(self, FMarkValues[i].FText, FMarkValues[i].FValue);
+
+  // the following event is deprecated and will be removed...
   if Assigned(FOnMarkToText) then
     for i := 0 to High(FMarkValues) do
       FOnMarkToText(FMarkValues[i].FText, FMarkValues[i].FValue);
@@ -779,6 +886,19 @@ begin
     end;
 end;
 
+function TChartAxis.MeasureLabelSize(ADrawer: IChartDrawer): Integer;
+var
+  sz: Integer;
+  mv: TChartValueTextArray = nil;
+  i: Integer;
+begin
+  SetLength(mv, ValueCount);
+  for i := 0 to ValueCount - 1 do
+    mv[i] := Value[i];
+  sz := Marks.Measure(ADrawer, not IsVertical, TickLength, mv);
+  Result := round(sz / ADrawer.Scale(1));
+end;
+
 function TChartAxis.PositionIsStored: Boolean;
 begin
   Result := not SameValue(Position, 0.0);
@@ -902,6 +1022,13 @@ end;
 procedure TChartAxis.SetMinors(AValue: TChartMinorAxisList);
 begin
   FMinors.Assign(AValue);
+  StyleChanged(Self);
+end;
+
+procedure TChartAxis.SetOnGetMarkText(AValue: TChartGetAxisMarkTextEvent);
+begin
+  if TMethod(FOnGetMarkText) = TMethod(AValue) then exit;
+  FOnGetMarkText := AValue;
   StyleChanged(Self);
 end;
 
@@ -1212,37 +1339,80 @@ end;
 
 { TAxisCoeffHelper }
 
-constructor TAxisCoeffHelper.Init(
-  AAxis: TChartAxis; AImageLo, AImageHi, AMarginLo, AMarginHi: Integer;
-  AMin, AMax: PDouble);
+procedure EnsureGuaranteedSpace(var AValue1, AValue2: Integer;
+  AImage1, AImage2, AMargin1, AMargin2, AGuaranteed: Integer);
+var
+  HasMarksInMargin1, HasMarksInMargin2: Boolean;
+  delta1, delta2: Integer;
 begin
-  FAxis := AAxis;
+  HasMarksInMargin1 := (AValue1 = AImage1 + AMargin1);
+  HasMarksInMargin2 := (AValue2 = AImage2 - AMargin2);
+
+  if HasMarksInMargin2 and not HasMarksInMargin1 then
+    AValue1 := AValue2 - AGuaranteed
+  else
+  if HasMarksInMargin1 and not HasMarksInMargin2 then
+    AValue2 := AValue1 + AGuaranteed
+  else
+  begin
+    delta1 := AImage1 - AValue1;
+    delta2 := AImage2 - AValue2;
+    AValue1 := (AImage1 + AImage2 - AGuaranteed) div 2;
+    AValue2 := AValue1 + AGuaranteed;
+    if AValue1 + delta1 >= AImage1 then begin
+      AValue1 := AImage1 - delta1;
+      AValue2 := AValue1 + AGuaranteed;
+    end else
+    if AValue2 + delta2 <= AImage2 then begin
+      AValue2 := AImage2 - delta2;
+      AValue1 := AValue2 - AGuaranteed;
+    end;
+  end;
+end;
+
+constructor TAxisCoeffHelper.Init(AAxis: TChartAxis; AImageLo, AImageHi: Integer;
+  AMarginLo, AMarginHi, ARequiredMarginLo, ARequiredMarginHi, AMinDataSpace: Integer;
+  AAxisIsVertical: Boolean; AMin, AMax: PDouble);
+begin
+  FAxisIsFlipped := (AAxis <> nil) and AAxis.IsFlipped;
   FImageLo := AImageLo;
   FImageHi := AImageHi;
   FMin := AMin;
   FMax := AMax;
   FLo := FImageLo + AMarginLo;
   FHi := FImageHi + AMarginHi;
+
+  if AAxisIsVertical then begin
+    if (FHi + AMinDataSpace >= FLo) then
+      EnsureGuaranteedSpace(FHi, FLo, FImageHi, FImageLo,
+        ARequiredMarginHi, ARequiredMarginLo, AMinDataSpace);
+  end else begin
+    if (FLo + AMinDataSpace >= FHi) then
+      EnsureGuaranteedSpace(FLo, FHi, FImageLo, FImageHi,
+        ARequiredMarginLo, ARequiredMarginHi, AMinDataSpace);
+  end;
 end;
 
 function TAxisCoeffHelper.CalcScale(ASign: Integer): Double;
 begin
-  if (FMax^ = FMin^) or (Sign(FHi - FLo) <> ASign) then exit(1.0);
-  if (FAxis <> nil) and FAxis.IsFlipped then
-    Exchange(FLo, FHi);
-  Result := (FHi - FLo) / (FMax^ - FMin^);
+  if (FMax^ <= FMin^) or (Sign(FHi - FLo) <> ASign) then
+    Result := ASign
+  else
+    Result := (FHi - FLo) / (FMax^ - FMin^);
+  if FAxisIsFlipped then
+    Result := -Result;
 end;
 
 function TAxisCoeffHelper.CalcOffset(AScale: Double): Double;
 begin
-  Result := (FLo + FHi) / 2 - AScale * (FMin^ + FMax^) / 2;
+  Result := ((FLo + FHi) - AScale * (FMin^ + FMax^)) * 0.5;
 end;
 
 procedure TAxisCoeffHelper.UpdateMinMax(AConv: TAxisConvFunc);
 begin
   FMin^ := AConv(FImageLo);
   FMax^ := AConv(FImageHi);
-  if (FAxis <> nil) and FAxis.IsFlipped then
+  if FAxisIsFlipped then
     Exchange(FMin^, FMax^);
 end;
 

@@ -9,8 +9,15 @@
   for details about the license.
 }
 unit LvlGraphCtrl;
+{off $DEFINE LvlGraphConsistencyCheck}
+{off $DEFINE CheckMinXGraph}
 
 {$mode objfpc}{$H+}
+{$IFDEF LvlGraphConsistencyCheck}
+  {$ASSERTIONS ON}
+{$ELSE}
+  {$ASSERTIONS OFF}
+{$ENDIF}
 
 interface
 
@@ -19,13 +26,12 @@ uses
   // LazUtils
   LazLoggerBase, AvgLvlTree,
   // LCL
-  LMessages, LCLType, LCLIntf, GraphType, GraphMath, Graphics, Controls, ImgList,
+  LMessages, LCLType, LCLIntf, GraphType, Graphics, Controls, ImgList,
   Forms, Themes;
 
 type
   TLazCtrlPalette = array of TFPColor;
 
-{off $DEFINE CheckMinXGraph}
 const
   DefaultLvlGraphNodeImageEffect = gdeNormal;
 type
@@ -56,6 +62,7 @@ type
     FOverlayIndex: integer;
     FPrevSelected: TLvlGraphNode;
     FSelected: boolean;
+    FSubGraph: Integer;
     FVisible: boolean;
     function GetIndexInLevel: integer;
     function GetInEdges(Index: integer): TLvlGraphEdge; inline;
@@ -63,6 +70,7 @@ type
     procedure SetCaption(AValue: string);
     procedure SetColor(AValue: TFPColor);
     procedure OnLevelDestroy;
+    procedure SetDrawCenter(AValue: integer);
     procedure SetDrawSize(AValue: integer);
     procedure SetImageEffect(AValue: TGraphicsDrawEffect);
     procedure SetImageIndex(AValue: integer);
@@ -70,9 +78,13 @@ type
     procedure SetLevel(AValue: TLvlGraphLevel);
     procedure SetOverlayIndex(AValue: integer);
     procedure SetSelected(AValue: boolean);
+    procedure SetSubGraph(AValue: Integer);
     procedure SetVisible(AValue: boolean);
     procedure UnbindLevel;
     procedure SelectionChanged;
+    function GetDrawCenter: integer;
+  protected
+    property SubGraph: Integer read FSubGraph write SetSubGraph;
   public
     Data: Pointer; // free for user data
     constructor Create(TheGraph: TLvlGraph; TheCaption: string; TheLevel: TLvlGraphLevel);
@@ -105,7 +117,7 @@ type
     property PrevSelected: TLvlGraphNode read FPrevSelected;
     property DrawPosition: integer read FDrawPosition write FDrawPosition; // position in a level
     property DrawSize: integer read FDrawSize write SetDrawSize default 1;
-    function DrawCenter: integer;
+    property DrawCenter: integer read GetDrawCenter write SetDrawCenter;
     function DrawPositionEnd: integer;// = DrawPosition+Max(InSize,OutSize)
     property DrawnCaptionRect: TRect read FDrawnCaptionRect; // last draw position of caption with scrolling
     property InWeight: single read FInWeight; // total weight of InEdges
@@ -119,6 +131,7 @@ type
   TLvlGraphEdge = class(TPersistent)
   private
     FBackEdge: boolean;
+    FNoGapCircle: boolean; // a circle between 2 nodes, with no levels between => both edges paint in the same location
     FDrawnAt: TRect;
     FHighlighted: boolean;
     FSource: TLvlGraphNode;
@@ -126,6 +139,8 @@ type
     FWeight: single;
     procedure SetHighlighted(AValue: boolean);
     procedure SetWeight(AValue: single);
+  protected
+    procedure RevertDirection;
   public
     Data: Pointer; // free for user data
     constructor Create(TheSource: TLvlGraphNode; TheTarget: TLvlGraphNode);
@@ -134,7 +149,7 @@ type
     property Target: TLvlGraphNode read FTarget;
     property Weight: single read FWeight write SetWeight; // >=0
     function IsBackEdge: boolean;
-    property BackEdge: boolean read FBackEdge; // edge was disabled to break a cycle
+    property BackEdge: boolean read FBackEdge; // edge had its direction reverted (source <> target exchanged)
     property Highlighted: boolean read FHighlighted write SetHighlighted;
     property DrawnAt: TRect read FDrawnAt;  // last drawn with scrolling
     function GetVisibleSourceNodes: TLvlGraphNodeArray;
@@ -173,6 +188,23 @@ type
   end;
   TLvlGraphLevelClass = class of TLvlGraphLevel;
 
+  { TLvlGraphSubGraph }
+
+  TLvlGraphSubGraph = class(TPersistent)
+  private
+    FGraph: TLvlGraph;
+    FHighestLevel: integer;
+    FIndex: integer;
+    FLowestLevel: integer;
+  public
+    constructor Create(TheGraph: TLvlGraph; TheIndex: integer);
+    destructor Destroy; override;
+    property Graph: TLvlGraph read FGraph;
+    property Index: integer read FIndex;
+    property LowestLevel: integer read FLowestLevel;
+    property HighestLevel: integer read FHighestLevel;
+  end;
+
   TOnLvlGraphStructureChanged = procedure(Sender, Element: TObject;
                                                Operation: TOperation) of object;
 
@@ -196,17 +228,21 @@ type
     FOnInvalidate: TNotifyEvent;
     FNodes: TFPList; // list of TLvlGraphNode
     fLevels: TFPList;
+    fSubGraphs: TFPList;
     FCaseSensitive: Boolean;
     FOnSelectionChanged: TNotifyEvent;
     FOnStructureChanged: TOnLvlGraphStructureChanged;
     function GetLevelCount: integer;
     function GetLevels(Index: integer): TLvlGraphLevel;
     function GetNodes(Index: integer): TLvlGraphNode;
+    function GetSubGraphCount: integer;
+    function GetSubGraphs(Index: integer): TLvlGraphSubGraph;
     procedure SetLevelCount(AValue: integer);
     procedure InternalRemoveNode(Node: TLvlGraphNode);
     procedure InternalRemoveLevel(Lvl: TLvlGraphLevel);
   protected
     procedure SelectionChanged;
+    function NewLevelAtIndex(AnIndex, ASubGraphIndex: integer): TLvlGraphLevel;
   public
     Data: Pointer; // free for user data
     constructor Create;
@@ -239,12 +275,17 @@ type
       CreateIfNotExists: boolean): TLvlGraphEdge;
     property EdgeClass: TLvlGraphEdgeClass read FEdgeClass;
 
+    property SubGraphs[Index: integer]: TLvlGraphSubGraph read GetSubGraphs;
+    property SubGraphCount: integer read GetSubGraphCount;
     // levels
     property Levels[Index: integer]: TLvlGraphLevel read GetLevels;
     property LevelCount: integer read GetLevelCount write SetLevelCount;
     property LevelClass: TLvlGraphLevelClass read FLevelClass;
 
-    procedure CreateTopologicalLevels(HighLevels: boolean); // create levels from edges
+    procedure FindIndependentGraphs;
+    procedure CreateTopologicalLevels(HighLevels, ReduceBackEdges: boolean); // create levels from edges
+    procedure MinimizeEdgeLens(HighLevels: boolean); // requires that BackEdge have been processed by procedure MarkBackEdges
+    procedure LimitLevelHeights(MaxHeight: integer; MaxHeightRel: Single);
     procedure SplitLongEdges(SplitMode: TLvlGraphEdgeSplitMode); // split long edges by adding hidden nodes
     procedure ScaleNodeDrawSizes(NodeGapAbove, NodeGapBelow,
       HardMaxTotal, HardMinOneNode, SoftMaxTotal, SoftMinOneNode: integer; out PixelPerWeight: single);
@@ -254,6 +295,7 @@ type
     procedure MinimizeOverlappings(MinPos: integer = 0;
       NodeGapAbove: integer = 1; NodeGapBelow: integer = 1;
       aLevel: integer = -1); // set all Node.Position to minimize overlappings
+    procedure StraightenGraph;
     procedure SetColors(Palette: TLazCtrlPalette);
 
     // debugging
@@ -264,14 +306,17 @@ type
 type
   TLvlGraphCtrlOption = (
     lgoAutoLayout, // automatic graph layout after graph was changed
+    lgoReduceBackEdges, // CreateTopologicalLevels (AutoLayout) will attempts to find an order with less BackEdges
     lgoHighLevels, // put nodes topologically at higher levels
+    lgoMinimizeEdgeLens, // If nodes are not fixed to a level by neighbours on both side, find the level which reduces total edge len the most
+    lgoStraightenGraph, // Minimize vertical up/down movement of edges
     lgoHighlightNodeUnderMouse, // when mouse over node highlight node and its edges
     lgoHighlightEdgeNearMouse, // when mouse near an edge highlight edge and its edges, lgoHighlightNodeUnderMouse takes precedence
     lgoMouseSelects
     );
   TLvlGraphCtrlOptions = set of TLvlGraphCtrlOption;
 const
-  DefaultLvlGraphCtrlOptions = [lgoAutoLayout,
+  DefaultLvlGraphCtrlOptions = [lgoAutoLayout, lgoStraightenGraph,
           lgoHighlightNodeUnderMouse,lgoHighlightEdgeNearMouse,lgoMouseSelects];
 
 type
@@ -324,6 +369,8 @@ const
   DefaultLvlGraphEdgeHighlightColor     = clBlack;
   DefaultLvlGraphEdgeBackColor          = clRed;
   DefaultLvlGraphEdgeBackHighlightColor = clBlue;
+  DefaultMaxLevelHeightAbs              = 0;
+  DefaultMaxLevelHeightRel              = single(1.5);
 
 type
 
@@ -409,6 +456,28 @@ type
     property BackHighlightColor: TColor read FBackHighlightColor write SetBackHighlightColor default DefaultLvlGraphEdgeBackHighlightColor;
   end;
 
+  { TLvlGraphLimits }
+
+  TLvlGraphLimits = class(TPersistent)
+  private
+    FControl: TCustomLvlGraphControl;
+    FMaxLevelHeightAbs: integer;
+    FMaxLevelHeightRel: single;
+    procedure SetMaxLevelHeightAbs(AValue: integer);
+    procedure SetMaxLevelHeightRel(AValue: single);
+  public
+    constructor Create(AControl: TCustomLvlGraphControl);
+    destructor Destroy; override;
+    procedure Assign(Source: TPersistent); override;
+    function Equals(Obj: TObject): boolean; override;
+    property Control: TCustomLvlGraphControl read FControl;
+  published
+    // Maximum amount of visible (user specified nodes) in a level. (0 = ignore)
+    property MaxLevelHeightAbs: integer read FMaxLevelHeightAbs write SetMaxLevelHeightAbs default DefaultMaxLevelHeightAbs;
+    // Relative max amount of visible nodes per level. Limit := Max(3, sqr(NodeCount) * MaxLevelHeightRel) / (0 = ignore)
+    property MaxLevelHeightRel: single read FMaxLevelHeightRel write SetMaxLevelHeightRel default DefaultMaxLevelHeightRel;
+  end;
+
   TLvlGraphControlFlag =  (
     lgcNeedInvalidate,
     lgcNeedAutoLayout,
@@ -418,8 +487,9 @@ type
     );
   TLvlGraphControlFlags = set of TLvlGraphControlFlag;
 
-  TLvlGraphMinimizeOverlappingsEvent = procedure(MinPos: integer = 0;
-      NodeGapInFront: integer = 1; NodeGapBehind: integer = 1) of object;
+  TLvlGraphMinimizeOverlappingsEvent = procedure(var MinPos: integer;
+      var NodeGapInFront: integer; var NodeGapBehind: integer;
+      var Handled: Boolean) of object;
   TLvlGraphDrawStep = (
     lgdsBackground,
     lgdsHeader,
@@ -441,6 +511,7 @@ type
     FGraph: TLvlGraph;
     FImageChangeLink: TChangeLink;
     FImages: TCustomImageList;
+    FLimits: TLvlGraphLimits;
     FNodeStyle: TLvlGraphNodeStyle;
     FNodeUnderMouse: TLvlGraphNode;
     FOnDrawStep: TLvlGraphDrawEvent;
@@ -516,6 +587,7 @@ type
     property NodeUnderMouse: TLvlGraphNode read FNodeUnderMouse write SetNodeUnderMouse;
     property EdgeNearMouse: TLvlGraphEdge read FEdgeNearMouse write SetEdgeNearMouse;
     property EdgeStyle: TLvlGraphEdgeStyle read FEdgeStyle;
+    property Limits: TLvlGraphLimits read FLimits;
     property Options: TLvlGraphCtrlOptions read FOptions write SetOptions default DefaultLvlGraphCtrlOptions;
     property OnSelectionChanged: TNotifyEvent read FOnSelectionChanged write FOnSelectionChanged;
     property ScrollTop: integer read FScrollTop write SetScrollTop;
@@ -601,7 +673,7 @@ procedure LvlGraphMinimizeCrossings(Graph: TLvlGraph); overload;
 procedure LvlGraphHighlightNode(Node: TLvlGraphNode;
   HighlightedElements: TAvlTree; FollowIn, FollowOut: boolean);
 function CompareLGNodesByCenterPos(Node1, Node2: Pointer): integer;
-procedure DrawCurvedLvlLeftToRightEdge(Canvas: TFPCustomCanvas; x1, y1, x2, y2: integer);
+procedure DrawCurvedLvlLeftToRightEdge(Canvas: TFPCustomCanvas; x1, y1, x2, y2: integer; StraightenLeft, StraightenRight: Single);
 function NodeAVLTreeToNodeArray(Nodes: TAvlTree; RemoveHidden: boolean; FreeTree: boolean): TLvlGraphNodeArray;
 function NodeArrayAsString(Nodes: TLvlGraphNodeArray): String;
 
@@ -658,7 +730,7 @@ type
     constructor Create(aLevel: TMinXLevel; aIndex: integer);
     destructor Destroy; override;
     procedure UnbindFromSwitchList;
-    procedure BindToSwitchList;
+    function BindToSwitchList(AtEnd: Boolean=False): integer;
     procedure ComputeCrossingCount(out Crossing, SwitchCrossing: integer);
     function ComputeSwitchDiff: integer;
     property SwitchDiff: integer read FSwitchDiff write SetSwitchDiff;
@@ -696,6 +768,71 @@ type
     function GraphNodeToNode(GraphNode: TLvlGraphNode): TMinXNode; inline;
     procedure ConsistencyCheck;
   end;
+
+  (** For MinimizeEdgeLens **)
+  TGraphEdgeLenMinimizerTree = class;
+
+  { TGraphEdgeLenMinimizerNode }
+
+  TGraphEdgeLenMinimizerNode = class(TAVLTreeNode)
+  protected
+    FTree: TGraphEdgeLenMinimizerTree;
+    function GetLevel: Integer; virtual;
+    procedure SetLevel(AValue: Integer); virtual;
+    function GetInSibling(Index: Integer): TGraphEdgeLenMinimizerNode;  virtual;
+    function GetOutSibling(Index: Integer): TGraphEdgeLenMinimizerNode;  virtual;
+    function GetOutSiblingDistance(Index: Integer): Integer; virtual;
+    class function MapLevel(ALvl, {%H-}LvlCount: Integer): integer; virtual;
+  public
+    Node: TLvlGraphNode;
+    NextExtNodeTowardsLowerLevel: TGraphEdgeLenMinimizerNode;
+    MaxLevel, LevelDiff, VisitedId: Integer;
+    MinSubGraphLevel, MaxSubGraphLevel: Integer;
+    (* gelOnlyPush:
+         Nodes that have no shorten-able OutEdges.
+         Either no OutEdges at all, or all OutEdges are directly (len=1) connected
+         to another gelOnlyPush
+         Only move them, to make space for a moved none-gelOnlyPush node.
+    *)
+    Flags: set of (gelOnlyPush);
+  public
+    property Level: Integer read GetLevel write SetLevel;
+    function OutSiblingCount: Integer; virtual;
+    property OutSibling[Index: Integer]: TGraphEdgeLenMinimizerNode read GetOutSibling;
+    property OutSiblingDistance[Index: Integer]: Integer read GetOutSiblingDistance;
+    function InSiblingCount: Integer; virtual;
+    property InSibling[Index: Integer]: TGraphEdgeLenMinimizerNode read GetInSibling;
+  end;
+
+  TGraphEdgeLenMinimizerNodeClass = class of TGraphEdgeLenMinimizerNode;
+
+  { TGraphEdgeLenMinimizerReverseNode }
+
+  TGraphEdgeLenMinimizerReverseNode = class(TGraphEdgeLenMinimizerNode)
+  protected
+    function GetLevel: Integer; override;
+    procedure SetLevel(AValue: Integer); override;
+    function GetInSibling(Index: Integer): TGraphEdgeLenMinimizerNode;  override;
+    function GetOutSibling(Index: Integer): TGraphEdgeLenMinimizerNode;  override;
+    function GetOutSiblingDistance(Index: Integer): Integer; override;
+    class function MapLevel(ALvl, LvlCount: Integer): integer; override;
+  public
+    function OutSiblingCount: Integer; override;
+    function InSiblingCount: Integer; override;
+  end;
+
+  { TGraphEdgeLenMinimizerTree }
+
+  TGraphEdgeLenMinimizerTree = class(TAvlTree)
+  public
+    Graph: TLvlGraph;
+    ExtNodeWithHighestLevel, ExtNodeWithLowestLevel :TGraphEdgeLenMinimizerNode;
+    constructor Create;
+    function GetTreeNode(Node: TLvlGraphNode): TGraphEdgeLenMinimizerNode;
+    function AddGraphNode(Node: TLvlGraphNode): TGraphEdgeLenMinimizerNode;
+    function MapLevel(ALvl: Integer): integer;
+  end;
+
 
 procedure LvlGraphMinimizeCrossings(Graph: TLvlGraph);
 var
@@ -903,32 +1040,36 @@ begin
   Result:=LNode1.IndexInLevel-LNode2.IndexInLevel;
 end;
 
-procedure DrawCurvedLvlLeftToRightEdge(Canvas: TFPCustomCanvas;
-  x1, y1, x2, y2: integer);
-var
-  b: TBezier;
-  Points: PPoint;
-  Count: Longint;
-  p: PPoint;
-  i: Integer;
+procedure DrawCurvedLvlLeftToRightEdge(Canvas: TFPCustomCanvas; x1, y1, x2,
+  y2: integer; StraightenLeft, StraightenRight: Single);
+//var
+//  b: TBezier;
+//  Points: PPoint;
+//  Count: Longint;
+//  p: PPoint;
+//  i: Integer;
 begin
-  Canvas.PolyBezier([Point(x1,y1),Point(x1+10,y1),Point(x2-10,y2),Point(x2,y2)]);
+  Canvas.PolyBezier([
+    Point(x1,y1),
+    Point(x1+10,y1-Trunc(0.5+10*StraightenLeft)),
+    Point(x2-10,y2+Trunc(0.5+10*StraightenRight)),
+    Point(x2,y2)]);
   exit;
-  b:=Bezier(Point(x1,y1),Point(x1+10,y1),Point(x2-10,y2),Point(x2,y2));
-  Points:=nil;
-  Count:=0;
-  Bezier2Polyline(b,Points,Count);
-  //debugln(['DrawCurvedLvlLeftToRightEdge Count=',Count]);
-  if Count=0 then exit;
-  p:=Points;
-  Canvas.MoveTo(p^);
-  //debugln(['DrawCurvedLvlLeftToRightEdge Point0=',dbgs(p^)]);
-  for i:=1 to Count-1 do begin
-    inc(p);
-    //debugln(['DrawCurvedLvlLeftToRightEdge Point',i,'=',dbgs(p^)]);
-    Canvas.LineTo(p^);
-  end;
-  Freemem(Points);
+  //b:=Bezier(Point(x1,y1),Point(x1+10,y1),Point(x2-10,y2),Point(x2,y2));
+  //Points:=nil;
+  //Count:=0;
+  //Bezier2Polyline(b,Points,Count);
+  ////debugln(['DrawCurvedLvlLeftToRightEdge Count=',Count]);
+  //if Count=0 then exit;
+  //p:=Points;
+  //Canvas.MoveTo(p^);
+  ////debugln(['DrawCurvedLvlLeftToRightEdge Point0=',dbgs(p^)]);
+  //for i:=1 to Count-1 do begin
+  //  inc(p);
+  //  //debugln(['DrawCurvedLvlLeftToRightEdge Point',i,'=',dbgs(p^)]);
+  //  Canvas.LineTo(p^);
+  //end;
+  //Freemem(Points);
 end;
 
 function NodeAVLTreeToNodeArray(Nodes: TAvlTree; RemoveHidden: boolean;
@@ -991,6 +1132,211 @@ begin
       Result+=dbgs(o);
     end;
   Result:='['+Result+']';
+end;
+
+{ TLvlGraphSubGraph }
+
+constructor TLvlGraphSubGraph.Create(TheGraph: TLvlGraph; TheIndex: integer);
+begin
+  inherited Create;
+  FGraph := TheGraph;
+  FIndex := TheIndex;
+  FGraph.fSubGraphs.Insert(TheIndex, Self);
+end;
+
+destructor TLvlGraphSubGraph.Destroy;
+begin
+  FGraph.fSubGraphs.Remove(Self);
+  inherited Destroy;
+end;
+
+{ TGraphEdgeLenMinimizerTree }
+
+function CompareEdgeLenMinimizerNodes(Node1, Node2: Pointer): integer;
+begin
+  Result:=ComparePointer(Node1,Node2);
+end;
+
+function CompareLGNodeWithEdgeLenMinimizerNode(GNode, ANode: Pointer): integer;
+begin
+  Result:=ComparePointer(GNode,ANode);
+end;
+
+{ TLvlGraphLimits }
+
+procedure TLvlGraphLimits.SetMaxLevelHeightAbs(AValue: integer);
+begin
+  if FMaxLevelHeightAbs = AValue then Exit;
+  FMaxLevelHeightAbs := AValue;
+  Control.Invalidate;
+end;
+
+procedure TLvlGraphLimits.SetMaxLevelHeightRel(AValue: single);
+begin
+  if FMaxLevelHeightRel = AValue then Exit;
+  FMaxLevelHeightRel := AValue;
+  Control.Invalidate;
+end;
+
+constructor TLvlGraphLimits.Create(AControl: TCustomLvlGraphControl);
+begin
+  FControl:=AControl;
+  FMaxLevelHeightAbs := DefaultMaxLevelHeightAbs;
+  FMaxLevelHeightRel := DefaultMaxLevelHeightRel;
+end;
+
+destructor TLvlGraphLimits.Destroy;
+begin
+  FControl.FLimits:=nil;
+  inherited Destroy;
+end;
+
+procedure TLvlGraphLimits.Assign(Source: TPersistent);
+var
+  Src: TLvlGraphLimits;
+begin
+  if Source is TLvlGraphLimits then begin
+    Src:=TLvlGraphLimits(Source);
+    MaxLevelHeightAbs := Src.MaxLevelHeightAbs;
+    MaxLevelHeightRel := Src.MaxLevelHeightRel;
+  end;
+  inherited Assign(Source);
+end;
+
+function TLvlGraphLimits.Equals(Obj: TObject): boolean;
+var
+  Src: TLvlGraphLimits;
+begin
+  Result:=inherited Equals(Obj);
+  if not Result then exit;
+  if Obj is TLvlGraphLimits then begin
+    Src:=TLvlGraphLimits(Obj);
+    Result:=(MaxLevelHeightAbs=Src.MaxLevelHeightAbs)
+        and (MaxLevelHeightRel=Src.MaxLevelHeightRel);
+  end;
+end;
+
+constructor TGraphEdgeLenMinimizerTree.Create;
+begin
+  inherited Create(@CompareEdgeLenMinimizerNodes);
+  NodeClass := TGraphEdgeLenMinimizerNode;
+end;
+
+function TGraphEdgeLenMinimizerTree.GetTreeNode(Node: TLvlGraphNode): TGraphEdgeLenMinimizerNode;
+begin
+  Result:=TGraphEdgeLenMinimizerNode(FindKey(Pointer(Node),@CompareLGNodeWithEdgeLenMinimizerNode));
+end;
+
+function TGraphEdgeLenMinimizerTree.AddGraphNode(Node: TLvlGraphNode
+  ): TGraphEdgeLenMinimizerNode;
+begin
+  Result:=TGraphEdgeLenMinimizerNode(NodeClass.Create);
+  Result.FTree := Self;
+  Result.Node:=Node;
+  Result.Data:=Node;
+  if ExtNodeWithHighestLevel = nil then
+    ExtNodeWithHighestLevel := Result
+  else
+    ExtNodeWithLowestLevel.NextExtNodeTowardsLowerLevel := Result;
+  ExtNodeWithLowestLevel := Result;
+  Add(Result);
+end;
+
+function TGraphEdgeLenMinimizerTree.MapLevel(ALvl: Integer): integer;
+begin
+  Result := TGraphEdgeLenMinimizerNodeClass(NodeClass).MapLevel(ALvl, Graph.LevelCount);
+end;
+
+{ TGraphEdgeLenMinimizerNode }
+
+function TGraphEdgeLenMinimizerNode.GetLevel: Integer;
+begin
+  Result := Node.Level.Index;
+end;
+
+procedure TGraphEdgeLenMinimizerNode.SetLevel(AValue: Integer);
+begin
+  Node.Level := FTree.Graph.Levels[AValue];
+end;
+
+function TGraphEdgeLenMinimizerNode.GetInSibling(Index: Integer
+  ): TGraphEdgeLenMinimizerNode;
+begin
+  Result := FTree.GetTreeNode(Node.InEdges[Index].Source);
+end;
+
+function TGraphEdgeLenMinimizerNode.GetOutSiblingDistance(Index: Integer
+  ): Integer;
+begin
+  Result := Node.OutEdges[Index].Target.Level.Index - Node.Level.Index;
+end;
+
+function TGraphEdgeLenMinimizerNode.GetOutSibling(Index: Integer
+  ): TGraphEdgeLenMinimizerNode;
+begin
+  Result := FTree.GetTreeNode(Node.OutEdges[Index].Target);
+end;
+
+class function TGraphEdgeLenMinimizerNode.MapLevel(ALvl, LvlCount: Integer
+  ): integer;
+begin
+  Result := ALvl;
+end;
+
+function TGraphEdgeLenMinimizerNode.OutSiblingCount: Integer;
+begin
+  Result := Node.OutEdgeCount;
+end;
+
+function TGraphEdgeLenMinimizerNode.InSiblingCount: Integer;
+begin
+  Result := Node.InEdgeCount;
+end;
+
+{ TGraphEdgeLenMinimizerReverseNode }
+
+function TGraphEdgeLenMinimizerReverseNode.GetInSibling(Index: Integer
+  ): TGraphEdgeLenMinimizerNode;
+begin
+  Result := FTree.GetTreeNode(Node.OutEdges[Index].Target);
+end;
+
+function TGraphEdgeLenMinimizerReverseNode.GetOutSibling(Index: Integer
+  ): TGraphEdgeLenMinimizerNode;
+begin
+  Result := FTree.GetTreeNode(Node.InEdges[Index].Source);
+end;
+
+function TGraphEdgeLenMinimizerReverseNode.GetOutSiblingDistance(Index: Integer
+  ): Integer;
+begin
+  Result := Node.Level.Index - Node.InEdges[Index].Source.Level.Index;
+end;
+
+class function TGraphEdgeLenMinimizerReverseNode.MapLevel(ALvl,
+  LvlCount: Integer): integer;
+begin
+  Result := LvlCount - 1 - ALvl;
+end;
+
+procedure TGraphEdgeLenMinimizerReverseNode.SetLevel(AValue: Integer);
+begin
+  Node.Level := FTree.Graph.Levels[MinSubGraphLevel + MaxSubGraphLevel - AValue];
+end;
+
+function TGraphEdgeLenMinimizerReverseNode.GetLevel: Integer;
+begin
+  Result := MinSubGraphLevel + MaxSubGraphLevel - Node.Level.Index;
+end;
+
+function TGraphEdgeLenMinimizerReverseNode.OutSiblingCount: Integer;
+begin
+  Result := Node.InEdgeCount;
+end;
+
+function TGraphEdgeLenMinimizerReverseNode.InSiblingCount: Integer;
+begin
+  Result := Node.OutEdgeCount;
 end;
 
 { TLvlGraphEdgeStyle }
@@ -1134,9 +1480,22 @@ begin
   NextSameSwitchPair:=nil;
 end;
 
-procedure TMinXPair.BindToSwitchList;
+function TMinXPair.BindToSwitchList(AtEnd: Boolean): integer;
+var
+  n: TMinXPair;
 begin
-  NextSameSwitchPair:=Graph.SameSwitchDiffPairs[Graph.SameSwitchDiffPair0+SwitchDiff];
+  Result := 0;
+  n:=Graph.SameSwitchDiffPairs[Graph.SameSwitchDiffPair0+SwitchDiff];
+  if AtEnd and (n<> nil) then begin
+    while n.NextSameSwitchPair <> nil do begin
+      n:=n.NextSameSwitchPair;
+      inc(Result);
+    end;
+    n.NextSameSwitchPair:=Self;
+    PrevSameSwitchPair:=n;
+    exit;
+  end;
+  NextSameSwitchPair:=n;
   Graph.SameSwitchDiffPairs[Graph.SameSwitchDiffPair0+SwitchDiff]:=Self;
   if NextSameSwitchPair<>nil then
     NextSameSwitchPair.PrevSameSwitchPair:=Self;
@@ -1283,7 +1642,8 @@ begin
   Cnt:=0;
   for i:=0 to length(Levels)-1 do begin
     Level:=Levels[i];
-    SetLength(Level.Pairs,length(Level.Nodes)-1);
+    if length(Level.Nodes) > 0 then
+      SetLength(Level.Pairs,length(Level.Nodes)-1);
     for n:=0 to length(Level.Pairs)-1 do begin
       if First then begin
         Pair:=TMinXPair.Create(Level,n);
@@ -1393,15 +1753,43 @@ begin
 end;
 
 procedure TMinXGraph.SwitchCrossingPairs(MaxRun: int64; var Run: int64);
+(* Calculating how many rounds to go for ZeroRun
+   Switching a node with SwitchDiff=0, can move other zero-nodes (i.e.,
+   remove them in one place, and create another in a new place)
+   Extra loops are needed to:
+   - run such new nodes
+   - re-run and switch back the original nodes, to test the zero-nodes
+     that were removed.
+   Sucessful swaps (unblocking actual crossings) can be found even at
+   high multiplies of LastInsertIdx (the count of zero-nodes)
+*)
 var
   Pair: TMinXPair;
+  LastInsertIdx, ZeroRun: Integer;
 begin
+  ZeroRun := 0;
   while (MaxRun>0) and (BestCrossCount<>0) do begin
     //debugln(['TMinXGraph.SwitchCrossingPairs ',MaxRun,' ',Run]);
     Pair:=FindBestPair;
     Run+=1;
-    if (Pair=nil) or (Pair.SwitchDiff=0) then exit;
+    if (Pair=nil) then exit;
+    if (Pair.SwitchDiff=0) then begin
+      dec(ZeroRun);
+      if ZeroRun = 0 then
+        exit;
+    end
+    else
+      ZeroRun := 0;
     SwitchPair(Pair);
+    if (Pair.SwitchDiff=0) then begin
+      Pair.UnbindFromSwitchList;
+      LastInsertIdx := Pair.BindToSwitchList(True);
+      If ZeroRun = -1 then
+        if CrossCount < BestCrossCount + BestCrossCount div 8 then // add 12% to BestCrossCount
+          ZeroRun := 8 * LastInsertIdx+1 // closer to a new BestCrossCount, search harder
+        else
+          ZeroRun := 2 * LastInsertIdx+1;
+    end;
     MaxRun-=1;
   end;
 end;
@@ -1891,9 +2279,17 @@ begin
 end;
 
 constructor TLvlGraphLevel.Create(TheGraph: TLvlGraph; TheIndex: integer);
+var
+  i: Integer;
 begin
   FGraph:=TheGraph;
-  FGraph.fLevels.Add(Self);
+  if TheIndex < FGraph.fLevels.Count then begin
+    FGraph.fLevels.Insert(TheIndex, Self);
+    for i := TheIndex + 1 to FGraph.fLevels.Count - 1 do
+      TLvlGraphLevel(FGraph.fLevels[i]).FIndex := TLvlGraphLevel(FGraph.fLevels[i]).Index + 1;
+  end
+  else
+    FGraph.fLevels.Add(Self);
   FIndex:=TheIndex;
   fNodes:=TFPList.Create;
   if Graph<>nil then
@@ -1991,7 +2387,8 @@ begin
         Edge:=Node.OutEdges[k];
         TargetNode:=Edge.Target;
         if Edge.Highlighted<>Highlighted then continue;
-        if TargetNode.Level.Index>Level.Index then begin
+        // compare Level in case MarkBackEdges was skipped
+        if (TargetNode.Level.Index>Level.Index) and (not Edge.BackEdge) then begin
           // normal dependency
           // => draw line from right of Node to left of TargetNode
           if Edge.Highlighted then
@@ -2131,6 +2528,7 @@ begin
           if not TargetNode.Visible then
             x2+=NodeStyle.Width div 2;
         end else begin
+          // This code is only reachable if MarkBackEdges was skipped
           // cycle dependency
           // => draw line from left of Node to right of TargetNode
           if not Node.Visible then
@@ -2420,23 +2818,73 @@ end;
 procedure TCustomLvlGraphControl.DoDrawEdge(Edge: TLvlGraphEdge);
 var
   r: TRect;
-  s: integer;
+  s, Ascend, FarAscend: integer;
+  Source, Target, FarSource, FarTarget: TLvlGraphNode;
+  SourceStraighenFactor, TargetStraighenFactor: Single;
 begin
+  SourceStraighenFactor := 0;
+  TargetStraighenFactor := 0;
+  if EdgeStyle.Shape = lgesCurved then begin
+    Source := Edge.Source;
+    Target := Edge.Target;
+    Ascend := (Source.DrawCenter - Target.DrawCenter) * 1024
+              div (Target.Level.DrawPosition - Source.Level.DrawPosition);
+    if (not Source.Visible) and (Source.OutEdgeCount = 1) and (Source.InEdgeCount = 1) then begin
+      FarSource := Source.InEdges[0].Source;
+      FarAscend := (FarSource.DrawCenter - Source.DrawCenter) * 1024
+              div (Source.Level.DrawPosition - FarSource.Level.DrawPosition);
+      if ((Ascend < 0) and (FarAscend < 0)) then
+        SourceStraighenFactor := Max(Ascend, FarAscend) / 1024
+      else
+      if ((Ascend > 0) and (FarAscend > 0)) then
+        SourceStraighenFactor := Min(Ascend, FarAscend) / 1024;
+    end;
+    if (not Target.Visible) and (Target.OutEdgeCount = 1) and (Target.InEdgeCount = 1) then begin
+      FarTarget := Target.OutEdges[0].Target;
+      FarAscend := (Target.DrawCenter - FarTarget.DrawCenter) * 1024
+              div (FarTarget.Level.DrawPosition - Target.Level.DrawPosition);
+      if ((Ascend < 0) and (FarAscend < 0)) then
+        TargetStraighenFactor := Max(Ascend, FarAscend) / 1024
+      else
+      if ((Ascend > 0) and (FarAscend > 0)) then
+        TargetStraighenFactor := Min(Ascend, FarAscend) / 1024;
+    end;
+  end;
+
   r:=Edge.DrawnAt;
+  if Edge.FNoGapCircle then begin
+    if EdgeStyle.Shape = lgesCurved then begin
+      if Edge.BackEdge then begin
+        SourceStraighenFactor := -0.4;
+        TargetStraighenFactor :=  0.4;
+      end else begin
+        SourceStraighenFactor :=  0.4;
+        TargetStraighenFactor := -0.4;
+      end;
+    end else begin
+      if Edge.BackEdge then begin
+        inc(r.Top, 2);
+        inc(r.Bottom, 2);
+      end else begin
+        dec(r.Top);
+        dec(r.Bottom);
+      end;
+    end;
+  end;
   s:=round(Edge.Weight*PixelPerWeight);
   if s>1 then begin
     case EdgeStyle.Shape of
     lgesStraight: Canvas.Line(r);
     lgesCurved:
       begin
-        DrawCurvedLvlLeftToRightEdge(Canvas,r.Left,r.Top,r.Right,r.Bottom);
-        DrawCurvedLvlLeftToRightEdge(Canvas,r.Left,r.Top+s,r.Right,r.Bottom+s);
+        DrawCurvedLvlLeftToRightEdge(Canvas,r.Left,r.Top,r.Right,r.Bottom, SourceStraighenFactor, TargetStraighenFactor);
+        DrawCurvedLvlLeftToRightEdge(Canvas,r.Left,r.Top+s,r.Right,r.Bottom+s, SourceStraighenFactor, TargetStraighenFactor);
       end;
     end;
   end else begin
     case EdgeStyle.Shape of
     lgesStraight: Canvas.Line(r);
-    lgesCurved: DrawCurvedLvlLeftToRightEdge(Canvas,r.Left,r.Top,r.Right,r.Bottom);
+    lgesCurved: DrawCurvedLvlLeftToRightEdge(Canvas,r.Left,r.Top,r.Right,r.Bottom, SourceStraighenFactor, TargetStraighenFactor);
     end;
   end;
 end;
@@ -2451,10 +2899,13 @@ end;
 
 procedure TCustomLvlGraphControl.DoMinimizeOverlappings(MinPos: integer;
   NodeGapInFront: integer; NodeGapBehind: integer);
+var
+  Handled: Boolean;
 begin
+  Handled := False;
   if Assigned(OnMinimizeOverlappings) then
-    OnMinimizeOverlappings(MinPos,NodeGapInFront,NodeGapBehind)
-  else
+    OnMinimizeOverlappings(MinPos,NodeGapInFront,NodeGapBehind,Handled);
+  if not Handled then
     Graph.MinimizeOverlappings(MinPos,NodeGapInFront,NodeGapBehind);
 end;
 
@@ -2635,6 +3086,7 @@ begin
   FGraph.OnStructureChanged:=@GraphStructureChanged;
   FNodeStyle:=TLvlGraphNodeStyle.Create(Self);
   FEdgeStyle:=TLvlGraphEdgeStyle.Create(Self);
+  FLimits:=TLvlGraphLimits.Create(Self);
   FImageChangeLink := TChangeLink.Create;
   FImageChangeLink.OnChange:=@ImageListChange;
   ShowHint:=true;
@@ -2651,6 +3103,7 @@ begin
   FGraph.OnStructureChanged:=nil;
   FGraph.Free;
   FGraph:=nil;
+  FreeAndNil(FLimits);
   FreeAndNil(FEdgeStyle);
   FreeAndNil(FNodeStyle);
   inherited Destroy;
@@ -2698,8 +3151,18 @@ begin
     end else
       HeaderHeight:=0;
 
+    Graph.FindIndependentGraphs;
+
     // distribute the nodes on levels and mark back edges
-    Graph.CreateTopologicalLevels(lgoHighLevels in Options);
+    Graph.CreateTopologicalLevels(lgoHighLevels in Options, lgoReduceBackEdges in Options);
+
+    Graph.MarkBackEdges;
+
+    if lgoMinimizeEdgeLens in Options then
+      Graph.MinimizeEdgeLens(lgoHighLevels in Options);
+
+    if (Limits.MaxLevelHeightAbs > 0) or (Limits.MaxLevelHeightRel > 0) then
+      Graph.LimitLevelHeights(Limits.MaxLevelHeightAbs, Limits.MaxLevelHeightRel);
 
     Graph.SplitLongEdges(EdgeStyle.SplitMode);
 
@@ -2724,8 +3187,10 @@ begin
       FPixelPerWeight);
 
     // position nodes without overlapping
-    DoMinimizeOverlappings;
-    Graph.MinimizeOverlappings(HeaderHeight,GapInFront,GapBehind);
+    DoMinimizeOverlappings(HeaderHeight,GapInFront,GapBehind);
+
+    if lgoStraightenGraph in Options then
+      Graph.StraightenGraph;
 
     // node colors
     if NodeStyle.Coloring=lgncRGB then
@@ -2901,6 +3366,26 @@ begin
   Result:=TLvlGraphNode(FNodes[Index]);
 end;
 
+function TLvlGraph.GetSubGraphCount: integer;
+begin
+  Result:=fSubGraphs.Count;
+  if Result=0 then begin
+    Result:=1;
+    TLvlGraphSubGraph.Create(Self,0);
+  end;
+end;
+
+function TLvlGraph.GetSubGraphs(Index: integer): TLvlGraphSubGraph;
+begin
+  if fSubGraphs.Count = 0 then
+    GetSubGraphCount;
+  Result:=TLvlGraphSubGraph(fSubGraphs[Index]);
+  if fSubGraphs.Count=1 then begin
+    Result.FLowestLevel:=0;
+    Result.FHighestLevel:=LevelCount-1;
+  end;
+end;
+
 procedure TLvlGraph.SetLevelCount(AValue: integer);
 begin
   if AValue<1 then
@@ -2936,11 +3421,13 @@ begin
   FLevelClass:=TLvlGraphLevel;
   FNodes:=TFPList.Create;
   fLevels:=TFPList.Create;
+  fSubGraphs := TFPList.Create;
 end;
 
 destructor TLvlGraph.Destroy;
 begin
   Clear;
+  FreeAndNil(fSubGraphs);
   FreeAndNil(fLevels);
   FreeAndNil(FNodes);
   inherited Destroy;
@@ -2954,6 +3441,8 @@ begin
     Nodes[NodeCount-1].Free;
   for i:=LevelCount-1 downto 0 do
     Levels[i].Free;
+  for i:=fSubGraphs.Count-1 downto 0 do
+    TLvlGraphSubGraph(fSubGraphs[i]).Free;
 end;
 
 procedure TLvlGraph.Invalidate;
@@ -3049,6 +3538,38 @@ begin
   end;
 end;
 
+procedure TLvlGraph.FindIndependentGraphs;
+  procedure ApplySubGraphRecursively(Node: TLvlGraphNode; SubGraph: integer);
+  var
+    i: Integer;
+  begin
+    assert((node.SubGraph < 0) or (Node.SubGraph = SubGraph), 'ApplySubGraphRecursively: node already in other subgraph');
+    if Node.SubGraph >= 0 then
+      exit;
+    node.SubGraph := SubGraph;
+    for i := 0 to node.InEdgeCount - 1 do
+      ApplySubGraphRecursively(Node.InEdges[i].Source, SubGraph);
+    for i := 0 to node.OutEdgeCount - 1 do
+      ApplySubGraphRecursively(Node.OutEdges[i].Target, SubGraph);
+  end;
+var
+  i: Integer;
+  Node: TLvlGraphNode;
+  CurrentSubGraph: TLvlGraphSubGraph;
+begin
+  CurrentSubGraph := SubGraphs[0];
+  for i:=0 to NodeCount-1 do
+    Nodes[i].FSubGraph := -1;
+  for i:=0 to NodeCount-1 do begin
+    Node := Nodes[i];
+    if Node.SubGraph >= 0 then Continue;
+    if CurrentSubGraph = nil then
+      CurrentSubGraph:=TLvlGraphSubGraph.Create(Self, SubGraphCount);
+    ApplySubGraphRecursively(Node, CurrentSubGraph.Index);
+    CurrentSubGraph := nil;
+  end;
+end;
+
 procedure TLvlGraph.InternalRemoveLevel(Lvl: TLvlGraphLevel);
 var
   i: Integer;
@@ -3069,8 +3590,20 @@ begin
     OnSelectionChanged(Self);
 end;
 
-procedure TLvlGraph.CreateTopologicalLevels(HighLevels: boolean);
-{$DEFINE LvlGraphConsistencyCheck}
+function TLvlGraph.NewLevelAtIndex(AnIndex, ASubGraphIndex: integer
+  ): TLvlGraphLevel;
+var
+  i: Integer;
+begin
+  Result := FLevelClass.Create(Self,AnIndex);
+  SubGraphs[ASubGraphIndex].FHighestLevel := SubGraphs[ASubGraphIndex].HighestLevel + 1;
+  for i := ASubGraphIndex+1 to SubGraphCount - 1 do begin
+    SubGraphs[i].FLowestLevel := SubGraphs[i].LowestLevel + 1;
+    SubGraphs[i].FHighestLevel := SubGraphs[i].HighestLevel + 1;
+  end
+end;
+
+procedure TLvlGraph.CreateTopologicalLevels(HighLevels, ReduceBackEdges: boolean);
 var
   ExtNodes: TAvlTree; // tree of TGraphLevelerNode sorted by Node
   MaxLevel: Integer;
@@ -3080,7 +3613,7 @@ var
     Result:=TGraphLevelerNode(ExtNodes.FindKey(Pointer(Node),@CompareLGNodeWithLevelerNode).Data);
   end;
 
-  procedure Traverse(ExtNode: TGraphLevelerNode);
+  procedure Traverse(ExtNode: TGraphLevelerNode; MinLevel: Integer);
   var
     Node: TLvlGraphNode;
     e: Integer;
@@ -3091,6 +3624,8 @@ var
     if ExtNode.Visited then exit;
     ExtNode.InPath:=true;
     ExtNode.Visited:=true;
+    if ExtNode.Level < MinLevel then
+      ExtNode.Level := MinLevel;
     Node:=ExtNode.Node;
     if HighLevels then
       Cnt:=Node.OutEdgeCount
@@ -3104,24 +3639,216 @@ var
         Edge:=Node.InEdges[e];
         ExtNextNode:=GetExtNode(Edge.Source);
       end;
-      if ExtNextNode.InPath then begin
-        Edge.FBackEdge:=true // edge is part of a cycle
-      end else begin
-        Traverse(ExtNextNode);
+      if not ExtNextNode.InPath then begin
+        Traverse(ExtNextNode, MinLevel);
         ExtNode.Level:=Max(ExtNode.Level,ExtNextNode.Level+1);
       end;
+      // else node is part of a cycle
     end;
     MaxLevel:=Max(MaxLevel,ExtNode.Level);
     // backtrack
     ExtNode.InPath:=false;
   end;
 
+  procedure DoReduceBackEdges(var MaxLevel: integer; StartLevel, SubGraphIdx: integer);
+  var
+    MaybeReduceMaxLevel: Boolean;
+
+    function IncomingBackEdgeCount(ExtReceivingNode: TGraphLevelerNode;
+      PretendLevel: Integer; out HasSiblingOnPretendLevel: Boolean;
+      out NextLowelSiblingAtLevel: integer): integer;
+    var
+      Node: TLvlGraphNode;
+      i, c: Integer;
+      ExtFromNode: TGraphLevelerNode;
+    begin
+      Result := 0;
+      HasSiblingOnPretendLevel := False;
+      NextLowelSiblingAtLevel := StartLevel-1;
+      Node := ExtReceivingNode.Node;
+      if HighLevels then
+        c := Node.OutEdgeCount
+      else
+        c := Node.InEdgeCount;
+      for i := 0 to c - 1 do begin
+        if HighLevels then
+          ExtFromNode := GetExtNode(Node.OutEdges[i].Target)
+        else
+          ExtFromNode := GetExtNode(Node.InEdges[i].Source);
+        if ExtFromNode.Level >= PretendLevel then // include equal => they will need to be pushed up, if the node is inserted at this level
+          inc(Result);
+        if ExtFromNode.Level = PretendLevel then
+          HasSiblingOnPretendLevel := True
+        else
+        if (ExtFromNode.Level > NextLowelSiblingAtLevel) and (ExtFromNode.Level < PretendLevel) then
+          NextLowelSiblingAtLevel := ExtFromNode.Level;
+      end;
+    end;
+    procedure AdjustSiblingLevels(ExtAdjustNode: TGraphLevelerNode; NewLevel: integer; Force: Boolean = False);
+    var
+      i, c, OldLevel: Integer;
+      ExtSiblingNode: TGraphLevelerNode;
+      Node: TLvlGraphNode;
+    begin
+      if ExtAdjustNode.InPath then
+        exit;
+      ExtAdjustNode.InPath := True;
+
+      if (ExtAdjustNode.Level > NewLevel) and not force then begin
+        Node := ExtAdjustNode.Node;
+        if HighLevels then
+          c := Node.OutEdgeCount
+        else
+          c := Node.InEdgeCount;
+        for i := 0 to c - 1 do begin
+          if HighLevels then
+            ExtSiblingNode := GetExtNode(Node.OutEdges[i].Target)
+          else
+            ExtSiblingNode := GetExtNode(Node.InEdges[i].Source);
+          if (ExtSiblingNode.Level >= NewLevel) and (ExtSiblingNode.Level < ExtAdjustNode.Level) then
+            NewLevel := ExtSiblingNode.Level + 1;
+        end;
+        if HighLevels then
+          c := Node.InEdgeCount
+        else
+          c := Node.OutEdgeCount;
+        // check backlinks
+        for i := 0 to c - 1 do begin
+          if HighLevels then
+            ExtSiblingNode := GetExtNode(Node.InEdges[i].Source)
+          else
+            ExtSiblingNode := GetExtNode(Node.OutEdges[i].Target);
+          if (ExtSiblingNode.Level = NewLevel) then
+            NewLevel := ExtSiblingNode.Level + 1;
+        end;
+      end;
+
+      if (ExtAdjustNode.Level = NewLevel) and not Force then begin
+        ExtAdjustNode.InPath := False;
+        exit;
+      end;
+
+      OldLevel := ExtAdjustNode.Level;
+      ExtAdjustNode.Level := NewLevel;
+      if NewLevel > MaxLevel then
+          MaxLevel := NewLevel;
+      if OldLevel = MaxLevel then
+        MaybeReduceMaxLevel := True;
+
+      Node := ExtAdjustNode.Node;
+      if HighLevels then
+        c := Node.InEdgeCount
+      else
+        c := Node.OutEdgeCount;
+      for i := 0 to c - 1 do begin
+        if HighLevels then
+          ExtSiblingNode := GetExtNode(Node.InEdges[i].Source)
+        else
+          ExtSiblingNode := GetExtNode(Node.OutEdges[i].Target);
+        if ExtSiblingNode.Level >= OldLevel then // do not adjust other BackEdges
+          AdjustSiblingLevels(ExtSiblingNode, NewLevel + 1);
+      end;
+      // maybe new backegdes on the InEdge side
+      if HighLevels then
+        c := Node.OutEdgeCount
+      else
+        c := Node.InEdgeCount;
+      for i := 0 to c - 1 do begin
+        if HighLevels then
+          ExtSiblingNode := GetExtNode(Node.OutEdges[i].Target)
+        else
+          ExtSiblingNode := GetExtNode(Node.InEdges[i].Source);
+        if ExtSiblingNode.Level = NewLevel then // do not adjust other BackEdges
+          AdjustSiblingLevels(ExtSiblingNode, NewLevel + 1);
+      end;
+
+      ExtAdjustNode.InPath := False;
+    end;
+  var
+    AVLNode: TAVLTreeNode;
+    ExtNode, ExtTargetNode: TGraphLevelerNode;
+    Node: TLvlGraphNode;
+    LvlIdx, LowerLvl, BackEdgeCnt, TotalBackEdgeCnt: Integer;
+    i, c, j, BestLvl: integer;
+    BackEdgeList: array of TGraphLevelerNode;
+    SiblingOnLvl: Boolean;
+  begin
+    SetLength(BackEdgeList, NodeCount);
+    MaybeReduceMaxLevel := False;
+    AVLNode := ExtNodes.FindLowest;
+    while AVLNode <> nil do begin
+      ExtNode := TGraphLevelerNode(AVLNode.Data);
+      AVLNode := AVLNode.Successor;
+      Node := ExtNode.Node;
+      if (Node.SubGraph <> SubGraphIdx) then
+        Continue;
+
+      BackEdgeCnt := 0;
+      if HighLevels then
+        c := Node.InEdgeCount
+      else
+        c := Node.OutEdgeCount;
+      if c > Length(BackEdgeList) then
+        SetLength(BackEdgeList, c);
+      LvlIdx := ExtNode.Level;
+      for i := 0 to c - 1 do begin
+        if HighLevels then
+          ExtTargetNode := GetExtNode(Node.InEdges[i].Source)
+        else
+          ExtTargetNode := GetExtNode(Node.OutEdges[i].Target);
+        if ExtTargetNode.Level <  LvlIdx then begin
+          j := 0;
+          while (j < BackEdgeCnt) and (BackEdgeList[j].Level < ExtTargetNode.Level) do
+            inc(j);
+          move(BackEdgeList[j], BackEdgeList[j+1], (BackEdgeCnt-j)*SizeOf(TGraphLevelerNode));
+          BackEdgeList[j] := ExtTargetNode;
+          inc(BackEdgeCnt);
+        end;
+      end;
+      if BackEdgeCnt = 0 then
+        Continue;
+
+      BestLvl := ExtNode.Level;
+      TotalBackEdgeCnt := BackEdgeCnt + IncomingBackEdgeCount(ExtNode, BestLvl, SiblingOnLvl, LowerLvl);
+      BestLvl := LowerLvl + 1;
+      while BackEdgeCnt > 0 do begin
+        dec(BackEdgeCnt);
+        i := BackEdgeList[BackEdgeCnt].Level;
+        while (BackEdgeCnt > 0) and (BackEdgeList[BackEdgeCnt - 1].Level = i) do
+          dec(BackEdgeCnt);
+        c := BackEdgeCnt + IncomingBackEdgeCount(ExtNode, i, SiblingOnLvl, LowerLvl);
+        if c < TotalBackEdgeCnt then begin
+          BestLvl := LowerLvl + 1;
+          TotalBackEdgeCnt := c;
+        end;
+      end;
+
+      if BestLvl < ExtNode.Level then begin
+        ExtNode.Level := BestLvl;
+        AdjustSiblingLevels(ExtNode, BestLvl, True);
+      end;
+
+    end;
+
+    if MaybeReduceMaxLevel then begin
+      MaxLevel := StartLevel;
+      AVLNode := ExtNodes.FindLowest;
+      while AVLNode <> nil do begin
+        ExtNode := TGraphLevelerNode(AVLNode.Data);
+        AVLNode := AVLNode.Successor;
+        if ExtNode.Node.SubGraph <> SubGraphIdx then
+          continue;
+        if ExtNode.Level > MaxLevel then
+          MaxLevel := ExtNode.Level;
+      end;
+    end;
+  end;
+
 var
-  i: Integer;
+  i, g, GroupMinLevel: Integer;
   Node: TLvlGraphNode;
   ExtNode: TGraphLevelerNode;
-  j: Integer;
-  Edge: TLvlGraphEdge;
+  CurrentSubGraph: TLvlGraphSubGraph;
 begin
   //WriteDebugReport('TLvlGraph.CreateTopologicalLevels START');
   {$IFDEF LvlGraphConsistencyCheck}
@@ -3130,30 +3857,40 @@ begin
   ExtNodes:=TAvlTree.Create(@CompareGraphLevelerNodes);
   try
     // init ExtNodes
-    // clear BackEdge flags
     for i:=0 to NodeCount-1 do begin
       Node:=Nodes[i];
       ExtNode:=TGraphLevelerNode.Create;
       ExtNode.Node:=Node;
       ExtNodes.Add(ExtNode);
-      for j:=0 to Node.OutEdgeCount-1 do begin
-        Edge:=Node.OutEdges[j];
-        Edge.fBackEdge:=false;
-      end;
     end;
     // traverse all nodes
-    MaxLevel:=0;
-    for i:=0 to NodeCount-1 do begin
-      Node:=Nodes[i];
-      Traverse(GetExtNode(Node));
+    MaxLevel:=-1;
+    for g := 0 to SubGraphCount - 1 do begin
+      inc(MaxLevel);
+      CurrentSubGraph := SubGraphs[g];
+      CurrentSubGraph.FLowestLevel := MaxLevel;
+      GroupMinLevel := MaxLevel;
+      for i:=0 to NodeCount-1 do begin
+        Node:=Nodes[i];
+        if (Node.SubGraph <> CurrentSubGraph.Index) then
+          Continue;
+        Traverse(GetExtNode(Node), GroupMinLevel);
+      end;
+
+      if ReduceBackEdges then
+        DoReduceBackEdges(MaxLevel, CurrentSubGraph.FLowestLevel, CurrentSubGraph.Index);
+      CurrentSubGraph.FHighestLevel := MaxLevel;
     end;
+
     // set levels
     LevelCount:=Max(LevelCount,MaxLevel+1);
     for i:=0 to NodeCount-1 do begin
       Node:=Nodes[i];
       ExtNode:=GetExtNode(Node);
-      if HighLevels then
-        Node.Level:=Levels[MaxLevel-ExtNode.Level]
+      if HighLevels then begin
+        CurrentSubGraph := SubGraphs[ExtNode.Node.SubGraph];
+        Node.Level:=Levels[CurrentSubGraph.LowestLevel + CurrentSubGraph.HighestLevel - ExtNode.Level];
+      end
       else
         Node.Level:=Levels[ExtNode.Level];
     end;
@@ -3165,15 +3902,388 @@ begin
   end;
   //WriteDebugReport('TLvlGraph.CreateTopologicalLevels END');
   {$IFDEF LvlGraphConsistencyCheck}
-  ConsistencyCheck(true);
+  ConsistencyCheck(False);
   {$ENDIF}
+end;
+
+procedure TLvlGraph.MinimizeEdgeLens(HighLevels: boolean);
+(* This method can only minize edges in certain graphs.
+   Therefore some edges may not be fully minimized.
+
+  Possible TODOs
+  * gelOnlyPush:
+    - For Edges with len>1, check if the target node is reachable via len=1 nodes.
+    If yes the edge cannot be shortened
+    - Collect all InEntries for each entire group, so that CalculateCostForMoveUp can
+    calculate the cost for the entire group at once.
+  * Check for nodes in front of the current node, that are free to pull up.
+    If a node has several InEdges, they may prevent it from moving.
+    And in turn the node itself may prevent any of those sources from moving.
+*)
+var
+  NodeTree: TGraphEdgeLenMinimizerTree; // tree of TGraphEdgeLenMinimizerNode sorted by Node
+  VisitingId: Integer;
+
+  procedure UpdateMaxLevelsForSiblings(ExtNode: TGraphEdgeLenMinimizerNode);
+  var
+    i: Integer;
+    Sibling: TGraphEdgeLenMinimizerNode;
+  begin
+    for i := 0 to ExtNode.InSiblingCount - 1 do begin
+      Sibling := ExtNode.InSibling[i];
+      Sibling.MaxLevel := Min(Sibling.MaxLevel, ExtNode.MaxLevel-1);
+      Assert(Sibling.MaxLevel >= Sibling.Level, 'UpdateMaxLevelsForSiblings: Sibling.MinLevel <= Sibling.Level');
+      Assert(Sibling.Level < ExtNode.Level, 'UpdateMaxLevelsForSiblings: Sibling.Level > ExtNode.Level');
+    end;
+  end;
+
+  procedure MaybeMarkOnlyPush(ExtNode: TGraphEdgeLenMinimizerNode);
+  var
+    i: Integer;
+    Sibling: TGraphEdgeLenMinimizerNode;
+  begin
+    for i := 0 to ExtNode.OutSiblingCount - 1 do begin
+      if ExtNode.OutSiblingDistance[i] > 1 then exit;
+      Sibling := ExtNode.OutSibling[i];
+      assert(Sibling.Level - ExtNode.Level = 1, 'MaybeMarkOnlyPush: Dist = 1');
+      if not (gelOnlyPush in Sibling.Flags) then exit;
+    end;
+    Include(ExtNode.Flags, gelOnlyPush);
+  end;
+
+  function CalculateCostForMoveUp(CalcExtNode: TGraphEdgeLenMinimizerNode; var CalcNewLevel: Integer): Integer;
+    function CheckInEdgeSavingsQuick(InEdgeExtNode: TGraphEdgeLenMinimizerNode; MaxSavingNeeded: Integer): Integer;
+    var
+      i, j, l, d, SiblingCanSave: Integer;
+      InSibling, ReverseSibling: TGraphEdgeLenMinimizerNode;
+    begin
+      Result := 0;
+      l := InEdgeExtNode.Level - 1;
+      for i := 0 to InEdgeExtNode.InSiblingCount - 1 do begin
+        InSibling := InEdgeExtNode.InSibling[i];
+        SiblingCanSave := 0;
+        if InSibling.Level < l then
+          continue;
+        if InSibling.InSiblingCount >= InSibling.OutSiblingCount-1 then
+          continue;
+        for j := 0 to InSibling.OutSiblingCount - 1 do begin
+          ReverseSibling := InSibling.OutSibling[j];
+          d := ReverseSibling.Level - InSibling.Level;
+          if (ReverseSibling = InEdgeExtNode) then
+            continue;
+          if d <= 1 then
+            break;
+          if d < MaxSavingNeeded then
+            MaxSavingNeeded := d;
+        end;
+        if (d <= 1) and (ReverseSibling <> InEdgeExtNode) then begin // loop aborted
+          continue;
+        end;
+        for j := 0 to InSibling.OutSiblingCount - 1 do begin
+          ReverseSibling := InSibling.OutSibling[j];
+          if (ReverseSibling = InEdgeExtNode) then
+            continue;
+          d := ReverseSibling.Level - InSibling.Level;
+          SiblingCanSave := SiblingCanSave + Min(MaxSavingNeeded, d);
+        end;
+        SiblingCanSave := SiblingCanSave - InSibling.InSiblingCount;
+        Result := Result + max(0, SiblingCanSave);
+      end;
+    end;
+    procedure SetNewLevelDiffRecursive(TargetExtNode: TGraphEdgeLenMinimizerNode; TargetNewLevel: Integer;
+      out CostChangesAtLevel: integer);
+    var
+      Diff, i, SiblingCostChangesAtLevel: Integer;
+      FirstMove: Boolean;
+      SiblingNode: TGraphEdgeLenMinimizerNode;
+    begin
+      Assert(TargetNewLevel <= TargetExtNode.MaxLevel, 'CalculateCostForMoveUp(): TargetNewLevel < MaxLevel');
+      Assert(TargetNewLevel < LevelCount, 'CalculateCostForMoveUp(): TargetNewLevel < LevelCount');
+      CostChangesAtLevel := TargetExtNode.Level + 1; // Applies, if this node is NOT pushed
+      Diff := TargetNewLevel - TargetExtNode.Level;
+      FirstMove := TargetExtNode.VisitedId <> VisitingId; // The same node may be pushed several times, if more than one edge leads here
+      TargetExtNode.VisitedId := VisitingId;
+      if FirstMove then
+        TargetExtNode.LevelDiff := 0
+      else
+        CostChangesAtLevel := TargetExtNode.MaxLevel+1; // correct limit has been applied before / in case next line does exit
+      if Diff <= TargetExtNode.LevelDiff then
+        exit;
+      TargetExtNode.LevelDiff := Diff;
+      CostChangesAtLevel := TargetExtNode.MaxLevel+1; // Best case we can go to MaxLevel, then cost goes to infinite
+      if (TargetExtNode.InSiblingCount > 1) then       // One InEdge is from the pushing node
+        CostChangesAtLevel := TargetExtNode.Level + Diff + 1; // could be more, if the nodes can be pulled free of cost
+      for i := 0 to TargetExtNode.InSiblingCount - 1 do begin
+        SiblingNode := TargetExtNode.InSibling[i];
+        if SiblingNode.VisitedId <> VisitingId then
+          SiblingNode.LevelDiff := 0;
+      end;
+      for i := 0 to TargetExtNode.OutSiblingCount - 1 do begin
+        SiblingNode := TargetExtNode.OutSibling[i];
+        SetNewLevelDiffRecursive(SiblingNode, TargetNewLevel + 1, SiblingCostChangesAtLevel);
+        if SiblingCostChangesAtLevel - 1 < CostChangesAtLevel then
+          CostChangesAtLevel := SiblingCostChangesAtLevel - 1;
+      end;
+    end;
+    function DoCalculateCostForMoveUp(ExtNode: TGraphEdgeLenMinimizerNode): Integer;
+    var
+      i: Integer;
+      SiblingNode: TGraphEdgeLenMinimizerNode;
+    begin
+      Result := 0;
+      if (ExtNode.VisitedId = VisitingId) or (ExtNode.LevelDiff = 0) then
+        exit;
+      ExtNode.VisitedId := VisitingId;
+      // InEdges get longer
+      for i := 0 to ExtNode.InSiblingCount - 1 do
+        Result := Result + ExtNode.LevelDiff - ExtNode.InSibling[i].LevelDiff;
+      for i := 0 to ExtNode.OutSiblingCount - 1 do begin
+        SiblingNode := ExtNode.OutSibling[i];
+        Result := Result - ExtNode.LevelDiff + SiblingNode.LevelDiff;
+        Result := Result + DoCalculateCostForMoveUp(SiblingNode);
+      end;
+    end;
+  var
+    NextCostChangesAtLevel, i: Integer;
+  begin
+    inc(VisitingId);
+    SetNewLevelDiffRecursive(CalcExtNode, CalcNewLevel, NextCostChangesAtLevel);
+    dec(NextCostChangesAtLevel); // the last level use-able without extra cost
+    Assert(NextCostChangesAtLevel <= CalcExtNode.MaxLevel, 'CalculateCostForMoveUp: NextCostChangesAtLevel <= CalcExtNode.MaxLevel');
+    Assert(NextCostChangesAtLevel >= CalcNewLevel, 'CalculateCostForMoveUp: NextCostChangesAtLevel >= CalcNewLevel');
+    if (NextCostChangesAtLevel > CalcNewLevel) and (NextCostChangesAtLevel <= CalcExtNode.MaxLevel) then begin
+      CalcNewLevel := NextCostChangesAtLevel;
+      inc(VisitingId);
+      SetNewLevelDiffRecursive(CalcExtNode, CalcNewLevel, NextCostChangesAtLevel);
+    end;
+    inc(VisitingId);
+    Result := DoCalculateCostForMoveUp(CalcExtNode);
+    if Result >= 0 then
+      Result := Result - CheckInEdgeSavingsQuick(CalcExtNode, CalcNewLevel - CalcExtNode.Level)
+    else
+    if Result = 0 then begin
+      inc(Result); // zero cost should be moved only, if it might block on of its InEdges
+      for i := 0 to CalcExtNode.InSiblingCount - 1 do begin
+        if CalcExtNode.InSibling[i].Level = CalcExtNode.Level - 1 then begin
+          dec(Result); // return 0 => at least one node that might be blocked
+          exit;
+        end;
+      end;
+    end;
+  end;
+
+  procedure PushLevelUpRecursive(ExtNode: TGraphEdgeLenMinimizerNode; NewLevel: Integer);
+  var
+    i: Integer;
+  begin
+    Assert(NewLevel < LevelCount, 'PushLevelUpRecursive: NewLevel < LevelCount');
+    if ExtNode.Level >= NewLevel then
+      exit;
+    ExtNode.Level:=NewLevel;
+
+    for i := 0 to ExtNode.OutSiblingCount - 1 do
+      PushLevelUpRecursive(ExtNode.OutSibling[i], NewLevel + 1);
+  end;
+
+  function TryMoveNode(ExtNode: TGraphEdgeLenMinimizerNode): boolean;
+  var
+    BestCost, ConsecutiveBadCost, Cost, BestLvl, i, mx: Integer;
+  begin
+    Result := False;
+    BestCost := 0;
+    ConsecutiveBadCost := 0;
+
+    mx := ExtNode.MaxLevel-1;
+    i := ExtNode.Level;
+    while i < mx do begin
+      inc(i);
+      Cost := CalculateCostForMoveUp(ExtNode, i);
+      if Cost > 0 then begin
+        ConsecutiveBadCost := ConsecutiveBadCost + 1;
+        if ConsecutiveBadCost >= 3 then
+          break; // give up
+      end
+      else
+      if Cost <= BestCost then begin
+        ConsecutiveBadCost := 0;
+        BestCost := Cost;
+        BestLvl := i;
+      end;
+    end;
+
+    inc(mx);
+    Cost := CalculateCostForMoveUp(ExtNode, mx);
+    if Cost <= BestCost then begin
+      BestCost := Cost;
+      BestLvl := mx;
+    end;
+
+    //DebugLn([' BestCost: ',ExtNode.Node.Caption, ' from ', ExtNode.Level, ' to idx ', BestLvl,' (', ExtNode.Level+1 ,'..', ExtNode.MaxLevel,')  cost ', BestCost ]);
+    Result := BestCost < 0;
+    if Result then
+      PushLevelUpRecursive(ExtNode, BestLvl);
+  end;
+
+var
+  i, l, j: Integer;
+  ExtNode: TGraphEdgeLenMinimizerNode;
+  DidMove: Boolean;
+  CurrentSubGraph: TLvlGraphSubGraph;
+begin
+  NodeTree:=TGraphEdgeLenMinimizerTree.Create;
+  NodeTree.Graph:=Self;
+  VisitingId := 0;
+  if HighLevels then
+    NodeTree.NodeClass := TGraphEdgeLenMinimizerReverseNode;
+
+  try
+    // init NodeTree // Add highest level first, so nodes can be linked in initial order
+    for j := LevelCount-1 downto 0 do begin
+      l := NodeTree.MapLevel(j);
+      for i := 0 to Levels[l].Count - 1 do begin
+        ExtNode := NodeTree.AddGraphNode(Levels[l].Nodes[i]);
+        CurrentSubGraph := SubGraphs[ExtNode.Node.SubGraph];
+        ExtNode.MaxLevel := CurrentSubGraph.HighestLevel;
+        ExtNode.MinSubGraphLevel := CurrentSubGraph.LowestLevel;
+        ExtNode.MaxSubGraphLevel := CurrentSubGraph.HighestLevel;
+      end;
+    end;
+
+    // Update MaxLevel
+    ExtNode := NodeTree.ExtNodeWithHighestLevel;
+    while ExtNode <> nil do begin
+      UpdateMaxLevelsForSiblings(ExtNode);
+      ExtNode := ExtNode.NextExtNodeTowardsLowerLevel;
+    end;
+
+    // gelOnlyPush: Mark nodes, with no outgoing edges that could be shortened (push would push entire subtree)
+    ExtNode := NodeTree.ExtNodeWithHighestLevel;
+    while ExtNode <> nil do begin
+      if ExtNode.MaxLevel > ExtNode.Level then
+        MaybeMarkOnlyPush(ExtNode);
+      ExtNode := ExtNode.NextExtNodeTowardsLowerLevel;
+    end;
+
+    repeat
+      DidMove := False;
+      ExtNode := TGraphEdgeLenMinimizerNode(NodeTree.FindLowest);
+      while ExtNode<> nil do begin
+        if (ExtNode.OutSiblingCount > 0) and (ExtNode.MaxLevel > ExtNode.Level) and
+           not(gelOnlyPush in ExtNode.Flags)
+        then
+          if TryMoveNode(ExtNode) then
+            DidMove := True;
+        ExtNode := TGraphEdgeLenMinimizerNode(ExtNode.Successor);
+      end;
+    until not DidMove;
+
+  finally
+    NodeTree.Free;
+  end;
+end;
+
+procedure TLvlGraph.LimitLevelHeights(MaxHeight: integer; MaxHeightRel: Single);
+var
+  SubGraphIdx, LowLevelIdx, HighLevelIdx, CurLevelIdx: Integer;
+  CurNodeCount, CurMaxHeight: Integer;
+  i, j, w, LevelsNeeded, TargetLvlCnt: Integer;
+  CurLevel: TLvlGraphLevel;
+  CurNode: TLvlGraphNode;
+  NodeWeights: array of record
+    Node: TLvlGraphNode;
+    Weight: integer;
+  end;
+  CurrentSubGraph: TLvlGraphSubGraph;
+begin
+  if LevelCount = 0 then
+    exit;
+  NodeWeights := nil;
+  For SubGraphIdx := 0 to SubGraphCount-1 do begin
+    CurrentSubGraph := SubGraphs[SubGraphIdx];
+  //For SubGraphIdx := 0 to Max(0, FSubGraphCount-1) do begin
+    // Find Lowest/Highest level for subgraph
+    LowLevelIdx := CurrentSubGraph.LowestLevel;
+    HighLevelIdx := CurrentSubGraph.HighestLevel;
+    CurNodeCount := 0;
+    for i := LowLevelIdx to HighLevelIdx do
+      CurNodeCount := CurNodeCount + Levels[i].Count;
+
+    // Calculate CurMaxHeight for SubGraph
+    if MaxHeightRel > 0 then begin
+      if MaxHeight > 0 then
+        CurMaxHeight := Min(MaxHeight, Max(3, Trunc(0.5 + sqrt(CurNodeCount)*MaxHeightRel)))
+      else
+        CurMaxHeight := Max(3, Trunc(0.5 + sqrt(CurNodeCount)*MaxHeightRel));
+    end
+    else
+      CurMaxHeight := MaxHeight;
+    if CurMaxHeight <= 0 then Continue;
+
+    // Process each level
+    CurLevelIdx := HighLevelIdx + 1;
+    while CurLevelIdx > LowLevelIdx do begin
+      dec(CurLevelIdx);
+      CurLevel := Levels[CurLevelIdx];
+      if CurLevel.Count <= CurMaxHeight then
+        continue;
+
+      if Length(NodeWeights) < CurLevel.Count then
+        SetLength(NodeWeights, CurLevel.Count + 8);
+
+      for i := 0 to CurLevel.Count - 1 do begin
+        CurNode := CurLevel.Nodes[i];
+        if CurNode.InEdgeCount = 0 then
+          w := CurNodeCount * CurNode.OutEdgeCount
+        else
+        if CurNode.OutEdgeCount = 0 then
+          w := -CurNodeCount * CurNode.InEdgeCount
+        else
+          w := CurNode.OutEdgeCount - CurNode.InEdgeCount;
+        // if w=0 then // find outher criteria; edge length...
+        //DebugLn(w=0, ['LimitLevelHeights has node with zero weight. L=', CurLevel.Index, ' N=',CurNode.IndexInLevel, ' ', CurNode.Caption]);
+
+        j := 0;
+        while (j < i) and (NodeWeights[j].Weight < w) do
+          inc(j);
+        if j < i then
+          move(NodeWeights[j], NodeWeights[j+1], (i-j) * SizeOf(NodeWeights[0]));
+        NodeWeights[j].Node := CurNode;
+        NodeWeights[j].Weight := w;
+      end;
+
+      LevelsNeeded := (CurLevel.Count-1) div CurMaxHeight + 1;
+      assert(LevelsNeeded > 1, 'LimitLevelHeights: LevelsNeeded > 1');
+      for i := 0 to LevelsNeeded-2 do
+        NewLevelAtIndex(CurLevelIdx+1, SubGraphIdx);
+
+      i := CurLevel.Count;
+      while LevelsNeeded > 1 do begin
+        TargetLvlCnt := i div LevelsNeeded;
+        j := min(i, CurMaxHeight); // Nodes with no InEdge should be moved until MaxHeight, even if the distribution of nodes will be uneven
+        dec(LevelsNeeded);
+        CurLevel := Levels[CurLevelIdx+LevelsNeeded];
+        while ( (TargetLvlCnt > 0) or
+                ( (j > 0) and (NodeWeights[i-1].Weight>=CurNodeCount) )
+              ) and
+              not( (i<=MaxHeight) and (NodeWeights[i-1].Weight<=-CurNodeCount) )  // Keep as many Nodes with no outedge, in the left most column
+        do begin
+          dec(i);
+          NodeWeights[i].Node.Level := CurLevel;
+          dec(TargetLvlCnt);
+          dec(j);
+        end;
+      end;
+
+    end;
+  end;
 end;
 
 procedure TLvlGraph.SplitLongEdges(SplitMode: TLvlGraphEdgeSplitMode);
 // replace edges over several levels into several short edges by adding hidden nodes
 type
+  THiddenGraphNodeArray = Array [boolean] of TLvlGraphNodeArray;
   TNodeInfo = record
-    HiddenNodes: TLvlGraphNodeArray;
+    HiddenNodes: THiddenGraphNodeArray;
     LongInEdges, LongOutEdges: integer;
   end;
   PNodeInfo = ^TNodeInfo;
@@ -3193,7 +4303,7 @@ var
   NextNode: TLvlGraphNode;
   AVLNode: TAvlTreeNode;
   P2PItem: PPointerToPointerItem;
-  MergeAtSourceNode: Boolean;
+  MergeAtSourceNode, EdgeBack: Boolean;
   SourceInfo: PNodeInfo;
   TargetInfo: PNodeInfo;
 begin
@@ -3206,7 +4316,8 @@ begin
       SourceNode:=Nodes[n];
       New(SourceInfo);
       FillByte(SourceInfo^,SizeOf(TNodeInfo),0);
-      SetLength(SourceInfo^.HiddenNodes,LevelCount);
+      SetLength(SourceInfo^.HiddenNodes[False],LevelCount);
+      SetLength(SourceInfo^.HiddenNodes[True],LevelCount);
       for e:=0 to SourceNode.OutEdgeCount-1 do begin
         Edge:=SourceNode.OutEdges[e];
         if Edge.Target.Level.Index-SourceNode.Level.Index<=1 then continue;
@@ -3231,6 +4342,7 @@ begin
         //debugln(['TLvlGraph.SplitLongEdges long edge: ',SourceNode.Caption,'(',SourceNode.Level.Index,') ',TargetNode.Caption,'(',TargetNode.Level.Index,')']);
         EdgeWeight:=Edge.Weight;
         EdgeData:=Edge.Data;
+        EdgeBack:=Edge.BackEdge;
         // remove long edge
         Edge.Free;
         // create merged hidden nodes
@@ -3245,9 +4357,9 @@ begin
           end;
           //debugln(['TLvlGraph.SplitLongEdges ',SourceNode.Caption,'=',SourceInfo^.LongOutEdges,' ',TargetNode.Caption,'=',TargetInfo^.LongInEdges,' MergeAtSourceNode=',MergeAtSourceNode]);
           if MergeAtSourceNode then
-            HiddenNodes:=SourceInfo^.HiddenNodes
+            HiddenNodes:=SourceInfo^.HiddenNodes[EdgeBack]
           else
-            HiddenNodes:=TargetInfo^.HiddenNodes;
+            HiddenNodes:=TargetInfo^.HiddenNodes[EdgeBack];
           // create hidden nodes
           for l:=SourceNode.Level.Index+1 to TargetNode.Level.Index-1 do
             if HiddenNodes[l]=nil then
@@ -3265,6 +4377,7 @@ begin
             NextNode:=TargetNode;
           Edge:=GetEdge(LastNode,NextNode,true);
           Edge.Weight:=Edge.Weight+EdgeWeight;
+          Edge.FBackEdge:=EdgeBack;
           if Edge.Data=nil then
             Edge.Data:=EdgeData;
           LastNode:=NextNode;
@@ -3396,15 +4509,32 @@ end;
 procedure TLvlGraph.MarkBackEdges;
 var
   i: Integer;
-  Node: TLvlGraphNode;
-  j: Integer;
+  Node, OtherNode: TLvlGraphNode;
+  j, k: Integer;
   Edge: TLvlGraphEdge;
 begin
+  for i:=0 to NodeCount-1 do
+    for j := 0 to Nodes[i].OutEdgeCount-1 do
+      Nodes[i].OutEdges[j].FNoGapCircle := False;
   for i:=0 to NodeCount-1 do begin
     Node:=Nodes[i];
-    for j:=0 to Node.OutEdgeCount-1 do begin
+    for j:=Node.OutEdgeCount-1 downto 0 do begin // Edges may be removed/replaced
       Edge:=Node.OutEdges[j];
-      Edge.fBackEdge:=Edge.IsBackEdge;
+      if Edge.IsBackEdge then
+        Edge.RevertDirection;
+      if Edge.Source.Level.Index = Edge.Target.Level.Index - 1 then begin
+        // check for circles of exactly 2 nodes, with no levels between
+        OtherNode := Edge.Source;
+        for k := 0 to OtherNode.OutEdgeCount - 1 do begin
+          if (OtherNode.OutEdges[k] <> Edge) and
+             (OtherNode.OutEdges[k].Target = Node) and
+             (not OtherNode.OutEdges[k].BackEdge)
+          then begin
+            Edge.FNoGapCircle := True;
+            OtherNode.OutEdges[k].FNoGapCircle := True;
+          end;
+        end;
+      end;
     end;
   end;
 end;
@@ -3417,7 +4547,7 @@ end;
 procedure TLvlGraph.MinimizeOverlappings(MinPos: integer;
   NodeGapAbove: integer; NodeGapBelow: integer; aLevel: integer);
 var
-  i: Integer;
+  i, Below: Integer;
   Level: TLvlGraphLevel;
   Node: TLvlGraphNode;
   Last: TLvlGraphNode;
@@ -3430,16 +4560,310 @@ begin
     Last:=nil;
     for i:=0 to Level.Count-1 do begin
       Node:=Level[i];
+      Below := 0;
+      if (Last <> nil) and Last.Visible then
+        Below := NodeGapBelow;
       if Last=nil then
         Node.DrawPosition:=MinPos+NodeGapAbove
       else if Node.Visible then
-        Node.DrawPosition:=Max(Node.DrawPosition,Last.DrawPositionEnd+NodeGapBelow+NodeGapAbove)
+        Node.DrawPosition:=Max(Node.DrawPosition,Last.DrawPositionEnd+Below+NodeGapAbove)
       else
-        Node.DrawPosition:=Max(Node.DrawPosition,Last.DrawPositionEnd+1);
+        Node.DrawPosition:=Max(Node.DrawPosition,Last.DrawPositionEnd+1+Below);
       //debugln(['TLvlGraph.MinimizeOverlappings Level=',aLevel,' Node=',Node.Caption,' Size=',Node.DrawSize,' Position=',Node.DrawPosition]);
       Last:=Node;
     end;
   end;
+end;
+
+procedure TLvlGraph.StraightenGraph;
+const
+  DRAWPOS_UNKOWN = low(integer);
+type
+  TNodeInfo = record
+    TheNode: TLvlGraphNode;
+    TheNodeIdx: Integer;
+    TheLevelIdx: Integer;
+    DrawPosGapAbove: integer;
+    CurDrawPos, TmpDrawPos: Integer;
+  end;
+  PNodeInfo = ^TNodeInfo;
+var
+  NodeInfos: array of array of TNodeInfo;
+
+  function GetWantedDrawPosByAvgIn(NInfo: PNodeInfo): integer;
+  var
+    Node: TLvlGraphNode;
+    i: Integer;
+  begin
+    Node := NInfo^.TheNode;
+    if Node.InEdgeCount = 0 then
+      exit(DRAWPOS_UNKOWN);
+    Result := 0;
+    for i := 0 to Node.InEdgeCount - 1 do
+      Result := Result + Node.InEdges[i].Source.DrawCenter;
+    Result := (Result div (Node.InEdgeCount));
+  end;
+
+  function GetWantedDrawPosByAvgOut(NInfo: PNodeInfo): integer;
+  var
+    Node: TLvlGraphNode;
+    i: Integer;
+  begin
+    Node := NInfo^.TheNode;
+    if Node.OutEdgeCount = 0 then
+      exit(DRAWPOS_UNKOWN);
+    Result := 0;
+    for i := 0 to Node.OutEdgeCount - 1 do
+      Result := Result + Node.OutEdges[i].Target.DrawCenter;
+    Result := (Result div (Node.OutEdgeCount));
+  end;
+
+  procedure PreComputeWantedPositions(ALvlIdx, AnInWeight, AnOutWeight: integer);
+  var
+    Level: TLvlGraphLevel;
+    NodeIdx: Integer;
+    NInfo: PNodeInfo;
+  begin
+    Level := Levels[ALvlIdx];
+    if Level.Count = 0 then
+      exit;
+
+    if (AnInWeight > 0) and (AnOutWeight > 0) then
+      for NodeIdx := 0 to Level.Count - 1 do begin
+        NInfo := @NodeInfos[ALvlIdx, NodeIdx];
+        if (NInfo^.TheNode.OutEdgeCount > 0) and (NInfo^.TheNode.InEdgeCount > 0) then
+          NInfo^.TmpDrawPos := (
+            GetWantedDrawPosByAvgOut(NInfo) * AnOutWeight * NInfo^.TheNode.OutEdgeCount +
+            GetWantedDrawPosByAvgIn(NInfo) * AnInWeight * NInfo^.TheNode.InEdgeCount
+            ) div (AnOutWeight * NInfo^.TheNode.OutEdgeCount + AnInWeight * NInfo^.TheNode.InEdgeCount)
+        else
+        if (NInfo^.TheNode.OutEdgeCount > 0) then
+          NInfo^.TmpDrawPos := GetWantedDrawPosByAvgOut(NInfo)
+        else
+          NInfo^.TmpDrawPos := GetWantedDrawPosByAvgIn(NInfo);
+      end
+    else
+    if AnOutWeight > 0 then
+      for NodeIdx := 0 to Level.Count - 1 do begin
+        NInfo := @NodeInfos[ALvlIdx, NodeIdx];
+        NInfo^.TmpDrawPos := GetWantedDrawPosByAvgOut(NInfo);
+      end
+    else
+      for NodeIdx := 0 to Level.Count - 1 do begin
+        NInfo := @NodeInfos[ALvlIdx, NodeIdx];
+        NInfo^.TmpDrawPos := GetWantedDrawPosByAvgIn(NInfo);
+      end;
+
+  end;
+
+  procedure AdjustNodesInLevel(ALvlIdx, AMinDrawPos, AMaxDrawPos: integer);
+  var
+    Level: TLvlGraphLevel;
+    i, NodeIdx: Integer;
+    PushUpNeeded, PushUpAllowed, FreeGapAbove: Integer;
+    CurGroupWeight, CurGroupCnt, WantedPos: Integer;
+    NInfo, NInfoPrev, PushNode, PushNodePrev: PNodeInfo;
+    Node: TLvlGraphNode;
+  begin
+    Level := Levels[ALvlIdx];
+    if Level.Count = 0 then
+      exit;
+
+    NInfoPrev := @NodeInfos[ALvlIdx, 0];
+    if (NInfoPrev^.TmpDrawPos <> DRAWPOS_UNKOWN) and
+       (NInfoPrev^.TmpDrawPos >= AMinDrawPos + NInfoPrev^.DrawPosGapAbove)
+    then
+      NInfoPrev^.CurDrawPos := NInfoPrev^.TmpDrawPos
+    else
+      NInfoPrev^.CurDrawPos := AMinDrawPos + NInfoPrev^.DrawPosGapAbove;
+    NInfoPrev^.TheNode.DrawCenter := NInfoPrev^.CurDrawPos;
+
+    for NodeIdx := 1 to Level.Count - 1 do begin
+      NInfo := @NodeInfos[ALvlIdx, NodeIdx];
+      Node := NInfo^.TheNode;
+      if NInfo^.TmpDrawPos <> DRAWPOS_UNKOWN then begin
+        NInfo^.CurDrawPos := NInfo^.TmpDrawPos;
+        PushUpNeeded := (NInfoPrev^.CurDrawPos + NInfo^.DrawPosGapAbove) - NInfo^.TmpDrawPos;
+      end
+      else begin
+        NInfo^.CurDrawPos := NInfoPrev^.CurDrawPos + NInfo^.DrawPosGapAbove;
+        PushUpNeeded := 0;
+      end;
+
+      if PushUpNeeded > 0 then begin
+        NInfo^.CurDrawPos := NInfo^.TmpDrawPos + PushUpNeeded; // default pos
+        PushUpAllowed := 0;
+        // try to push up prev node
+        CurGroupWeight := 0; // negative: nodes have up-pull / positive: nodes have down-pull
+        CurGroupCnt := 0;
+        PushNode := NInfo;
+        while (PushNode <> nil) do begin
+          if PushNode^.TmpDrawPos <> DRAWPOS_UNKOWN then begin
+            CurGroupWeight := CurGroupWeight + PushNode^.TmpDrawPos - PushNode^.CurDrawPos;
+            inc(CurGroupCnt);
+          end;
+
+          if PushNode^.TheNodeIdx = 0 then begin
+            PushNodePrev := nil;
+            i := AMinDrawPos;
+          end
+          else begin
+            PushNodePrev := @NodeInfos[ALvlIdx, PushNode^.TheNodeIdx-1];
+            i := PushNodePrev^.CurDrawPos;
+          end;
+
+          FreeGapAbove := PushNode^.CurDrawPos - PushNode^.DrawPosGapAbove - i;
+          if (FreeGapAbove = 0) and (PushNodePrev = nil) then
+            break; // can not push any further
+          if (FreeGapAbove > 0) then begin
+            // push
+            if CurGroupWeight >= 0 then
+              break; // can not pull up
+            Assert((CurGroupCnt > 0) or (CurGroupWeight = 0), 'AdjustNodesInLevel: (CurGroupCnt > 0) or (CurGroupWeight = 0)');
+            i := 0;
+            if CurGroupCnt > 0 then
+              i := -(CurGroupWeight - CurGroupCnt div 2) div CurGroupCnt;
+            i := Min(Min(i, PushUpNeeded), FreeGapAbove);
+            PushUpAllowed := PushUpAllowed + i;
+            PushUpNeeded := PushUpNeeded - i;
+
+            if (PushUpNeeded <= 0) or (i < FreeGapAbove) then
+              break;
+            CurGroupWeight := CurGroupWeight + i * CurGroupCnt;
+          end;
+
+          PushNode := PushNodePrev;
+        end; // while (PushNode <> nil) do begin
+
+        if NInfo^.CurDrawPos - PushUpAllowed > AMaxDrawPos then // force pushup
+          PushUpAllowed := NInfo^.CurDrawPos - AMaxDrawPos;
+
+        if PushUpAllowed > 0 then begin
+          WantedPos := NInfo^.CurDrawPos - PushUpAllowed;
+          NInfo^.CurDrawPos := WantedPos;
+          NInfo^.TheNode.DrawCenter := WantedPos;
+          PushNode := NInfo;
+          i := 0; // the current (first) node wants to move
+          while (PushNode <> nil) and (PushNode^.TheNodeIdx > 0) do begin
+            WantedPos := WantedPos - PushNode^.DrawPosGapAbove;
+            PushNodePrev := @NodeInfos[ALvlIdx, PushNode^.TheNodeIdx-1];
+            if PushNodePrev^.CurDrawPos <= WantedPos then
+              break;
+            PushNodePrev^.CurDrawPos := WantedPos;
+            PushNodePrev^.TheNode.DrawCenter := WantedPos;
+            PushNode := PushNodePrev;
+          end;
+        end;
+      end
+
+      else // if PushUpNeeded > 0 then begin
+      if (NInfoPrev^.TmpDrawPos = DRAWPOS_UNKOWN) then begin
+        // re-distribute nodes with unknown weight to avg between upper/lower
+        // They depend on the nodes on the other side, but that is a cyclic dependecy....
+        PushNode := NInfoPrev;
+        CurGroupCnt := 1;
+        while (PushNode <> nil) and (PushNode^.TmpDrawPos = DRAWPOS_UNKOWN) do begin
+          PushNodePrev := PushNode; // node below
+          inc(CurGroupCnt);
+          if PushNode^.TheNodeIdx > 0 then
+            PushNode := @NodeInfos[ALvlIdx, PushNode^.TheNodeIdx-1]
+          else
+            PushNode := nil;
+        end;
+        FreeGapAbove := 0;
+        if PushNode <> nil then
+          FreeGapAbove := NInfo^.CurDrawPos - NInfo^.DrawPosGapAbove - NInfoPrev^.CurDrawPos;
+        PushNode := NInfoPrev;
+        PushNodePrev := NInfo;
+        while (PushNode <> nil) and (PushNode^.TmpDrawPos = DRAWPOS_UNKOWN) do begin
+          i := FreeGapAbove div CurGroupCnt;
+          WantedPos := PushNodePrev^.CurDrawPos - PushNodePrev^.DrawPosGapAbove - i;
+          FreeGapAbove := FreeGapAbove - i;
+          dec(CurGroupCnt);
+          PushNode^.CurDrawPos := WantedPos;
+          PushNode^.TheNode.DrawCenter := WantedPos;
+          PushNodePrev := PushNode;
+          if PushNode^.TheNodeIdx > 0 then
+            PushNode := @NodeInfos[ALvlIdx, PushNode^.TheNodeIdx-1]
+          else
+            PushNode := nil;
+        end;
+      end;
+
+      Node.DrawCenter := NInfo^.CurDrawPos;
+      NInfoPrev:= NInfo;
+    end;
+  end;
+
+  procedure ProcessSubGraph(ALowLevelIdx, AHighLevelIdx: integer);
+  var
+    MaxLevelCount, LvlIdx: integer;
+    j, c, MaxDrawPos, MaxLvlIdx: integer;
+    Node: TLvlGraphNode;
+    Level: TLvlGraphLevel;
+    NInfo, NInfoPrev: PNodeInfo;
+  begin
+    if AHighLevelIdx <= ALowLevelIdx then
+      exit;
+    MaxLvlIdx := -1;
+    MaxLevelCount := 0;
+    MaxDrawPos := 0;
+    SetLength(NodeInfos, LevelCount);
+    NInfoPrev := nil;
+    for LvlIdx := ALowLevelIdx to AHighLevelIdx do begin
+      Level := Levels[LvlIdx];
+      if Level.Count > MaxLevelCount then
+        MaxLevelCount := Level.Count;
+      SetLength(NodeInfos[LvlIdx], Level.Count);
+      c := Level.Count - 1;
+      for j := 0 to c do begin
+        Node := Level.Nodes[j];
+        NInfo := @NodeInfos[LvlIdx,j];
+        NInfo^.TheNode := Node;
+        NInfo^.TheNodeIdx := j;
+        NInfo^.TheLevelIdx := LvlIdx;
+        NInfo^.CurDrawPos := Node.DrawCenter;
+        if j = 0 then
+          NInfo^.DrawPosGapAbove := NInfo^.CurDrawPos
+        else
+          NInfo^.DrawPosGapAbove := NInfo^.CurDrawPos - NInfoPrev^.CurDrawPos;
+        NInfoPrev := NInfo;
+      end;
+      if (c > 0) and (Node.DrawCenter > MaxDrawPos) then begin
+        MaxDrawPos := Node.DrawCenter;
+        MaxLvlIdx := LvlIdx;
+      end;
+    end;
+    if MaxLvlIdx < 0 then
+      exit;
+
+
+    for LvlIdx := MaxLvlIdx+1 to AHighLevelIdx do begin
+      PreComputeWantedPositions(LvlIdx, 1, 0);
+      AdjustNodesInLevel(LvlIdx, 0, MaxDrawPos);
+    end;
+    for LvlIdx := MaxLvlIdx-1 downto ALowLevelIdx do begin
+      PreComputeWantedPositions(LvlIdx, 0, 1);
+      AdjustNodesInLevel(LvlIdx, 0, MaxDrawPos);
+    end;
+
+    for j := 0 to 1 do begin
+      for LvlIdx := ALowLevelIdx to AHighLevelIdx do begin
+        PreComputeWantedPositions(LvlIdx, 1, 1);
+        AdjustNodesInLevel(LvlIdx, 0, MaxDrawPos);
+      end;
+      for LvlIdx := AHighLevelIdx downto ALowLevelIdx do begin
+        PreComputeWantedPositions(LvlIdx, 1, 1);
+        AdjustNodesInLevel(LvlIdx, 0, MaxDrawPos);
+      end;
+    end;
+  end;
+
+var
+  i: Integer;
+begin
+  For i := 0 to SubGraphCount-1 do
+    ProcessSubGraph(SubGraphs[i].LowestLevel, SubGraphs[i].HighestLevel);
 end;
 
 procedure TLvlGraph.SetColors(Palette: TLazCtrlPalette);
@@ -3512,7 +4936,9 @@ begin
         raise Exception.Create('');
       if Edge.Target.FInEdges.IndexOf(Edge)<0 then
         raise Exception.Create('');
-      if WithBackEdge and (Edge.BackEdge<>Edge.IsBackEdge) then
+      // An edge can EITHER be marked "BackEdge" or be "IsBackEdge" (aka target is before source).
+      // An egge is not allowed ot be both.
+      if WithBackEdge and Edge.BackEdge and Edge.IsBackEdge then
         raise Exception.Create('Edge.BackEdge '+Edge.AsString+' Edge.BackEdge='+dbgs(Edge.BackEdge)+' Edge.IsBackEdge='+dbgs(Edge.IsBackEdge)+' Source.Index='+dbgs(Edge.Source.Level.Index)+' Target.Index='+dbgs(Edge.Target.Level.Index));
     end;
     for j:=0 to Node.InEdgeCount-1 do begin
@@ -3565,6 +4991,8 @@ begin
   OldGraph:=Source.Graph;
   Source.FOutEdges.Remove(Self);
   Target.FInEdges.Remove(Self);
+  Source.FOutWeight-=FWeight;
+  Target.FInWeight-=FWeight;
   FSource:=nil;
   FTarget:=nil;
   if OldGraph<>nil then
@@ -3575,6 +5003,26 @@ end;
 function TLvlGraphEdge.IsBackEdge: boolean;
 begin
   Result:=Source.Level.Index>=Target.Level.Index;
+end;
+
+procedure TLvlGraphEdge.RevertDirection;
+var
+  t: TLvlGraphNode;
+begin
+  Source.FOutEdges.Remove(Self);
+  Target.FInEdges.Remove(Self);
+  Source.FOutWeight-=FWeight;
+  Target.FInWeight-=FWeight;
+
+  t := FSource;
+  FSource := FTarget;
+  FTarget := t;
+
+  Source.FOutEdges.Add(Self);
+  Target.FInEdges.Add(Self);
+  Source.FOutWeight+=FWeight;
+  Target.FInWeight+=FWeight;
+  FBackEdge := not FBackEdge;
 end;
 
 function TLvlGraphEdge.GetVisibleSourceNodes: TLvlGraphNodeArray;
@@ -3604,6 +5052,12 @@ var
   end;
 
 begin
+  if BackEdge then begin
+    FBackEdge := False;
+    Result := GetVisibleTargetNodesAsAVLTree;
+    FBackEdge := True;
+    exit;
+  end;
   Result:=TAvlTree.Create;
   Visited:=TAvlTree.Create;
   try
@@ -3640,10 +5094,16 @@ var
   end;
 
 begin
+  if BackEdge then begin
+    FBackEdge := False;
+    Result := GetVisibleSourceNodesAsAVLTree;
+    FBackEdge := True;
+    exit;
+  end;
   Result:=TAvlTree.Create;
   Visited:=TAvlTree.Create;
   try
-    Search(Source);
+    Search(Target);
   finally
     Visited.Free;
   end;
@@ -3699,6 +5159,11 @@ begin
     Level:=Graph.Levels[1]
   else
     fLevel:=nil;
+end;
+
+procedure TLvlGraphNode.SetDrawCenter(AValue: integer);
+begin
+  DrawPosition := AValue-(DrawSize div 2);
 end;
 
 procedure TLvlGraphNode.SetDrawSize(AValue: integer);
@@ -3794,6 +5259,15 @@ begin
     end;
   end;
   SelectionChanged;
+end;
+
+procedure TLvlGraphNode.SetSubGraph(AValue: Integer);
+begin
+  if FSubGraph = AValue then Exit;
+  if (AValue < 0) or (AValue >= FGraph.SubGraphCount) then
+    raise Exception.Create('subgraph index out of range');
+
+  FSubGraph := AValue;
 end;
 
 procedure TLvlGraphNode.SetVisible(AValue: boolean);
@@ -3903,28 +5377,52 @@ begin
   Result:=NodeAVLTreeToNodeArray(GetVisibleSourceNodesAsAVLTree,true,true);
 end;
 
-function TLvlGraphNode.GetVisibleSourceNodesAsAVLTree: TAvlTree;
-// return all visible nodes connected in Source direction
-
-  procedure Search(Node: TLvlGraphNode);
-  var
-    i: Integer;
-  begin
-    if Node=nil then exit;
-    if Node.Visible then begin
-      Result.Add(Node);
-    end else begin
-      for i:=0 to Node.InEdgeCount-1 do
-        Search(Node.InEdges[i].Source);
-    end;
-  end;
-
+procedure SearchForTargets(Node: TLvlGraphNode; AResult, Visited: TAvlTree);
 var
   i: Integer;
 begin
+  if Node=nil then exit;
+  if Visited.Find(Node)<>nil then exit;
+  Visited.Add(Node);
+  if Node.Visible then begin
+    AResult.Add(Node);
+  end else begin
+    for i:=0 to Node.OutEdgeCount-1 do
+      SearchForTargets(Node.OutEdges[i].Target, AResult, Visited);
+  end;
+end;
+
+procedure SearchForSources(Node: TLvlGraphNode; AResult: TAvlTree);
+var
+  i: Integer;
+begin
+  if Node=nil then exit;
+  if Node.Visible then begin
+    AResult.Add(Node);
+  end else begin
+    for i:=0 to Node.InEdgeCount-1 do
+      SearchForSources(Node.InEdges[i].Source, AResult);
+  end;
+end;
+
+function TLvlGraphNode.GetVisibleSourceNodesAsAVLTree: TAvlTree;
+// return all visible nodes connected in Source direction
+var
+  i: Integer;
+  Visited: TAvlTree;
+begin
   Result:=TAvlTree.Create;
-  for i:=0 to InEdgeCount-1 do
-    Search(InEdges[i].Source);
+  Visited:=TAvlTree.Create;
+  try
+    for i:=0 to InEdgeCount-1 do
+      if not InEdges[i].BackEdge then
+        SearchForSources(InEdges[i].Source, Result);
+    for i:=0 to OutEdgeCount-1 do
+      if OutEdges[i].BackEdge then
+        SearchForTargets(OutEdges[i].Target, Result, Visited);
+  finally
+    Visited.Free;
+  end;
 end;
 
 function TLvlGraphNode.GetVisibleTargetNodes: TLvlGraphNodeArray;
@@ -3937,36 +5435,23 @@ function TLvlGraphNode.GetVisibleTargetNodesAsAVLTree: TAvlTree;
 // return all visible nodes connected in Target direction
 var
   Visited: TAvlTree;
-
-  procedure Search(Node: TLvlGraphNode);
-  var
-    i: Integer;
-  begin
-    if Node=nil then exit;
-    if Visited.Find(Node)<>nil then exit;
-    Visited.Add(Node);
-    if Node.Visible then begin
-      Result.Add(Node);
-    end else begin
-      for i:=0 to Node.OutEdgeCount-1 do
-        Search(Node.OutEdges[i].Target);
-    end;
-  end;
-
-var
   i: Integer;
 begin
   Result:=TAvlTree.Create;
   Visited:=TAvlTree.Create;
   try
     for i:=0 to OutEdgeCount-1 do
-      Search(OutEdges[i].Target);
+      if not OutEdges[i].BackEdge then
+        SearchForTargets(OutEdges[i].Target, Result, Visited);
+    for i:=0 to InEdgeCount-1 do
+      if InEdges[i].BackEdge then
+        SearchForSources(InEdges[i].Source, Result);
   finally
     Visited.Free;
   end;
 end;
 
-function TLvlGraphNode.DrawCenter: integer;
+function TLvlGraphNode.GetDrawCenter: integer;
 begin
   Result:=DrawPosition+(DrawSize div 2);
 end;

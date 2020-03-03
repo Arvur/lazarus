@@ -58,13 +58,12 @@ type
   private
     fSettings: TConvertSettings;
     fOrigFormat: TLRSStreamOriginalFormat;
-    function FixWideString(aInStream, aOutStream: TMemoryStream): TModalResult;
-    function GetLFMFilename(const DfmFilename: string; KeepCase: boolean): string;
   public
     constructor Create;
     destructor Destroy; override;
     function ConvertDfmToLfm(const aFilename: string): TModalResult;
-    function Convert(const DfmFilename: string): TModalResult;
+    function Convert(const DfmFilename: string;
+      DisplaySuccessMessage: Boolean): TModalResult;
   public
     property Settings: TConvertSettings read fSettings write fSettings;
   end;
@@ -147,54 +146,7 @@ begin
         and (TLFMObjectNode(Node).TypeName<>'');
 end;
 
-{ TDFMConverter }
-
-constructor TDFMConverter.Create;
-begin
-  inherited Create;
-end;
-
-destructor TDFMConverter.Destroy;
-begin
-  inherited Destroy;
-end;
-
-function TDFMConverter.Convert(const DfmFilename: string): TModalResult;
-var
-  s: String;
-  Urgency: TMessageLineUrgency;
-begin
-  Result:=ConvertDfmToLfm(DfmFilename);
-  if Result=mrOK then begin
-    if fOrigFormat=sofBinary then begin
-      s:=Format(lisFileSIsConvertedToTextFormat, [DfmFilename]);
-      Urgency:=mluHint;
-    end
-    else begin
-      s:=Format(lisFileSHasIncorrectSyntax, [DfmFilename]);
-      Urgency:=mluError;
-    end;
-    if Assigned(fSettings) then
-      fSettings.AddLogLine(Urgency, s, DfmFilename)
-    else
-      ShowMessage(s);
-  end;
-end;
-
-function TDFMConverter.GetLFMFilename(const DfmFilename: string;
-  KeepCase: boolean): string;
-begin
-  if DfmFilename<>'' then begin
-    // platform and fpc independent unitnames are lowercase, so are the lfm files
-    Result:=lowercase(ExtractFilenameOnly(DfmFilename));
-    if KeepCase then
-      Result:=ExtractFilenameOnly(DfmFilename);
-    Result:=ExtractFilePath(DfmFilename)+Result+'.lfm';
-  end else
-    Result:='';
-end;
-
-function TDFMConverter.FixWideString(aInStream, aOutStream: TMemoryStream): TModalResult;
+function FixWideString(aInStream, aOutStream: TMemoryStream): TModalResult;
 // Convert Windows WideString syntax (#xxx) to UTF8
 
   function UnicodeNumber(const InS: string; var Ind: integer): string;
@@ -285,6 +237,46 @@ begin
   aOutStream.Write(OutS[1], Length(OutS));
 end;
 
+{ TDFMConverter }
+
+constructor TDFMConverter.Create;
+begin
+  inherited Create;
+end;
+
+destructor TDFMConverter.Destroy;
+begin
+  inherited Destroy;
+end;
+
+function TDFMConverter.Convert(const DfmFilename: string;
+  DisplaySuccessMessage: Boolean): TModalResult;
+var
+  s: String;
+  Urgency: TMessageLineUrgency;
+begin
+  Result:=ConvertDfmToLfm(DfmFilename);
+  if Result=mrOK then begin
+    if fOrigFormat=sofBinary then begin
+      if DisplaySuccessMessage then
+        s:=Format(lisFileSIsConvertedToTextFormat, [DfmFilename])
+      else
+        s:='';
+      Urgency:=mluHint;
+    end
+    else begin
+      s:=Format(lisFileSHasIncorrectSyntax, [DfmFilename]);
+      Urgency:=mluError;
+    end;
+    if s <> '' then begin
+      if Assigned(fSettings) then
+        fSettings.AddLogLine(Urgency, s, DfmFilename)
+      else
+        ShowMessage(s);
+    end;
+  end;
+end;
+
 function TDFMConverter.ConvertDfmToLfm(const aFilename: string): TModalResult;
 var
   DFMStream, LFMStream, Utf8LFMStream: TMemoryStreamUTF8;
@@ -325,7 +317,7 @@ begin
     FixWideString(LFMStream, Utf8LFMStream);
     // Save the converted file.
     try
-      Utf8LFMStream.SaveToFile(aFilename);
+      Utf8LFMStream.SaveToFile(ChangeFileExt(aFilename, '.lfm'));
     except
       on E: Exception do begin
         Result:=MessageDlg(lisCodeToolsDefsWriteError,
@@ -573,7 +565,6 @@ end;
 function TLFMFixer.ShowConvertLFMWizard: TModalResult;
 var
   FixLFMDialog: TFixLFMDialog;
-  PrevCursor: TCursor;
 begin
   Result:=mrCancel;
   FixLFMDialog:=TFixLFMDialog.Create(nil, self);
@@ -587,14 +578,7 @@ begin
     and ((fSettings.TypeReplaceMode=raAutomatic) or not fHasMissingObjectTypes) then
       Result:=ReplaceAndRemoveAll  // Can return mrRetry.
     else begin
-      // Cursor is earlier set to HourGlass. Show normal cursor while in dialog.
-      PrevCursor:=Screen.Cursor;
-      Screen.Cursor:=crDefault;
-      try
-        Result:=FixLFMDialog.ShowModal;
-      finally
-        Screen.Cursor:=PrevCursor;
-      end;
+      Result:=FixLFMDialog.ShowModal;
     end;
   finally
     FixLFMDialog.Free;
@@ -741,7 +725,7 @@ begin
   PropertiesText.Caption:=lisProperties;
   TypesText.Caption:=lisTypes;
   ReplaceAllButton.Caption:=lisReplaceRemoveUnknown;
-  TIDEImages.AssignImage(ReplaceAllButton.Glyph, 'laz_refresh');
+  IDEImages.AssignImage(ReplaceAllButton, 'laz_refresh');
   EditorOpts.GetHighlighterSettings(SynLFMSyn1);
   EditorOpts.GetSynEditSettings(LFMSynEdit);
 end;

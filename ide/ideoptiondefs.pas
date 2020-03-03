@@ -32,9 +32,15 @@ unit IDEOptionDefs;
 interface
 
 uses
-  Classes, SysUtils, types, LCLProc, LazFileUtils, Laz2_XMLCfg,
-  Forms, Controls, Buttons, BaseIDEIntf, LazConfigStorage, LazUTF8,
-  IDEWindowIntf, IDEExternToolIntf, LazConf;
+  Classes, SysUtils, types,
+  // LCL
+  LCLProc, Forms, Controls,
+  // LazUtils
+  LazFileUtils, LazConfigStorage, Laz2_XMLCfg, LazUTF8,
+  // IdeIntf
+  BaseIDEIntf, IDEExternToolIntf,
+  // IDE
+  LazConf;
 
 type
   { TXMLOptionsStorage }
@@ -72,17 +78,17 @@ type
 type
   TNonModalIDEWindow = (
     nmiwNone, // empty/none/undefined
-    nmiwMainIDEName,
-    nmiwSourceNoteBookName,
-    nmiwMessagesViewName,
-    nmiwUnitDependenciesName,
-    nmiwCodeExplorerName,
-    nmiwFPDocEditorName,
-    nmiwClipbrdHistoryName,
+    nmiwMainIDE,
+    nmiwSourceNoteBook,
+    nmiwMessagesView,
+    nmiwUnitDependencies,
+    nmiwCodeExplorer,
+    nmiwFPDocEditor,
+    nmiwClipbrdHistory,
     nmiwPkgGraphExplorer,
     nmiwProjectInspector,
     nmiwEditorFileManager,
-    nmiwSearchResultsViewName,
+    nmiwSearchResultsView,
     nmiwAnchorEditor,
     nmiwTabOrderEditor,
     nmiwCodeBrowser,
@@ -96,11 +102,11 @@ const
   // on startup. These windows are opened automatically when needed.
 {  NonModalIDEWindowManualOpen = [
     nmiwNone,
-    nmiwMainIDEName,
-    nmiwSourceNoteBookName,
+    nmiwMainIDE,
+    nmiwSourceNoteBook,
     //nmiwDbgOutput,
     //nmiwDbgEvents,
-    nmiwSearchResultsViewName,
+    nmiwSearchResultsView,
     nmiwAnchorEditor
     ];
 }

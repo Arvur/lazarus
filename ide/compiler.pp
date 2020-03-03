@@ -38,10 +38,17 @@ unit Compiler;
 interface
 
 uses
-  Classes, SysUtils, LCLProc, Forms, Controls, contnrs, strutils,
-  IDEExternToolIntf, IDEMsgIntf, LazIDEIntf, MacroIntf, LazUTF8,
-  IDECmdLine, LazarusIDEStrConsts, CompilerOptions, Project,
-  DefineTemplates, TransferMacros, EnvironmentOpts, LazFileUtils;
+  Classes, SysUtils, contnrs, strutils,
+  // LazUtils
+  LazUTF8, LazFileUtils, LazUtilities, LazLoggerBase,
+  // LCL
+  Forms, Controls,
+  // Codetools
+  DefineTemplates, LinkScanner, CodeToolManager, TransferMacros,
+  // IdeIntf
+  IDEExternToolIntf, IDEMsgIntf, LazIDEIntf,
+  // IDE
+  IDECmdLine, LazarusIDEStrConsts, CompilerOptions, Project, EnvironmentOpts;
 
 type
   TOnCmdLineCreate = procedure(var CmdLine: string; var Abort:boolean) of object;
@@ -99,7 +106,7 @@ type
     procedure SetValue(aValue: string; aOrigLine: integer);
   protected
     procedure ParseEditKind; virtual;
-    procedure ParseOption(aDescr: string; aIndent: integer); virtual;
+    function ParseOption(aDescr: string; aIndent: integer): Boolean; virtual;
   public
     constructor Create(aOwnerGroup: TCompilerOptGroup);
     destructor Destroy; override;
@@ -132,7 +139,7 @@ type
     function OneCharOptions(aOptAndValue: string): TCompilerOpt;
   protected
     procedure ParseEditKind; override;
-    procedure ParseOption(aDescr: string; aIndent: integer); override;
+    function ParseOption(aDescr: string; aIndent: integer): Boolean; override;
   public
     constructor Create(aOwnerReader: TCompilerOptReader; aOwnerGroup: TCompilerOptGroup);
     destructor Destroy; override;
@@ -274,7 +281,8 @@ var
   Title: String;
   TargetOS: String;
   TargetCPU: String;
-  TargetFilename: String;
+  TargetFilename, SubTool: String;
+  CompilerKind: TPascalCompiler;
 begin
   Result:=mrCancel;
   if ConsoleVerbosity>=1 then
@@ -336,7 +344,11 @@ begin
     Tool.CmdLineParams:=CmdLine;
     Tool.Process.CurrentDirectory:=WorkingDir;
     Tool.CurrentDirectoryIsTestDir:=CurrentDirectoryIsTestDir;
-    FPCParser:=TFPCParser(Tool.AddParsers(SubToolFPC));
+    SubTool:=SubToolFPC;
+    CompilerKind:=CodeToolBoss.GetPascalCompilerForDirectory(WorkingDir);
+    if CompilerKind=pcPas2js then
+      SubTool:=SubToolPas2js;
+    FPCParser:=TFPCParser(Tool.AddParsers(SubTool));
     FPCParser.ShowLinesCompiled:=EnvironmentOptions.MsgViewShowFPCMsgLinesCompiled;
     FPCParser.HideHintsSenderNotUsed:=not AProject.CompilerOptions.ShowHintsForSenderNotUsed;
     FPCParser.HideHintsUnitNotUsedInMainSource:=not AProject.CompilerOptions.ShowHintsForUnusedUnitsInMainSrc;
@@ -461,14 +473,14 @@ begin
     AddChoicesByOptOld;
 end;
 
-procedure TCompilerOpt.ParseOption(aDescr: string; aIndent: integer);
+function TCompilerOpt.ParseOption(aDescr: string; aIndent: integer): Boolean;
 var
   i: Integer;
 begin
+  Result := True;
   fIndentation := aIndent;
+  if aDescr[1] <> '-' then Exit(False);     // Skip free text explanations.
   // Separate the actual option and description from each other
-  if aDescr[1] <> '-' then
-    raise Exception.CreateFmt('Option "%s" does not start with "-"', [aDescr]);
   i := 1;
   while (i <= Length(aDescr)) and (aDescr[i] <> ' ') do
     Inc(i);
@@ -742,11 +754,12 @@ begin
   fEditKind := oeGroup;
 end;
 
-procedure TCompilerOptGroup.ParseOption(aDescr: string; aIndent: integer);
+function TCompilerOptGroup.ParseOption(aDescr: string; aIndent: integer): Boolean;
 var
   i: Integer;
 begin
-  inherited ParseOption(aDescr, aIndent);
+  Result := inherited ParseOption(aDescr, aIndent);
+  if not Result then Exit;
   i := Length(fOption);
   fIncludeNegativeOpt := Copy(fOption, i-3, 4) = '[NO]';
   if fIncludeNegativeOpt then
@@ -1426,7 +1439,7 @@ procedure TCompilerOptThread.StartParsing;
 begin
   if fStartedOnce then
     WaitFor;
-  fReader.CompilerExecutable:=LazarusIDE.GetFPCompilerFilename;
+  fReader.CompilerExecutable:=LazarusIDE.GetCompilerFilename;
   fReader.UpdateTargetParam;
   Start;
   fStartedOnce:=true;

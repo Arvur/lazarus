@@ -9,13 +9,15 @@ interface
 
 uses
   lazfppkgmanagerintf, fppkg_const, fppkg_details, fppkg_mainfrm, fppkg_optionsfrm, laz_pkgrepos, 
-  FppkgWorkerThread, LazarusPackageIntf;
+  FppkgWorkerThread, Fppkg_EnvironmentOptions, Fppkg_Interface, fppkg_packageoptionsfrm, 
+  fppkg_packagevariant, fppkg_packagefileoptionsfrm, fppkg_initializeoptionsfrm, LazarusPackageIntf;
 
 implementation
 
 procedure Register;
 begin
   RegisterUnit('lazfppkgmanagerintf', @lazfppkgmanagerintf.Register);
+  RegisterUnit('Fppkg_EnvironmentOptions', @Fppkg_EnvironmentOptions.Register);
 end;
 
 initialization

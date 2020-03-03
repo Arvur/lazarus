@@ -30,12 +30,15 @@ unit IDEOptionsDlg;
 interface
 
 uses
-  Classes, SysUtils, LCLProc,
-  LCLType, Controls, Forms, ComCtrls, Buttons, ButtonPanel, ExtCtrls, StdCtrls,
-  Dialogs, TreeFilterEdit,
+  Classes, SysUtils,
+  // LCL
+  LCLProc, LCLType, Controls, Forms, ComCtrls, Buttons, ButtonPanel,
+  ExtCtrls, StdCtrls, Dialogs,
+  // LazControls
+  TreeFilterEdit,
   // IdeIntf
-  IDEWindowIntf, IDEOptionsIntf, IDECommands, IDEHelpIntf, ProjectIntf,
-  IDEImagesIntf,
+  IDEWindowIntf, IDEOptionsIntf, IDEOptEditorIntf, IDECommands, IDEHelpIntf,
+  ProjectIntf, IDEImagesIntf,
   // IDE
   EnvironmentOpts, EditorOptions, BuildModesManager, Compiler_ModeMatrix,
   Project, LazarusIDEStrConsts,
@@ -55,7 +58,6 @@ type
 
   TIDEOptionsDialog = class(TAbstractOptionsEditorDialog)
     BuildModeComboBox: TComboBox;
-    UseBuildModeCheckBox: TCheckBox;
     BuildModeManageButton: TButton;
     BuildModeSelectPanel: TPanel;
     ButtonPanel: TButtonPanel;
@@ -64,9 +66,8 @@ type
     CatTVSplitter: TSplitter;
     EditorsPanel: TScrollBox;
     FilterEdit: TTreeFilterEdit;
+    BuildModesLabel: TLabel;
     SettingsPanel: TPanel;
-    procedure FormCreate(Sender: TObject);
-    procedure UseBuildModeCheckBoxChange(Sender: TObject);
     procedure BuildModeComboBoxSelect(Sender: TObject);
     procedure BuildModeManageButtonClick(Sender: TObject);
     procedure CategoryTreeChange(Sender: TObject; Node: TTreeNode);
@@ -96,6 +97,7 @@ type
     procedure SaveIDEOptions(Sender: TObject; AOptions: TAbstractIDEOptions);
     procedure CreateEditors;
     function SearchEditorNode(AEditor: TAbstractIDEOptionsEditorClass): TTreeNode;
+    function SearchEditorNode(const IDEOptionsEditorClassName: string): TTreeNode;
     function PassesFilter(ARec: PIDEOptionsGroupRec): Boolean;
     procedure SetSettings(const AValue: TIDEOptionsEditorSettings);
     function AllBuildModes: boolean;
@@ -110,6 +112,7 @@ type
     procedure OpenEditor(AEditor: TAbstractIDEOptionsEditorClass); override;
     procedure OpenEditor(GroupIndex, AIndex: integer); override;
     function FindEditor(AEditor: TAbstractIDEOptionsEditorClass): TAbstractIDEOptionsEditor; override;
+    function FindEditor(const IDEOptionsEditorClassName: string): TAbstractIDEOptionsEditor; override;
     function FindEditor(GroupIndex, AIndex: integer): TAbstractIDEOptionsEditor; override;
     function FindEditorClass(GroupIndex, AIndex: integer): TAbstractIDEOptionsEditorClass; override;
     function ResetFilter: Boolean; override;
@@ -127,27 +130,6 @@ implementation
 
 {$R *.lfm}
 
-
-const
-  LazUtilsPkg = 'LazUtils';
-
-function HasLazUtilsDependency: Boolean;
-begin
-  Result := Assigned(Project1.FindDependencyByName('LCL'))
-         or Assigned(Project1.FindDependencyByName(LazUtilsPkg));
-end;
-
-procedure AddLazUtilsDependency;
-var
-  Dep: TPkgDependency;
-begin
-  if HasLazUtilsDependency then Exit;
-  Project1.AddPackageDependency(LazUtilsPkg);
-  Dep:=Project1.FindDependencyByName(LazUtilsPkg);
-  if Assigned(Dep) then
-    PackageGraph.OpenDependency(Dep,false);
-end;
-
 { TIDEOptionsDialog }
 
 constructor TIDEOptionsDialog.Create(AOwner: TComponent);
@@ -156,12 +138,9 @@ begin
   FPrevEditor := nil;
   FEditorsCreated := False;
   FEditorToOpen := nil;
-  SettingsPanel.Constraints.MinHeight:=0;
   SetBuildModeVisibility(False);
-  UseBuildModeCheckBox.Caption:=lisBuildModes;
-
-  IDEDialogLayoutList.ApplyLayout(Self);
   Caption := dlgIDEOptions;
+  BuildModesLabel.Caption := lisBuildModes;
   ButtonPanel.OKButton.Caption := lisMenuOk;
   ButtonPanel.OKButton.OnClick := @OKButtonClick;
   ButtonPanel.OKButton.ModalResult := mrNone;
@@ -169,6 +148,8 @@ begin
   ButtonPanel.CancelButton.OnClick := @CancelButtonClick;
   ButtonPanel.HelpButton.Caption:= lisMenuHelp;
   ButtonPanel.HelpButton.OnClick := @HelpButtonClick;
+  IDEDialogLayoutList.ApplyLayout(Self);
+  BuildModeComboBox.DropDownCount := EnvironmentOptions.DropDownCount;
 end;
 
 procedure TIDEOptionsDialog.FormShow(Sender: TObject);
@@ -229,22 +210,10 @@ begin
   end;
 end;
 
-procedure TIDEOptionsDialog.UseBuildModeCheckBoxChange(Sender: TObject);
-begin
-  EnvironmentOptions.UseBuildModes:=(Sender as TCheckBox).Checked;
-  UpdateBuildModeButtons;
-end;
-
-procedure TIDEOptionsDialog.FormCreate(Sender: TObject);
-begin
-  TIDEImages.AssignImage(FilterEdit.Glyph, 'btnfiltercancel');
-end;
-
 procedure TIDEOptionsDialog.BuildModeComboBoxSelect(Sender: TObject);
 begin
-  if AllBuildModes then begin
-    ShowMessage(lisThisWillAllowChangingAllBuildModesAtOnceNotImpleme);
-  end
+  if AllBuildModes then
+    ShowMessage(lisThisWillAllowChangingAllBuildModesAtOnceNotImpleme)
   else begin
     Assert(BuildModeSelectPanel.Visible, 'BuildModeComboBoxSelect: BuildModeSelectPanel not Visible');
     SwitchBuildMode(BuildModeComboBox.Text);
@@ -591,6 +560,28 @@ begin
   Result := Traverse(CategoryTree.Items.GetFirstNode);
 end;
 
+function TIDEOptionsDialog.SearchEditorNode(
+  const IDEOptionsEditorClassName: string): TTreeNode;
+
+  function Traverse(ANode: TTreeNode): TTreeNode;
+  begin
+    Result := nil;
+    if ANode <> nil then
+    begin
+      if (ANode.Data <> nil)
+      and (CompareText(TObject(ANode.Data).ClassName,IDEOptionsEditorClassName)=0) then
+        Result := ANode;
+      if Result = nil then
+        Result := Traverse(ANode.GetFirstChild);
+      if Result = nil then
+        Result := Traverse(ANode.GetNextSibling);
+    end;
+  end;
+
+begin
+  Result := Traverse(CategoryTree.Items.GetFirstNode);
+end;
+
 function TIDEOptionsDialog.PassesFilter(ARec: PIDEOptionsGroupRec): Boolean;
 var
   i: Integer;
@@ -624,17 +615,8 @@ end;
 
 procedure TIDEOptionsDialog.UpdateBuildModeButtons;
 var
-  ManyBuildModes: Boolean;
   ModeMatrix: TCompOptModeMatrixFrame;
 begin
-  ManyBuildModes:=Project1.BuildModes.Count > 1;
-  if ManyBuildModes then
-    EnvironmentOptions.UseBuildModes := True;
-  UseBuildModeCheckBox.Checked:=EnvironmentOptions.UseBuildModes;
-  UseBuildModeCheckBox.Enabled := not ManyBuildModes;
-  BuildModeComboBox.Visible := EnvironmentOptions.UseBuildModes;
-  BuildModeManageButton.Visible := EnvironmentOptions.UseBuildModes;
-
   ModeMatrix:=TCompOptModeMatrixFrame(FindEditor(TCompOptModeMatrixFrame));
   if Assigned(ModeMatrix) then
     ModeMatrix.UpdateModes;
@@ -735,6 +717,18 @@ var
   Node: TTreeNode;
 begin
   Node := SearchEditorNode(AEditor);
+  if Node <> nil then
+    Result := TAbstractIDEOptionsEditor(Node.Data)
+  else
+    Result := nil;
+end;
+
+function TIDEOptionsDialog.FindEditor(const IDEOptionsEditorClassName: string
+  ): TAbstractIDEOptionsEditor;
+var
+  Node: TTreeNode;
+begin
+  Node := SearchEditorNode(IDEOptionsEditorClassName);
   if Node <> nil then
     Result := TAbstractIDEOptionsEditor(Node.Data)
   else

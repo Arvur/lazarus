@@ -8,6 +8,8 @@ msgstr ""
 "Language-Team: \n"
 "MIME-Version: 1.0\n"
 "Content-Transfer-Encoding: 8bit\n"
+"Language: ru\n"
+"X-Generator: Poedit 2.2.1\n"
 
 #: emsstrings.emsactive
 msgid "Scripting active."
@@ -25,6 +27,10 @@ msgstr "Сценарии редактора"
 msgid "Scripting not active. Selftest failed."
 msgstr "Сценарии отключены. Не прошло самотестирование."
 
+#: emsstrings.emsnotactiveverbose
+msgid "EditorMacroScript failed its self-test and is not active. Some macros may not work."
+msgstr "EditorMacroScript не прошёл самотестирование и отключился. Некоторые макросы могут не работать."
+
 #: emsstrings.emsnotsupported
 msgid "Scripting not active. Not supported on this platform or CPU."
 msgstr "Сценарии отключены. Они не поддерживаются на данной платформе."
@@ -38,10 +44,12 @@ msgid "Error in EditorMacroScript"
 msgstr "Ошибка пакета EditorMacroScript"
 
 #: emsstrings.emsselftestfailed
+#, object-pascal-format
 msgid "The package EditorMacroScript (pascalscript macros) has detected a problem and was deactivated.%0:sThe package failed its selftest with the message:%0:s\"%1:s\""
 msgstr "Пакет EditorMacroScript (сценарии PascalScript) обнаружил проблему и отключился.%0:sПакет не прошёл самотестирование с сообщением:%0:s\"%1:s\""
 
 #: emsstrings.emsselftestfailedlasttime
+#, object-pascal-format
 msgid "The package EditorMacroScript (pascalscript macros) has detected a problem and was deactivated.%0:sThe package selftest was not completed during the last start of the IDE."
 msgstr "Пакет EditorMacroScript (сценарии PascalScript) обнаружил проблему и отключился.%0:sПри последнем запуске IDE самотестирование пакета не было завершено."
 

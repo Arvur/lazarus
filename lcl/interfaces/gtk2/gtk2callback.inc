@@ -27,7 +27,7 @@ begin
   Result := DeliverMessage(Target, PaintMsg);
 
   if IsCustomControl then begin
-    WidgetInfo := GetWidgetInfo({%H-}PGtkWidget(TCustomControl(Target).Handle), False);
+    WidgetInfo := GetWidgetInfo({%H-}PGtkWidget(TCustomControl(Target).Handle));
     if WidgetInfo <> nil then
       WidgetInfo^.UpdateRect := Rect(0,0,0,0);
   end;
@@ -218,73 +218,69 @@ end;
 -------------------------------------------------------------------------------}
 function gtkRealizeAfterCB(Widget: PGtkWidget; Data: Pointer): GBoolean; cdecl;
 var
+  MainWidget, ClientWidget: PGtkWidget;
   WinWidgetInfo: PWidgetInfo;
-  LCLObject: TObject;
+  GdkWidget, GdkClient: PGDKWindow;
   NewEventMask: TGdkEventMask;
+  LCLObject: TObject;
   TheWinControl: TWinControl;
-  ClientWidget: PGtkWidget;
-  MainWidget: PGtkWidget;
 begin
-  Result := CallBackDefaultReturn;
-  //DebugLn(['gtkRealizeAfterCB ',GetWidgetDebugReport(Widget)]);
-
+  Result:=CallBackDefaultReturn;
   if Data=nil then ;
   {$IFDEF EventTrace}
   EventTrace('realizeafter', nil);
   {$ENDIF}
-
   MainWidget:=GetMainWidget(Widget);
-  WinWidgetInfo:=GetWidgetInfo(MainWidget,true);
+  Assert(Assigned(MainWidget), 'gtkRealizeAfterCB: MainWidget not assigned.');
+  WinWidgetInfo:=g_object_get_data(PGObject(MainWidget), 'widgetinfo');
+  Assert(Assigned(WinWidgetInfo), 'gtkRealizeAfterCB: WinWidgetInfo not assigned.');
   LCLObject:=GetLCLObject(MainWidget);
-  if (LCLObject<>nil) and (WinWidgetInfo<>nil) then begin
+  if LCLObject=nil then exit;
+  if (LCLObject is TWinControl) then
+    TheWinControl:=TWinControl(LCLObject)
+  else
+    TheWinControl:=nil;
+
+  // set extra signal masks after the widget window is created
+  // define extra events we're interrested in
+  //if TheWinControl<>nil then DbgOut(' ',TheWinControl.Name,':',TheWinControl.ClassName,' ',DbgS(TheWinControl.Handle));
+  //DebugLn(' Widget=',DbgS(Widget),' Fixed=',DbgS(GetFixedWidget(Widget)),' Main=',DbgS(GetMainWidget(Widget)));
+  if (TheWinControl<>nil) then begin
+    //DebugLn(['gtkRealizeAfterCB ',GetWidgetDebugReport(Widget)]);
+    {$IFDEF DebugGDK}BeginGDKErrorTrap;{$ENDIF}
+
+    GdkWidget:=GetControlWindow(Widget);
+    NewEventMask:=gdk_window_get_events(GdkWidget) or WinWidgetInfo^.EventMask;
+    gtk_widget_add_events(Widget,NewEventMask);
+    gdk_window_set_events(GdkWidget,NewEventMask);
+
     ClientWidget:=GetFixedWidget(Widget);
-    if (LCLObject is TWinControl) then
-      TheWinControl:=TWinControl(LCLObject)
-    else
-      TheWinControl:=nil;
-
-    // set extra signal masks after the widget window is created
-    // define extra events we're interrested in
-    //write('GTKRealizeAfterCB ');
-    //if TheWinControl<>nil then DbgOut(' ',TheWinControl.Name,':',TheWinControl.ClassName,' ',DbgS(TheWinControl.Handle));
-    //DebugLn(' Widget=',DbgS(Widget),' Fixed=',DbgS(GetFixedWidget(Widget)),' Main=',DbgS(GetMainWidget(Widget)));
-    if (TheWinControl<>nil) then begin
-      //DebugLn(['gtkRealizeAfterCB ',GetWidgetDebugReport(Widget)]);
-      {$IFDEF DebugGDK}BeginGDKErrorTrap;{$ENDIF}
-
-      NewEventMask:=gdk_window_get_events(GetControlWindow(Widget))
-                    or WinWidgetInfo^.EventMask;
-      gtk_widget_add_events(Widget,NewEventMask);
-      gdk_window_set_events(GetControlWindow(Widget),NewEventMask);
-
-      if (ClientWidget<>nil) and (GetControlWindow(ClientWidget)<>nil)
-      and (GetControlWindow(ClientWidget)<>GetControlWindow(Widget)) then begin
-        //DebugLn(['gtkRealizeAfterCB ClientWindow<>Window']);
-        NewEventMask:=gdk_window_get_events(GetControlWindow(ClientWidget))
-                      or WinWidgetInfo^.EventMask;
-        gtk_widget_add_events(ClientWidget,WinWidgetInfo^.EventMask);
-        gdk_window_set_events(GetControlWindow(ClientWidget),NewEventMask);
-      end;
-      //DebugLn('BBB1 ',DbgS(NewEventMask),8),' ',DbgS(Cardinal(gdk_window_get_events(Widget^.Window)));
-      {$IFDEF DebugGDK}EndGDKErrorTrap;{$ENDIF}
-    end;
-
-    if TheWinControl<>nil then
+    GdkClient:=GetControlWindow(ClientWidget);
+    if (ClientWidget<>nil) and (GdkClient<>nil) and (GdkClient<>GdkWidget) then
     begin
-      TheWinControl.CNPreferredSizeChanged;
-      TGtkPrivateWidgetClass(TheWinControl.WidgetSetClass.WSPrivate).UpdateCursor(WinWidgetInfo);
-      ConnectInternalWidgetsSignals(MainWidget,TheWinControl);
-
-      if (TheWinControl is TCustomPage)
-        and not ((TheWinControl.Parent <> nil) and (TheWinControl.Parent is TTabControl))
-      then
-        UpdateNotebookPageTab(nil,TheWinControl);
-
-      if TheWinControl is TCustomForm then
-        SetFormShowInTaskbar(TCustomForm(TheWinControl),
-                             TCustomForm(TheWinControl).ShowInTaskbar);
+      //DebugLn(['gtkRealizeAfterCB ClientWindow<>Window']);
+      NewEventMask:=gdk_window_get_events(GdkClient) or WinWidgetInfo^.EventMask;
+      gtk_widget_add_events(ClientWidget,WinWidgetInfo^.EventMask);
+      gdk_window_set_events(GdkClient,NewEventMask);
     end;
+    //DebugLn('BBB1 ',DbgS(NewEventMask),8),' ',DbgS(Cardinal(gdk_window_get_events(Widget^.Window)));
+    {$IFDEF DebugGDK}EndGDKErrorTrap;{$ENDIF}
+  end;
 
+  if TheWinControl<>nil then
+  begin
+    TheWinControl.CNPreferredSizeChanged;
+    TGtkPrivateWidgetClass(TheWinControl.WidgetSetClass.WSPrivate).UpdateCursor(WinWidgetInfo);
+    ConnectInternalWidgetsSignals(MainWidget,TheWinControl);
+
+    if (TheWinControl is TCustomPage)
+      and not ((TheWinControl.Parent <> nil) and (TheWinControl.Parent is TTabControl))
+    then
+      UpdateNotebookPageTab(nil,TheWinControl);
+
+    if TheWinControl is TCustomForm then
+      SetFormShowInTaskbar(TCustomForm(TheWinControl),
+                           TCustomForm(TheWinControl).ShowInTaskbar);
   end;
 end;
 
@@ -412,7 +408,7 @@ function postpone_changed_signal(Widget: PGtkWidget): GBoolean; cdecl;
 begin
   Result := gtk_false;
   g_object_set_data(PGObject(Widget), 'lcl-postpone-changed-signal', nil);
-  gtkchanged_editbox(Widget, GetWidgetInfo(Widget, False)^.LCLObject);
+  gtkchanged_editbox(Widget, GetWidgetInfo(Widget)^.LCLObject);
 end;
 
 procedure gtkchanged_editbox_delete_text(Widget: PGtkWidget; AStartPos,
@@ -449,9 +445,7 @@ function gtkchanged_editbox( widget: PGtkWidget; data: gPointer) : GBoolean; cde
 var
   Mess : TLMessage;
   GStart, GEnd: gint;
-  Info: PWidgetInfo;
   EntryText: PgChar;
-  NeedCursorCheck: Boolean;
 begin
   //debugln('gtkchanged_editbox');
   Result := CallBackDefaultReturn;
@@ -467,234 +461,36 @@ begin
   {$IFDEF EventTrace}
   EventTrace('changed_editbox', data);
   {$ENDIF}
-  NeedCursorCheck := False;
   if GTK_IS_ENTRY(Widget) then
   begin
-    // lcl-do-not-change-selection comes from gtkKeyPress.
-    // Only floatspinedit sets that data, so default is nil. issue #18679
-    if g_object_get_data(PGObject(Widget),'lcl-do-not-change-selection') = nil then
-    begin
-      {cheat GtkEditable to update cursor pos in gtkEntry. issue #7243}
-      gtk_editable_get_selection_bounds(PGtkEditable(Widget), @GStart, @GEnd);
-      EntryText := gtk_entry_get_text(PGtkEntry(Widget));
-      if (GStart = GEnd) and
-        (UTF8Length(EntryText) >= PGtkEntry(Widget)^.text_length) then
-      begin
-        Info := GetWidgetInfo(Widget, False);
-        {do not update position if backspace or delete pressed}
-        if wwiInvalidEvent in Info^.Flags then
-        begin
-          Exclude(Info^.Flags, wwiInvalidEvent);
-
-          {take care of pasted data since it does not return proper cursor pos.}
-          // issue #7243
-          if g_object_get_data(PGObject(Widget),'lcl-delay-cm_textchanged') <> nil then
-          begin
-            g_object_set_data(PGObject(Widget),'lcl-delay-cm_textchanged',nil);
-            g_object_set_data(PGObject(Widget),'lcl-gtkentry-pasted-data',Widget);
-            g_idle_add(@GtkEntryDelayCursorPos, Widget);
-            exit;
-          end;
-        end else
-        begin
-          // if we change selstart in OnChange event new cursor pos need to
-          // be postponed in TGtk2WSCustomEdit.SetSelStart
-          if g_object_get_data(PGObject(Widget),'lcl-gtkentry-pasted-data') <> nil then
-          begin
-            g_object_set_data(PGObject(Widget),'lcl-gtkentry-pasted-data',nil);
-            gtk_editable_set_position(PGtkEditable(Widget), GStart);
-          end else
-          begin
-            NeedCursorCheck := True;
-            g_object_set_data(PGObject(Widget),'lcl-gtkentry-pasted-data',Widget);
-            g_idle_add(@GtkEntryDelayCursorPos, Widget);
-            exit;
-          end;
-        end;
-      end;
-    end else
-      g_object_set_data(PGObject(Widget),'lcl-do-not-change-selection', nil);
-  end;
-
-  if NeedCursorCheck then
-    LockOnChange(PgtkObject(Widget), +1);
-  // 'lcl-suppress-cm_textchanged' is set by gtkchanged_spinbox when it changes
-  // the text in the widget or when it sends a CM_TEXTCHANGED message (via DeliverMessage)
-  // Issue #0031618
-  if g_object_get_data(PGObject(Widget),'lcl-suppress-cm_textchanged') = nil then
-  begin
-    FillByte(Mess{%H-},SizeOf(Mess),0);
-    Mess.Msg := CM_TEXTCHANGED;
-    //debugln('gtkchanged_editbox B: DeliverMessage(CM_TextChanged)');
-    DeliverMessage(Data, Mess);
-  end
-  else
-  begin
-    //debugln('gtkchanged_editbox C: Found: "lcl-suppress-cm_textchanged"');
-    g_object_set_data(PGObject(Widget),'lcl-suppress-cm_textchanged', nil);
-  end;
-  if NeedCursorCheck then
-    LockOnChange(PgtkObject(Widget), -1);
-end;
-
-function gtkchanged_spinbox(widget: PGtkWidget; data: gPointer): GBoolean; cdecl;
-var
-  SValue: String;
-  SNewValue: String;
-  AValue, AMin, AMax: Double;
-  NumDigits, TextDigits: Integer;
-  Mess : TLMessage;
-  ADecimalSeparator: Char;
-begin
-  //debugln('gtkchanged_spinbox A');
-  Result := CallBackDefaultReturn;
-  if LockOnChange(PgtkObject(Widget),0) > 0 then exit;
-
-  // prior to gtk2-2.12 there's bug with signalling of spin button
-  // which leads to crash.See issue #18554
-  // we are passing this code only for gtk2 >= 2.12
-  if GTK_IS_SPIN_BUTTON(Widget) and (gtk_minor_version >= 12) then
-  begin
-    NumDigits := gtk_spin_button_get_digits(PGtkSpinButton(Widget));
-    if NumDigits > 0 then
-    begin
-      {$IF FPC_FULLVERSION<20600}
-      ADecimalSeparator := DecimalSeparator;
-      {$ELSE}
-      ADecimalSeparator := DefaultFormatSettings.DecimalSeparator;
-      {$ENDIF}
-      SValue := gtk_entry_get_text(PGtkEntry(Widget));
-
-      //debugln('gtkchanged_spinbox B');
-      //debugln('  SValue = ',SValue);
-
-      {do not try to parse SValue if it's empty, eg started typing on
-       selected value. issue #23190}
-      if (SValue = '') or (SValue = ',') or
-        (SValue = '.') or (SValue = '+') or
-        (SValue = '-') or (SValue = ADecimalSeparator) then
-      begin
-        debugln('  SValue in [<empty>,#32, +, -, comma, period, ADecimalSeparator]');
-        FillByte(Mess{%H-},SizeOf(Mess),0);
-        Mess.Msg := CM_TEXTCHANGED;
-        DeliverMessage(Data, Mess);
-        exit;
-      end;
-
-      SNewValue := SValue;
-      AValue := StrToFloatDef(SValue, 0);
-      //debugln('gtkchanged_spinbox C');
-      //debugln('  SValue = ',SValue);
-      //debugln(format('  AValue = %.4f',[AValue]));
-
-      {do not freeze (below) if clocale isn't used. issue #23190}
-      if (ADecimalSeparator <> '.') and (Pos('.', SValue) <> 0) then
-      begin
-        SValue := StringReplace(SValue, '.', ADecimalSeparator, [rfReplaceAll]);
-        if (SValue[1] = ADecimalSeparator) then
-          SValue := '0' + SValue;
-        SNewValue := SValue;
-        AValue := StrToFloatDef(SValue, 0);
-      end else
-      if (ADecimalSeparator <> ',') and (Pos(',', SValue) <> 0) then
-      begin
-        SValue := StringReplace(SValue, ',', ADecimalSeparator, [rfReplaceAll]);
-        if (SValue[1] = ADecimalSeparator) then
-          SValue := '0' + SValue;
-        SNewValue := SValue;
-        AValue := StrToFloatDef(SValue, 0);
-      end;
-      //debugln('gtkchanged_spinbox D');
-      //debugln('  SValue = ',SValue);
-      //debugln('  SNewValue = ',SNewValue);
-      //debugln(format('  AValue = %.4f',[AValue]));
-
-      gtk_spin_button_get_range(PGtkSpinButton(Widget), @AMin, @AMax);
-      // woohoo
-      // gtk2 have different meaning how validator should work and trigger
-      // so we change it. #18679
-      // do not use while loop, but assign to minimum or maximum allowed. #23190
-      if (AValue < AMin) or (AValue > AMax) then
-      begin
-        if AValue < AMin then
-          SValue := FloatToStr(AMin);
-        if AValue > AMax then
-          SValue := FloatToStr(AMax);
-        AValue := StrToFloatDef(SValue, 0);
-      end;
-      if (Pos(ADecimalSeparator, SValue) > 0) and (length(SValue) > 1) then
-      begin
-        //debugln('gtkchanged_spinbox E');
-        //debugln('  ADecimalSeparator = ',ADecimalSeparator);
-        //debugln('  SValue = ',SValue);
-        //debugln('  SNewValue = ',SNewValue);
-        //debugln(format('  AValue = %.4f',[AValue]));
-
-        //The widget allows to type in more digits than we set in DecimalPlaces, so we may need to trim those
-        TextDigits := Length(Copy(SValue,Pos(ADecimalSeparator, SValue) + 1, length(SValue)));
-        if (TextDigits > NumDigits) then
-        begin
-          //debugln('gtkchanged_spinbox E1');
-          //DbgOut('  SValue = ',SValue,' -> ');
-          Delete(SValue, length(SValue) - (TextDigits-NumDigits-1), (TextDigits-NumDigits));
-          //debugln(SValue);
-        end;
-      end;
-      if SNewValue <> SValue then
-      begin
-        //debugln('gtkchanged_spinbox F');
-        //debugln('  SValue = ',SValue);
-        //debugln('  SNewValue = ',SNewValue);
-        //debugln(format('  AValue = %.4f',[AValue]));
-        //debugln(format('  SValue: "%s" <> SNewValue: "%s"  call: gtk_entry_set_text',[SValue,SnewValue]));
-
-        //Suppress CM_TEXTXHANGED message in gtkchanged_editbox, which will lead
-        //to double OnChange events. Issue #0031618
-        g_object_set_data(PGObject(Widget),'lcl-suppress-cm_textchanged',Widget);
-        gtk_entry_set_text(PGtkEntry(Widget), PChar(SValue));
-      end;
-      //Suppress CM_TEXTXHANGED message in gtkchanged_editbox, which will lead
-      //to double OnChange events. Issue #0031618
-      g_object_set_data(PGObject(Widget),'lcl-suppress-cm_textchanged',Widget);
-      // inform LCL about our changes to entry
-      FillByte(Mess{%H-},SizeOf(Mess),0);
-      Mess.Msg := CM_TEXTCHANGED;
-      //debugln('gtkchanged_spinbox H: DeliverMessage(CM_TextChanged)');
-      DeliverMessage(Data, Mess);
-    end else
-      // always signal update to pure TSpinEdit
-      gtk_spin_button_update(PGtkSpinButton(Widget));
-  end;
-end;
-
-function gtkchanged_editbox_backspace(widget: PGtkWidget;
-  data: gPointer): GBoolean; cdecl;
-var
-  GStart, GEnd: gint;
-  Info: PWidgetInfo;
-  EntryText: PgChar;
-begin
-  Result := CallBackDefaultReturn;
-  if GTK_IS_ENTRY(Widget) then
-  begin
+    {cheat GtkEditable to update cursor pos in gtkEntry. issue #7243}
     gtk_editable_get_selection_bounds(PGtkEditable(Widget), @GStart, @GEnd);
     EntryText := gtk_entry_get_text(PGtkEntry(Widget));
-    if (GStart = GEnd) and (GStart > 0) and
-      (UTF8Length(EntryText) = PGtkEntry(Widget)^.text_length) then
+    if (GStart = GEnd) and
+      (UTF8Length(EntryText) >= PGtkEntry(Widget)^.text_length) then
     begin
-      {mark as invalid event for gtkchanged_editbox, so
-       it doesn't update cursor pos or we have a mess.}
-      Info := GetWidgetInfo(Widget, False);
-      include(Info^.Flags, wwiInvalidEvent);
-      PGtkEntry(Widget)^.current_pos := GStart - 1;
+      if g_object_get_data(PGObject(Widget),'lcl-gtkentry-pasted-data') <> nil then
+      begin
+        g_object_set_data(PGObject(Widget),'lcl-gtkentry-pasted-data',nil);
+        gtk_editable_set_position(PGtkEditable(Widget), GStart);
+      end else
+      begin
+        g_object_set_data(PGObject(Widget),'lcl-gtkentry-pasted-data',Widget);
+        g_idle_add(@GtkEntryDelayCursorPos, Widget);
+        exit;
+      end;
     end;
   end;
+
+  FillByte(Mess{%H-},SizeOf(Mess),0);
+  Mess.Msg := CM_TEXTCHANGED;
+  //debugln('gtkchanged_editbox B: DeliverMessage(CM_TextChanged)');
+  DeliverMessage(Data, Mess);
 end;
 
 function gtkchanged_editbox_delete(widget: PGtkWidget;
   AType: TGtkDeleteType; APos: gint; data: gPointer): GBoolean; cdecl;
 var
-  Info: PWidgetInfo;
   EntryText: PgChar;
 begin
   Result := CallBackDefaultReturn;
@@ -708,8 +504,6 @@ begin
       Exit;
     end;
   end;
-  Info := GetWidgetInfo(Widget, False);
-  include(Info^.Flags, wwiInvalidEvent);
 end;
 
 function gtkdaychanged(Widget: PGtkWidget; data: gPointer) : GBoolean; cdecl;
@@ -850,9 +644,9 @@ begin
          and gtk_window_has_TopLevel_Focus(Window) then
       begin
         // fake focus-out event
-        {.$IFDEF VerboseFocus}
+        {$IFDEF VerboseFocus}
         DebugLn('NOTE: Window with stalled focus found!, faking focus-out event');
-        {.$ENDIF}
+        {$ENDIF}
         event := gdk_event_new(GDK_FOCUS_CHANGE);
         event^.focus_change.window := TopLevelWin;
         event^.focus_change._type := GDK_FOCUS_CHANGE;
@@ -894,7 +688,7 @@ begin
   end;
   {$ENDIF}
 
-  Info := GetWidgetInfo(Widget, false);
+  Info := GetWidgetInfo(Widget);
   try
     if (Info <> nil) then
       Include(Info^.Flags, wwiActivating);
@@ -940,7 +734,7 @@ begin
   {$ENDIF}
   ResetDefaultIMContext;
 
-  Info := GetWidgetInfo(Widget,false);
+  Info := GetWidgetInfo(Widget);
   try
     if (Info<>nil) then
       Include(Info^.Flags, wwiDeactivating);
@@ -1279,8 +1073,12 @@ begin
 
   if GTK_WIDGET_REALIZED(Widget) then
   begin
-    if (GDK_WINDOW_STATE_WITHDRAWN and state^.changed_mask) = 1 then // visibility changed - this is another message block
-      exit;
+    if (GDK_WINDOW_STATE_WITHDRAWN and state^.changed_mask <> 0)
+    or (GDK_WINDOW_STATE_WITHDRAWN and state^.new_window_state <> 0) then
+    begin
+      // visibility changed - this is another message block
+      Exit;
+    end;
     if TObject(Data) is TCustomForm then
     begin
       TheForm := TCustomForm(Data);
@@ -1297,9 +1095,6 @@ begin
         //debugln('GTKWindowStateEventCB ',DbgSName(TObject(Data)),' ',dbgs(state^.new_window_state),' ',WidgetFlagsToString(Widget));
         if ((GDK_WINDOW_STATE_ICONIFIED and state^.new_window_state)>0) then
         begin
-          if (TheForm = Application.MainForm) and
-            (TheForm.WindowState <> wsMinimized) then
-            Application.IntfAppMinimize;
           {$IFDEF HasX}
           NetAtom := gdk_atom_intern('_NET_WM_DESKTOP', True);
           if NetAtom > 0 then begin
@@ -1332,11 +1127,6 @@ begin
         else
           SizeMsg.SizeType := SIZE_RESTORED;
 
-        if (TheForm = Application.MainForm) and
-          (SizeMsg.SizeType <> SIZE_MINIMIZED) and
-          (TheForm.WindowState = wsMinimized) then
-            Application.IntfAppRestore;
-
         // don't bother the LCL if nothing changed
         case SizeMsg.SizeType of
           SIZE_RESTORED: if TheForm.WindowState=wsNormal then exit;
@@ -1364,6 +1154,15 @@ begin
         if (gtk_major_version = 2) and (gtk_minor_version <= 8) and
           (TheForm.WindowState = wsMaximized) then
             gtk_widget_queue_draw({%H-}PGtkWidget(TheForm.Handle));
+
+        if (TheForm = Application.MainForm)
+        and (GDK_WINDOW_STATE_ICONIFIED and state^.changed_mask <> 0) then
+        begin
+          if GDK_WINDOW_STATE_ICONIFIED and state^.new_window_state <> 0 then
+            Application.IntfAppMinimize
+          else
+            Application.IntfAppRestore;
+        end;
       end;
     end;
   end;
@@ -1378,7 +1177,7 @@ begin
   Result := CallBackDefaultReturn;
   //DebugLn(['gtkdestroyCB ',GetWidgetDebugReport(Widget)]);
   
-  Info:=GetWidgetInfo(Widget,false);
+  Info:=GetWidgetInfo(Widget);
   if Info = nil then // this widget is already destroyed
     Exit;
 
@@ -1917,7 +1716,7 @@ function gtkMouseBtnPress(widget: PGtkWidget; event: pgdkEventButton; data: gPoi
     // When in browse mode and a listbox is focused and nothing is selected,
     // the first item is focused.
     // Clicking with the mouse on this item won't select it.
-    Info := GetWidgetInfo(Widget, false);
+    Info := GetWidgetInfo(Widget);
     if Info = nil then Exit;
     if Info^.CoreWidget = nil then Exit;
     if not GtkWidgetIsA(Info^.CoreWidget, gtk_list_get_type) then
@@ -2161,6 +1960,11 @@ var
 
 begin
   Result := 0;
+
+  if GTK_IS_TREE_VIEW(widget)
+  and (gtk_tree_view_get_bin_window(PGtkTreeView(widget)) <> Event^.window) then
+    Exit;
+
   CheckTransparentWindow({%H-}TLCLIntfHandle(widget), AWinControl);
   if (widget=nil) or (AWinControl=nil) then
     Exit;
@@ -2399,7 +2203,9 @@ begin
     MessI.Result := 0;
     NotifyApplicationUserInput(AWinControl, MessI.Msg);
     DeliverMessage(AWinControl, MessI);
-    if MessI.Result <> 0 then
+    if not AWinControl.HandleAllocated then
+      Result := True
+    else if MessI.Result <> 0 then
     begin
       // issue #19914
       if GTK_IS_NOTEBOOK(Widget) then
@@ -2833,14 +2639,8 @@ end;
 function gtkCutToClip( widget: PGtkWidget; data: gPointer) : GBoolean; cdecl;
 var
   Mess : TLMessage;
-  Info: PWidgetInfo;
 begin
   EventTrace('Cut to clip', data);
-  if (Widget <> nil) and (GTK_IS_ENTRY(Widget)) then
-  begin
-    Info := GetWidgetInfo(Widget, False);
-    include(Info^.Flags, wwiInvalidEvent);
-  end;
   Mess.msg := LM_CUT;
   Result:= DeliverMessage(Data, Mess) = 0;
 end;
@@ -2857,18 +2657,8 @@ end;
 function gtkPasteFromClip( widget: PGtkWidget; data: gPointer) : GBoolean; cdecl;
 var
   Mess : TLMessage;
-  //Info: PWidgetInfo;
 begin
   EventTrace('Paste from clip', data);
-
-  // we must update cursor pos with delay otherwise selStart is wrong.issue #7243
-  if (Widget <> nil) and (GTK_IS_ENTRY(Widget)) then
-  begin
-    //Info := GetWidgetInfo(Widget, False);
-    //Include(Info^.Flags, wwiInvalidEvent);
-    // happy end is inside gtkchanged_editbox() above.
-    g_object_set_data(PGObject(Widget),'lcl-delay-cm_textchanged', data);
-  end;
   Mess.msg := LM_PASTE;
   Result:= DeliverMessage(Data, Mess) = 0;
 end;
@@ -3284,9 +3074,9 @@ var
   WidgetInfo: PWidgetInfo;
 begin
   AValue:=PGtkRange(Widget)^.adjustment^.value;
-  WidgetInfo:=GetWidgetInfo(Widget, False);
+  WidgetInfo:=GetWidgetInfo(Widget);
   if not Assigned(WidgetInfo) then
-    WidgetInfo:=GetWidgetInfo(Widget^.parent, False);
+    WidgetInfo:=GetWidgetInfo(Widget^.parent);
   if Assigned(WidgetInfo) and (Widget^.state = 1) then
     Gtk2RangeScrollCB(PGtkRange(Widget), 0, AValue, WidgetInfo);
   Widget^.state := 0;
@@ -3708,11 +3498,6 @@ begin
   GetMem(Buffer,BufLength);
   Assert(Assigned(Buffer) and (BufLength>0), 'SetData: GTK2 clipboard Buffer=Nil or empty.');
   MemStream.Read(Buffer^,BufLength);
-  {$IFDEF GTK_REMOVE_CLIPBOARD_NULL}
-  // Issue #21453. gtk_selection_data_set adds the required null. Remove it here.
-  if PChar(Buffer+BufLength-1)^ = #0 then
-    dec(BufLength);
-  {$ENDIF}
   gtk_selection_data_set(SelectionData,SelectionData^.Target,8,Buffer,BufLength);
   FreeMem(Buffer);
 end;
@@ -3993,7 +3778,8 @@ begin
                                         PageWidget);
   if TabWidget = nil then exit;
   {$IFDEF VerboseGtkToDos}{$note reimplement}{$ENDIF}
-  DrawImageListIconOnWidget(NoteBook.Images, ImageIndex, Widget);
+  DrawImageListIconOnWidget(NoteBook.Images.ResolutionForPPI[NoteBook.ImagesWidth, NoteBook.Font.PixelsPerInch, NoteBook.GetCanvasScaleFactor],
+    ImageIndex, Widget);
 end;
 
 function PageIconWidgetExposeAfter(Widget: PGtkWidget; Event: PGDKEventExpose;

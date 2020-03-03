@@ -78,9 +78,6 @@ begin
     Result := '';
 end;
 
-{------------------------------------------------------------------------------
-       TApplication Constructor
-------------------------------------------------------------------------------}
 constructor TApplication.Create(AOwner: TComponent);
 begin
   LCLProc.SendApplicationMessageFunction:=@SendApplicationMsg;
@@ -104,6 +101,7 @@ begin
   FOnIdle := nil;
   FIcon := TIcon.Create;
   FIcon.OnChange := @IconChanged;
+  FLastKeyDownKeys := TWordList.Create;
   FNavigation := [anoTabToSelectNext,anoReturnForDefaultControl,
                   anoEscapeForCancelControl,anoF1ForHelp,anoArrowToSelectNextInParent];
   FUpdateFormatSettings := True;
@@ -127,9 +125,6 @@ begin
   OnGetApplicationName := @GetApplicationName;
 end;
 
-{------------------------------------------------------------------------------
-       TApplication Destructor
-------------------------------------------------------------------------------}
 destructor TApplication.Destroy;
 var
   HandlerType: TApplicationHandlerType;
@@ -155,6 +150,7 @@ begin
   ApplicationActionComponent:=nil;
   FreeThenNil(FIcon);
   FreeIconHandles;
+  FreeThenNil(FLastKeyDownKeys);
   FreeThenNil(FRestoreStayOnTop);
 
   for HandlerType:=Low(TApplicationHandlerType) to High(TApplicationHandlerType) do
@@ -217,17 +213,11 @@ begin
     CancelHint;
 end;
 
-{------------------------------------------------------------------------------
-       TApplication BringToFront
-------------------------------------------------------------------------------}
 procedure TApplication.BringToFront;
 begin
   WidgetSet.AppBringToFront;
 end;
 
-{------------------------------------------------------------------------------
-       TApplication Messagebox
-------------------------------------------------------------------------------}
 function TApplication.MessageBox(Text, Caption: PChar; Flags: Longint) : Integer;
 begin
   if Assigned(MessageBoxFunction) then
@@ -241,12 +231,14 @@ begin
   end;
 end;
 
-{------------------------------------------------------------------------------
-       TApplication GetExename
-------------------------------------------------------------------------------}
 function TApplication.GetExename: String;
 Begin
   Result := ParamStrUTF8(0);
+end;
+
+function TApplication.GetHandle: THandle;
+begin
+  Result := WidgetSet.AppHandle;
 end;
 
 function TApplication.GetMainFormHandle: HWND;
@@ -295,8 +287,6 @@ end;
   Method: TApplication.ControlDestroyed
   Params: None
   Returns:  Nothing
-
-
  ------------------------------------------------------------------------------}
 procedure TApplication.ControlDestroyed(AControl: TControl);
 begin
@@ -411,9 +401,6 @@ begin
   end;
 end;
 
-{------------------------------------------------------------------------------
-  TApplication HintMouseMEssage
-------------------------------------------------------------------------------}
 procedure TApplication.HintMouseMessage(Control : TControl;
   var AMessage : TLMessage);
 begin
@@ -437,14 +424,6 @@ begin
     raise Exception.Create(rsNoWidgetSet);
   end;
   WidgetSet.AppInit(ScreenInfo);
-  {$IFDEF DARWIN}
-  // Mac OSX (all WS) return 72 PPI for 100% scaling.
-  // The LCL needs 96 PPI for correct
-  //   a) font size scaling (Height/Size ratio)
-  //   b) High-DPI scaling (Application.Scaled)
-  ScreenInfo.PixelsPerInchX := MulDiv(ScreenInfo.PixelsPerInchX, 96, 72);
-  ScreenInfo.PixelsPerInchY := MulDiv(ScreenInfo.PixelsPerInchY, 96, 72);
-  {$ENDIF}
   ScreenInfo.Initialized := True;
   Screen.UpdateScreen;
   // set that we are initialized => all exceptions will be handled by our HandleException
@@ -516,10 +495,6 @@ begin
   end;
 end;
 
-{------------------------------------------------------------------------------
-  function TApplication.GetControlAtMouse: TControl;
-
- ------------------------------------------------------------------------------}
 function TApplication.GetControlAtMouse: TControl;
 var
   P: TPoint;
@@ -554,6 +529,11 @@ procedure TApplication.SetFlags(const AValue: TApplicationFlags);
 begin
   { Only allow AppNoExceptionMessages to be changed }
   FFlags := Flags - [AppNoExceptionMessages] + AValue*[AppNoExceptionMessages];
+end;
+
+procedure TApplication.SetHandle(const AHandle: THandle);
+begin
+  WidgetSet.AppHandle := AHandle;
 end;
 
 procedure TApplication.SetMainFormOnTaskBar(const AValue: Boolean);
@@ -600,10 +580,6 @@ begin
   end;
 end;
 
-{------------------------------------------------------------------------------
-  procedure TApplication.UpdateMouseControl(NewMouseControl: TControl);
-
- ------------------------------------------------------------------------------}
 procedure TApplication.UpdateMouseControl(NewMouseControl: TControl);
 begin
   //debugln(['TApplication.UpdateMouseControl Old=',DbgSName(FMouseControl),' New=',DbgSName(NewMouseControl)]);
@@ -634,9 +610,6 @@ begin
   FIcon.Assign(AValue);
 end;
 
-{------------------------------------------------------------------------------
-  procedure TApplication.SetShowHint(const AValue: Boolean);
- ------------------------------------------------------------------------------}
 procedure TApplication.SetShowHint(const AValue: Boolean);
 begin
   if FShowHint = AValue then
@@ -651,27 +624,18 @@ begin
   end;
 end;
 
-{------------------------------------------------------------------------------
-  procedure TApplication.SetTitle(const AValue: String);
- ------------------------------------------------------------------------------}
 procedure TApplication.SetTitle(const AValue: String);
 begin
   inherited SetTitle(AValue);
   WidgetSet.AppSetTitle(GetTitle);
 end;
 
-{------------------------------------------------------------------------------
-  procedure TApplication.StopHintTimer;
- ------------------------------------------------------------------------------}
 procedure TApplication.StopHintTimer;
 begin
   if FHintTimer <> nil then
     FHintTimer.Enabled := False;
 end;
 
-{------------------------------------------------------------------------------
-  procedure TApplication.ValidateHelpSystem;
- ------------------------------------------------------------------------------}
 function TApplication.ValidateHelpSystem: Boolean;
 begin
   Result := HelpManager <> nil;
@@ -694,10 +658,6 @@ begin
   end;
 end;
 
-{------------------------------------------------------------------------------
-  procedure TApplication.NotifyIdleEndHandler;
-
- ------------------------------------------------------------------------------}
 procedure TApplication.NotifyIdleEndHandler;
 begin
   FApplicationHandlers[ahtIdleEnd].CallNotifyEvents(Self);
@@ -723,10 +683,6 @@ begin
     Screen.CustomForms[i].Perform(Msg, 0, 0);
 end;
 
-{------------------------------------------------------------------------------
-  function TApplication.IsHintMsg(var Msg: TMsg): Boolean;
-
- ------------------------------------------------------------------------------}
 function TApplication.IsHintMsg(var Msg: TMsg): Boolean;
 begin
   Result := False;
@@ -753,10 +709,6 @@ begin
   end;
 end;
 
-{------------------------------------------------------------------------------
-  procedure TApplication.DoOnMouseMove;
-
- ------------------------------------------------------------------------------}
 procedure TApplication.DoOnMouseMove;
 var
   CursorPos: TPoint;
@@ -767,9 +719,6 @@ begin
   ActivateHint(CursorPos, True);
 end;
 
-{------------------------------------------------------------------------------
-  procedure TApplication.ShowHintWindow(const Info: THintInfoAtMouse);
- ------------------------------------------------------------------------------}
 procedure TApplication.ShowHintWindow(const Info: THintInfoAtMouse);
 
   function GetCursorHeightMargin: integer;
@@ -882,10 +831,6 @@ begin
   {$endif}
 end;
 
-{------------------------------------------------------------------------------
-  procedure TApplication.StartHintTimer(Interval: integer;
-    TimerType: TAppHintTimerType);
- ------------------------------------------------------------------------------}
 procedure TApplication.StartHintTimer(Interval: integer;
   TimerType: TAppHintTimerType);
 begin
@@ -906,9 +851,6 @@ begin
     OnHintTimer(Self);
 end;
 
-{------------------------------------------------------------------------------
-  procedure TApplication.OnHintTimer(Sender: TObject);
- ------------------------------------------------------------------------------}
 procedure TApplication.OnHintTimer(Sender: TObject);
 var
   Info: THintInfoAtMouse;
@@ -942,9 +884,6 @@ begin
   end;
 end;
 
-{------------------------------------------------------------------------------
-  procedure TApplication.UpdateVisible;
- ------------------------------------------------------------------------------}
 procedure TApplication.UpdateVisible;
 
   function AppUseSingleButton: Boolean;
@@ -988,9 +927,6 @@ begin
   WidgetSet.AppSetVisible(HasVisibleForms);
 end;
 
-{------------------------------------------------------------------------------
-  procedure TApplication.DoIdleActions;
- ------------------------------------------------------------------------------}
 procedure TApplication.DoIdleActions;
 var
   i: Integer;
@@ -1099,9 +1035,6 @@ begin
   Result:=ParamStrUTF8(Index);
 end;
 
-{------------------------------------------------------------------------------
-  Method: TApplication.IconChanged
- ------------------------------------------------------------------------------}
 procedure TApplication.IconChanged(Sender: TObject);
 var
   i: integer;
@@ -1190,51 +1123,52 @@ end;
   Method: TApplication.HandleException
   Params: Sender
   Returns:  Nothing
-
  ------------------------------------------------------------------------------}
 procedure TApplication.HandleException(Sender: TObject);
+  procedure ShowInvalidException(ExObject: TObject; ExAddr: Pointer);
+  // use shortstring. On exception, the heap may be corrupt.
+  var
+    Buf: ShortString;
+  begin
+    if Assigned(SysUtils.OnShowException) then
+    begin
+      SetLength(Buf,ExceptionErrorMessage(ExObject,ExAddr,@Buf[1],255));
+      SysUtils.OnShowException(Buf);
+    end;
+  end;
+
 var
   i: LongInt;
   Skip: Boolean;
 begin
   if Self = nil then
     Exit;
-  if AppHandlingException in FFlags then
+  if FExceptionCounter>1 then
+  begin
+    // multiple exception circle, just exit
+    Exit;
+  end;
+  if FExceptionCounter=1 then
   begin
     // there was an exception during showing the exception -> break the circle
-    DebugLn('TApplication.HandleException: ',
-      'there was another exception during showing the first exception');
-
-    if Assigned(OnCircularException) and (ExceptObject is Exception) then
-      OnCircularException(Sender, Exception(ExceptObject));
+    Inc(FExceptionCounter);
+    if ExceptObject is Exception then
+    begin
+      if Assigned(OnCircularException) then
+        OnCircularException(Sender, Exception(ExceptObject));
+    end else
+      ShowInvalidException(ExceptObject, ExceptAddr);
 
     HaltingProgram:=true;
-    DumpExceptionBackTrace;
     Halt;
   end;
-  Include(FFlags,AppHandlingException);
+  Inc(FExceptionCounter);
   
   if StopOnException then
     inherited Terminate;
 
   Skip := ExceptObject is EAbort;
 
-  if not (AppNoExceptionMessages in FFlags) then
-  begin
-    // before we do anything, write it down
-    if ExceptObject is Exception then
-    begin
-      if not Skip then
-      begin
-        DebugLn('TApplication.HandleException ',Exception(ExceptObject).Message);
-        DumpExceptionBackTrace;
-      end;
-    end else
-    begin
-      DebugLn('TApplication.HandleException Strange Exception ');
-      DumpExceptionBackTrace;
-    end;
-  end;
   // release capture and hide all forms with stay on top, so that
   // a message can be shown
   if GetCapture <> 0 then SendMessage(GetCapture, LM_CANCELMODE, 0, 0);
@@ -1258,10 +1192,10 @@ begin
     end;
   end
   else
-    SysUtils.ShowException(ExceptObject, ExceptAddr);
+    ShowInvalidException(ExceptObject, ExceptAddr);
   if not Skip then
     RestoreStayOnTop(True);
-  Exclude(FFlags, AppHandlingException);
+  Dec(FExceptionCounter);
 end;
 
 {------------------------------------------------------------------------------
@@ -1277,9 +1211,6 @@ begin
   if not Terminated then Idle(true);
 end;
 
-{------------------------------------------------------------------------------
-  function TApplication.HelpContext(Context: THelpContext): Boolean;
-------------------------------------------------------------------------------}
 function TApplication.HelpContext(Context: THelpContext): Boolean;
 var
   CallHelp: Boolean;
@@ -1294,9 +1225,6 @@ begin
     Result := False;
 end;
 
-{------------------------------------------------------------------------------
-  function TApplication.HelpKeyword(const Keyword: String): Boolean;
-------------------------------------------------------------------------------}
 function TApplication.HelpKeyword(const Keyword: String): Boolean;
 var
   CallHelp: Boolean;
@@ -1317,9 +1245,6 @@ begin
     TControl(Sender).ShowHelp;
 end;
 
-{------------------------------------------------------------------------------
-  procedure TApplication.RemoveStayOnTop;
-------------------------------------------------------------------------------}
 procedure TApplication.RemoveStayOnTop(const ASystemTopAlso: Boolean = False);
 var
   i: Integer;
@@ -1361,17 +1286,11 @@ begin
     end;
 end;
 
-{------------------------------------------------------------------------------
-  function TApplication.IsWaiting: boolean;
-------------------------------------------------------------------------------}
 function TApplication.IsWaiting: boolean;
 begin
   Result:=AppWaiting in FFlags;
 end;
 
-{------------------------------------------------------------------------------
-  procedure TApplication.CancelHint;
-------------------------------------------------------------------------------}
 procedure TApplication.CancelHint;
 begin
   StopHintTimer;
@@ -1380,9 +1299,6 @@ begin
   FHintTimerType := ahttNone;
 end;
 
-{------------------------------------------------------------------------------
-  procedure TApplication.HideHint;
-------------------------------------------------------------------------------}
 procedure TApplication.HideHint;
 begin
   if FHintWindow <> nil then
@@ -1453,10 +1369,6 @@ begin
   end;
 end;
 
-{------------------------------------------------------------------------------}
-{       TApplication WndPRoc                                                   }
-{                                                                              }
-{------------------------------------------------------------------------------}
 procedure TApplication.WndProc(var AMessage : TLMessage);
 begin
   case AMessage.Msg of
@@ -1546,9 +1458,6 @@ begin
   Result := AppActive in Flags;
 end;
 
-{------------------------------------------------------------------------------
-  function TApplication.GetCurrentHelpFile: string;
-------------------------------------------------------------------------------}
 function TApplication.GetCurrentHelpFile: string;
 var
   ActiveForm: TCustomForm;
@@ -1560,9 +1469,6 @@ begin
     Result := HelpFile;
 end;
 
-{------------------------------------------------------------------------------
-       TApplication ShowException
-------------------------------------------------------------------------------}
 procedure TApplication.ShowException(E: Exception);
 var
   Msg: string;
@@ -1621,10 +1527,6 @@ begin
   dec(FIdleLockCount);
 end;
 
-{------------------------------------------------------------------------------
-  procedure TApplication.NotifyUserInputHandler;
-
- ------------------------------------------------------------------------------}
 procedure TApplication.NotifyUserInputHandler(Sender: TObject; Msg: Cardinal);
 var
   i: integer;
@@ -1680,6 +1582,8 @@ begin
   begin
     AControl := TWinControl(Sender);
     //debugln('TApplication.ControlKeyDown A ',DbgSName(AControl));
+    if FLastKeyDownSender <> AControl then
+      FLastKeyDownKeys.Clear;
     FLastKeyDownSender := AControl;
 
     // handle navigation key
@@ -1687,33 +1591,49 @@ begin
     DoArrowKey(AControl, Key, Shift);
   end
   else
+  begin
+    if FLastKeyDownSender <> nil then
+      FLastKeyDownKeys.Clear;
     FLastKeyDownSender := nil;
+  end;
   //DebugLn(['TApplication.ControlKeyDown Sender=',DbgSName(Sender),' Key=',Key,' Shift=',dbgs(Shift)]);
-  FLastKeyDownKey := Key;
   FLastKeyDownShift := Shift;
+  if FLastKeyDownShift <> Shift then
+    FLastKeyDownKeys.Clear;
+  FLastKeyDownKeys.Add(Key);
 end;
 
 procedure TApplication.ControlKeyUp(Sender: TObject; var Key: Word;
   Shift: TShiftState);
 var
   AControl: TWinControl;
+  AIndex: Integer;
+  AKey: Word;
 begin
   if Key = VK_UNKNOWN then exit;
+
+  AKey := Key;
 
   try
     if Sender is TWinControl then
     begin
       AControl := TWinControl(Sender);
       //debugln('TApplication.ControlKeyUp A ',DbgSName(AControl),' Key=',dbgs(Key),' Shift=',dbgs(Shift));
-      if FLastKeyDownKey = VK_UNKNOWN then
+
+      AIndex := FLastKeyDownKeys.IndexOf(Key);
+      if (AIndex = -1) and (FLastKeyDownKeys.Count > 0) then
+        FLastKeyDownKeys.Clear;
+
+      if FLastKeyDownKeys.Count = 0 then
       begin
         // key was already handled in key down
         //debugln('TApplication.ControlKeyUp key was handled in key down');
         Exit;
       end;
-      if (Key <> FLastKeyDownKey) or (Shift <> FLastKeyDownShift) or (AControl <> FLastKeyDownSender) then
+
+      if (Shift <> FLastKeyDownShift) or (AControl <> FLastKeyDownSender) then
       begin
-        // a key up, without key down
+        FLastKeyDownKeys.Clear;
         //debugln('TApplication.ControlKeyUp key was handled in key down or in key up');
         Exit;
       end;
@@ -1723,7 +1643,9 @@ begin
       DoEscapeKey(AControl, Key, Shift);
     end;
   finally
-    FLastKeyDownKey := VK_UNKNOWN;
+    AIndex := FLastKeyDownKeys.IndexOf(AKey);
+    if AIndex <> -1 then
+      FLastKeyDownKeys.Delete(AIndex);
   end;
 end;
 
@@ -1942,9 +1864,6 @@ begin
     FApplicationHandlers[HandlerType].RemoveAllMethodsOfObject(AnObject);
 end;
 
-{------------------------------------------------------------------------------
-  procedure TApplication.IntfEndSession;
-------------------------------------------------------------------------------}
 procedure TApplication.IntfEndSession;
 begin
   if Assigned(FOnEndSession) then FOnEndSession(Self);
@@ -1967,9 +1886,6 @@ begin
     Deactivate(1);
 end;
 
-{------------------------------------------------------------------------------
-  procedure TApplication.IntfQueryEndSession(var Cancel: Boolean);
-------------------------------------------------------------------------------}
 procedure TApplication.IntfQueryEndSession(var Cancel: Boolean);
 var
   i: LongInt;
@@ -1980,18 +1896,12 @@ begin
     TQueryEndSessionEvent(FApplicationHandlers[ahtQueryEndSession][i])(Cancel);
 end;
 
-{------------------------------------------------------------------------------
-  procedure TApplication.IntfAppMinimize;
-------------------------------------------------------------------------------}
 procedure TApplication.IntfAppMinimize;
 begin
   if Assigned(FOnMinimize) then FOnMinimize(Self);
   FApplicationHandlers[ahtMinimize].CallNotifyEvents(Self);
 end;
 
-{------------------------------------------------------------------------------
-  procedure TApplication.IntfAppRestore;
-------------------------------------------------------------------------------}
 procedure TApplication.IntfAppRestore;
 begin
   Screen.RestoreLastActive;
@@ -2053,7 +1963,7 @@ procedure TApplication.DoArrowKey(AControl: TWinControl; var Key: Word;
 begin
   if (Key in [VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN]) and (Shift = []) and
      (AControl.Perform(CM_WANTSPECIALKEY, Key, 0) = 0) and
-     (AControl.Perform(LM_GETDLGCODE, 0, 0) and DLGC_WANTARROWS = 0) and
+     (AControl.Perform(LM_GETDLGCODE, Key, 0) and DLGC_WANTARROWS = 0) and
      (anoArrowToSelectNextInParent in Navigation) and AControl.Focused and
      Assigned(AControl.Parent)  then
   begin
@@ -2063,9 +1973,6 @@ begin
   end;
 end;
 
-{------------------------------------------------------------------------------
-  procedure TApplication.DoBeforeMouseMessage(CurMouseControl: TControl);
-------------------------------------------------------------------------------}
 procedure TApplication.DoBeforeMouseMessage(CurMouseControl: TControl);
 begin
   //debugln(['TApplication.DoBeforeMouseMessage ',DbgSName(CurMouseControl)]);
@@ -2114,7 +2021,7 @@ var
 begin
   if (Shift = []) and (Key = VK_ESCAPE) and
      (AControl.Perform(CM_WANTSPECIALKEY, Key, 0) = 0) and
-     (AControl.Perform(LM_GETDLGCODE, 0, 0) and DLGC_WANTALLKEYS = 0) and
+     (AControl.Perform(LM_GETDLGCODE, Key, 0) and DLGC_WANTALLKEYS = 0) and
      (anoEscapeForCancelControl in Navigation) then
   begin
     Form := GetParentForm(AControl);
@@ -2143,7 +2050,7 @@ var
 begin
   if (Shift = []) and (Key = VK_RETURN) and
      (AControl.Perform(CM_WANTSPECIALKEY, Key, 0) = 0) and
-     (AControl.Perform(LM_GETDLGCODE, 0, 0) and DLGC_WANTALLKEYS = 0) and
+     (AControl.Perform(LM_GETDLGCODE, Key, 0) and DLGC_WANTALLKEYS = 0) and
      (anoReturnForDefaultControl in Navigation) then
   begin
     //DebugLn(['TApplication.DoReturnKey ',DbgSName(AControl)]);
@@ -2176,7 +2083,7 @@ procedure TApplication.DoTabKey(AControl: TWinControl; var Key: Word;
 begin
   if (Key = VK_TAB) and ((Shift - [ssShift]) = []) and
      (AControl.Perform(CM_WANTSPECIALKEY, Key, 0) = 0) and
-     (AControl.Perform(LM_GETDLGCODE, 0, 0) and DLGC_WANTTAB = 0) and
+     (AControl.Perform(LM_GETDLGCODE, Key, 0) and DLGC_WANTTAB = 0) and
      (anoTabToSelectNext in Navigation) and AControl.Focused then
   begin
     // traverse tabstop controls inside form

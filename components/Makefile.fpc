@@ -56,6 +56,8 @@ bigide:
 	$(MAKE) -C fpcunit
 	$(MAKE) -C fpcunit/ide
 	$(MAKE) -C projecttemplates
+	$(MAKE) -C fpdebug
+	$(MAKE) -C lazdebuggers
 	$(MAKE) -C leakview
 	$(MAKE) -C memds
 	$(MAKE) -C sdf
@@ -72,6 +74,10 @@ bigide:
 	$(MAKE) -C sqldb
 	$(MAKE) -C PascalScript/Source
 	$(MAKE) -C macroscript
+	$(MAKE) -C lclextensions
+	$(MAKE) -C virtualtreeview
+	$(MAKE) -C onlinepackagemanager
+	$(MAKE) -C pas2js
 
 all: base bigide
 
@@ -94,6 +100,8 @@ clean:
 	$(MAKE) -C fpcunit clean
 	$(MAKE) -C fpcunit/ide clean
 	$(MAKE) -C projecttemplates clean
+	$(MAKE) -C fpdebug clean
+	$(MAKE) -C lazdebuggers clean
 	$(MAKE) -C leakview clean
 	$(MAKE) -C memds clean
 	$(MAKE) -C sdf clean
@@ -110,6 +118,10 @@ clean:
 	$(MAKE) -C sqldb clean
 	$(MAKE) -C PascalScript/Source clean
 	$(MAKE) -C macroscript clean
+	$(MAKE) -C lclextensions clean
+	$(MAKE) -C virtualtreeview clean
+	$(MAKE) -C onlinepackagemanager clean
+	$(MAKE) -C pas2js clean
 
 cleanall: clean
 
@@ -132,6 +144,8 @@ distclean:
 	$(MAKE) -C fpcunit distclean
 	$(MAKE) -C fpcunit/ide distclean
 	$(MAKE) -C projecttemplates distclean
+	$(MAKE) -C fpdebug distclean
+	$(MAKE) -C lazdebuggers distclean
 	$(MAKE) -C leakview distclean
 	$(MAKE) -C memds distclean
 	$(MAKE) -C sdf distclean
@@ -148,4 +162,8 @@ distclean:
 	$(MAKE) -C sqldb distclean
 	$(MAKE) -C PascalScript/Source distclean
 	$(MAKE) -C macroscript distclean
+	$(MAKE) -C lclextensions distclean
+	$(MAKE) -C virtualtreeview distclean
+	$(MAKE) -C onlinepackagemanager distclean
+	$(MAKE) -C pas2js distclean
 

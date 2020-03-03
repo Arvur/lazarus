@@ -29,7 +29,7 @@ uses
   LCLStrConsts, LCLType, LCLProc, LCLIntf, LMessages, LResources, Graphics,
   ActnList, Controls, Forms, Menus, Themes,
   // LazUtils
-  TextStrings, ExtendedStrings, LazUTF8;
+  TextStrings, ExtendedStrings, LazUTF8, LazMethodList, LazLoggerBase, LazUtilities;
 
 type
 
@@ -123,6 +123,7 @@ type
     property BidiMode;
     property BorderSpacing;
     property Constraints;
+    property DoubleBuffered;
     property DragCursor;
     property DragKind;
     property DragMode;
@@ -133,6 +134,7 @@ type
     property Min;
     property PageSize;
     property ParentBidiMode;
+    property ParentDoubleBuffered;
     property ParentShowHint;
     property PopupMenu;
     property Position;
@@ -185,6 +187,7 @@ type
     property Color;
     property Constraints;
     property DockSite;
+    property DoubleBuffered;
     property DragCursor;
     property DragKind;
     property DragMode;
@@ -192,6 +195,7 @@ type
     property Font;
     property ParentBidiMode;
     property ParentColor;
+    property ParentDoubleBuffered;
     property ParentFont;
     property ParentShowHint;
     property PopupMenu;
@@ -273,6 +277,7 @@ type
     FDropDownCount: Integer;
     FDroppedDown: boolean;
     FDroppingDown: Boolean;
+    FEditingDone: Boolean;
     FItemHeight: integer;
     FItemIndex: integer;
     FItemWidth: integer;
@@ -381,7 +386,7 @@ type
     procedure ClearSelection; //override;
     property CharCase: TEditCharCase read FCharCase write SetCharCase default ecNormal;
     property DroppedDown: Boolean read GetDroppedDown write SetDroppedDown;
-    property DroppingDown: Boolean read FDroppingDown write FDroppingDown;
+    property DroppingDown: Boolean read FDroppingDown write FDroppingDown; deprecated 'Will be removed in 2.2';
     procedure SelectAll;
     property AutoComplete: boolean
       read GetAutoComplete write SetAutoComplete default False;
@@ -427,6 +432,7 @@ type
     property CharCase;
     property Color;
     property Constraints;
+    property DoubleBuffered;
     property DragCursor;
     property DragKind;
     property DragMode;
@@ -470,10 +476,11 @@ type
     property OnUTF8KeyPress;
     property ParentBidiMode;
     property ParentColor;
+    property ParentDoubleBuffered;
     property ParentFont;
     property ParentShowHint;
     property PopupMenu;
-    property ReadOnly; deprecated 'Will be removed in 1.10 - use extended Style values instead.';
+    property ReadOnly; deprecated 'Will be removed in 2.2 - use extended Style values instead.';
     property ShowHint;
     property Sorted;
     property Style;
@@ -533,6 +540,9 @@ type
     procedure LMSelChange(var TheMessage); message LM_SelChange;
     procedure WMLButtonUp(Var Message: TLMLButtonUp); message LM_LBUTTONUP;
     procedure SendItemSelected(Index: integer; IsSelected: boolean);
+    procedure ClearSelectedCache;
+    procedure SetSelectedCache(Index: Integer; IsSelected: Boolean);
+    function GetSelectedCache(Index: Integer): Boolean;
   protected
     class procedure WSRegisterClass; override;
     procedure AssignItemDataToCache(const AIndex: Integer; const AData: Pointer); virtual; // called to store item data while the handle isn't created
@@ -542,6 +552,7 @@ type
     function CalculateStandardItemHeight: Integer;
     procedure CreateParams(var Params: TCreateParams); override;
     procedure InitializeWnd; override;
+    procedure DestroyWnd; override;
     procedure FinalizeWnd; override;
     class function GetControlClassDefaultSize: TSize; override;
     procedure CheckIndex(const AIndex: Integer);
@@ -655,6 +666,7 @@ type
     property Color;
     property Columns;
     property Constraints;
+    property DoubleBuffered;
     property DragCursor;
     property DragKind;
     property DragMode;
@@ -688,6 +700,9 @@ type
     property OnMouseWheel;
     property OnMouseWheelDown;
     property OnMouseWheelUp;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
     property OnResize;
     property OnSelectionChange;
     property OnShowHint;
@@ -696,6 +711,7 @@ type
     property Options;
     property ParentBidiMode;
     property ParentColor;
+    property ParentDoubleBuffered;
     property ParentShowHint;
     property ParentFont;
     property PopupMenu;
@@ -881,7 +897,7 @@ type
     procedure SetScrollBars(const Value: TScrollStyle);
     procedure Loaded; override;
     procedure CMWantSpecialKey(var Message: TCMWantSpecialKey); message CM_WANTSPECIALKEY;
-    procedure WMGetDlgCode(var Message: TLMNoParams); message LM_GETDLGCODE;
+    procedure WMGetDlgCode(var Message: TLMGetDlgCode); message LM_GETDLGCODE;
     class function GetControlClassDefaultSize: TSize; override;
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
     function CanShowEmulatedTextHint: Boolean; override;
@@ -918,6 +934,7 @@ type
     property CharCase;
     property Color;
     property Constraints;
+    property DoubleBuffered;
     property DragCursor;
     property DragKind;
     property DragMode;
@@ -954,6 +971,7 @@ type
     property OnStartDrag;
     property OnUTF8KeyPress;
     property ParentColor;
+    property ParentDoubleBuffered;
     property ParentFont;
     property ParentShowHint;
     property PasswordChar;
@@ -981,6 +999,7 @@ type
     property CharCase;
     property Color;
     property Constraints;
+    property DoubleBuffered;
     property DragCursor;
     property DragKind;
     property DragMode;
@@ -1010,10 +1029,14 @@ type
     property OnMouseWheel;
     property OnMouseWheelDown;
     property OnMouseWheelUp;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
     property OnStartDrag;
     property OnUTF8KeyPress;
     property ParentBidiMode;
     property ParentColor;
+    property ParentDoubleBuffered;
     property ParentFont;
     property PopupMenu;
     property ParentShowHint;
@@ -1077,6 +1100,7 @@ type
     property Caption;
     property Color nodefault;
     property Constraints;
+    property DoubleBuffered;
     property DragCursor;
     property DragKind;
     property DragMode;
@@ -1098,11 +1122,15 @@ type
     property OnMouseWheel;
     property OnMouseWheelDown;
     property OnMouseWheelUp;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
     property OnResize;
     property OnStartDrag;
     property ParentBidiMode;
     property ParentFont;
     property ParentColor;
+    property ParentDoubleBuffered;
     property ParentShowHint;
     property PopupMenu;
     property ShowAccelChar;
@@ -1219,6 +1247,7 @@ type
     property Color;
     property Constraints;
     property Default;
+    property DoubleBuffered;
     property DragCursor;
     property DragKind;
     property DragMode;
@@ -1248,6 +1277,7 @@ type
     property OnResize;
     property OnStartDrag;
     property OnUTF8KeyPress;
+    property ParentDoubleBuffered;
     property ParentFont;
     property ParentShowHint;
     property PopupMenu;
@@ -1323,6 +1353,7 @@ type
     property Checked;
     property Color nodefault;
     property Constraints;
+    property DoubleBuffered;
     property DragCursor;
     property DragKind;
     property DragMode;
@@ -1354,6 +1385,7 @@ type
     property OnStartDrag;
     property OnUTF8KeyPress;
     property ParentColor;
+    property ParentDoubleBuffered;
     property ParentFont;
     property ParentShowHint;
     property ParentBidiMode;
@@ -1386,6 +1418,7 @@ type
     property Checked;
     property Color;
     property Constraints;
+    property DoubleBuffered;
     property DragCursor;
     property DragKind;
     property DragMode;
@@ -1409,6 +1442,7 @@ type
     property OnMouseWheelUp;
     property OnStartDrag;
     property ParentBidiMode;
+    property ParentDoubleBuffered;
     property ParentFont;
     property ParentShowHint;
     property PopupMenu;
@@ -1443,6 +1477,7 @@ type
     property Checked;
     property Color;
     property Constraints;
+    property DoubleBuffered;
     property DragCursor;
     property DragKind;
     property DragMode;
@@ -1473,6 +1508,7 @@ type
     property OnStartDrag;
     property ParentBidiMode;
     property ParentColor;
+    property ParentDoubleBuffered;
     property ParentFont;
     property ParentShowHint;
     property PopupMenu;
@@ -1594,6 +1630,9 @@ type
     property OnMouseWheel;
     property OnMouseWheelDown;
     property OnMouseWheelUp;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
     property OnResize;
     property OnStartDrag;
     property OptimalFill;
@@ -1683,7 +1722,4 @@ end;
 
 {$I customstatictext.inc}
 
-initialization
-  RegisterPropertyToSkip(TCustomEdit, 'TextHintFontColor','Used in a previous version of Lazarus','');
-  RegisterPropertyToSkip(TCustomEdit, 'TextHintFontStyle','Used in a previous version of Lazarus','');
 end.

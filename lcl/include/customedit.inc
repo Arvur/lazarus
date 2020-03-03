@@ -395,6 +395,8 @@ begin
   RegisterPropertyToSkip(TCustomEdit, 'BevelKind',  'VCL compatibility property', '');
   RegisterPropertyToSkip(TCustomEdit, 'BevelOuter', 'VCL compatibility property', '');
   RegisterPropertyToSkip(TCustomEdit, 'OEMConvert', 'VCL compatibility property', '');
+  RegisterPropertyToSkip(TCustomEdit, 'TextHintFontColor','Used in a previous version of Lazarus','');
+  RegisterPropertyToSkip(TCustomEdit, 'TextHintFontStyle','Used in a previous version of Lazarus','');
 end;
 
 function TCustomEdit.CanShowEmulatedTextHint: Boolean;
@@ -500,10 +502,8 @@ procedure TCustomEdit.WMChar(var Message: TLMChar);
 begin
   // all normal characters are handled by the Edit
   //debugln('TCustomEdit.WMChar ',DbgSName(Self),' ',dbgs(Message.CharCode));
-  if (KeyDataToShiftState(Message.KeyData) * [ssCtrl, ssAlt] = [])
-      and (Message.CharCode in [ord('A')..ord('Z'),ord('a')..ord('z')]) then
-    // eat normal keys, so they don't trigger accelerators
-    Message.Result := 1
+  if KeyDataToShiftState(Message.KeyData) * [ssCtrl, ssAlt] = [] then
+    Message.Result := 1  // eat normal keys, so they don't trigger accelerators
   else
     inherited WMChar(Message);
 end;

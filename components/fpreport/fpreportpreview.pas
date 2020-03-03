@@ -32,6 +32,8 @@ type
 
   TFPReportPreviewForm = class(TForm)
     AClose: TAction;
+    ALast: TAction;
+    AFirst: TAction;
     APrint: TAction;
     AExportPDF: TAction;
     AZoomReset: TAction;
@@ -49,13 +51,17 @@ type
     PBottom: TPanel;
     PMExport: TPopupMenu;
     SBPrevious: TSpeedButton;
+    SBPrevious1: TSpeedButton;
     ScrollBox1: TScrollBox;
     SpeedButton1: TSpeedButton;
+    SpeedButton2: TSpeedButton;
     TBPreview: TToolBar;
     TBClose: TToolButton;
     TBExport: TToolButton;
     TBPDF: TToolButton;
     TBPrint: TToolButton;
+    TBFirst: TToolButton;
+    TBLast: TToolButton;
     ToolButton3: TToolButton;
     TBPrevious: TToolButton;
     TBNext: TToolButton;
@@ -67,6 +73,10 @@ type
     procedure AExportExecute(Sender: TObject);
     procedure AExportPDFExecute(Sender: TObject);
     procedure AExportPDFUpdate(Sender: TObject);
+    procedure AFirstExecute(Sender: TObject);
+    procedure AFirstUpdate(Sender: TObject);
+    procedure ALastExecute(Sender: TObject);
+    procedure ALastUpdate(Sender: TObject);
     procedure ANextExecute(Sender: TObject);
     procedure ANextUpdate(Sender: TObject);
     procedure APreviousExecute(Sender: TObject);
@@ -79,11 +89,15 @@ type
     procedure AZoomResetExecute(Sender: TObject);
     procedure EPageEditingDone(Sender: TObject);
     procedure FormCreate(Sender: TObject);
+    procedure FormDestroy(Sender: TObject);
     procedure PBPreviewClick(Sender: TObject);
     procedure PBPreviewMouseLeave(Sender: TObject);
     procedure PBPreviewMouseMove(Sender: TObject; Shift: TShiftState; X,
       Y: Integer);
   private
+    FHorzOffset : Integer;
+    FBitmap:TBitmap;
+    FLastPage : Integer;
     FCurrentZoom : Integer;
     FOnOpenURL: TOpenURLEvent;
     FRender:TFPReportExportCanvas;
@@ -91,6 +105,7 @@ type
     procedure ExportReport(REC: TFPReportExporterClass);
     procedure FillExportMenu;
     function GetPageIndex: Integer;
+    procedure RecreateBitmap;
     procedure ResizePreview;
     procedure SetCurrentZoom(AValue: Integer);
     procedure SetPageIndex(AValue: Integer);
@@ -178,6 +193,26 @@ begin
   (Sender as TAction).Enabled:=ReportExportManager.FindExporter(PDFExport)<>Nil;
 end;
 
+procedure TFPReportPreviewForm.AFirstExecute(Sender: TObject);
+begin
+  PageIndex:=0;
+end;
+
+procedure TFPReportPreviewForm.AFirstUpdate(Sender: TObject);
+begin
+  (Sender as TAction).Enabled:=PageIndex>0;
+end;
+
+procedure TFPReportPreviewForm.ALastExecute(Sender: TObject);
+begin
+  PageIndex:=ReportPages.Count-1;
+end;
+
+procedure TFPReportPreviewForm.ALastUpdate(Sender: TObject);
+begin
+  (Sender as TAction).Enabled:=PageIndex<ReportPages.Count-1;
+end;
+
 procedure TFPReportPreviewForm.ANextExecute(Sender: TObject);
 begin
   PageIndex:=PageIndex+1;
@@ -216,7 +251,7 @@ end;
 
 procedure TFPReportPreviewForm.AZoomOutExecute(Sender: TObject);
 begin
-  if FCurrentZoom<MaxZoomIndex then
+  if FCurrentZoom>-MaxZoomIndex then
     CurrentZoom:=CurrentZoom-1;
 end;
 
@@ -249,7 +284,8 @@ begin
   FRender.VDPI:=PixelsPerInch;
   FRender.Zoom:=Zooms[FCurrentZoom];
   ResizePreview;
-  Frender.RenderCurrentPage;
+  FLastPage:=-1; // Force recreate
+  PBPreview.Invalidate;
 end;
 
 function TFPReportPreviewForm.GetPageIndex: Integer;
@@ -261,6 +297,7 @@ procedure TFPReportPreviewForm.SetPageIndex(AValue: Integer);
 begin
   FRender.PageIndex:=AValue;
   EPage.Text:=IntToStr(AValue+1);
+  PBPreview.Invalidate;
 end;
 
 function TFPReportPreviewForm.GetEnableHyperLinks: Boolean;
@@ -293,16 +330,30 @@ Var
 
 begin
   FRender.GetCurrentPageRenderSize(W,H);
-  PBPreview.Width:=W+FRender.HorzOffset;
+  PBPreview.Width:=W+FHorzOffset*2;
   PBPreview.Height:=H;
+end;
+
+procedure TFPReportPreviewForm.RecreateBitmap;
+
+Var
+  W,H : Integer;
+
+begin
+  FRender.GetCurrentPageRenderSize(W,H);
+  FBitmap.SetSize(W,H);
+  FRender.RenderCurrentPage;
+  FLastPage:=FRender.PageIndex;
 end;
 
 procedure TFPReportPreviewForm.DoPaintReport(Sender: TObject);
 
 
 begin
+  if FLastPage<>FRender.PageIndex then
+    RecreateBitmap;
   ResizePreview;
-  FRender.Execute;
+  PBPreview.Canvas.Draw(FHorzOffset*2,0,FBitmap);
 end;
 
 class function TFPReportPreviewForm.LoadFromResource: Boolean;
@@ -311,16 +362,25 @@ begin
 end;
 
 procedure TFPReportPreviewForm.FormCreate(Sender: TObject);
+
 begin
+  FHorzOffset:=100;
   FRender:=TFPReportExportCanvas.Create(Self);
   FRender.HyperLinksEnabled:=True;
-  FRender.Canvas:=PBPReview.Canvas;
+  FBitmap:=TBitmap.Create;
+  FLastPage:=-1;
+  FRender.Zoom:=1;
+  FRender.Canvas:=FBitmap.Canvas;
   PBPreview.OnPaint:=@DoPaintReport;
   AExportPDF.Enabled:=ReportExportManager.IndexOfExporter(PDFExport)<>-1;
   APrint.Enabled:=ReportExportManager.IndexOfExporter(PrintExport)<>-1;
   CurrentZoom:=0;
-  FRender.HorzOffset:=100;
   FillExportMenu;
+end;
+
+procedure TFPReportPreviewForm.FormDestroy(Sender: TObject);
+begin
+  FBitmap.Free;
 end;
 
 procedure TFPReportPreviewForm.ShowHyperLink(const AURL: String);

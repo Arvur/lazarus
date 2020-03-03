@@ -47,10 +47,11 @@ uses
     glib, gdk, gtk, gdkpixbuf,
   {$ENDIF}
   Math, // Math after gtk to get the correct Float type
+  Masks, LazUTF8, FileUtil, LazFileUtils, LazStringUtils, DynHashArray,
   LMessages, LCLMessageGlue, LCLProc, LCLStrConsts, LCLIntf, LCLType,
-  DynHashArray, Masks, GraphType, GraphMath, Graphics, Controls,
-  Forms, Menus, StdCtrls, ComCtrls, ExtCtrls, Dialogs, ExtDlgs,
-  FileUtil, ImgList, GtkFontCache, GTKGlobals, GtkDef, GtkExtra, GtkDebug;
+  GraphType, GraphMath, Graphics, Controls, Forms, Menus,
+  StdCtrls, ComCtrls, ExtCtrls, Dialogs, ExtDlgs,
+  ImgList, GtkFontCache, GTKGlobals, GtkDef, GtkExtra, GtkDebug;
 
 const
   GtkListItemGtkListTag = 'GtkList';
@@ -301,7 +302,6 @@ procedure BeginGDKErrorTrap;
 procedure EndGDKErrorTrap;
 function dbgGRect(const ARect: PGDKRectangle): string; overload;
 
-
 // gtk resources
 procedure Set_RC_Name(Sender: TObject; AWidget: PGtkWidget);
 
@@ -310,8 +310,7 @@ function DeliverPostMessage(const Target: Pointer; var TheMessage): GBoolean;
 function DeliverMessage(const Target: Pointer; var AMessage): PtrInt;
 
 // PChar
-function CreatePChar(const s: string): PChar;
-function ComparePChar(P1, P2: PChar): boolean;
+//function CreatePChar(const s: string): PChar;
 function FindChar(c: char; p:PChar; Max: integer): integer;
 function FindLineLen(p:PChar; Max: integer): integer;
 
@@ -599,7 +598,6 @@ procedure ConnectInternalWidgetsSignals(AWidget: PGtkWidget;
 //--
   
 // accelerators
-function DeleteAmpersands(var Str: String): Longint;
 function Ampersands2Underscore(Src: PChar): PChar;
 function Ampersands2Underscore(const ASource: String): String;
 function RemoveAmpersands(Src: PChar; LineLength: Longint): PChar;

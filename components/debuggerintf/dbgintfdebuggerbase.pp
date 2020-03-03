@@ -48,9 +48,9 @@ uses
   // LCL
   LCLProc,
   // LazUtils
-  LazClasses, LazLoggerBase, LazFileUtils, Maps, LazMethodList,
+  LazClasses, LazLoggerBase, LazFileUtils, LazStringUtils, Maps, LazMethodList,
   // DebuggerIntf
-  DbgIntfBaseTypes, DbgIntfMiscClasses;
+  DbgIntfBaseTypes, DbgIntfMiscClasses, DbgIntfPseudoTerminal;
 
 const
   DebuggerIntfVersion = 0;
@@ -81,6 +81,7 @@ type
     dcStepOverInstr,
     dcStepIntoInstr,
     dcSendConsoleInput
+    //, dcSendSignal
     );
   TDBGCommands = set of TDBGCommand;
 
@@ -158,7 +159,7 @@ type
                        );
 
   (* TValidState: State for breakpoints *)
-  TValidState = (vsUnknown, vsValid, vsInvalid);
+  TValidState = (vsUnknown, vsValid, vsInvalid, vsPending);
 
 const
   DebuggerDataStateStr : array[TDebuggerDataState] of string = (
@@ -199,6 +200,7 @@ type
   *)
 
   TDebuggerIntf = class;
+  TDebuggerClass = class of TDebuggerIntf;
   TDebuggerDataSupplier = class;
 
   { TDebuggerDataHandler }
@@ -290,35 +292,51 @@ type
   TDBGWatchPointKind = (
     wpkWrite,
     wpkRead,
-    wpkReadWrite
+    wpkReadWrite,
+    wkpExec
   );
 
   { TBaseBreakPoint }
 
   TBaseBreakPoint = class(TRefCountedColectionItem)
-  protected
+  private
     FAddress: TDBGPtr;
-    FWatchData: String;
     FEnabled: Boolean;
+    FInitialEnabled: Boolean;
     FExpression: String;
     FHitCount: Integer;      // Current counter
     FBreakHitCount: Integer; // The user configurable value
     FKind: TDBGBreakPointKind;
-    FLine: Integer;
+  protected  // TODO: private
+    FWatchData: String;
     FWatchScope: TDBGWatchPointScope;
     FWatchKind: TDBGWatchPointKind;
     FSource: String;
+    FLine: Integer;
     FValid: TValidState;
-    FInitialEnabled: Boolean;
+  protected
+    type
+      (* ciCreated  will be called, as soon as any other property is set the first time (or at EndUpdate)
+         ciLocation includes Address, WatchData,Watch....
+      *)
+      TDbgBpChangeIndicator = (ciCreated, ciDestroy, ciKind, ciLocation, ciEnabled, ciCondition, ciHitCount);
+      TDbgBpChangeIndicators = set of TDbgBpChangeIndicator;
+    // For the debugger backend to override
+  private
+    FPropertiesChanged: TDbgBpChangeIndicators;
+    FInPropertiesChanged: Boolean;
+  protected
+    procedure MarkPropertyChanged(AChanged: TDbgBpChangeIndicator);
+    procedure MarkPropertiesChanged(AChanged: TDbgBpChangeIndicators);
+    procedure DoPropertiesChanged(AChanged: TDbgBpChangeIndicators); virtual;
+    procedure DoExpressionChange; virtual;
+    procedure DoEnableChange; virtual;
+    // TODO: ClearPropertiesChanged, if needed inside DoPropertiesChanged
   protected
     procedure AssignLocationTo(Dest: TPersistent); virtual;
     procedure AssignTo(Dest: TPersistent); override;
-    procedure DoBreakHitCountChange; virtual;
-    procedure DoExpressionChange; virtual;
-    procedure DoEnableChange; virtual;
     procedure DoHit(const ACount: Integer; var {%H-}AContinue: Boolean); virtual;
     procedure SetHitCount(const AValue: Integer);
-    procedure DoKindChange; virtual;
     procedure SetValid(const AValue: TValidState);
   protected
     // virtual properties
@@ -334,24 +352,27 @@ type
     function GetWatchScope: TDBGWatchPointScope; virtual;
     function GetWatchKind: TDBGWatchPointKind; virtual;
     function GetValid: TValidState; virtual;
+    procedure DoEndUpdate; override;
 
-    procedure SetAddress(const AValue: TDBGPtr); virtual;
     procedure SetBreakHitCount(const AValue: Integer); virtual;
     procedure SetEnabled(const AValue: Boolean); virtual;
     procedure SetExpression(const AValue: String); virtual;
     procedure SetInitialEnabled(const AValue: Boolean); virtual;
-    procedure SetKind(const AValue: TDBGBreakPointKind); virtual;
+    procedure SetKind(const AValue: TDBGBreakPointKind);
   public
     constructor Create(ACollection: TCollection); override;
+    destructor Destroy; override;
+    procedure SetPendingToValid(const AValue: TValidState);
     // PublicProtectedFix ide/debugmanager.pas(867,32) Error: identifier idents no member "SetLocation"
     property BreakHitCount: Integer read GetBreakHitCount write SetBreakHitCount;
     property Enabled: Boolean read GetEnabled write SetEnabled;
     property Expression: String read GetExpression write SetExpression;
     property HitCount: Integer read GetHitCount;
     property InitialEnabled: Boolean read FInitialEnabled write SetInitialEnabled;
-    property Kind: TDBGBreakPointKind read GetKind write SetKind;
+    property Kind: TDBGBreakPointKind read GetKind;
     property Valid: TValidState read GetValid;
   public
+    procedure SetAddress(const AValue: TDBGPtr); virtual;
     procedure SetLocation(const ASource: String; const ALine: Integer); virtual;
     procedure SetWatch(const AData: String; const AScope: TDBGWatchPointScope;
                        const AKind: TDBGWatchPointKind); virtual;
@@ -375,23 +396,42 @@ type
   private
     FSlave: TBaseBreakPoint;
     function GetDebugger: TDebuggerIntf;
+    function GetDebuggerState: TDBGState;
     procedure SetSlave(const ASlave : TBaseBreakPoint);
   protected
-    procedure SetEnabled(const AValue: Boolean); override;
+    procedure SetEnabled(const AValue: Boolean); override; // TODO: remove, currently used by WatchPoint, instead of vsInvalid
     procedure DoChanged; override;
     procedure DoStateChange(const AOldState: TDBGState); virtual;
     property  Debugger: TDebuggerIntf read GetDebugger;
+    property  DebuggerState: TDBGState read GetDebuggerState;
   public
     constructor Create(ACollection: TCollection); override;
     destructor Destroy; override;
     procedure Hit(var ACanContinue: Boolean);
     property Slave: TBaseBreakPoint read FSlave write SetSlave;
+    property Kind: TDBGBreakPointKind read GetKind write SetKind; // TODO: remove, used by TIDEBreakPoint.SetKind
 
     procedure DoLogMessage(const AMessage: String); virtual;
     procedure DoLogCallStack(const {%H-}Limit: Integer); virtual;
     procedure DoLogExpression(const {%H-}AnExpression: String); virtual; // implemented in TGDBMIBreakpoint
   end;
   TDBGBreakPointClass = class of TDBGBreakPoint;
+
+  { TIdeBreakPointBase }
+
+  TIdeBreakPointBase = class(TBaseBreakPoint)
+  private
+    FMaster: TDBGBreakPoint;
+    procedure SetMaster(AValue: TDBGBreakPoint);
+  protected
+    procedure DoEndUpdate; override;
+    procedure ReleaseMaster;
+    property Master: TDBGBreakPoint read FMaster write SetMaster;
+    // TODO: move TBaseBreakPoint properties from IDE te IDEBase
+  public
+    destructor Destroy; override;
+    procedure BeginUpdate; override;
+  end;
 
   { TBaseBreakPoints }
 
@@ -402,10 +442,10 @@ type
     constructor Create(const ABreakPointClass: TBaseBreakPointClass);
     destructor Destroy; override;
     procedure Clear; reintroduce;
-    function Add(const ASource: String; const ALine: Integer): TBaseBreakPoint; overload;
-    function Add(const AAddress: TDBGPtr): TBaseBreakPoint; overload;
+    function Add(const ASource: String; const ALine: Integer; AnUpdating: Boolean = False): TBaseBreakPoint; overload;
+    function Add(const AAddress: TDBGPtr; AnUpdating: Boolean = False): TBaseBreakPoint; overload;
     function Add(const AData: String; const AScope: TDBGWatchPointScope;
-                 const AKind: TDBGWatchPointKind): TBaseBreakPoint; overload;
+                 const AKind: TDBGWatchPointKind; AnUpdating: Boolean = False): TBaseBreakPoint; overload;
     function Find(const ASource: String; const ALine: Integer): TBaseBreakPoint; overload;
     function Find(const ASource: String; const ALine: Integer; const AIgnore: TBaseBreakPoint): TBaseBreakPoint; overload;
     function Find(const AAddress: TDBGPtr): TBaseBreakPoint; overload;
@@ -430,10 +470,10 @@ type
   public
     constructor Create(const ADebugger: TDebuggerIntf;
                        const ABreakPointClass: TDBGBreakPointClass);
-    function Add(const ASource: String; const ALine: Integer): TDBGBreakPoint; overload;
-    function Add(const AAddress: TDBGPtr): TDBGBreakPoint; overload;
+    function Add(const ASource: String; const ALine: Integer; AnUpdating: Boolean = False): TDBGBreakPoint; overload; reintroduce;
+    function Add(const AAddress: TDBGPtr; AnUpdating: Boolean = False): TDBGBreakPoint; overload; reintroduce;
     function Add(const AData: String; const AScope: TDBGWatchPointScope;
-                 const AKind: TDBGWatchPointKind): TDBGBreakPoint; overload;
+                 const AKind: TDBGWatchPointKind; AnUpdating: Boolean = False): TDBGBreakPoint; overload; reintroduce;
     function Find(const ASource: String; const ALine: Integer): TDBGBreakPoint; overload;
     function Find(const ASource: String; const ALine: Integer; const AIgnore: TDBGBreakPoint): TDBGBreakPoint; overload;
     function Find(const AAddress: TDBGPtr): TDBGBreakPoint; overload;
@@ -500,11 +540,11 @@ type
                        ALocation: TDBGFieldLocation; AFlags: TDBGFieldFlags = [];
                        AClassName: String = '');
     destructor Destroy; override;
-    property Name: String read FName;
+    property Name: String read FName write FName;
     property DBGType: TDBGType read FDBGType;
     property Location: TDBGFieldLocation read FLocation;
     property Flags: TDBGFieldFlags read FFlags;
-    property ClassName: String read FClassName; // the class in which the field was declared
+    property ClassName: String read FClassName write FClassName; // the class in which the field was declared
   end;
 
   { TDBGFields }
@@ -592,7 +632,7 @@ type
      wdfChar, wdfString,
      wdfDecimal, wdfUnsigned, wdfFloat, wdfHex,
      wdfPointer,
-     wdfMemDump
+     wdfMemDump, wdfBinary
     );
 
   TWatch = class;
@@ -858,8 +898,8 @@ type
   public
     constructor Create;
     function Count: Integer; virtual;
-    function GetAddress(const {%H-}AIndex: Integer; const {%H-}ALine: Integer): TDbgPtr; virtual;
-    function GetAddress(const ASource: String; const ALine: Integer): TDbgPtr;
+    function HasAddress(const AIndex: Integer; const ALine: Integer): Boolean; virtual;
+    function HasAddress(const ASource: String; const ALine: Integer): Boolean;
     function GetInfo({%H-}AAddress: TDbgPtr; out {%H-}ASource, {%H-}ALine, {%H-}AOffset: Integer): Boolean; virtual;
     function IndexOf(const {%H-}ASource: String): integer; virtual;
     procedure Request(const {%H-}ASource: String); virtual;
@@ -981,6 +1021,7 @@ type
     function GetEntryByIdx(AnIndex: Integer): TRegisters;
   protected
   public
+    procedure InvalidateItems;
     property EntriesByIdx[AnIndex: Integer]: TRegisters read GetEntryByIdx;
     property Entries[AThreadId, AStackFrame: Integer]: TRegisters read GetEntry; default;
   end;
@@ -1683,6 +1724,9 @@ type
     etWindowsMessageSent
   );
 
+  TDebugCompilerRequirement = (dcrNoExternalDbgInfo, dcrExternalDbgInfoOnly, dcrDwarfOnly);
+  TDebugCompilerRequirements = set of TDebugCompilerRequirement;
+
   TDBGFeedbackType = (ftInformation, ftWarning, ftError);
   TDBGFeedbackResult = (frOk, frStop);
   TDBGFeedbackResults = set of TDBGFeedbackResult;
@@ -1709,6 +1753,8 @@ type
                                AType: TDBGFeedbackType; AButtons: TDBGFeedbackResults
                               ): TDBGFeedbackResult of object;
 
+  TDBGEvaluateResultCallback = procedure(Sender: TObject; ASuccess: Boolean; ResultText: String;
+    ResultDBGType: TDBGType) of object;
 
   TDebuggerNotifyReason = (dnrDestroy);
 
@@ -1723,6 +1769,46 @@ type
   end;
   TDebuggerPropertiesClass= class of TDebuggerProperties;
 
+  { TCommonDebuggerProperties
+    properties that all debuggers should/could implement
+  }
+
+  TInternalExceptionBreakPoint = (ieRaiseBreakPoint, ieRunErrorBreakPoint, ieBreakErrorBreakPoint);
+  TInternalExceptionBreakPoints = set of TInternalExceptionBreakPoint;
+
+  TCommonDebuggerProperties = class(TDebuggerProperties)
+  private
+    FInternalExceptionBreakPoints: TInternalExceptionBreakPoints;
+  protected const
+    INTERNALEXCEPTIONBREAKPOINTS_DEFAULT = [ieRaiseBreakPoint, ieRunErrorBreakPoint, ieBreakErrorBreakPoint];
+  protected
+    property InternalExceptionBreakPoints: TInternalExceptionBreakPoints
+      read FInternalExceptionBreakPoints write FInternalExceptionBreakPoints default INTERNALEXCEPTIONBREAKPOINTS_DEFAULT;
+  public
+    constructor Create; override;
+    procedure Assign({%H-}Source: TPersistent); override;
+  end;
+
+  {$INTERFACES CORBA} // no ref counting needed
+
+  { TDebuggerEventLogInterface
+    Methods for the EventLogger that a debugger may call
+  }
+  //TODO: remove TDebuggerIntf.OnEvent
+
+  TDebuggerEventLogInterface = interface
+    procedure LogCustomEvent(const ACategory: TDBGEventCategory;
+                const AEventType: TDBGEventType; const AText: String);
+    procedure LogEventBreakPointHit(const ABreakpoint: TDBGBreakPoint; const ALocation: TDBGLocationRec);
+    procedure LogEventWatchPointTriggered(const ABreakpoint: TDBGBreakPoint;
+                const ALocation: TDBGLocationRec; const AOldWatchedVal, ANewWatchedVal: String);
+    procedure LogEventWatchPointScope(const ABreakpoint: TDBGBreakPoint;
+                const ALocation: TDBGLocationRec);
+  end;
+
+  //TDebuggerActionInterface = interface
+  //  // prompt user
+  //end;
 
   { TDebuggerIntf }
 
@@ -1740,6 +1826,7 @@ type
     FExitCode: Integer;
     FExternalDebugger: String;
     FFileName: String;
+    FIsInReset: Boolean;
     FLocals: TLocalsSupplier;
     FLineInfo: TDBGLineInfo;
     //FUnitInfoProvider, FInternalUnitInfoProvider: TDebuggerUnitInfoProvider;
@@ -1754,6 +1841,7 @@ type
     FCallStack: TCallStackSupplier;
     FWatches: TWatchesSupplier;
     FThreads: TThreadsSupplier;
+    FEventLogHandler: TDebuggerEventLogInterface;
     FOnCurrent: TDBGCurrentLineEvent;
     FOnException: TDBGExceptionEvent;
     FOnOutput: TDBGOutputEvent;
@@ -1763,13 +1851,17 @@ type
     FOnBreakPointHit: TDebuggerBreakPointHitEvent;
     FWorkingDir: String;
     FDestroyNotificationList: array [TDebuggerNotifyReason] of TMethodList;
+    FReleaseLock: Integer;
     procedure DebuggerEnvironmentChanged(Sender: TObject);
     procedure EnvironmentChanged(Sender: TObject);
     //function GetUnitInfoProvider: TDebuggerUnitInfoProvider;
     function  GetState: TDBGState;
     function  ReqCmd(const ACommand: TDBGCommand;
-                     const AParams: array of const): Boolean;
-    procedure SetDebuggerEnvironment (const AValue: TStrings );
+                     const AParams: array of const): Boolean; overload;
+    function  ReqCmd(const ACommand: TDBGCommand;
+                     const AParams: array of const;
+                     const ACallback: TMethod): Boolean;
+    procedure SetDebuggerEnvironment (const AValue: TStrings ); overload;
     procedure SetEnvironment(const AValue: TStrings);
     procedure SetFileName(const AValue: String);
   protected
@@ -1786,6 +1878,7 @@ type
     procedure DoCurrent(const ALocation: TDBGLocationRec);
     procedure DoDbgOutput(const AText: String);
     procedure DoDbgEvent(const ACategory: TDBGEventCategory; const AEventType: TDBGEventType; const AText: String);
+      deprecated 'switch to EventLogHandler';
     procedure DoException(const AExceptionType: TDBGExceptionType;
                           const AExceptionClass: String;
                           const AExceptionLocation: TDBGLocationRec;
@@ -1802,23 +1895,30 @@ type
     function  GetWaiting: Boolean; virtual;
     function  GetIsIdle: Boolean; virtual;
     function  RequestCommand(const ACommand: TDBGCommand;
-                             const AParams: array of const): Boolean;
+                             const AParams: array of const;
+                             const ACallback: TMethod): Boolean;
                              virtual; abstract; // True if succesful
     procedure SetExitCode(const AValue: Integer);
     procedure SetState(const AValue: TDBGState);
     procedure SetErrorState(const AMsg: String; const AInfo: String = '');
     procedure DoRelease; virtual;
+    // prevent destruction while nested in any call
+    procedure LockRelease; virtual;
+    procedure UnlockRelease; virtual;
+    function GetPseudoTerminal: TPseudoTerminal; virtual;
+    property InternalFilename: string read FFileName write FFileName; //experimental
   public
     class function Caption: String; virtual;         // The name of the debugger as shown in the debuggeroptions
     class function ExePaths: String; virtual;        // The default locations of the exe
+    class function ExePathsMruGroup: TDebuggerClass; virtual;        // The default locations of the exe
     class function HasExePath: boolean; virtual; deprecated; // use NeedsExePath instead
     class function NeedsExePath: boolean; virtual;        // If the debugger needs to have an exe path
-    class function CanExternalDebugSymbolsFile: boolean; virtual; // If the debugger support the -Xg compiler option to store the debug info in an external file
+    class function RequiredCompilerOpts(ATargetCPU, ATargetOS: String): TDebugCompilerRequirements; virtual;
 
     // debugger properties
     class function CreateProperties: TDebuggerProperties; virtual;         // Creates debuggerproperties
     class function GetProperties: TDebuggerProperties;                     // Get the current properties
-    class procedure SetProperties(const AProperties: TDebuggerProperties); // Set the current properties
+    //class procedure SetProperties(const AProperties: TDebuggerProperties); // Set the current properties
 
     (* TODO:
        This method is a workaround for http://bugs.freepascal.org/view.php?id=21834
@@ -1828,6 +1928,7 @@ type
        Errors should also be reported by debugger
     *)
     class function  RequiresLocalExecutable: Boolean; virtual;
+    procedure TestCmd(const ACommand: String); virtual;// For internal debugging purposes
   public
     constructor Create(const AExternalDebugger: String); virtual;
     destructor Destroy; override;
@@ -1848,8 +1949,7 @@ type
     procedure Attach(AProcessID: String);
     procedure Detach;
     procedure SendConsoleInput(AText: String);
-    function  Evaluate(const AExpression: String; var AResult: String;
-                       var ATypeInfo: TDBGType;
+    function  Evaluate(const AExpression: String; ACallback: TDBGEvaluateResultCallback;
                        EvalFlags: TDBGEvaluateFlags = []): Boolean;                     // Evaluates the given expression, returns true if valid
     function GetProcessList({%H-}AList: TRunningProcessInfoList): boolean; virtual;
     function  Modify(const AExpression, AValue: String): Boolean;                // Modifies the given expression, returns true if valid
@@ -1858,7 +1958,9 @@ type
     function GetLocation: TDBGLocationRec; virtual;
     procedure LockCommandProcessing; virtual;
     procedure UnLockCommandProcessing; virtual;
+    procedure BeginReset; virtual;
     function  NeedReset: Boolean; virtual;
+    property  IsInReset: Boolean read FIsInReset;
     procedure AddNotifyEvent(AReason: TDebuggerNotifyReason; AnEvent: TNotifyEvent);
     procedure RemoveNotifyEvent(AReason: TDebuggerNotifyReason; AnEvent: TNotifyEvent);
   public
@@ -1879,10 +1981,11 @@ type
     property Registers: TRegisterSupplier read FRegisters;                           // list of all registers
     property Signals: TDBGSignals read FSignals;                                 // A list of actions for signals we know
     property ShowConsole: Boolean read FShowConsole write FShowConsole;          // Indicates if the debugger should create a console for the debuggee
+    property PseudoTerminal: TPseudoTerminal read GetPseudoTerminal; experimental; // 'may be replaced with a more general API';
     property State: TDBGState read FState;                                       // The current state of the debugger
     property SupportedCommands: TDBGCommands read GetSupportedCommands;          // All available commands of the debugger
     property TargetWidth: Byte read GetTargetWidth;                              // Currently only 32 or 64
-    property Waiting: Boolean read GetWaiting;                                   // Set when the debugger is wating for a command to complete
+    //property Waiting: Boolean read GetWaiting;                                   // Set when the debugger is wating for a command to complete
     property Watches: TWatchesSupplier read FWatches;                                 // list of all watches etc
     property Threads: TThreadsSupplier read FThreads;
     property WorkingDir: String read FWorkingDir write FWorkingDir;              // The working dir of the exe being debugged
@@ -1892,9 +1995,11 @@ type
     //property UnitInfoProvider: TDebuggerUnitInfoProvider                        // Provided by DebugBoss, to map files to packages or project
     //         read GetUnitInfoProvider write FUnitInfoProvider;
     // Events
+    property EventLogHandler: TDebuggerEventLogInterface read FEventLogHandler write FEventLogHandler;
     property OnCurrent: TDBGCurrentLineEvent read FOnCurrent write FOnCurrent;   // Passes info about the current line being debugged
     property OnDbgOutput: TDBGOutputEvent read FOnDbgOutput write FOnDbgOutput;  // Passes all debuggeroutput
     property OnDbgEvent: TDBGEventNotify read FOnDbgEvent write FOnDbgEvent;     // Passes recognized debugger events, like library load or unload
+      deprecated 'switch to EventLogHandler';
     property OnException: TDBGExceptionEvent read FOnException write FOnException;  // Fires when the debugger received an ecxeption
     property OnOutput: TDBGOutputEvent read FOnOutput write FOnOutput;           // Passes all output of the debugged target
     property OnBeforeState: TDebuggerStateChangedEvent read FOnBeforeState write FOnBeforeState;   // Fires when the current state of the debugger changes
@@ -1904,7 +2009,8 @@ type
     property OnFeedback: TDBGFeedbackEvent read FOnFeedback write FOnFeedback;
     property OnIdle: TNotifyEvent read FOnIdle write FOnIdle;                    // Called if all outstanding requests are processed (queue empty)
   end;
-  TDebuggerClass = class of TDebuggerIntf;
+
+  { TBaseDebugManagerIntf }
 
   TBaseDebugManagerIntf = class(TComponent)
   public type
@@ -1915,10 +2021,11 @@ type
     function ValueFormatterKey(const aSymbolKind: TDBGSymbolKind;
       const aTypeName: string): string;
   protected
-    function GetDebuggerClass(const AIndex: Integer): TDebuggerClass;
+    class function GetDebuggerClass(const AIndex: Integer): TDebuggerClass;static;
+    class function GetDebuggerClassByName(const AIndex: String): TDebuggerClass; static;
     function FindDebuggerClass(const Astring: String): TDebuggerClass;
   public
-    function DebuggerCount: Integer;
+    class function DebuggerCount: Integer;
 
     procedure RegisterValueFormatter(const aSymbolKind: TDBGSymbolKind;
       const aTypeName: string; const aFunc: TStringFunction);
@@ -1926,12 +2033,15 @@ type
       const aTypeName, aValue: string): string;
     function FormatValue(const aDBGType: TDBGType;
       const aValue: string): string;
+    class property Debuggers[const AIndex: Integer]: TDebuggerClass read GetDebuggerClass;
+    class property DebuggersByClassName[const AIndex: String]: TDebuggerClass read GetDebuggerClassByName;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
   end;
 
 procedure RegisterDebugger(const ADebuggerClass: TDebuggerClass);
+function MinDbgPtr(a, b: TDBGPtr): TDBGPtr;inline; overload;
 
 function dbgs(AState: TDBGState): String; overload;
 function dbgs(ADataState: TDebuggerDataState): String; overload;
@@ -1964,11 +2074,11 @@ const
              dcSendConsoleInput],
   {dsPause} [dcRun, dcStop, dcStepOver, dcStepInto, dcStepOverInstr, dcStepIntoInstr,
              dcStepOut, dcRunTo, dcJumpto, dcDetach, dcBreak, dcWatch, dcLocal, dcEvaluate, dcModify,
-             dcEnvironment, dcSetStackFrame, dcDisassemble, dcSendConsoleInput],
+             dcEnvironment, dcSetStackFrame, dcDisassemble, dcSendConsoleInput {, dcSendSignal}],
   {dsInternalPause} // same as run, so not really used
-            [dcStop, dcBreak, dcWatch, dcEnvironment, dcSendConsoleInput],
+            [dcStop, dcBreak, dcWatch, dcEnvironment, dcSendConsoleInput{, dcSendSignal}],
   {dsInit } [],
-  {dsRun  } [dcPause, dcStop, dcDetach, dcBreak, dcWatch, dcEnvironment, dcSendConsoleInput],
+  {dsRun  } [dcPause, dcStop, dcDetach, dcBreak, dcWatch, dcEnvironment, dcSendConsoleInput{, dcSendSignal}],
   {dsError} [dcStop],
   {dsDestroying} []
   );
@@ -1979,7 +2089,16 @@ var
 
 procedure RegisterDebugger(const ADebuggerClass: TDebuggerClass);
 begin
-  MDebuggerClasses.AddObject(ADebuggerClass.ClassName, TObject(Pointer(ADebuggerClass)));
+  if MDebuggerClasses.IndexOfObject(TObject(Pointer(ADebuggerClass))) < 0 then
+    MDebuggerClasses.AddObject(ADebuggerClass.ClassName, TObject(Pointer(ADebuggerClass)));
+end;
+
+function MinDbgPtr(a, b: TDBGPtr): TDBGPtr;
+begin
+  if a < b then
+    Result := a
+  else
+    Result := b;
 end;
 
 procedure DoFinalization;
@@ -2087,6 +2206,21 @@ begin
                    [AnAddr.Value, AnAddr.GuessedValue, AnAddr.Offset, ValidityName[AnAddr.Validity]]);
 end;
 
+{ TCommonDebuggerProperties }
+
+constructor TCommonDebuggerProperties.Create;
+begin
+  FInternalExceptionBreakPoints := INTERNALEXCEPTIONBREAKPOINTS_DEFAULT;
+end;
+
+procedure TCommonDebuggerProperties.Assign(Source: TPersistent);
+begin
+  inherited Assign(Source);
+  if Source is TCommonDebuggerProperties then begin
+    FInternalExceptionBreakPoints := TCommonDebuggerProperties(Source).FInternalExceptionBreakPoints;
+  end;
+end;
+
 { TDBGDisassemblerRangeExtender }
 
 function TDBGDisassemblerRangeExtender.InitAddress(AValue: TDBGPtr;
@@ -2189,7 +2323,7 @@ begin
   TryStartAt.GuessedValue := TmpAddr;
   AdjustToRangeOrKnowFunctionStart(TryStartAt, RngBefore);
   // check max size
-  if (TryStartAt.Value < AStartAddr - Min(AStartAddr, DAssMaxRangeSize))
+  if (TryStartAt.Value < AStartAddr - MinDbgPtr(AStartAddr, DAssMaxRangeSize))
   then begin
     DebugLn(DBG_DISASSEMBLER, ['INFO: Limit Range for Disass: FStartAddr=', AStartAddr, '  TryStartAt.Value=', TryStartAt.Value  ]);
     TryStartAt := InitAddress(TmpAddr, avGuessed);
@@ -2307,7 +2441,7 @@ begin
     then RngBefore := nil;
     {$POP}
     AdjustToRangeOrKnowFunctionStart(TryStartAt, RngBefore);
-    if (TryStartAt.Value < TryEndAt.Value - Min(TryEndAt.Value, DAssMaxRangeSize))
+    if (TryStartAt.Value < TryEndAt.Value - MinDbgPtr(TryEndAt.Value, DAssMaxRangeSize))
     then begin
       DebugLn(DBG_DISASSEMBLER, ['INFO: Limit Range for Disass: TryEndAt.Value=', TryEndAt.Value, '  TryStartAt.Value=', TryStartAt.Value  ]);
       TryStartAt := InitAddress(TmpAddr, avGuessed);
@@ -3232,6 +3366,19 @@ begin
   Result := TRegisters(inherited EntriesByIdx[AnIndex]);
 end;
 
+procedure TRegistersList.InvalidateItems;
+var
+  i: Integer;
+begin
+  Assert(not Immutable, 'TRegisterList.InvalidateItems Immutable');
+  if Count = 0 then
+    exit;
+  for i := 0 to Count-1 do begin
+    EntriesByIdx[i].DataValidity := ddsUnknown;
+  end;
+  DoCleared;
+end;
+
 { TWatchesBase }
 
 function TWatches.GetItemBase(const AnIndex: Integer): TWatch;
@@ -3450,7 +3597,8 @@ begin
   if FKind <> AValue
   then begin
     FKind := AValue;
-    DoKindChange;
+    Changed;
+    MarkPropertyChanged(ciKind);
   end;
 end;
 
@@ -3460,6 +3608,7 @@ begin
   begin
     FAddress := AValue;
     Changed;
+    MarkPropertyChanged(ciLocation);
   end;
 end;
 
@@ -3506,6 +3655,7 @@ end;
 
 constructor TBaseBreakPoint.Create(ACollection: TCollection);
 begin
+  FPropertiesChanged := [ciCreated];
   FAddress := 0;
   FSource := '';
   FLine := -1;
@@ -3520,9 +3670,51 @@ begin
   AddReference;
 end;
 
-procedure TBaseBreakPoint.DoBreakHitCountChange;
+destructor TBaseBreakPoint.Destroy;
 begin
-  Changed;
+  FPropertiesChanged := []; // Do not sent old changes
+  if not IsUpdating then
+    MarkPropertyChanged(ciDestroy);
+  inherited Destroy;
+end;
+
+procedure TBaseBreakPoint.SetPendingToValid(const AValue: TValidState);
+begin
+  assert(Valid = vsPending, 'Can only change state if pending');
+  SetValid(AValue);
+end;
+
+procedure TBaseBreakPoint.MarkPropertyChanged(AChanged: TDbgBpChangeIndicator);
+begin
+  MarkPropertiesChanged([AChanged]);
+end;
+
+procedure TBaseBreakPoint.MarkPropertiesChanged(AChanged: TDbgBpChangeIndicators
+  );
+var
+  c: TDbgBpChangeIndicators;
+begin
+  FPropertiesChanged := FPropertiesChanged + AChanged;
+  if IsUpdating or FInPropertiesChanged then
+    exit;
+  FInPropertiesChanged := True;
+  try
+    while FPropertiesChanged <> [] do begin
+      c := FPropertiesChanged;
+      FPropertiesChanged := [];
+      DoPropertiesChanged(c);
+    end;
+  finally
+    FInPropertiesChanged := False;
+  end;
+end;
+
+procedure TBaseBreakPoint.DoPropertiesChanged(AChanged: TDbgBpChangeIndicators);
+begin
+  if ciEnabled in AChanged then
+    DoEnableChange;
+  if ciCondition in AChanged then
+    DoExpressionChange;
 end;
 
 procedure TBaseBreakPoint.DoEnableChange;
@@ -3575,12 +3767,19 @@ begin
   Result := FValid;
 end;
 
+procedure TBaseBreakPoint.DoEndUpdate;
+begin
+  inherited DoEndUpdate;
+  MarkPropertiesChanged([]);
+end;
+
 procedure TBaseBreakPoint.SetBreakHitCount(const AValue: Integer);
 begin
   if FBreakHitCount <> AValue
   then begin
     FBreakHitCount := AValue;
-    DoBreakHitCountChange;
+    Changed;
+    MarkPropertyChanged(ciHitCount);
   end;
 end;
 
@@ -3589,7 +3788,7 @@ begin
   if FEnabled <> AValue
   then begin
     FEnabled := AValue;
-    DoEnableChange;
+    MarkPropertyChanged(ciEnabled);
   end;
 end;
 
@@ -3598,7 +3797,7 @@ begin
   if FExpression <> AValue
   then begin
     FExpression := AValue;
-    DoExpressionChange;
+    MarkPropertyChanged(ciCondition);
   end;
 end;
 
@@ -3609,11 +3808,6 @@ begin
     FHitCount := AValue;
     Changed;
   end;
-end;
-
-procedure TBaseBreakPoint.DoKindChange;
-begin
-  Changed;
 end;
 
 procedure TBaseBreakPoint.SetInitialEnabled(const AValue: Boolean);
@@ -3628,6 +3822,7 @@ begin
   FSource := ASource;
   FLine := ALine;
   Changed;
+  MarkPropertyChanged(ciLocation);
 end;
 
 procedure TBaseBreakPoint.SetWatch(const AData: String; const AScope: TDBGWatchPointScope;
@@ -3638,6 +3833,7 @@ begin
   FWatchScope := AScope;
   FWatchKind := AKind;
   Changed;
+  MarkPropertyChanged(ciLocation);
 end;
 
 procedure TBaseBreakPoint.SetValid(const AValue: TValidState );
@@ -3759,6 +3955,14 @@ begin
   Result := TDBGBreakPoints(Collection).FDebugger;
 end;
 
+function TDBGBreakPoint.GetDebuggerState: TDBGState;
+begin
+  if Debugger <> nil then
+    Result := Debugger.State
+  else
+    Result := dsNone;
+end;
+
 procedure TDBGBreakPoint.SetSlave(const ASlave : TBaseBreakPoint);
 begin
   Assert((FSlave = nil) or (ASlave = nil), 'TDBGBreakPoint.SetSlave already has a slave');
@@ -3773,30 +3977,79 @@ begin
   if FSlave <> nil then FSlave.Enabled := AValue;
 end;
 
+{ TIdeBreakPointBase }
+
+procedure TIdeBreakPointBase.SetMaster(AValue: TDBGBreakPoint);
+begin
+  if FMaster = AValue then Exit;
+  if (FMaster <> nil) and IsUpdating then FMaster.EndUpdate;
+  FMaster := AValue;
+  if (FMaster <> nil) and IsUpdating then FMaster.BeginUpdate;
+end;
+
+procedure TIdeBreakPointBase.BeginUpdate;
+begin
+  if (not IsUpdating) and (FMaster <> nil) then FMaster.BeginUpdate;
+  inherited BeginUpdate;
+end;
+
+procedure TIdeBreakPointBase.DoEndUpdate;
+begin
+  inherited DoEndUpdate;
+  if FMaster <> nil then FMaster.EndUpdate;
+end;
+
+procedure TIdeBreakPointBase.ReleaseMaster;
+begin
+  if FMaster <> nil
+  then begin
+    FMaster.Slave := nil;
+    ReleaseRefAndNil(FMaster);
+  end;
+end;
+
+destructor TIdeBreakPointBase.Destroy;
+begin
+  ReleaseMaster;
+  inherited Destroy;
+end;
+
 { =========================================================================== }
 { TBaseBreakPoints }
 { =========================================================================== }
 
-function TBaseBreakPoints.Add(const ASource: String; const ALine: Integer): TBaseBreakPoint;
+function TBaseBreakPoints.Add(const ASource: String; const ALine: Integer;
+  AnUpdating: Boolean): TBaseBreakPoint;
 begin
   Result := TBaseBreakPoint(inherited Add);
+  Result.BeginUpdate;
   Result.SetKind(bpkSource);
   Result.SetLocation(ASource, ALine);
+  if not AnUpdating then
+    Result.EndUpdate;
 end;
 
-function TBaseBreakPoints.Add(const AAddress: TDBGPtr): TBaseBreakPoint;
+function TBaseBreakPoints.Add(const AAddress: TDBGPtr; AnUpdating: Boolean
+  ): TBaseBreakPoint;
 begin
   Result := TBaseBreakPoint(inherited Add);
+  Result.BeginUpdate;
   Result.SetKind(bpkAddress);
   Result.SetAddress(AAddress);
+  if not AnUpdating then
+    Result.EndUpdate;
 end;
 
-function TBaseBreakPoints.Add(const AData: String; const AScope: TDBGWatchPointScope;
-  const AKind: TDBGWatchPointKind): TBaseBreakPoint;
+function TBaseBreakPoints.Add(const AData: String;
+  const AScope: TDBGWatchPointScope; const AKind: TDBGWatchPointKind;
+  AnUpdating: Boolean): TBaseBreakPoint;
 begin
   Result := TBaseBreakPoint(inherited Add);
+  Result.BeginUpdate;
   Result.SetKind(bpkData);
   Result.SetWatch(AData, AScope, AKind);
+  if not AnUpdating then
+    Result.EndUpdate;
 end;
 
 constructor TBaseBreakPoints.Create(const ABreakPointClass: TBaseBreakPointClass);
@@ -3884,20 +4137,23 @@ end;
 { TDBGBreakPoints }
 { =========================================================================== }
 
-function TDBGBreakPoints.Add (const ASource: String; const ALine: Integer ): TDBGBreakPoint;
+function TDBGBreakPoints.Add(const ASource: String; const ALine: Integer;
+  AnUpdating: Boolean): TDBGBreakPoint;
 begin
-  Result := TDBGBreakPoint(inherited Add(ASource, ALine));
+  Result := TDBGBreakPoint(inherited Add(ASource, ALine, AnUpdating));
 end;
 
-function TDBGBreakPoints.Add(const AAddress: TDBGPtr): TDBGBreakPoint;
+function TDBGBreakPoints.Add(const AAddress: TDBGPtr; AnUpdating: Boolean
+  ): TDBGBreakPoint;
 begin
-  Result := TDBGBreakPoint(inherited Add(AAddress));
+  Result := TDBGBreakPoint(inherited Add(AAddress, AnUpdating));
 end;
 
-function TDBGBreakPoints.Add(const AData: String; const AScope: TDBGWatchPointScope;
-  const AKind: TDBGWatchPointKind): TDBGBreakPoint;
+function TDBGBreakPoints.Add(const AData: String;
+  const AScope: TDBGWatchPointScope; const AKind: TDBGWatchPointKind;
+  AnUpdating: Boolean): TDBGBreakPoint;
 begin
-  Result := TDBGBreakPoint(inherited Add(AData, AScope, AKind));
+  Result := TDBGBreakPoint(inherited Add(AData, AScope, AKind, AnUpdating));
 end;
 
 constructor TDBGBreakPoints.Create(const ADebugger: TDebuggerIntf;
@@ -4238,19 +4494,15 @@ begin
   inherited Create;
 end;
 
-function TBaseLineInfo.GetAddress(const AIndex: Integer; const ALine: Integer): TDbgPtr;
-begin
-  Result := 0;
-end;
-
-function TBaseLineInfo.GetAddress(const ASource: String; const ALine: Integer): TDbgPtr;
+function TBaseLineInfo.HasAddress(const ASource: String; const ALine: Integer
+  ): Boolean;
 var
   idx: Integer;
 begin
   idx := IndexOf(ASource);
   if idx = -1
-  then Result := 0
-  else Result := GetAddress(idx, ALine);
+  then Result := False
+  else Result := HasAddress(idx, ALine);
 end;
 
 function TBaseLineInfo.GetInfo(AAddress: TDbgPtr; out ASource, ALine, AOffset: Integer): Boolean;
@@ -4270,6 +4522,12 @@ end;
 function TBaseLineInfo.Count: Integer;
 begin
   Result := 0;
+end;
+
+function TBaseLineInfo.HasAddress(const AIndex: Integer; const ALine: Integer
+  ): Boolean;
+begin
+  Result := False;
 end;
 
 { TDBGLineInfo }
@@ -4534,8 +4792,9 @@ begin
   end;
   It.Free;
 
-  if Monitor <> nil
-  then Monitor.DoModified;
+  if Monitor <> nil then
+    ACallstack.DoEntriesUpdated; // calls Monitor.DoModified;
+  //Monitor.DoModified;
 end;
 
 //procedure TCallStackSupplier.CurrentChanged;
@@ -5672,6 +5931,11 @@ begin
   // nothing
 end;
 
+procedure TDebuggerIntf.BeginReset;
+begin
+  FIsInReset := True;
+end;
+
 function TDebuggerIntf.NeedReset: Boolean;
 begin
   Result := False;
@@ -5716,7 +5980,7 @@ end;
 procedure TDebuggerIntf.DoDbgEvent(const ACategory: TDBGEventCategory; const AEventType: TDBGEventType; const AText: String);
 begin
   DebugLnEnter(DBG_EVENTS, ['DebugEvent: Enter >> DoDbgEvent >>  State=', dbgs(FState), ' Category=', dbgs(ACategory)]);
-  if Assigned(FOnDbgEvent) then FOnDbgEvent(Self, ACategory, AEventType, AText);
+  if Assigned(FEventLogHandler) then FEventLogHandler.LogCustomEvent(ACategory, AEventType, AText);
   DebugLnExit(DBG_EVENTS, ['DebugEvent: Exit  << DoDbgEvent <<']);
 end;
 
@@ -5803,6 +6067,11 @@ begin
   FCurEnvironment.Assign(FEnvironment);
 end;
 
+function TDebuggerIntf.GetPseudoTerminal: TPseudoTerminal;
+begin
+  Result := nil;
+end;
+
 //function TDebuggerIntf.GetUnitInfoProvider: TDebuggerUnitInfoProvider;
 //begin
 //  Result := FUnitInfoProvider;
@@ -5815,11 +6084,10 @@ begin
   Result := False;
 end;
 
-function TDebuggerIntf.Evaluate(const AExpression: String; var AResult: String;
-  var ATypeInfo: TDBGType; EvalFlags: TDBGEvaluateFlags = []): Boolean;
+function TDebuggerIntf.Evaluate(const AExpression: String;
+  ACallback: TDBGEvaluateResultCallback; EvalFlags: TDBGEvaluateFlags): Boolean;
 begin
-  FreeAndNIL(ATypeInfo);
-  Result := ReqCmd(dcEvaluate, [AExpression, @AResult, @ATypeInfo, Integer(EvalFlags)]);
+  Result := ReqCmd(dcEvaluate, [AExpression, Integer(EvalFlags)], TMethod(ACallback));
 end;
 
 function TDebuggerIntf.GetProcessList(AList: TRunningProcessInfoList): boolean;
@@ -5832,6 +6100,11 @@ begin
   Result := '';
 end;
 
+class function TDebuggerIntf.ExePathsMruGroup: TDebuggerClass;
+begin
+  Result := Self;
+end;
+
 class function TDebuggerIntf.HasExePath: boolean;
 begin
   Result := NeedsExePath;
@@ -5842,9 +6115,9 @@ begin
   Result := true; // most debugger are external and have an exe path
 end;
 
-class function TDebuggerIntf.CanExternalDebugSymbolsFile: boolean;
+class function TDebuggerIntf.RequiredCompilerOpts(ATargetCPU, ATargetOS: String): TDebugCompilerRequirements;
 begin
-  Result := false;
+  Result := [];
 end;
 
 function TDebuggerIntf.GetCommands: TDBGCommands;
@@ -5872,6 +6145,16 @@ end;
 function TDebuggerIntf.GetState: TDBGState;
 begin
   Result := FState;
+end;
+
+function TDebuggerIntf.ReqCmd(const ACommand: TDBGCommand;
+  const AParams: array of const): Boolean;
+var
+  dummy: TMethod;
+begin
+  dummy.Code := nil;
+  dummy.Data := nil;
+  ReqCmd(ACommand, AParams, dummy);
 end;
 
 function TDebuggerIntf.GetSupportedCommands: TDBGCommands;
@@ -5929,12 +6212,12 @@ begin
 end;
 
 function TDebuggerIntf.ReqCmd(const ACommand: TDBGCommand;
-  const AParams: array of const): Boolean;
+  const AParams: array of const; const ACallback: TMethod): Boolean;
 begin
   if FState = dsNone then Init;
   if ACommand in Commands
   then begin
-    Result := RequestCommand(ACommand, AParams);
+    Result := RequestCommand(ACommand, AParams, ACallback);
     if not Result then begin
       DebugLn(DBG_WARNINGS, 'TDebuggerIntf.ReqCmd failed: ',dbgs(ACommand));
     end;
@@ -6007,21 +6290,26 @@ begin
   SetState(dsIdle);
 end;
 
-class procedure TDebuggerIntf.SetProperties(const AProperties: TDebuggerProperties);
-var
-  Props: TDebuggerProperties;
-begin
-  if AProperties = nil then Exit;
-  Props := GetProperties;
-  if Props = AProperties then Exit;
-
-  if Props = nil then Exit; // they weren't created ?
-  Props.Assign(AProperties);
-end;
+//class procedure TDebuggerIntf.SetProperties(const AProperties: TDebuggerProperties);
+//var
+//  Props: TDebuggerProperties;
+//begin
+//  if AProperties = nil then Exit;
+//  Props := GetProperties;
+//  if Props = AProperties then Exit;
+//
+//  if Props = nil then Exit; // they weren't created ?
+//  Props.Assign(AProperties);
+//end;
 
 class function TDebuggerIntf.RequiresLocalExecutable: Boolean;
 begin
   Result := True;
+end;
+
+procedure TDebuggerIntf.TestCmd(const ACommand: String);
+begin
+  //
 end;
 
 procedure TDebuggerIntf.SetState(const AValue: TDBGState);
@@ -6077,7 +6365,25 @@ end;
 
 procedure TDebuggerIntf.DoRelease;
 begin
+  SetState(dsDestroying);
+  if FReleaseLock > 0
+  then exit;
+
   Self.Free;
+end;
+
+procedure TDebuggerIntf.LockRelease;
+begin
+  inc(FReleaseLock);
+  DebugLnEnter(DBG_VERBOSE, ['> TDebuggerIntf.LockRelease ',FReleaseLock]);
+end;
+
+procedure TDebuggerIntf.UnlockRelease;
+begin
+  DebugLnExit(DBG_VERBOSE, ['< TDebuggerIntf.UnlockRelease ',FReleaseLock]);
+  dec(FReleaseLock);
+  if (FReleaseLock = 0) and (State = dsDestroying)
+  then Release;
 end;
 
 procedure TDebuggerIntf.StepInto;
@@ -6125,7 +6431,7 @@ begin
   FValueFormatterList.Duplicates := dupError;
 end;
 
-function TBaseDebugManagerIntf.DebuggerCount: Integer;
+class function TBaseDebugManagerIntf.DebuggerCount: Integer;
 begin
   Result := MDebuggerClasses.Count;
 end;
@@ -6169,9 +6475,23 @@ begin
     Result := FormatValue(aDBGType.Kind, aDBGType.TypeName, aValue);
 end;
 
-function TBaseDebugManagerIntf.GetDebuggerClass(const AIndex: Integer): TDebuggerClass;
+class function TBaseDebugManagerIntf.GetDebuggerClass(const AIndex: Integer): TDebuggerClass;
 begin
   Result := TDebuggerClass(MDebuggerClasses.Objects[AIndex]);
+end;
+
+class function TBaseDebugManagerIntf.GetDebuggerClassByName(const AIndex: String
+  ): TDebuggerClass;
+var
+  i: Integer;
+begin
+  i := MDebuggerClasses.Count - 1;
+  while i >= 0 do begin
+    if LowerCase(TDebuggerClass(MDebuggerClasses.Objects[i]).ClassName) = LowerCase(AIndex) then
+      exit(TDebuggerClass(MDebuggerClasses.Objects[i]));
+    dec(i);
+  end;
+  Result := nil;
 end;
 
 procedure TBaseDebugManagerIntf.RegisterValueFormatter(

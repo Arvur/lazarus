@@ -5,7 +5,13 @@ unit pjsprojectoptions;
 interface
 
 uses
-  Classes, SysUtils, Forms, Controls, StdCtrls, ExtCtrls, Spin, projectintf, CompOptsIntf, IDEOptionsIntf;
+  Classes, SysUtils,
+  // LCL
+  StdCtrls, Spin,
+  // LazUtils
+  LazLoggerBase,
+  // IdeIntf
+  LazIDEIntf, ProjectIntf, CompOptsIntf, IDEOptionsIntf, IDEOptEditorIntf;
 
 type
 
@@ -38,6 +44,7 @@ type
     procedure CheckServerOptions(aEnabled: Boolean);
     function FillFilesCombo(PRJ: TLazProject): Integer;
     procedure ToggleCB(CB: TCheckBox; aEnabled: Boolean);
+
   public
     function GetTitle: string; override;
     procedure Setup({%H-}ADialog: TAbstractOptionsEditorDialog); override;
@@ -53,7 +60,7 @@ Procedure SetDefaultNodeJSCompileOptions(CompOpts: TLazCompilerOptions);
 
 implementation
 
-uses ideintf, lazideintf, pjsdsgnoptions, pjscontroller;
+uses pjsdsgnoptions, pjscontroller, strpas2jsdesign;
 
 Procedure ResetRunParams(RunParams : TAbstractRunParamsOptionsMode);
 
@@ -67,41 +74,61 @@ Procedure SetDefaultWebRunParams(RunParams : TAbstractRunParamsOptionsMode);
 
 begin
   ResetRunParams(RunParams);
-  RunParams.LaunchingApplicationPathPlusParams:='$(Pas2JSBrowser) $(Pas2JSProjectURL)';
+  RunParams.LaunchingApplicationPathPlusParams:='"$(Pas2JSBrowser)" "$(Pas2JSProjectURL)"';
 end;
 
 Procedure SetDefaultNodeRunParams(RunParams : TAbstractRunParamsOptionsMode);
 
 begin
   ResetRunParams(RunParams);
-  RunParams.LaunchingApplicationPathPlusParams:='$(Pas2JSNodeJS) "$MakeDir($(ProjPath))$NameOnly($(ProjFile)).js"';
+  RunParams.LaunchingApplicationPathPlusParams:='"$(Pas2JSNodeJS)" "$MakeDir($(ProjPath))$NameOnly($(ProjFile)).js"';
 end;
 
-Procedure SetPasJSCompileOptions(CompOpts: TLazCompilerOptions; Opts : String);
+Procedure SetPasJSCompileOptions(CompOpts: TLazCompilerOptions;
+  TargetOS, CustomOpts : String);
 
 Var
   Compiler : String;
 
 begin
-  CompOpts.Win32GraphicApp:=false;
+  DebugLn(['SetPasJSCompileOptions START']);
   CompOpts.UnitOutputDirectory:='js';
-  if Length(PJSOptions.CompilerFilename)=0 then
-     Compiler:='$MakeExe(pas2js)'
-  else
-     Compiler:=AnsiQuotedStr(PJSOptions.CompilerFilename, '"');
-  CompOpts.SetAlternativeCompile(Compiler+' '+Opts,true);
+
+  CompOpts.TargetFileExt:='.js';
+  CompOpts.TargetOS:=TargetOS;
+
+  CompOpts.AllowLabel:=false;
+  CompOpts.UseAnsiStrings:=false;
+  CompOpts.CPPInline:=false;
+
+  CompOpts.IOChecks:=false;
+  CompOpts.StackChecks:=false;
+  CompOpts.SmartLinkUnit:=false;
+
+  CompOpts.GenerateDebugInfo:=false;
+  CompOpts.DebugInfoType:=dsAuto;
+  CompOpts.UseLineInfoUnit:=false;
+  CompOpts.UseHeaptrc:=false;
+  CompOpts.Win32GraphicApp:=false;
+
+  CompOpts.WriteFPCLogo:=true;
+  CompOpts.CustomOptions:=CustomOpts;
+
+  Compiler:='$(pas2js)';
+  CompOpts.CompilerPath:=Compiler;
+  debugln(['Hint: (lazarus) [pjsprojectoptions.SetPasJSCompileOptions] Compiler=',CompOpts.CompilerPath,' TargetOS=',CompOpts.TargetOS,' Custom="',CompOpts.CustomOptions,'"']);
 end;
 
 Procedure SetDefaultWebCompileOptions(CompOpts: TLazCompilerOptions);
 
 begin
-  SetPasJSCompileOptions(CompOpts,'-Jirtl.js -Jc -Jminclude -Tbrowser "-Fu$(ProjUnitPath)" $Name($(ProjFile))');
+  SetPasJSCompileOptions(CompOpts,'browser','-Jeutf-8 -Jirtl.js -Jc -Jminclude');
 end;
 
 Procedure SetDefaultNodeJSCompileOptions(CompOpts: TLazCompilerOptions);
 
 begin
-  SetPasJSCompileOptions(CompOpts,'-Jc -Jminclude -Tnodejs "-Fu$(ProjUnitPath)" $Name($(ProjFile))');
+  SetPasJSCompileOptions(CompOpts,'nodejs','-Jeutf-8 -Jminclude');
 end;
 
 {$R *.lfm}
@@ -110,12 +137,21 @@ end;
 
 function TPas2JSProjectOptionsFrame.GetTitle: string;
 begin
-  Result:='Web Project (pas2js)'
+  Result:=pjsdWebProjectPas2js;
 end;
 
 procedure TPas2JSProjectOptionsFrame.Setup(ADialog: TAbstractOptionsEditorDialog);
 begin
-  // Do nothing
+  CBWebProject.Caption:=pjsdProjectIsAWebBrowserPas2jsProject;
+  LCBProjectHTMLFile.Caption:=pjsdProjectHTMLPage;
+  CBMaintainHTMLFile.Caption:=pjsdMaintainHTMLPage;
+  CBUseBrowserConsole.Caption:=pjsdUseBrowserConsoleUnitToDisplayWritelnOutput;
+  CBRunOnReady.Caption:=pjsdRunRTLWhenAllPageResourcesAreFullyLoaded;
+  CBUseHTTPServer.Caption:=pjsdProjectNeedsAHTTPServer;
+  RBStartServerAt.Caption:=pjsdStartHTTPServerOnPort;
+  RBUseURL.Caption:=pjsdUseThisURLToStartApplication;
+  BResetRunCommand.Caption:=pjsdResetRunCommand;
+  BResetCompileCommand.Caption:=pjsdResetCompileCommand;
 end;
 
 procedure TPas2JSProjectOptionsFrame.CBWebProjectChange(Sender: TObject);
@@ -142,14 +178,21 @@ procedure TPas2JSProjectOptionsFrame.BResetRunCommandClick(Sender: TObject);
 
 Var
   Prj : TLazProject;
+
 begin
   PRJ:=LazarusIDE.ActiveProject;
   SetDefaultWebRunParams(Prj.RunParameters.GetOrCreate('Default'));
 end;
 
 procedure TPas2JSProjectOptionsFrame.BResetCompileCommandClick(Sender: TObject);
-begin
 
+Var
+  Prj : TLazProject;
+
+begin
+  PRJ:=LazarusIDE.ActiveProject;
+  SetDefaultWebCompileOptions(PRJ.LazBuildModes.BuildModes[0].LazCompilerOptions);
+  SetDefaultWebCompileOptions(PRJ.LazCompilerOptions);
 end;
 
 procedure TPas2JSProjectOptionsFrame.CBUseHTTPServerChange(Sender: TObject);
@@ -202,7 +245,7 @@ end;
 Function TPas2JSProjectOptionsFrame.FillFilesCombo(PRJ : TLazProject) : Integer;
 
 Var
-  I: integer;
+  I : integer;
   HPF,PF : TLazProjectFile;
   Ext : String;
   L : TStringList;

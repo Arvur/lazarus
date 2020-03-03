@@ -58,7 +58,8 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     procedure InitReading; override;
-    procedure ReadLine(Line: string; OutputIndex: integer; var Handled: boolean); override;
+    procedure ReadLine(Line: string; OutputIndex: integer; IsStdErr: boolean;
+      var Handled: boolean); override;
     class function DefaultSubTool: string; override;
     class function Priority: integer; override;
   end;
@@ -245,36 +246,58 @@ begin
 end;
 
 procedure TIDEMakeParser.ReadLine(Line: string; OutputIndex: integer;
-  var Handled: boolean);
+  IsStdErr: boolean; var Handled: boolean);
 { returns true, if it is a make/gmake message
    Examples for make messages:
      make[1]: Entering directory `<filename>'
      make[1]: Leaving directory `<filename>'
      make[1]: *** [<filename>] Killed
      make <command>
+     make[2]: *** [lazarus] Error 1
+     make[1]: *** [idepkg] Error 2
+     make: *** [idepkg] Error 2
      /bin/cp <options>
 }
 const
-  EnterDirPattern = ']: Entering directory `';
-  LeavingDirPattern = ']: Leaving directory `';
-  MakeMsgPattern = ']: *** [';
+  EnterDirPattern = ': Entering directory `';
+  LeavingDirPattern = ': Leaving directory `';
+  MakeMsgPattern = ': *** [';
 var
   MsgLine: TMessageLine;
   p: PChar;
   Filename, Dir: string;
-  Run: PChar;
+  Run, OldP: PChar;
 begin
   if Line='' then exit;
   p:=PChar(Line);
-  if ReadString(p,'make[') or ReadString(p,'make.exe[') then begin
+  OldP:=p;
+  if ReadString(p,'make.exe') then
+    inc(p,8)
+  else if ReadString(p,'make') then
+    inc(p,4)
+  else if ReadString(p,'gmake') then
+    inc(p,5);
+
+  if (p>OldP) and (p^ in ['[',':']) then begin
+    // e.g. make[2]: *** [lazarus] Error 1
     Handled:=true;
 
     MsgLine:=CreateMsgLine(OutputIndex);
     MsgLine.SubTool:=SubToolMake;
-    MsgLine.Urgency:=mluVerbose;
+    if IsStdErr then
+    begin
+      MsgLine.Urgency:=mluImportant;
+      MsgLine.Flags:=MsgLine.Flags+[mlfStdErr];
+    end else begin
+      MsgLine.Urgency:=mluVerbose;
+    end;
     MsgLine.Msg:=Line;
 
-    while not (p^ in [']',#0]) do inc(p);
+    if p^='[' then
+    begin
+      while not (p^ in [']',#0]) do inc(p);
+      if p^=']' then inc(p);
+    end;
     if ReadString(p,EnterDirPattern) then begin
       // entering directory
       MsgLine.MsgID:=MakeMsgIDEnteringDirectory;
@@ -302,18 +325,24 @@ begin
     end;
     AddMsgLine(MsgLine);
     exit;
-  end else if ReadString(p,'make ') then begin
-    // e.g.  make --assume-new=lazbuild.lpr lazbuild
+  end else if (p>OldP) and (p^=' ') then begin
+    // e.g. make --assume-new=lazbuild.lpr lazbuild
     Handled:=true;
 
     MsgLine:=CreateMsgLine(OutputIndex);
     MsgLine.SubTool:=SubToolMake;
-    MsgLine.Urgency:=mluVerbose;
+    if IsStdErr then begin
+      MsgLine.Urgency:=mluImportant;
+      MsgLine.Flags:=MsgLine.Flags+[mlfStdErr];
+    end else begin
+      MsgLine.Urgency:=mluVerbose;
+    end;
     MsgLine.Msg:=Line;
     AddMsgLine(MsgLine);
     exit;
   end;
 
+  p:=OldP;
   if not (p^ in [#0,' ',#9]) then begin
     // check for command <option>
     Run:=p;
@@ -328,7 +357,12 @@ begin
         Handled:=true;
         MsgLine:=CreateMsgLine(OutputIndex);
         MsgLine.SubTool:=SubToolMake;
-        MsgLine.Urgency:=mluVerbose;
+        if IsStdErr then begin
+          MsgLine.Urgency:=mluImportant;
+          MsgLine.Flags:=MsgLine.Flags+[mlfStdErr];
+        end else begin
+          MsgLine.Urgency:=mluVerbose;
+        end;
         MsgLine.Msg:=Line;
         AddMsgLine(MsgLine);
       end;

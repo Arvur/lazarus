@@ -42,7 +42,8 @@ uses
   // LCL
   LCLProc,
   // LazUtils
-  Laz2_XMLCfg, LazFileUtils, LazLoggerBase, LazConfigStorage, LazClasses, Maps,
+  Laz2_XMLCfg, LazFileUtils, LazStringUtils, LazLoggerBase, LazConfigStorage,
+  LazClasses, Maps,
   // DebuggerIntf
   DbgIntfBaseTypes, DbgIntfMiscClasses, DbgIntfDebuggerBase;
 
@@ -97,7 +98,6 @@ type
 
   TDebuggerConfigStore = class(TDebuggerConfigStoreBase)
   private
-    FDebuggerClass: String;
     FDlgCallStackConfig: TDebuggerCallStackDlgConfig;
     FTDebuggerWatchesDlgConfig: TDebuggerWatchesDlgConfig;
   public
@@ -106,7 +106,6 @@ type
   public
     constructor Create;
     destructor Destroy; override;
-    property DebuggerClass: String read FDebuggerClass write FDebuggerClass;
     property DlgWatchesConfig: TDebuggerWatchesDlgConfig read FTDebuggerWatchesDlgConfig;
     property DlgCallStackConfig: TDebuggerCallStackDlgConfig read FDlgCallStackConfig write FDlgCallStackConfig;
   published
@@ -346,10 +345,9 @@ type
     property Items[AIndex: Integer]: TIDEBreakPointGroup read GetItem; default;
   end;
 
-  TIDEBreakPoint = class(TBaseBreakPoint)
+  TIDEBreakPoint = class(TIDEBreakPointBase)
   private
     FLogEvalExpression: String;
-    FMaster: TDBGBreakPoint;
     FAutoContinueTime: Cardinal;
     FActions: TIDEBreakPointActions;
     FDisableGroupList: TIDEBreakPointGroupList;
@@ -370,6 +368,7 @@ type
     procedure SetEnabled(const AValue: Boolean); override;
     procedure SetInitialEnabled(const AValue: Boolean); override;
     procedure SetExpression(const AValue: String); override;
+    procedure SetKind(const AValue: TDBGBreakPointKind);
     function  DebugExeLine: Integer; virtual;  // Same as line, but in Subclass: the line in the compiled exe
 
     procedure DisableGroups;
@@ -450,10 +449,10 @@ type
   public
     constructor Create(const ABreakPointClass: TIDEBreakPointClass);
     destructor Destroy; override;
-    function Add(const ASource: String; const ALine: Integer): TIDEBreakPoint; overload;
-    function Add(const AAddress: TDBGPtr): TIDEBreakPoint; overload;
+    function Add(const ASource: String; const ALine: Integer; AnUpdating: Boolean = False): TIDEBreakPoint; overload; reintroduce;
+    function Add(const AAddress: TDBGPtr; AnUpdating: Boolean = False): TIDEBreakPoint; overload; reintroduce;
     function Add(const AData: String; const AScope: TDBGWatchPointScope;
-                 const AKind: TDBGWatchPointKind): TIDEBreakPoint; overload;
+                 const AKind: TDBGWatchPointKind; AnUpdating: Boolean = False): TIDEBreakPoint; overload; reintroduce;
     function Find(const ASource: String; const ALine: Integer): TIDEBreakPoint; overload;
     function Find(const ASource: String; const ALine: Integer; const AIgnore: TIDEBreakPoint): TIDEBreakPoint; overload;
     function Find(const AAddress: TDBGPtr): TIDEBreakPoint; overload;
@@ -467,7 +466,7 @@ type
     procedure LoadFromXMLConfig(XMLConfig: TXMLConfig; const Path: string;
                       const OnLoadFilename: TOnLoadFilenameFromConfig;
                       const OnGetGroup: TOnGetGroupByName); virtual;
-    procedure SaveToXMLConfig(XMLConfig: TXMLConfig; const Path: string;
+    procedure SaveToXMLConfig(XMLConfig: TXMLConfig; const Path: string; const ALegacyList: Boolean;
                       const OnSaveFilename: TOnSaveFilenameToConfig); virtual;
     property Master: TDBGBreakPoints read FMaster write SetMaster;
   public
@@ -525,7 +524,7 @@ type
     procedure LoadFromXMLConfig(XMLConfig: TXMLConfig;
                                 const Path: string); virtual;
     procedure SaveToXMLConfig(XMLConfig: TXMLConfig;
-                              const Path: string); virtual;
+      const Path: string; const ALegacyList: Boolean); virtual;
     function GetGroupByName(const GroupName: string): TIDEBreakPointGroup;
     function FindGroupByName(const GroupName: string;
                              Ignore: TIDEBreakPointGroup): TIDEBreakPointGroup;
@@ -556,7 +555,7 @@ const
      'wdfChar', 'wdfString',
      'wdfDecimal', 'wdfUnsigned', 'wdfFloat', 'wdfHex',
      'wdfPointer',
-     'wdfMemDump'
+     'wdfMemDump', 'wdfBinary'
     );
 
 type
@@ -749,7 +748,8 @@ type
     function Find(const AExpression: String): TCurrentWatch; reintroduce;
     // IDE
     procedure LoadFromXMLConfig(const AConfig: TXMLConfig; const APath: string);
-    procedure SaveToXMLConfig(const AConfig: TXMLConfig; const APath: string);
+    procedure SaveToXMLConfig(const AConfig: TXMLConfig; const APath: string;
+      const ALegacyList: Boolean);
   public
     property Items[const AnIndex: Integer]: TCurrentWatch read GetItem
                                                       write SetItem; default;
@@ -789,7 +789,8 @@ type
   public
     procedure Clear;
     procedure LoadFromXMLConfig(const AConfig: TXMLConfig; const APath: string);
-    procedure SaveToXMLConfig(const AConfig: TXMLConfig; const APath: string);
+    procedure SaveToXMLConfig(const AConfig: TXMLConfig; const APath: string;
+      const ALegacyList: Boolean);
 
     procedure BeginIgnoreModified;
     procedure EndIgnoreModified;
@@ -944,7 +945,7 @@ type
     procedure AddNotification(const ANotification: TIDELineInfoNotification);
     procedure RemoveNotification(const ANotification: TIDELineInfoNotification);
     function Count: Integer; override;
-    function GetAddress(const AIndex: Integer; const ALine: Integer): TDbgPtr; override;
+    function HasAddress(const AIndex: Integer; const ALine: Integer): Boolean; override;
     function GetInfo(AAdress: TDbgPtr; out ASource, ALine, AOffset: Integer): Boolean; override;
     function IndexOf(const ASource: String): integer; override;
     procedure Request(const ASource: String); override;
@@ -1044,6 +1045,7 @@ type
     constructor Create;
     destructor Destroy; override;
     procedure Clear;
+    procedure InvalidateItems;
     procedure AddNotification(const ANotification: TRegistersNotification);
     procedure RemoveNotification(const ANotification: TRegistersNotification);
     property  CurrentRegistersList: TCurrentIDERegistersList read GetCurrentRegistersList;
@@ -1348,6 +1350,9 @@ type
     FThread: TIdeThreadEntry;
   protected
     function GetUnitInfoProvider: TDebuggerUnitInfoProvider; override;
+  public
+    function CreateCopy: TCallStackEntry; override;
+    procedure Assign(AnOther: TCallStackEntry); override;
   end;
 
   { TThreadEntry }
@@ -1691,7 +1696,7 @@ type
     procedure LoadFromXMLConfig(const AXMLConfig: TXMLConfig;
                                 const APath: string);
     procedure SaveToXMLConfig(const AXMLConfig: TXMLConfig;
-                              const APath: string);
+                              const APath: string; const ALegacyList: Boolean);
     procedure AddIfNeeded(AName: string);
     procedure Reset; override;
     property Items[const AIndex: Integer]: TIDEException read GetItem
@@ -1744,6 +1749,7 @@ const
     'StepOverInstr',
     'StepIntoInstr',
     'SendConsoleInput'
+//    'SendSignal'
     );
 
   DBGStateNames: array[TDBGState] of string = (
@@ -1769,7 +1775,6 @@ const
     );
 
 function DBGCommandNameToCommand(const s: string): TDBGCommand;
-function DBGStateNameToState(const s: string): TDBGState; deprecated;
 function DBGBreakPointActionNameToAction(const s: string): TIDEBreakPointAction;
 
 function dbgs(AFlag: TDebuggerLocationFlag): String; overload;
@@ -1820,13 +1825,6 @@ begin
   Result:=dcStop;
 end;
 
-function DBGStateNameToState(const s: string): TDBGState;
-begin
-  for Result:=Low(TDBGState) to High(TDBGState) do
-    if AnsiCompareText(s,DBGStateNames[Result])=0 then exit;
-  Result:=dsNone;
-end;
-
 function DBGBreakPointActionNameToAction(const s: string): TIDEBreakPointAction;
 begin
   for Result:=Low(TIDEBreakPointAction) to High(TIDEBreakPointAction) do
@@ -1850,7 +1848,22 @@ end;
 
 function TIdeThreadFrameEntry.GetUnitInfoProvider: TDebuggerUnitInfoProvider;
 begin
+  assert(FThread <> nil, 'FThread <> nil');
   Result := FThread.GetUnitInfoProvider;
+end;
+
+function TIdeThreadFrameEntry.CreateCopy: TCallStackEntry;
+begin
+  Result := TIdeThreadFrameEntry.Create;
+  Result.Assign(Self);
+end;
+
+procedure TIdeThreadFrameEntry.Assign(AnOther: TCallStackEntry);
+begin
+  inherited Assign(AnOther);
+  if AnOther is TIdeThreadFrameEntry then begin
+    FThread := TIdeThreadFrameEntry(AnOther).FThread;
+  end;
 end;
 
 { TIDEBreakPointGroupList }
@@ -1951,20 +1964,8 @@ end;
 { TDebuggerConfigStore }
 
 procedure TDebuggerConfigStore.Load;
-const
-  OLD_GDB_DBG_NAME = 'GNU debugger (gdb)';
-  OLD_SSH_DBG_NAME = 'GNU debugger through SSH (gdb)';
-var
-  s: String;
 begin
   inherited;
-  FDebuggerClass := ConfigStore.GetValue('Class', '');
-  if FDebuggerClass='' then begin
-    // try old format
-    s := ConfigStore.GetValue('Type', '');
-    if s = OLD_GDB_DBG_NAME then FDebuggerClass:='TGDBMIDEBUGGER';
-    if s = OLD_SSH_DBG_NAME then FDebuggerClass:='TSSHGDBMIDEBUGGER';
-  end;
   ConfigStore.AppendBasePath('WatchesDlg/');
   try
     FTDebuggerWatchesDlgConfig.ConfigStore := ConfigStore;
@@ -1984,7 +1985,6 @@ end;
 procedure TDebuggerConfigStore.Save;
 begin
   inherited;
-  ConfigStore.SetDeleteValue('Class', FDebuggerClass, '');
   ConfigStore.DeletePath('Type');
   ConfigStore.AppendBasePath('WatchesDlg/');
   try
@@ -3596,9 +3596,10 @@ begin
   CurrentWatches.LoadFromXMLConfig(AConfig, APath);
 end;
 
-procedure TIdeWatchesMonitor.SaveToXMLConfig(const AConfig: TXMLConfig; const APath: string);
+procedure TIdeWatchesMonitor.SaveToXMLConfig(const AConfig: TXMLConfig;
+  const APath: string; const ALegacyList: Boolean);
 begin
-  CurrentWatches.SaveToXMLConfig(AConfig, APath);
+  CurrentWatches.SaveToXMLConfig(AConfig, APath, ALegacyList);
 end;
 
 procedure TIdeWatchesMonitor.BeginIgnoreModified;
@@ -4142,7 +4143,7 @@ procedure TIdeThreadsMonitor.DoStateEnterPause;
 begin
   inherited DoStateEnterPause;
   if (CurrentThreads = nil) then Exit;
-  CurrentThreads.SetValidity(ddsUnknown);
+  CurrentThreads.SetValidity(ddsUnknown); // TODO: this may be wrong, for any debugger that keeps threads updated while running
   CurrentThreads.Paused := True;
 end;
 
@@ -4528,18 +4529,18 @@ begin
   if (Collection <> nil) and (TIDEBreakPoints(Collection).FMaster <> nil)
   and (Dest is TDBGBreakPoint)
   then begin
-    Assert(FMaster=nil, 'TManagedBreakPoint.AssignTO already has Master');
-    if FMaster <> nil then FMaster.Slave := nil;
-    FMaster := TDBGBreakPoint(Dest);
-    FMaster.Slave := Self;
+    Assert(Master=nil, 'TManagedBreakPoint.AssignTO already has Master');
+    if Master <> nil then Master.Slave := nil;
+    Master := TDBGBreakPoint(Dest);
+    Master.Slave := Self;
   end;
 end;
 
 procedure TIDEBreakPoint.DoChanged;
 begin
-  if (FMaster <> nil)
-  and (FMaster.Slave = nil)
-  then FMaster := nil;
+  if (Master <> nil)
+  and (Master.Slave = nil)
+  then Master := nil;
 
   inherited DoChanged;
 end;
@@ -4552,16 +4553,16 @@ end;
 
 function TIDEBreakPoint.GetHitCount: Integer;
 begin
-  if FMaster = nil
+  if Master = nil
   then Result := 0
-  else Result := FMaster.HitCount;
+  else Result := Master.HitCount;
 end;
 
 function TIDEBreakPoint.GetValid: TValidState;
 begin
-  if FMaster = nil
+  if Master = nil
   then Result := vsUnknown
-  else Result := FMaster.Valid;
+  else Result := Master.Valid;
 end;
 
 procedure TIDEBreakPoint.SetBreakHitCount(const AValue: Integer);
@@ -4569,7 +4570,7 @@ begin
   if BreakHitCount = AValue then exit;
   inherited SetBreakHitCount(AValue);
   DoUserChanged;
-  if FMaster <> nil then FMaster.BreakHitCount := AValue;
+  if Master <> nil then Master.BreakHitCount := AValue;
 end;
 
 procedure TIDEBreakPoint.SetEnabled(const AValue: Boolean);
@@ -4577,7 +4578,7 @@ begin
   if Enabled = AValue then exit;
   inherited SetEnabled(AValue);
   InitialEnabled:=Enabled;
-  if FMaster <> nil then FMaster.Enabled := AValue;
+  if Master <> nil then Master.Enabled := AValue;
 end;
 
 procedure TIDEBreakPoint.SetInitialEnabled(const AValue: Boolean);
@@ -4585,7 +4586,7 @@ begin
   if InitialEnabled = AValue then exit;
   inherited SetInitialEnabled(AValue);
   DoUserChanged;
-  if FMaster <> nil then FMaster.InitialEnabled := AValue;
+  if Master <> nil then Master.InitialEnabled := AValue;
 end;
 
 procedure TIDEBreakPoint.SetExpression(const AValue: String);
@@ -4593,7 +4594,15 @@ begin
   if AValue=Expression then exit;
   inherited SetExpression(AValue);
   DoUserChanged;
-  if FMaster <> nil then FMaster.Expression := AValue;
+  if Master <> nil then Master.Expression := AValue;
+end;
+
+procedure TIDEBreakPoint.SetKind(const AValue: TDBGBreakPointKind);
+begin
+  if AValue=Kind then exit;
+  inherited SetKind(AValue);
+  DoUserChanged;
+  if Master <> nil then Master.Kind := AValue;
 end;
 
 function TIDEBreakPoint.DebugExeLine: Integer;
@@ -4612,7 +4621,7 @@ function TIDEBreakPoint.DebugText: string;
 var
   s: String;
 begin
-  WriteStr(s, FKind);
+  //WriteStr(s, FKind);
   Result := dbgs(self) + ' ' + s + ' at ' + Source +':' + IntToStr(Line);
 end;
 {$ENDIF}
@@ -4630,11 +4639,7 @@ destructor TIDEBreakPoint.Destroy;
 var
   Grp: TIDEBreakPointGroup;
 begin
-  if FMaster <> nil
-  then begin
-    FMaster.Slave := nil;
-    ReleaseRefAndNil(FMaster);
-  end;
+  ReleaseMaster;
 
   if (TIDEBreakPoints(Collection) <> nil)
   then TIDEBreakPoints(Collection).NotifyRemove(Self);
@@ -4673,11 +4678,11 @@ begin
   inherited DoHit(ACount, AContinue);
   AContinue := AContinue or not (bpaStop in Actions);
   if bpaLogMessage in Actions
-  then FMaster.DoLogMessage(FLogMessage);
+  then Master.DoLogMessage(FLogMessage);
   if (bpaEValExpression in Actions) and (Trim(FLogEvalExpression) <> '')
-  then FMaster.DoLogExpression(Trim(FLogEvalExpression));
+  then Master.DoLogExpression(Trim(FLogEvalExpression));
   if bpaLogCallStack in Actions
-  then FMaster.DoLogCallStack(FLogCallStackLimit);
+  then Master.DoLogCallStack(FLogCallStackLimit);
   // SnapShot is taken in TDebugManager.DebuggerChangeState
   if bpaEnableGroup in Actions
   then EnableGroups;
@@ -4737,7 +4742,7 @@ var
 begin
   FLoading:=true;
   try
-    Kind:=TDBGBreakPointKind(GetEnumValueDef(TypeInfo(TDBGBreakPointKind),XMLConfig.GetValue(Path+'Kind/Value',''),0));
+    SetKind(TDBGBreakPointKind(GetEnumValueDef(TypeInfo(TDBGBreakPointKind),XMLConfig.GetValue(Path+'Kind/Value',''),0)));
     GroupName:=XMLConfig.GetValue(Path+'Group/Name','');
     Group:=OnGetGroup(GroupName);
     Expression:=XMLConfig.GetValue(Path+'Expression/Value','');
@@ -4757,7 +4762,7 @@ begin
     FSource:=Filename;
 
     InitialEnabled:=XMLConfig.GetValue(Path+'InitialEnabled/Value',true);
-    Enabled:=FInitialEnabled;
+    Enabled:=InitialEnabled;
     FLine:=XMLConfig.GetValue(Path+'Line/Value',-1);
     FLogEvalExpression := XMLConfig.GetValue(Path+'LogEvalExpression/Value', '');
     FLogMessage:=XMLConfig.GetValue(Path+'LogMessage/Value','');
@@ -4835,26 +4840,30 @@ end;
 procedure TIDEBreakPoint.SetAddress(const AValue: TDBGPtr);
 begin
   inherited SetAddress(AValue);
-  if FMaster<>nil then FMaster.Address := Address;
+  if Master<>nil then Master.Address := Address;
+
+  //TODO: Why not DoUserChanged; ?
 end;
 
 procedure TIDEBreakPoint.SetLocation(const ASource: String; const ALine: Integer);
 begin
   inherited SetLocation(ASource, ALine);
-  if FMaster<>nil then FMaster.SetLocation(ASource, DebugExeLine);
+  if Master<>nil then Master.SetLocation(ASource, DebugExeLine);
+  //TODO: Why not DoUserChanged; ?
 end;
 
 procedure TIDEBreakPoint.SetWatch(const AData: String; const AScope: TDBGWatchPointScope;
   const AKind: TDBGWatchPointKind);
 begin
   inherited SetWatch(AData, AScope, AKind);
-  if FMaster<>nil then FMaster.SetWatch(AData, AScope, AKind);
+  if Master<>nil then Master.SetWatch(AData, AScope, AKind);
+  //TODO: Why not DoUserChanged; ?
 end;
 
 procedure TIDEBreakPoint.ResetMaster;
 begin
-  if FMaster <> nil then FMaster.Slave := nil;
-  FMaster := nil;
+  if Master <> nil then Master.Slave := nil;
+  Master := nil;
   Changed;
 end;
 
@@ -4918,23 +4927,25 @@ end;
 { TIDEBreakPoints }
 { =========================================================================== }
 
-function TIDEBreakPoints.Add(const ASource: String;
-  const ALine: Integer): TIDEBreakPoint;
+function TIDEBreakPoints.Add(const ASource: String; const ALine: Integer;
+  AnUpdating: Boolean): TIDEBreakPoint;
 begin
-  Result := TIDEBreakPoint(inherited Add(ASource, ALine));
+  Result := TIDEBreakPoint(inherited Add(ASource, ALine, AnUpdating));
   NotifyAdd(Result);
 end;
 
-function TIDEBreakPoints.Add(const AAddress: TDBGPtr): TIDEBreakPoint;
+function TIDEBreakPoints.Add(const AAddress: TDBGPtr; AnUpdating: Boolean
+  ): TIDEBreakPoint;
 begin
-  Result := TIDEBreakPoint(inherited Add(AAddress));
+  Result := TIDEBreakPoint(inherited Add(AAddress, AnUpdating));
   NotifyAdd(Result);
 end;
 
-function TIDEBreakPoints.Add(const AData: String; const AScope: TDBGWatchPointScope;
-  const AKind: TDBGWatchPointKind): TIDEBreakPoint;
+function TIDEBreakPoints.Add(const AData: String;
+  const AScope: TDBGWatchPointScope; const AKind: TDBGWatchPointKind;
+  AnUpdating: Boolean): TIDEBreakPoint;
 begin
-  Result := TIDEBreakPoint(inherited Add(AData, AScope, AKind));
+  Result := TIDEBreakPoint(inherited Add(AData, AScope, AKind, AnUpdating));
   NotifyAdd(Result);
 end;
 
@@ -5038,8 +5049,8 @@ begin
 
   if FMaster <> nil
   then begin
-    // create without source. it will be set in assign (but during Begin/EndUpdate)
-    BP := FMaster.Add('', 0);
+    // create without data. it will be set in assign (but during Begin/EndUpdate)
+    BP :=  TBaseBreakPoint(FMaster.Add);
     BP.Assign(ABreakPoint); // will set ABreakPoint.FMaster := BP;
   end;
 end;
@@ -5072,15 +5083,18 @@ var
   i: Integer;
   LoadBreakPoint: TIDEBreakPoint;
   BreakPoint: TIDEBreakPoint;
+  IsLegacyList: Boolean;
+  BreakPointPath: string;
 begin
   Clear;
-  NewCount:=XMLConfig.GetValue(Path+'Count',0);
+  IsLegacyList := XMLConfig.IsLegacyList(Path);
+  NewCount := XMLConfig.GetListItemCount(Path, 'Item', IsLegacyList);
 
   for i:=0 to NewCount-1 do
   begin
     LoadBreakPoint := TIDEBreakPoint.Create(nil);
-    LoadBreakPoint.LoadFromXMLConfig(XMLConfig,
-      Path+'Item'+IntToStr(i+1)+'/',OnLoadFilename,OnGetGroup);
+    BreakPointPath := Path+XMLConfig.GetListItemXPath('Item', i, IsLegacyList, True)+'/';
+    LoadBreakPoint.LoadFromXMLConfig(XMLConfig, BreakPointPath, OnLoadFilename, OnGetGroup);
 
     case LoadBreakPoint.Kind of
       bpkSource:
@@ -5109,18 +5123,20 @@ begin
 end;
 
 procedure TIDEBreakPoints.SaveToXMLConfig(XMLConfig: TXMLConfig;
-  const Path: string; const OnSaveFilename: TOnSaveFilenameToConfig);
+  const Path: string; const ALegacyList: Boolean;
+  const OnSaveFilename: TOnSaveFilenameToConfig);
 var
   Cnt: Integer;
   i: Integer;
   CurBreakPoint: TIDEBreakPoint;
+  BreakPointPath: string;
 begin
   Cnt:=Count;
-  XMLConfig.SetDeleteValue(Path+'Count',Cnt,0);
+  XMLConfig.SetListItemCount(Path,Cnt,ALegacyList);
   for i:=0 to Cnt-1 do begin
+    BreakPointPath := Path+XMLConfig.GetListItemXPath('Item', i, ALegacyList, True)+'/';
     CurBreakPoint:=Items[i];
-    CurBreakPoint.SaveToXMLConfig(XMLConfig,
-      Path+'Item'+IntToStr(i+1)+'/',OnSaveFilename);
+    CurBreakPoint.SaveToXMLConfig(XMLConfig, BreakPointPath, OnSaveFilename);
   end;
 end;
 
@@ -5292,14 +5308,17 @@ var
   NewGroup: TIDEBreakPointGroup;
   i: Integer;
   OldGroup: TIDEBreakPointGroup;
+  ItemPath: string;
+  IsLegacyList: Boolean;
 begin
   Clear;
-  NewCount := XMLConfig.GetValue(Path+'Count', 0);
+  IsLegacyList := XMLConfig.IsLegacyList(Path);
+  NewCount := XMLConfig.GetListItemCount(Path, 'Item',IsLegacyList);
   for i := 0 to NewCount - 1 do
   begin
     NewGroup := TIDEBreakPointGroup(inherited Add);
-    NewGroup.LoadFromXMLConfig(XMLConfig,
-                               Path+'Item'+IntToStr(i+1)+'/');
+    ItemPath := Path+XMLConfig.GetListItemXPath('Item', i, IsLegacyList, True)+'/';
+    NewGroup.LoadFromXMLConfig(XMLConfig, ItemPath);
     OldGroup := FindGroupByName(NewGroup.Name, NewGroup);
     if OldGroup <> nil then
       NewGroup.Free;
@@ -5307,19 +5326,20 @@ begin
 end;
 
 procedure TIDEBreakPointGroups.SaveToXMLConfig(XMLConfig: TXMLConfig;
-  const Path: string);
+  const Path: string; const ALegacyList: Boolean);
 var
   Cnt: Integer;
   CurGroup: TIDEBreakPointGroup;
   i: Integer;
+  ItemPath: string;
 begin
   Cnt:=Count;
-  XMLConfig.SetDeleteValue(Path+'Count',Cnt,0);
+  XMLConfig.SetListItemCount(Path,Cnt,ALegacyList);
   for i := 0 to Cnt - 1 do
   begin
     CurGroup := Items[i];
-    CurGroup.SaveToXMLConfig(XMLConfig,
-                             Path+'Item'+IntToStr(i+1)+'/');
+    ItemPath := Path+XMLConfig.GetListItemXPath('Item', i, ALegacyList, True)+'/';
+    CurGroup.SaveToXMLConfig(XMLConfig, ItemPath);
   end;
 end;
 
@@ -5667,17 +5687,21 @@ var
   NewCount: Integer;
   i: Integer;
   Watch: TCurrentWatch;
+  IsLegacyList: Boolean;
+  ItemPath: string;
 begin
   if FMonitor <> nil then
     FMonitor.BeginIgnoreModified;
   try
     Clear;
-    NewCount := AConfig.GetValue(APath + 'Count', 0);
+    IsLegacyList := AConfig.IsLegacyList(APath);
+    NewCount := AConfig.GetListItemCount(APath, 'Item', IsLegacyList);
     for i := 0 to NewCount-1 do
     begin
       // Call inherited Add, so NotifyAdd can be send, after the Watch was loaded
       Watch := TCurrentWatch(inherited Add(''));
-      Watch.LoadFromXMLConfig(AConfig, Format('%sItem%d/', [APath, i + 1]));
+      ItemPath := APath+AConfig.GetListItemXPath('Item', i, IsLegacyList, True)+'/';
+      Watch.LoadFromXMLConfig(AConfig, ItemPath);
       NotifyAdd(Watch);
     end;
   finally
@@ -5702,18 +5726,21 @@ begin
     FMonitor.DoModified;
 end;
 
-procedure TCurrentWatches.SaveToXMLConfig(const AConfig: TXMLConfig; const APath: string);
+procedure TCurrentWatches.SaveToXMLConfig(const AConfig: TXMLConfig;
+  const APath: string; const ALegacyList: Boolean);
 var
   Cnt: Integer;
   i: Integer;
   Watch: TCurrentWatch;
+  ItemPath: string;
 begin
   Cnt := Count;
-  AConfig.SetDeleteValue(APath + 'Count', Cnt, 0);
+  AConfig.SetListItemCount(APath, Cnt, ALegacyList);
   for i := 0 to Cnt - 1 do
   begin
     Watch := Items[i];
-    Watch.SaveToXMLConfig(AConfig, Format('%sItem%d/', [APath, i + 1]));
+    ItemPath := APath+AConfig.GetListItemXPath('Item', i, ALegacyList, True)+'/';
+    Watch.SaveToXMLConfig(AConfig, ItemPath);
   end;
 end;
 
@@ -5912,22 +5939,17 @@ end;
 
 function TCurrentIDERegisters.Count: Integer;
 begin
-  case DataValidity of
-    ddsUnknown:   begin
-        AddReference;
-        try
-          Result := 0;
-          DataValidity := ddsRequested;
-          FMonitor.RequestData(Self);  // Locals can be cleared, if debugger is "run" again
-          if DataValidity = ddsValid then Result := inherited Count();
-        finally
-          ReleaseReference;
-        end;
-      end;
-    ddsRequested, ddsEvaluating: Result := 0;
-    ddsValid:                    Result := inherited Count;
-    ddsInvalid, ddsError:        Result := 0;
+  if DataValidity = ddsUnknown then begin
+    AddReference;
+    try
+      Result := 0;
+      DataValidity := ddsRequested;
+      FMonitor.RequestData(Self);  // Locals can be cleared, if debugger is "run" again
+    finally
+      ReleaseReference;
+    end;
   end;
+  result := TDbgEntityValuesList(self).Count;
 end;
 
 { TCurrentIDERegistersList }
@@ -5960,14 +5982,14 @@ procedure TIdeRegistersMonitor.DoStateEnterPause;
 begin
   inherited DoStateEnterPause;
   if CurrentRegistersList = nil then exit;
-  Clear;
+  InvalidateItems;
 end;
 
 procedure TIdeRegistersMonitor.DoStateLeavePauseClean;
 begin
   inherited DoStateLeavePauseClean;
   if CurrentRegistersList = nil then exit;
-  Clear;
+  InvalidateItems;
 end;
 
 procedure TIdeRegistersMonitor.DoEndUpdate;
@@ -6021,6 +6043,11 @@ end;
 procedure TIdeRegistersMonitor.Clear;
 begin
   CurrentRegistersList.Clear;
+end;
+
+procedure TIdeRegistersMonitor.InvalidateItems;
+begin
+  CurrentRegistersList.InvalidateItems;
 end;
 
 procedure TIdeRegistersMonitor.AddNotification(const ANotification: TRegistersNotification);
@@ -6154,6 +6181,7 @@ end;
 
 function TIdeCallStackEntry.GetUnitInfoProvider: TDebuggerUnitInfoProvider;
 begin
+  assert(FOwner <> nil, 'FOwner <> nil');
   Result := (FOwner as TCurrentCallStack).FMonitor.UnitInfoProvider;
 end;
 
@@ -6723,33 +6751,37 @@ var
   NewCount: Integer;
   i: Integer;
   IDEException: TIDEException;
+  IsLegacyList: Boolean;
+  ItemPath: string;
 begin
   Clear;
-  NewCount := AXMLConfig.GetValue(APath + 'Count', 0);
+  IsLegacyList := AXMLConfig.IsLegacyList(APath);
+  NewCount := AXMLConfig.GetListItemCount(APath, 'Item', IsLegacyList);
   FIgnoreAll := AXMLConfig.GetValue(APath + 'IgnoreAll', False);
   for i := 0 to NewCount-1 do
   begin
     IDEException := TIDEException(inherited Add(''));
-    IDEException.LoadFromXMLConfig(AXMLConfig,
-                                    Format('%sItem%d/', [APath, i + 1]));
+    ItemPath := APath+AXMLConfig.GetListItemXPath('Item', i, IsLegacyList, True)+'/';
+    IDEException.LoadFromXMLConfig(AXMLConfig, ItemPath);
   end;
 end;
 
-procedure TIDEExceptions.SaveToXMLConfig (const AXMLConfig: TXMLConfig;
-  const APath: string);
+procedure TIDEExceptions.SaveToXMLConfig(const AXMLConfig: TXMLConfig;
+  const APath: string; const ALegacyList: Boolean);
 var
   Cnt: Integer;
   i: Integer;
   IDEException: TIDEException;
+  ItemPath: string;
 begin
   Cnt := Count;
-  AXMLConfig.SetDeleteValue(APath + 'Count', Cnt, 0);
+  AXMLConfig.SetListItemCount(APath, Cnt, ALegacyList);
   AXMLConfig.SetDeleteValue(APath + 'IgnoreAll', IgnoreAll, False);
   for i := 0 to Cnt - 1 do
   begin
     IDEException := Items[i];
-    IDEException.SaveToXMLConfig(AXMLConfig,
-                                  Format('%sItem%d/', [APath, i + 1]));
+    ItemPath := APath+AXMLConfig.GetListItemXPath('Item', i, ALegacyList, True)+'/';
+    IDEException.SaveToXMLConfig(AXMLConfig, ItemPath);
   end;
 end;
 
@@ -6862,11 +6894,12 @@ begin
   else Result := Master.Count;
 end;
 
-function TIDELineInfo.GetAddress(const AIndex: Integer; const ALine: Integer): TDbgPtr;
+function TIDELineInfo.HasAddress(const AIndex: Integer; const ALine: Integer
+  ): Boolean;
 begin
   if Master = nil
-  then Result := inherited GetAddress(AIndex, ALine)
-  else Result := Master.GetAddress(AIndex, ALine);
+  then Result := inherited HasAddress(AIndex, ALine)
+  else Result := Master.HasAddress(AIndex, ALine);
 end;
 
 function TIDELineInfo.GetInfo(AAdress: TDbgPtr; out ASource, ALine,

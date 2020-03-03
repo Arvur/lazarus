@@ -75,8 +75,7 @@ function LCLControlSizeNeedsUpdate(Sender: TWinControl;
 
 function GetLCLClientBoundsOffset(Sender: TObject; var ORect: TRect): boolean;
 function GetLCLClientBoundsOffset(Handle: HWnd; var Rect: TRect): boolean;
-procedure LCLBoundsToWin32Bounds(Sender: TObject;
-  var Left, Top, Width, Height: Integer);
+procedure LCLBoundsToWin32Bounds(Sender: TObject; var Left, Top: Integer);
 procedure LCLFormSizeToWin32Size(Form: TCustomForm; var AWidth, AHeight: Integer);
 procedure GetWin32ControlPos(Window, Parent: HWND; var Left, Top: integer);
 
@@ -793,16 +792,14 @@ var
   TM: TextMetric;
   DC: HDC;
   Handle: HWND;
-  TheWinControl: TWinControl;
+  TheWinControl: TWinControl absolute Sender;
   ARect: TRect;
-  Ignore: Integer;
 begin
   Result:=false;
   if (Sender = nil) or (not (Sender is TWinControl)) then exit;
-  TheWinControl:=TWinControl(Sender);
-  FillChar(ORect, SizeOf(ORect), 0);
   if not TheWinControl.HandleAllocated then exit;
   Handle := TheWinControl.Handle;
+  FillChar(ORect, SizeOf(ORect), 0);
   if TheWinControl is TScrollingWinControl then
     with TScrollingWinControl(TheWinControl) do
     begin
@@ -1246,6 +1243,7 @@ begin
       else Result := Wince_5;
     end;
     6: Result := Wince_6;
+    7: Result := wince_7;
     end;
   end;
 end;

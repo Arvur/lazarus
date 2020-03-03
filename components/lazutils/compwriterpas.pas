@@ -57,6 +57,7 @@ const
   CSPDefaultExecCustomProc = 'ExecCustomCSP';
   CSPDefaultExecCustomProcUnit = 'LazPasReadUtil';
   CSPDefaultMaxColumn = 80;
+  CSPDefaultAssignOp = ':=';
   CWPSkipParentName = '-';
 type
   TCompWriterPas = class;
@@ -71,10 +72,11 @@ type
 
   TCWPOption = (
     cwpoNoSignature,     // do not write Begin, End signatures
-    cwpoNoSelf,// enclose in "with LookupRootname do begin"
+    cwpoNoSelf,          // enclose in "with LookupRootname do begin"
     cwpoSetParentFirst,  // add "SetParentComponent" before setting properties, default: after
     cwpoSrcCodepageUTF8, // target unit uses $codepage utf-8, aka do not convert UTF-8 string literals
-    cwpoNoWithBlocks     // do not use with-do
+    cwpoNoWithBlocks,    // do not use with-do
+    cwpoNoFinalLineBreak
     );
   TCWPOptions = set of TCWPOption;
 
@@ -118,47 +120,48 @@ type
     FSignatureBegin: String;
     FSignatureEnd: String;
     FStream: TStream;
-    procedure AddToAncestorList(Component: TComponent);
-    procedure DetermineAncestor(Component: TComponent);
-    procedure SetNeededUnits(const AValue: TStrings);
-    procedure SetRoot(const AValue: TComponent);
-    procedure WriteComponentData(Instance: TComponent);
-    procedure WriteChildren(Component: TComponent; Step: TCWPChildrenStep);
-    procedure WriteProperty(Instance: TPersistent; PropInfo: PPropInfo);
-    procedure WriteProperties(Instance: TPersistent);
-    procedure WriteDefineProperties(Instance: TPersistent);
-    procedure WriteCollection(PropName: string; Collection: TCollection);
-    function ShortenFloat(s: string): string;
+  protected
+    procedure AddToAncestorList(Component: TComponent); virtual;
+    procedure DetermineAncestor(Component: TComponent); virtual;
+    procedure SetNeededUnits(const AValue: TStrings); virtual;
+    procedure SetRoot(const AValue: TComponent); virtual;
+    procedure WriteComponentData(Instance: TComponent); virtual;
+    procedure WriteChildren(Component: TComponent; Step: TCWPChildrenStep); virtual;
+    procedure WriteProperty(Instance: TPersistent; PropInfo: PPropInfo); virtual;
+    procedure WriteProperties(Instance: TPersistent); virtual;
+    procedure WriteDefineProperties(Instance: TPersistent); virtual;
+    procedure WriteCollection(PropName: string; Collection: TCollection); virtual;
+    function ShortenFloat(s: string): string; virtual;
   public
-    constructor Create(AStream: TStream);
+    constructor Create(AStream: TStream); virtual;
     destructor Destroy; override;
     // stream a component:
-    procedure WriteDescendant(ARoot: TComponent; AAncestor: TComponent = nil);
+    procedure WriteDescendant(ARoot: TComponent; AnAncestor: TComponent = nil); virtual;
     // utility functions:
-    procedure WriteComponentCreate(Component: TComponent);
-    procedure WriteComponent(Component: TComponent);
-    procedure WriteIndent;
-    procedure Write(const s: string);
-    procedure WriteLn;
-    procedure WriteStatement(const s: string);
-    procedure WriteAssign(const LHS, RHS: string);
-    procedure WriteWithDo(const Expr: string);
-    procedure WriteWithEnd;
-    function GetComponentPath(Component: TComponent): string;
-    function GetBoolLiteral(b: boolean): string;
-    function GetCharLiteral(c: integer): string;
-    function GetWideCharLiteral(c: integer): string;
-    function GetStringLiteral(const s: string): string;
-    function GetWStringLiteral(p: PWideChar; Count: integer): string;
-    function GetFloatLiteral(const e: Extended): string;
-    function GetCurrencyLiteral(const c: currency): string;
+    procedure WriteComponentCreate(Component: TComponent); virtual;
+    procedure WriteComponent(Component: TComponent); virtual;
+    procedure WriteIndent; virtual;
+    procedure Write(const s: string); virtual;
+    procedure WriteLn; virtual;
+    procedure WriteStatement(const s: string); virtual;
+    procedure WriteAssign(const LHS, RHS: string); virtual;
+    procedure WriteWithDo(const Expr: string); virtual;
+    procedure WriteWithEnd; virtual;
+    function GetComponentPath(Component: TComponent): string; virtual;
+    function GetBoolLiteral(b: boolean): string; virtual;
+    function GetCharLiteral(c: integer): string; virtual;
+    function GetWideCharLiteral(c: integer): string; virtual;
+    function GetStringLiteral(const s: string): string; virtual;
+    function GetWStringLiteral(p: PWideChar; Count: integer): string; virtual;
+    function GetFloatLiteral(const e: Extended): string; virtual;
+    function GetCurrencyLiteral(const c: currency): string; virtual;
     function GetEnumExpr(TypeInfo: PTypeInfo; Value: integer;
-      AllowOutOfRange: boolean): string;
-    function GetVersionStatement: string;
-    function CreatedByAncestor(Component: TComponent): boolean;
-    procedure AddNeededUnit(const AnUnitName: string);
-    procedure Indent;
-    procedure Unindent;
+      AllowOutOfRange: boolean): string; virtual;
+    function GetVersionStatement: string; virtual;
+    function CreatedByAncestor(Component: TComponent): boolean; virtual;
+    procedure AddNeededUnit(const AnUnitName: string); virtual;
+    procedure Indent; virtual;
+    procedure Unindent; virtual;
     property Stream: TStream read FStream;
     property Root: TComponent read FRoot write SetRoot;
     property LookupRoot: TComponent read FLookupRoot;
@@ -180,16 +183,18 @@ type
     property OnDefineProperties: TCWPDefinePropertiesEvent read FOnDefineProperties write FOnDefineProperties;
   public
     // code snippets
-    property LineEnding: string read FLineEnding write FLineEnding;
-    property AssignOp: String read FAssignOp write FAssignOp;
-    property SignatureBegin: String read FSignatureBegin write FSignatureBegin;
-    property SignatureEnd: String read FSignatureEnd write FSignatureEnd;
+    property LineEnding: string read FLineEnding write FLineEnding; // default: system.LineEnding
+    property AssignOp: String read FAssignOp write FAssignOp; // default CSPDefaultAssignOp;
+    property SignatureBegin: String read FSignatureBegin write FSignatureBegin; // default CSPDefaultSignatureBegin
+    property SignatureEnd: String read FSignatureEnd write FSignatureEnd; // default CSPDefaultSignatureEnd
     property AccessClass: string read FAccessClass
       write FAccessClass; // classname used to access protected TComponent members like SetChildOrder
-    property NeedAccessClass: boolean read FNeedAccessClass write FNeedAccessClass; // some property needed AccessClass
-    property ExecCustomProc: string read FExecCustomProc write FExecCustomProc;
-    property ExecCustomProcUnit: string read FExecCustomProcUnit write FExecCustomProcUnit;
+    property ExecCustomProc: string read FExecCustomProc write FExecCustomProc; // default CSPDefaultExecCustomProc
+    property ExecCustomProcUnit: string read FExecCustomProcUnit write FExecCustomProcUnit; // default CSPDefaultExecCustomProcUnit
     property MaxColumn: integer read FMaxColumn write FMaxColumn default CSPDefaultMaxColumn;
+  public
+    // set automatically when writing
+    property NeedAccessClass: boolean read FNeedAccessClass write FNeedAccessClass; // some property needed AccessClass
     property NeededUnits: TStrings read FNeededUnits write SetNeededUnits;
   end;
 
@@ -227,11 +232,6 @@ begin
   finally
     Writer.Free;
   end;
-end;
-
-function CompareMethods(const m1, m2: TMethod): boolean;
-begin
-  Result:=(m1.Code=m2.Code) and (m1.Data=m2.Data);
 end;
 
 procedure RegisterDefinePropertiesPas(aClass: TPersistentClass;
@@ -619,11 +619,17 @@ begin
                   WriteAssign(PropName,Ident)
                 else begin
                   // Integer has to be written just as number
-                  aTypeData:=GetTypeData(PropInfo^.PropType);
-                  if aTypeData^.MinValue>=0 then
-                    WriteAssign(PropName,IntToStr(longword(Int32Value)))
+                  case PropType^.Name of
+                  'ByteBool': WriteAssign(PropName,GetBoolLiteral(ByteBool(Int32Value)));
+                  'WordBool': WriteAssign(PropName,GetBoolLiteral(WordBool(Int32Value)));
+                  'LongBool': WriteAssign(PropName,GetBoolLiteral(LongBool(Int32Value)));
                   else
-                    WriteAssign(PropName,IntToStr(Int32Value));
+                    aTypeData:=GetTypeData(PropInfo^.PropType);
+                    if aTypeData^.MinValue>=0 then
+                      WriteAssign(PropName,IntToStr(longword(Int32Value)))
+                    else
+                      WriteAssign(PropName,IntToStr(Int32Value));
+                  end;
                 end;
               end;
             tkChar:
@@ -688,7 +694,9 @@ begin
             (MethodValue.Data <> DefMethodValue.Data) then
           begin
             OnGetMethodName(Self,Instance,PropInfo,Ident);
-            OnGetMethodName(Self,Ancestor,PropInfo,s);
+            s:='';
+            if HasAncestor then
+              OnGetMethodName(Self,Ancestor,PropInfo,s);
             if Ident<>s then
             begin
               if Ident='' then
@@ -1376,7 +1384,7 @@ var
 begin
   // remove unneeded leading 0 of exponent
   p:=Pos('E',s);
-  if p<1 then exit;
+  if p<1 then exit(s);
   i:=p;
   if s[i+1]='+' then inc(i);
   while (i<length(s)) and (s[i+1]='0') do
@@ -1430,7 +1438,7 @@ begin
   FIndentStep:=2;
   FStream:=AStream;
   FLineEnding:=system.LineEnding;
-  FAssignOp:=':=';
+  FAssignOp:=CSPDefaultAssignOp;
   FSignatureBegin:=CSPDefaultSignatureBegin;
   FSignatureEnd:=CSPDefaultSignatureEnd;
   FMaxColumn:=CSPDefaultMaxColumn;
@@ -1506,11 +1514,11 @@ begin
   end;
 end;
 
-procedure TCompWriterPas.WriteDescendant(ARoot: TComponent; AAncestor: TComponent);
+procedure TCompWriterPas.WriteDescendant(ARoot: TComponent; AnAncestor: TComponent);
 begin
   FRoot := ARoot;
-  FAncestor := AAncestor;
-  FRootAncestor := AAncestor;
+  FAncestor := AnAncestor;
+  FRootAncestor := AnAncestor;
   FLookupRoot := ARoot;
   FNeedAccessClass := false;
   if not (cwpoNoSignature in Options) then
@@ -1521,8 +1529,15 @@ begin
   WriteComponent(ARoot);
   if cwpoNoSelf in Options then
     WriteWithEnd;
-  if not (cwpoNoSignature in Options) then
-    WriteStatement(SignatureEnd);
+  if not (cwpoNoSignature in Options) then begin
+    if cwpoNoFinalLineBreak in Options then
+      begin
+      WriteIndent;
+      Write(SignatureEnd);
+      end
+    else
+      WriteStatement(SignatureEnd);
+  end;
 end;
 
 procedure TCompWriterPas.WriteIndent;

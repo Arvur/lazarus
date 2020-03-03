@@ -27,6 +27,8 @@ begin
   Result := NvbStrings[ANvb];
 end;
 
+{ TSpinEditEx }
+
 
 procedure TSpinEditExBase.UpdateControl;
 var
@@ -66,8 +68,6 @@ begin
   end;
 end;
 
-
-
 procedure TSpinEditExBase.UpDownChangingEx(Sender: TObject;
   var AllowChange: Boolean; NewValue: SmallInt; Direction: TUpDownDirection);
 begin
@@ -83,13 +83,10 @@ begin
   BuddyClick;
 end;
 
-
 function TSpinEditExBase.GetBuddyClassType: TControlClass;
 begin
   Result := TUpDown;
 end;
-
-
 
 procedure TSpinEditExBase.DoEnter;
 begin
@@ -168,7 +165,6 @@ begin
   UpdateControl;
 end;
 
-
 procedure TSpinEditExBase.SetIncrement(const AIncrement: T);
 begin
   if AIncrement = FIncrement then Exit;
@@ -177,7 +173,6 @@ begin
   else
     FIncrement := -AIncrement;
 end;
-
 
 procedure TSpinEditExBase.InitializeWnd;
 begin
@@ -192,6 +187,10 @@ begin
   if FUpdatePending then UpdateControl;
 end;
 
+function TSpinEditExBase.MaxValueStored: Boolean;
+begin
+  Result := not SameValue(FMaxValue, DefMaxValue);
+end;
 
 procedure TSpinEditExBase.EditMouseWheelUp(Shift: TShiftState;
   MousePos: TPoint; var Handled: Boolean);
@@ -208,7 +207,6 @@ begin
   if not Handled then
     SpinUpDown(False);
 end;
-
 
 procedure TSpinEditExBase.SetValue(const AValue: T);
 var
@@ -239,6 +237,11 @@ begin
   Result := FValue;
 end;
 
+function TSpinEditExBase.IncrementStored: Boolean;
+begin
+  Result := not SameValue(FIncrement, DefIncrement);
+end;
+
 function TSpinEditExBase.IsLimited: Boolean;
 begin
   Result := MaxValue > MinValue;
@@ -248,7 +251,6 @@ function TSpinEditExBase.IsOutOfLimits(AValue: T): Boolean;
 begin
   Result := IsLimited and ((AValue < MinValue) or (AValue > MaxValue));
 end;
-
 
 function TSpinEditExBase.GetEdit: TGEEdit;
 begin
@@ -262,7 +264,6 @@ begin
   if not (csLoading in ComponentState) then
     UpDown.MinRepeatInterval := FMinRepeatValue;
 end;
-
 
 procedure TSpinEditExBase.SpinUpDown(Up: Boolean);
 var
@@ -307,15 +308,14 @@ begin
   inherited Create(TheOwner);
 
   FArrowKeys := True;
-  FIncrement := 1;
-  FValue := 0;
-  FMinValue := 0;
-  FMaxValue := 100;
+  FIncrement := DefIncrement;
+  FMaxValue := DefMaxValue;
   FUpdatePending := True;
   FSettingValue := False;
   FNullValueBehaviour := nvbMinValue;
-  FMinRepeatValue := 100;
+  FMinRepeatValue := DefMinRepeatValue;
 
+  UpDown.ControlStyle := UpDown.ControlStyle + [csNoDesignVisible];
   Edit.Alignment := taRightJustify;
 
   {
@@ -417,7 +417,11 @@ end;
 
 procedure TCustomFloatSpinEditEx.SetDecimals(ADecimals: Integer);
 begin
-  if FDecimals = ADecimals then Exit;
+  if (FDecimals = ADecimals) or (ADecimals < 0) then Exit;
+  //if we increment DecimalPlaces first set FValue to correctly have the current DecimalPlaces decimals,
+  //and only then do the increment (GetValue will update FValue to have FDecimalPlaces decimals)
+  //Issue #0034370
+  if (ADecimals > FDecimals) then GetValue;
   FDecimals := ADecimals;
   UpdateControl;
 end;
@@ -465,8 +469,8 @@ constructor TCustomFloatSpinEditEx.Create(TheOwner: TComponent);
 begin
   inherited Create(TheOwner);
   FFS := DefaultFormatSettings;
-  FFS.DecimalSeparator := '.';
-  FDecimals := 2;
+  FFS.DecimalSeparator := DefDecimalSeparator;
+  FDecimals := DefDecimals;
 end;
 
 
@@ -559,8 +563,4 @@ begin
   {$endif}
 end;
 
-constructor TCustomSpinEditEx.Create(TheOwner: TComponent);
-begin
-  inherited Create(TheOwner);
-end;
 

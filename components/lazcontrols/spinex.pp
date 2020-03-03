@@ -65,7 +65,7 @@
 
   ---------------------------------------------------------------------------- }
 
-unit spinex;
+unit SpinEx;
 
 {$mode objfpc}{$H+}
 
@@ -97,6 +97,10 @@ type
   { TSpinEditExBase }
 
   generic TSpinEditExBase<T> = class(TCustomAbstractGroupedEdit)
+  private const
+    DefIncrement = 1;
+    DefMaxValue = 100;
+    DefMinRepeatValue = 100;
   private
     FArrowKeys: Boolean;
     FIncrement: T;
@@ -121,6 +125,8 @@ type
     procedure UpDownChangingEx(Sender: TObject; var {%H-}AllowChange: Boolean;
                                {%H-}NewValue: SmallInt; Direction: TUpDownDirection);
     procedure UpDownClick(Sender: TObject; {%H-}Button: TUDBtnType);
+    function IncrementStored: Boolean;
+    function MaxValueStored: Boolean;
   protected
     function GetBuddyClassType: TControlClass; override;
     procedure DoEnter; override;
@@ -145,7 +151,8 @@ type
     property ArrowKeys: Boolean read FArrowKeys write FArrowKeys default True;
     property Edit: TGEEdit read GetEdit;
     property UpDown: TUpDown read GetUpDown;
-    property MinRepeatValue: Byte read FMinRepeatValue write SetMinRepeatValue default 100;
+    property UpDownVisible: Boolean read GetBuddyVisible write SetBuddyVisible default True;
+    property MinRepeatValue: Byte read FMinRepeatValue write SetMinRepeatValue default DefMinRepeatValue;
   public
     constructor Create(TheOwner: TComponent); override;
     function GetLimitedValue(const AValue: T): T; virtual;
@@ -153,9 +160,9 @@ type
     function StrToValue(const S: String): T; virtual; abstract;
     procedure EditEditingDone; override;
   public
-    property Increment: T read FIncrement write SetIncrement;
+    property Increment: T read FIncrement write SetIncrement stored IncrementStored nodefault;
     property MinValue: T read FMinValue write SetMinValue;
-    property MaxValue: T read FMaxValue write SetMaxValue;
+    property MaxValue: T read FMaxValue write SetMaxValue stored MaxValueStored nodefault;
     property NullValue: T read GetNullValue write SetNullValue;
     property NullValueBehaviour: TNullValueBehaviour read FNullValueBehaviour write FNullValueBehaviour default nvbMinValue;
     property Value: T read GetValue write SetValue;
@@ -164,6 +171,9 @@ type
   { TCustomFloatSpinEditEx }
 
   TCustomFloatSpinEditEx = class(specialize TSpinEditExBase<Double>)
+  private const
+    DefDecimals = 2;
+    DefDecimalSeparator = '.';
   private
     FDecimals: Integer;
     FFS: TFormatSettings;
@@ -179,8 +189,8 @@ type
     function ValueToStr(const AValue: Double): String; override;
     function StrToValue(const S: String): Double; override;
     constructor Create(TheOwner: TComponent); override;
-    property DecimalSeparator: Char read GetDecimalSeparator write SetDecimalSeparator default '.';
-    property DecimalPlaces: Integer read FDecimals write SetDecimals default 2;
+    property DecimalSeparator: Char read GetDecimalSeparator write SetDecimalSeparator default DefDecimalSeparator;
+    property DecimalPlaces: Integer read FDecimals write SetDecimals default DefDecimals;
   end;
 
 
@@ -261,6 +271,7 @@ type
     property NullValue;
     property NullValueBehaviour;
     property Spacing;
+    property UpDownVisible;
     property Value;
   end;
 
@@ -276,7 +287,6 @@ type
   public
     function ValueToStr(const AValue: Int64): String; override;
     function StrToValue(const S: String): Int64; override;
-    constructor Create(TheOwner: TComponent); override;
   public
     property Increment default 1;
   end;
@@ -311,7 +321,7 @@ type
     property Hint;
     property Layout;
     property MaxLength;
-    property NumbersOnly default True;
+    property NumbersOnly;
     property ParentBiDiMode;
     property ParentColor;
     property ParentFont;
@@ -357,6 +367,7 @@ type
     property NullValue;
     property NullValueBehaviour;
     property Spacing;
+    property UpDownVisible;
     property Value;
   end;
 

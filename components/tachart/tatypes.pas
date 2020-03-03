@@ -27,6 +27,7 @@ uses
 
 const
   DEF_MARGIN = 4;
+  DEF_MIN_DATA_SPACE = 10;
   DEF_MARKS_DISTANCE = 20;
   DEF_POINTER_SIZE = 4;
   MARKS_YINDEX_ALL = -1;
@@ -34,8 +35,6 @@ const
   DEF_ARROW_WIDTH = 5;
   DEF_SHADOW_OFFSET = 8;
   DEF_SHADOW_TRANSPARENCY = 128;
-
-  // Constants for Chart.Notify commands
   CMD_QUERY_SERIESEXTENT = 0;
 
 
@@ -63,8 +62,12 @@ type
   end;
 
   TClearBrush = class(TBrush)
+  public
+    constructor Create; override;
   published
-    property Style default bsClear;
+   // property Style default bsClear;
+  { wp: Removed because bsClear would no longer work - TBrush.SetColor switches
+        Style to clSolid if Style is bsClear }
   end;
 
   TFPCanvasHelperClass = class of TFPCanvasHelper;
@@ -84,9 +87,7 @@ type
     constructor Create(AOwner: TCustomChart);
   public
     procedure Assign(ASource: TPersistent); override;
-
     procedure SetOwner(AOwner: TCustomChart);
-
     property Visible: Boolean read FVisible write SetVisible;
   end;
 
@@ -118,7 +119,6 @@ type
     destructor Destroy; override;
   public
     procedure Assign(Source: TPersistent); override;
-
     procedure Draw(ADrawer: IChartDrawer; ACenter: TPoint; AColor: TColor;
       ABrushAlreadySet: Boolean = false);
     procedure DrawSize(ADrawer: IChartDrawer; ACenter, ASize: TPoint;
@@ -131,7 +131,7 @@ type
     property Pen: TChartPen read FPen write SetPen;
     property Style: TSeriesPointerStyle read FStyle write SetStyle default psRectangle;
     property VertSize: Integer read FVertSize write SetVertSize default DEF_POINTER_SIZE;
-    property Visible default true;
+    property Visible default false;
   end;
 
   EExtentError = class(EChartError);
@@ -264,6 +264,22 @@ type
     property Visible default false;
   end;
 
+  TChartErrorBar = class(TChartElement)
+  private
+    FWidth: Integer;
+    FPen: TPen;
+    procedure SetPen(const AValue: TPen);
+    procedure SetWidth(const AValue: Integer);
+  public
+    constructor Create(AOwner: TCustomChart);
+    destructor Destroy; override;
+    procedure Assign(ASource: TPersistent); override;
+  published
+    property Pen: TPen read FPen write SetPen;
+    property Visible default false;
+    property Width: Integer read FWidth write SetWidth default -1;
+  end;
+
 implementation
 
 uses
@@ -294,6 +310,14 @@ procedure TChartPen.SetVisible(AValue: Boolean);
 begin
   FVisible := AValue;
   if Assigned(OnChange) then OnChange(Self);
+end;
+
+{ TClearBrush }
+
+constructor TClearBrush.Create;
+begin
+  inherited;
+  Style := bsClear;
 end;
 
 { TChartElement }
@@ -367,8 +391,8 @@ begin
 
   FHorizSize := DEF_POINTER_SIZE;
   SetPropDefaults(Self, ['OverrideColor', 'Style']);
-  FVertSize  := DEF_POINTER_SIZE;
-  FVisible := true;
+  FVertSize := DEF_POINTER_SIZE;
+  FVisible := false;
 end;
 
 destructor TSeriesPointer.Destroy;
@@ -537,6 +561,7 @@ begin
   FVertSize := AValue;
   StyleChanged(Self);
 end;
+
 
 { TChartRange }
 
@@ -809,6 +834,45 @@ begin
   if FTransparency = AValue then exit;
   FTransparency := AValue;
   StyleChanged(Self);
+end;
+
+{ TChartErrorBar }
+
+constructor TChartErrorBar.Create(AOwner: TCustomChart);
+begin
+  inherited Create(AOwner);
+  FWidth := -1;     // -1 = same width as series pointer
+  FPen := TPen.Create;
+  FPen.OnChange := @StyleChanged;
+  FVisible := false;
+end;
+
+destructor TChartErrorBar.Destroy;
+begin
+  FPen.Free;
+  inherited Destroy;
+end;
+
+procedure TChartErrorBar.Assign(ASource: TPersistent);
+begin
+  if ASource is TChartErrorBar then begin
+    FPen.Assign(TChartErrorBar(ASource).Pen);
+    FWidth := TChartErrorBar(ASource).Width;
+  end;
+  inherited;
+end;
+
+procedure TChartErrorBar.SetPen(const AValue: TPen);
+begin
+  FPen.Assign(AValue);
+  StyleChanged(Self);
+end;
+
+procedure TChartErrorBar.SetWidth(const AValue: Integer);
+begin
+  if FWidth = AValue then exit;
+  FWidth := AValue;
+  StyleChanged(self);
 end;
 
 end.

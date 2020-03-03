@@ -13,14 +13,16 @@ uses
   DbgIntfBaseTypes,
   maps,
   fpjson,
-  jsonparser,
+//  jsonparser,
+  {$IFDEF UNIX}
   BaseUnix,
-  LazLogger,
+  {$ENDIF}
+  LazLoggerBase,
   process,
   dialogs,
   syncobjs,
   lazCollections,
-  lazutf8sysutils,
+  LazSysUtils,
   strutils,
   SysUtils, UTF8Process;
 
@@ -153,11 +155,11 @@ type
 
   TFPDSendRemoveBreakpointCommand = class(TFPDSendCommand)
   private
-    FLocation: TDBGPtr;
+    FId: Integer;
   protected
     procedure ComposeJSon(AJsonObject: TJSONObject); override;
   public
-    constructor create(ALocation: TDBGPtr); virtual;
+    constructor create(AnId: Integer); virtual;
   end;
 
   { TFPDSendDoCurrentCommand }
@@ -326,7 +328,9 @@ type
     function CreateRegisters: TRegisterSupplier; override;
     function CreateCallStack: TCallStackSupplier; override;
     function CreateDisassembler: TDBGDisassembler; override;
-    function RequestCommand(const ACommand: TDBGCommand; const AParams: array of const): Boolean; override;
+    function RequestCommand(const ACommand: TDBGCommand;
+             const AParams: array of const;
+             const ACallback: TMethod): Boolean; override;
     // These methods are called by several TFPDSendCommands after success or failure of a command. (Most common
     // because the TFPDSendCommands do not have access to TFPDServerDebugger's protected methods theirself)
     procedure DoOnRunFailed;
@@ -350,6 +354,7 @@ type
     FResetBreakFlag: boolean;
     FIsSet: boolean;
     FUID: integer;
+    FServerId: integer;
     procedure SetBreak;
     procedure ResetBreak;
   protected
@@ -363,6 +368,7 @@ type
   public
     destructor Destroy; override;
     property UID: integer read FUID;
+    property ServerId: Integer read FServerId write FServerId;
   end;
 
   { TFPBreakpoints }
@@ -370,6 +376,7 @@ type
   TFPBreakpoints = class(TDBGBreakPoints)
   public
     function FindByUID(AnUID: integer): TFPBreakpoint;
+    function FindByServerID(AnServerID: integer): TFPBreakpoint;
   end;
 
   { TFPDBGDisassembler }
@@ -732,13 +739,13 @@ procedure TFPDSendRemoveBreakpointCommand.ComposeJSon(AJsonObject: TJSONObject);
 begin
   inherited ComposeJSon(AJsonObject);
   AJsonObject.Add('command','removebreakpoint');
-  AJsonObject.Add('location', Dec2Numb(FLocation, 8, 16));
+  AJsonObject.Add('BreakpointServerIdr', Dec2Numb(FId, 8, 16));
 end;
 
-constructor TFPDSendRemoveBreakpointCommand.create(ALocation: TDBGPtr);
+constructor TFPDSendRemoveBreakpointCommand.create(AnId: Integer);
 begin
   inherited create;
-  FLocation:=ALocation;
+  FId:=AnId;
 end;
 
 { TFPDSendResetBreakpointCommand }
@@ -856,9 +863,9 @@ procedure TFPBreakpoint.DoEnableChange;
 begin
   if (Debugger.State in [dsPause, dsInit, dsRun]) then
     begin
-    if FEnabled and not FIsSet then
+    if Enabled and not FIsSet then
       FSetBreakFlag := True
-    else if not FEnabled and FIsSet then
+    else if not Enabled and FIsSet then
       FResetBreakFlag := True;
     end;
   inherited;
@@ -900,6 +907,19 @@ var
 begin
   for i := 0 to Count-1 do
     if TFPBreakpoint(Items[i]).UID=AnUID then
+      begin
+      result := TFPBreakpoint(Items[i]);
+      exit;
+      end;
+  result := nil;
+end;
+
+function TFPBreakpoints.FindByServerID(AnServerID: integer): TFPBreakpoint;
+var
+  i: integer;
+begin
+  for i := 0 to Count-1 do
+    if TFPBreakpoint(Items[i]).ServerId=AnServerID then
       begin
       result := TFPBreakpoint(Items[i]);
       exit;
@@ -1009,7 +1029,9 @@ begin
       else
         begin
         // Set non-blocking
+  {$IFDEF UNIX}
         fpfcntl(ASocket.Handle,F_SETFL,O_NONBLOCK);
+  {$ENDIF}
 
         // Read and check FPDebug Server greeting
         s := ReadSTringTimeout(100);
@@ -1240,14 +1262,14 @@ end;
 
 procedure TFPDServerDebugger.DoHandleBreakpointEvent(AnEvent: TJSONObject);
 var
-  BrkLocation: string;
+  BrkId: Integer;
   Brk: TDBGBreakPoint;
   Continue: boolean;
 begin
-  BrkLocation:=AnEvent.Get('breakpointLocation','');
-  if BrkLocation<>'' then
+  BrkId:=AnEvent.Get('BreakpointServerIdr',0);
+  if BrkId<>0 then
     begin
-    Brk :=  BreakPoints.Find(Hex2Dec(BrkLocation));
+    Brk :=  TFPBreakPoints(BreakPoints).FindByServerID(BrkId);
     if not assigned(brk) then
       debugln('Break on unknown breakpoint')
     else
@@ -1428,7 +1450,8 @@ begin
   Result:=TFPDBGDisassembler.Create(Self);
 end;
 
-function TFPDServerDebugger.RequestCommand(const ACommand: TDBGCommand; const AParams: array of const): Boolean;
+function TFPDServerDebugger.RequestCommand(const ACommand: TDBGCommand;
+  const AParams: array of const; const ACallback: TMethod): Boolean;
 var
   ASendCommand: TFPDSendEvaluateCommand;
   tc: qword;
@@ -1494,8 +1517,8 @@ begin
       sleep(5);
       Application.ProcessMessages;
       until (ASendCommand.Validity<>ddsRequested) or ((GetTickCount64-tc)>2000);
-      String(AParams[1].VPointer^) := ASendCommand.Message;
-      TDBGType(AParams[2].VPointer^) := nil;
+      TDBGEvaluateResultCallback(ACallback)(Self, True, ASendCommand.Message, nil);
+      Result := True;
       ASendCommand.Free;
       end
     else

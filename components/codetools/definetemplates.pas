@@ -59,8 +59,8 @@ uses
   CodeToolsStrConsts, ExprEval, DirectoryCacher, BasicCodeTools,
   CodeToolsStructs, KeywordFuncLists, LinkScanner, FileProcs,
   // LazUtils
-  LazUtilities, LazUTF8, LazUTF8Classes, LazFileUtils, UTF8Process,
-  LazFileCache, LazDbgLog, AvgLvlTree, Laz2_XMLCfg;
+  LazStringUtils, LazFileUtils, LazFileCache,
+  LazUTF8, LazUTF8Classes, UTF8Process, LazDbgLog, AvgLvlTree, Laz2_XMLCfg;
 
 const
   ExternalMacroStart = ExprEval.ExternalMacroStart;
@@ -102,17 +102,18 @@ const
   TargetCPUMacro           = '$('+TargetCPUMacroName+')';
   NamespacesMacro          = '$('+NamespacesMacroName+')';
 
+  MacOSMinSDKVersionMacro = 'MAC_OS_X_VERSION_MIN_REQUIRED';
 
   // virtual directories
   VirtualDirectory='VIRTUALDIRECTORY';
   VirtualTempDir='TEMPORARYDIRECTORY';
   
   // FPC operating systems and processor types
-  FPCOperatingSystemNames: array[1..35] of shortstring =(
+  FPCOperatingSystemNames: array[1..36] of shortstring =(
      'linux',
      'win32','win64','wince',
      'darwin','macos',
-     'freebsd','netbsd','openbsd',
+     'freebsd','netbsd','openbsd','dragonfly',
      'aix',
      'amiga',
      'android',
@@ -140,34 +141,35 @@ const
      'wdosx',
      'wii'
     );
-  FPCOperatingSystemCaptions: array[1..35] of shortstring =(
+  FPCOperatingSystemCaptions: array[1..36] of shortstring =(
      'AIX',
      'Amiga',
      'Android',
      'AROS',
      'Atari',
-     'Beos',
+     'BeOS',
      'Darwin',
+     'DragonFly',
      'Embedded',
      'emx',
      'FreeBSD',
-     'gba',
-     'go32v2',
+     'GBA',
+     'Go32v2',
      'Haiku',
-     'iphonesim',
+     'iPhoneSim',
      'Java',
      'Linux',
      'MacOS',
      'MorphOS',
      'MSDOS',
-     'nds',
+     'NDS',
      'NetBSD',
-     'Netware',
+     'NetWare',
      'NetwLibC',
      'OpenBSD',
      'OS2',
      'PalmOS',
-     'qnx',
+     'QNX',
      'Solaris',
      'Symbian',
      'Watcom',
@@ -203,7 +205,16 @@ const
     'FPC', 'ObjFPC', 'Delphi', 'TP', 'MacPas', 'ISO'
     );
 
-  Lazarus_CPU_OS_Widget_Combinations: array[1..91] of shortstring = (
+  Pas2jsPlatformNames: array[1..2] of shortstring = (
+    'Browser',
+    'NodeJS'
+    );
+  Pas2jsProcessorNames: array[1..2] of shortstring = (
+    'ECMAScript5',
+    'ECMAScript6'
+    );
+
+  Lazarus_CPU_OS_Widget_Combinations: array[1..106] of shortstring = (
     'i386-linux-gtk',
     'i386-linux-gtk2',
     'i386-linux-qt',
@@ -284,6 +295,21 @@ const
     'x86_64-freebsd-qt5',
     'x86_64-freebsd-fpgui',
     'x86_64-freebsd-nogui',
+    'x86_64-openbsd-gtk2',
+    'x86_64-openbsd-qt',
+    'x86_64-openbsd-qt5',
+    'x86_64-openbsd-fpgui',
+    'x86_64-openbsd-nogui',
+    'x86_64-netbsd-gtk2',
+    'x86_64-netbsd-qt',
+    'x86_64-netbsd-qt5',
+    'x86_64-netbsd-fpgui',
+    'x86_64-netbsd-nogui',
+    'x86_64-dragonfly-gtk2',
+    'x86_64-dragonfly-qt',
+    'x86_64-dragonfly-qt5',
+    'x86_64-dragonfly-fpgui',
+    'x86_64-dragonfly-nogui',
     'x86_64-linux-gtk',
     'x86_64-linux-gtk2',
     'x86_64-linux-qt',
@@ -611,10 +637,6 @@ type
                                Owner: TObject): TDefineTemplate;
     function GetFPCVerFromFPCTemplate(Template: TDefineTemplate;
                         out FPCVersion, FPCRelease, FPCPatch: integer): boolean;
-    function CreateFPCSrcTemplate(const FPCSrcDir, UnitSearchPath, PPUExt,
-                          DefaultTargetOS, DefaultProcessorName: string;
-                          UnitLinkListValid: boolean; var UnitLinkList: string;
-                          Owner: TObject): TDefineTemplate; deprecated;
     function CreateFPCCommandLineDefines(const Name, CmdLine: string;
                                  RecursiveDefines: boolean;
                                  Owner: TObject;
@@ -727,7 +749,7 @@ const
 type
 
   { TPCConfigFileState
-    Store if a config file exists and its modification date }
+    Stores if a config file exists and its modification date }
 
   TPCConfigFileState = class
   public
@@ -766,6 +788,25 @@ type
 
   TFPCConfigFileStateList = TPCConfigFileStateList deprecated 'use TPCConfigFileStateList'; // Laz 1.9
 
+  { TPCFPMFileState
+    Stores information about a fppkg .fpm file }
+
+  TPCFPMFileState = class
+  public
+    Name: string;
+    FPMFilename: string;
+    FileDate: longint;
+    SourcePath: string;
+    UnitToSrc: TStringToStringTree; // case insensitive unit name to source file
+    constructor Create;
+    destructor Destroy; override;
+    procedure Clear;
+    procedure Assign(List: TPCFPMFileState);
+    function Equals(List: TPCFPMFileState; CheckDates: boolean): boolean; reintroduce;
+    procedure LoadFromXMLConfig(XMLConfig: TXMLConfig; const Path: string);
+    procedure SaveToXMLConfig(XMLConfig: TXMLConfig; const Path: string);
+  end;
+
   TPCTargetConfigCaches = class;
 
   { TPCTargetConfigCache
@@ -784,19 +825,22 @@ type
     // values
     Kind: TPascalCompiler;
     CompilerDate: longint;
-    RealCompiler: string; // when Compiler is fpc, this is the real compiler (e.g. ppc386)
+    RealCompiler: string; // when Compiler is fpc.exe, this is the real compiler (e.g. ppc386.exe)
     RealCompilerDate: longint;
     RealTargetOS: string;
     RealTargetCPU: string;
-    RealCompilerInPath: string; // the ppc<target> in PATH
+    RealTargetCPUCompiler: string; // the ppc<target>.exe in PATH for TargetCPU
     FullVersion: string; // Version.Release.Patch
     ConfigFiles: TPCConfigFileStateList;
     UnitPaths: TStrings;
     IncludePaths: TStrings;
+    UnitScopes: TStrings;
     Defines: TStringToStringTree; // macro to value
     Undefines: TStringToStringTree; // macro
     Units: TStringToStringTree; // unit name to file name
     Includes: TStringToStringTree; // inc name to file name
+    UnitToFPM: TStringToPointerTree; // unitname to TPCFPMFileState
+    FPMNameToFPM: TStringToPointerTree; // fpm name to TPCFPMFileState
     ErrorMsg: string;
     ErrorTranslatedMsg: string;
     Caches: TPCTargetConfigCaches;
@@ -815,7 +859,7 @@ type
     function GetFPCInfoCmdLineOptions(ExtraOptions: string): string;
     function Update(TestFilename: string; ExtraOptions: string = '';
                     const OnProgress: TDefinePoolProgress = nil): boolean;
-    function FindRealCompilerInPath(aTargetCPU: string; ResolveLinks: boolean): string;
+    function FindDefaultTargetCPUCompiler(aTargetCPU: string; ResolveLinks: boolean): string;
     function GetUnitPaths: string;
     function GetFPCVerNumbers(out FPCVersion, FPCRelease, FPCPatch: integer): boolean;
     function GetFPCVer: string; // e.g. 2.7.1
@@ -824,8 +868,6 @@ type
     procedure IncreaseChangeStamp;
     property ChangeStamp: integer read FChangeStamp;
   end;
-
-  TFPCTargetConfigCache = TPCTargetConfigCache deprecated 'use TPCTargetConfigCache'; // Laz 1.9
 
   { TPCTargetConfigCaches
     List of TPCTargetConfigCache }
@@ -856,8 +898,6 @@ type
     property TestFilename: string read FTestFilename write FTestFilename; // an empty file to test the compiler, will be auto created
     property ExtraOptions: string read FExtraOptions write FExtraOptions; // additional compiler options not used as key, e.g. -Fr<language file>
   end;
-
-  TFPCTargetConfigCaches = TPCTargetConfigCaches deprecated 'use TPCTargetConfigCaches'; // Laz 1.9
 
   TFPCSourceCaches = class;
 
@@ -975,6 +1015,8 @@ type
     procedure IncreaseChangeStamp;
     function GetUnitSetID: string;
     function GetFirstFPCCfg: string;
+    function GetUnitScopes: string;
+    function GetCompilerKind: TPascalCompiler;
   end;
 
   { TCompilerDefinesCache }
@@ -1007,7 +1049,10 @@ type
     property TestFilename: string read GetTestFilename write SetTestFilename; // an empty file to test the compiler, will be auto created
     property ExtraOptions: string read GetExtraOptions write SetExtraOptions; // additional compiler options not used as key, e.g. -Fr<language file>
     function GetFPCVersion(const CompilerFilename, TargetOS, TargetCPU: string;
-                           UseCompiledVersionAsDefault: boolean): string;
+                           UseCompiledVersionAsDefault: boolean): string; deprecated 'use GetPCVersion'; // 2.0.1
+    function GetPCVersion(const CompilerFilename, TargetOS, TargetCPU: string;
+                          UseCompiledVersionAsDefault: boolean;
+                          out Kind: TPascalCompiler): string;
     function FindUnitSet(const CompilerFilename, TargetOS, TargetCPU,
                          Options, FPCSrcDir: string;
                          CreateIfNotExists: boolean): TFPCUnitSetCache;
@@ -1034,11 +1079,18 @@ function GetCompiledTargetOS: string;
 function GetCompiledTargetCPU: string;
 function GetDefaultCompilerFilename(const TargetCPU: string = ''; Cross: boolean = false): string;
 procedure GetTargetProcessors(const TargetCPU: string; aList: TStrings);
-function GetFPCTargetOS(TargetOS: string): string;
-function GetFPCTargetCPU(TargetCPU: string): string;
-function GetPascalCompilerFromExeName(Filename: string): TPascalCompiler;
-function IsFPCExecutable(AFilename: string; out ErrorMsg: string): boolean; // not thread-safe
-function IsPas2JSExecutable(AFilename: string; out ErrorMsg: string): boolean; // not thread-safe
+function GetFPCTargetOS(TargetOS: string): string; // normalize
+function GetFPCTargetCPU(TargetCPU: string): string; // normalize
+function IsPas2jsTargetOS(TargetOS: string): boolean;
+function IsPas2jsTargetCPU(TargetCPU: string): boolean;
+
+function IsCTExecutable(AFilename: string; out ErrorMsg: string): boolean; // not thread-safe
+
+function GuessPascalCompilerFromExeName(Filename: string): TPascalCompiler; // thread-safe
+function IsCompilerExecutable(AFilename: string; out ErrorMsg: string;
+  out Kind: TPascalCompiler; Run: boolean): boolean; // not thread-safe
+function IsFPCExecutable(AFilename: string; out ErrorMsg: string; Run: boolean): boolean; deprecated; // 2.1, not thread-safe
+function IsPas2JSExecutable(AFilename: string; out ErrorMsg: string; Run: boolean): boolean; deprecated; // 2.1, not thread-safe
 
 // functions to quickly setup some defines
 function CreateDefinesInDirectories(const SourcePaths, FlagName: string
@@ -1072,49 +1124,55 @@ function ParseFPCInfo(FPCInfo: string; InfoTypes: TFPCInfoTypes;
                       out Infos: TFPCInfoStrings): boolean;
 function RunFPCInfo(const CompilerFilename: string;
                    InfoTypes: TFPCInfoTypes; const Options: string =''): string;
-function FPCVersionToNumber(const FPCVersionString: string): integer;
+function FPCVersionToNumber(const FPCVersionString: string): integer; // 2.7.1 -> 20701
 function SplitFPCVersion(const FPCVersionString: string;
-                        out FPCVersion, FPCRelease, FPCPatch: integer): boolean;
+                        out FPCVersion, FPCRelease, FPCPatch: integer): boolean; // 2.7.1 -> 2,7,1
 function ParseFPCVerbose(List: TStrings; // fpc -va output
                          const WorkDir: string;
                          out ConfigFiles: TStrings; // prefix '-' for file not found, '+' for found and read
                          out RealCompilerFilename: string; // what compiler is used by fpc
                          out UnitPaths: TStrings; // unit search paths
-                         out IncludePaths: TStrings; // inc search paths
+                         out IncludePaths: TStrings; // include search paths
+                         out UnitScopes: TStrings; // unit scopes/namespaces
                          out Defines, Undefines: TStringToStringTree): boolean;
 function RunFPCVerbose(const CompilerFilename, TestFilename: string;
                        out ConfigFiles: TStrings;
                        out RealCompilerFilename: string;
                        out UnitPaths: TStrings;
                        out IncludePaths: TStrings;
+                       out UnitScopes: TStrings; // unit scopes/namespaces
                        out Defines, Undefines: TStringToStringTree;
                        const Options: string = ''): boolean;
 procedure GatherUnitsInSearchPaths(SearchUnitPaths, SearchIncludePaths: TStrings;
                     const OnProgress: TDefinePoolProgress;
                     out Units: TStringToStringTree;
-                    out Includes: TStringToStringTree;
-                    CheckFPMkInst: boolean = false); // unit names to full file name
+                    out Includes: TStringToStringTree); // unit names to full file name
+procedure GatherUnitsInFPMSources(Units: TStringToStringTree; // unit names to full file name
+                    out UnitToFPM: TStringToPointerTree;
+                    out FPMNameToFPM: TStringToPointerTree; // TPCFPMFileState
+                    const OnProgress: TDefinePoolProgress = nil
+                    );
 function GatherUnitSourcesInDirectory(Directory: string;
                     MaxLevel: integer = 1): TStringToStringTree; // unit names to full file name
 procedure AdjustFPCSrcRulesForPPUPaths(Units: TStringToStringTree;
-                                       Rules: TFPCSourceRules);
+                                       Rules: TFPCSourceRules); // not for pas2js
 function GatherUnitsInFPCSources(Files: TStringList;
                    TargetOS: string = ''; TargetCPU: string = '';
                    Duplicates: TStringToStringTree = nil; // unit to semicolon separated list of files
                    Rules: TFPCSourceRules = nil;
-                   const DebugUnitName: string = ''): TStringToStringTree;
+                   const DebugUnitName: string = ''): TStringToStringTree; // not for pas2js
 function CreateFPCTemplate(Config: TPCTargetConfigCache;
                            Owner: TObject): TDefineTemplate; overload;
 function CreateFPCTemplate(Config: TFPCUnitSetCache;
                            Owner: TObject): TDefineTemplate; overload;
 function CreateFPCSourceTemplate(Config: TFPCUnitSetCache;
-                                 Owner: TObject): TDefineTemplate; overload;
+                                 Owner: TObject): TDefineTemplate; overload; // not for pas2js
 function CreateFPCSourceTemplate(FPCSrcDir: string;
-                                 Owner: TObject): TDefineTemplate; overload;
+                                 Owner: TObject): TDefineTemplate; overload; // not for pas2js
 procedure CheckPPUSources(PPUFiles,  // unitname to filename
                           UnitToSource, // unitname to file name
                           UnitToDuplicates: TStringToStringTree; // unitname to semicolon separated list of files
-                          var Duplicates, Missing: TStringToStringTree);
+                          var Duplicates, Missing: TStringToStringTree); // not for pas2js
 procedure LoadFPCCacheFromFile(Filename: string;
             var Configs: TPCTargetConfigCaches; var Sources: TFPCSourceCaches);
 procedure SaveFPCCacheToFile(Filename: string;
@@ -1419,7 +1477,7 @@ begin
   try
     buf:='';
     if (MainThreadID=GetCurrentThreadId) and not Quiet then begin
-      DbgOut(['Hint: (lazarus) [RunTool] ',Filename]);
+      DbgOut(['Hint: (lazarus) [RunTool] "',Filename,'"']);
       for i:=0 to Params.Count-1 do
         dbgout(' "',Params[i],'"');
       Debugln;
@@ -1510,29 +1568,32 @@ end;
 function RunFPCInfo(const CompilerFilename: string;
   InfoTypes: TFPCInfoTypes; const Options: string): string;
 var
-  Params: String;
+  Param: String;
   List: TStringList;
+  Params: TStringListUTF8;
 begin
   Result:='';
-  Params:='';
-  if fpciCompilerDate in InfoTypes then Params:=Params+'D';
-  if fpciShortVersion in InfoTypes then Params:=Params+'V';
-  if fpciFullVersion in InfoTypes then Params:=Params+'W';
-  if fpciCompilerOS in InfoTypes then Params:=Params+'SO';
-  if fpciCompilerProcessor in InfoTypes then Params:=Params+'SP';
-  if fpciTargetOS in InfoTypes then Params:=Params+'TO';
-  if fpciTargetProcessor in InfoTypes then Params:=Params+'TP';
-  if Params='' then exit;
-  Params:='-i'+Params;
-  if Options<>'' then
-    Params:=Params+' '+Options;
+  Param:='';
+  if fpciCompilerDate in InfoTypes then Param:=Param+'D';
+  if fpciShortVersion in InfoTypes then Param:=Param+'V';
+  if fpciFullVersion in InfoTypes then Param:=Param+'W';
+  if fpciCompilerOS in InfoTypes then Param:=Param+'SO';
+  if fpciCompilerProcessor in InfoTypes then Param:=Param+'SP';
+  if fpciTargetOS in InfoTypes then Param:=Param+'TO';
+  if fpciTargetProcessor in InfoTypes then Param:=Param+'TP';
+  if Param='' then exit;
+  Param:='-i'+Param;
   List:=nil;
+  Params:=TStringListUTF8.Create;
   try
+    Params.Add(Param);
+    SplitCmdLineParams(Options,Params);
     List:=RunTool(CompilerFilename,Params);
     if (List=nil) or (List.Count<1) then exit;
     Result:=List[0];
     if copy(Result,1,6)='Error:' then Result:='';
   finally
+    Params.Free;
     List.free;
   end;
 end;
@@ -1587,33 +1648,56 @@ end;
 
 function ParseFPCVerbose(List: TStrings; const WorkDir: string; out
   ConfigFiles: TStrings; out RealCompilerFilename: string; out
-  UnitPaths: TStrings; out IncludePaths: TStrings; out Defines,
-  Undefines: TStringToStringTree): boolean;
+  UnitPaths: TStrings; out IncludePaths: TStrings; out UnitScopes: TStrings; out
+  Defines, Undefines: TStringToStringTree): boolean;
+
+  function DeQuote(const s: string): string;
+  begin
+    if (length(s)>1) and (s[1]='"') and (s[length(s)]='"') then
+      Result:=AnsiDequotedStr(s,'"')
+    else
+      Result:=s;
+  end;
 
   procedure UndefineSymbol(const MacroName: string);
   begin
-    //DebugLn(['UndefineSymbol ',MacroName]);
+    {$IFDEF VerboseFPCSrcScan}
+    DebugLn(['UndefineSymbol ',MacroName]);
+    {$ENDIF}
     Defines.Remove(MacroName);
     Undefines[MacroName]:='';
   end;
 
   procedure DefineSymbol(const MacroName, Value: string);
   begin
-    //DebugLn(['DefineSymbol ',MacroName]);
+    {$IFDEF VerboseFPCSrcScan}
+    if Value='' then
+      DebugLn(['DefineSymbol ',MacroName])
+    else
+      DebugLn(['DefineSymbol ',MacroName,':=',Value]);
+    {$ENDIF}
     Undefines.Remove(MacroName);
     Defines[MacroName]:=Value;
   end;
 
   function ExpFile(const aFilename: string): string;
   begin
-    Result:=aFilename;
+    Result:=DeQuote(aFilename);
     if FilenameIsAbsolute(Result) then exit;
     Result:=AppendPathDelim(WorkDir)+Result;
   end;
 
   procedure ProcessOutputLine(Line: string);
   var
-    SymbolName, SymbolValue, UpLine, NewPath: string;
+    UpLine: string;
+
+    function IsUpLine(p: integer; const s: string): boolean;
+    begin
+      Result:=StrLComp(@UpLine[p], PChar(s), length(s)) = 0;
+    end;
+
+  var
+    SymbolName, SymbolValue, NewPath: string;
     i, len, CurPos: integer;
     Filename: String;
     p: SizeInt;
@@ -1635,44 +1719,58 @@ function ParseFPCVerbose(List: TStrings; const WorkDir: string; out
     end;
 
     UpLine:=UpperCaseStr(Line);
-
     case UpLine[CurPos] of
-    'C':
-      if StrLComp(@UpLine[CurPos], 'CONFIGFILE SEARCH: ', 19) = 0 then
-      begin
-        // skip keywords
-        Inc(CurPos, 19);
-        Filename:=ExpFile(GetForcedPathDelims(copy(Line,CurPos,length(Line))));
-        ConfigFiles.Add('-'+Filename);
-      end else if StrLComp(@UpLine[CurPos], 'COMPILER: ', 10) = 0 then begin
-        // skip keywords
-        Inc(CurPos, 10);
-        RealCompilerFilename:=ExpFile(copy(Line,CurPos,length(Line)));
-      end;
+    'I':
+      if IsUpLine(CurPos,'INFO: ') then
+        inc(CurPos,6);
     'E':
-      if StrLComp(@UpLine[CurPos], 'ERROR: ', 7) = 0 then begin
+      if IsUpLine(CurPos,'ERROR: ') then begin
         inc(CurPos,7);
         if RealCompilerFilename='' then begin
           p:=Pos(' returned an error exitcode',Line);
           if p>0 then
             RealCompilerFilename:=copy(Line,CurPos,p-CurPos);
         end;
+        exit;
+      end;
+    end;
+
+    case UpLine[CurPos] of
+    'C':
+      if IsUpLine(CurPos,'CONFIGFILE SEARCH: ') then
+      begin
+        // skip keywords
+        Inc(CurPos, 19);
+        Filename:=ExpFile(GetForcedPathDelims(copy(Line,CurPos,length(Line))));
+        ConfigFiles.Add('-'+Filename);
+      end else if IsUpLine(CurPos,'COMPILER: ') then begin
+        // skip keywords
+        Inc(CurPos, 10);
+        RealCompilerFilename:=ExpFile(copy(Line,CurPos,length(Line)));
       end;
     'M':
-      if StrLComp(@UpLine[CurPos], 'MACRO ', 6) = 0 then begin
+      if IsUpLine(CurPos,'MACRO ') then begin
         // skip keyword macro
         Inc(CurPos, 6);
 
-        if (StrLComp(@UpLine[CurPos], 'DEFINED: ', 9) = 0) then begin
+        if IsUpLine(CurPos,'DEFINED: ') then begin
           Inc(CurPos, 9);
-          SymbolName:=copy(UpLine, CurPos, len);
+          SymbolName:=copy(Line, CurPos, len);
+          if (SameText(SymbolName,'PAS2JS_FULLVERSION')
+                or SameText(SymbolName,'FPC_FULLVERSION'))
+              and Defines.Contains(SymbolName) then
+            begin
+            // keep the FULLVERSION value
+            // Note: pas2js <1.4 had a bug, it gave out DEFINED
+            exit;
+            end;
           DefineSymbol(SymbolName,'');
           Exit;
         end;
 
-        if (StrLComp(@UpLine[CurPos], 'UNDEFINED: ', 11) = 0) then begin
+        if IsUpLine(CurPos,'UNDEFINED: ') then begin
           Inc(CurPos, 11);
-          SymbolName:=copy(UpLine,CurPos,len);
+          SymbolName:=copy(Line,CurPos,len);
           UndefineSymbol(SymbolName);
           Exit;
         end;
@@ -1680,17 +1778,18 @@ function ParseFPCVerbose(List: TStrings; const WorkDir: string; out
         // MACRO something...
         i := CurPos;
         while (i <= len) and (Line[i]<>' ') do inc(i);
-        SymbolName:=copy(UpLine,CurPos,i-CurPos);
+        SymbolName:=copy(Line,CurPos,i-CurPos);
         CurPos := i + 1; // skip space
 
-        if StrLComp(@UpLine[CurPos], 'SET TO ', 7) = 0 then begin
+        if IsUpLine(CurPos,'SET TO ') then begin
+          // MACRO name SET TO "value"
           Inc(CurPos, 7);
-          SymbolValue:=copy(Line, CurPos, len);
+          SymbolValue:=DeQuote(copy(Line, CurPos, len));
           DefineSymbol(SymbolName, SymbolValue);
         end;
       end;
     'R':
-      if StrLComp(@UpLine[CurPos], 'READING OPTIONS FROM FILE ', 26) = 0 then
+      if IsUpLine(CurPos,'READING OPTIONS FROM FILE ') then
       begin
         // skip keywords
         Inc(CurPos, 26);
@@ -1698,29 +1797,35 @@ function ParseFPCVerbose(List: TStrings; const WorkDir: string; out
         if (ConfigFiles.Count>0)
         and (ConfigFiles[ConfigFiles.Count-1]='-'+Filename) then
           ConfigFiles.Delete(ConfigFiles.Count-1);
+        {$IFDEF VerboseFPCSrcScan}
+        DebugLn('Used options file: "',Filename,'"');
+        {$ENDIF}
         ConfigFiles.Add('+'+Filename);
       end;
     'U':
-      if (StrLComp(@UpLine[CurPos], 'USING UNIT PATH: ', 17) = 0) then begin
+      if IsUpLine(CurPos,'USING UNIT PATH: ') then begin
         Inc(CurPos, 17);
-        NewPath:=GetForcedPathDelims(copy(Line,CurPos,len));
-        if not FilenameIsAbsolute(NewPath) then
-          NewPath:=ExpFile(NewPath);
+        NewPath:=ExpFile(GetForcedPathDelims(DeQuote(copy(Line,CurPos,len))));
         NewPath:=ChompPathDelim(TrimFilename(NewPath));
         {$IFDEF VerboseFPCSrcScan}
         DebugLn('Using unit path: "',NewPath,'"');
         {$ENDIF}
         UnitPaths.Add(NewPath);
-      end else if (StrLComp(@UpLine[CurPos], 'USING INCLUDE PATH: ', 20) = 0) then begin
+      end else if IsUpLine(CurPos,'USING INCLUDE PATH: ') then begin
         Inc(CurPos, 20);
-        NewPath:=GetForcedPathDelims(copy(Line,CurPos,len));
-        if not FilenameIsAbsolute(NewPath) then
-          NewPath:=ExpFile(NewPath);
+        NewPath:=ExpFile(GetForcedPathDelims(DeQuote(copy(Line,CurPos,len))));
         NewPath:=ChompPathDelim(TrimFilename(NewPath));
         {$IFDEF VerboseFPCSrcScan}
         DebugLn('Using include path: "',NewPath,'"');
         {$ENDIF}
         IncludePaths.Add(NewPath);
+      end else if IsUpLine(CurPos,'USING UNIT SCOPE: ') then begin
+        Inc(CurPos, 18);
+        NewPath:=Trim(DeQuote(copy(Line,CurPos,len)));
+        {$IFDEF VerboseFPCSrcScan}
+        DebugLn('Using unit scope: "',NewPath,'"');
+        {$ENDIF}
+        UnitScopes.Add(NewPath);
       end;
     end;
   end;
@@ -1733,6 +1838,7 @@ begin
   RealCompilerFilename:='';
   UnitPaths:=TStringList.Create;
   IncludePaths:=TStringList.Create;
+  UnitScopes:=TStringList.Create;
   Defines:=TStringToStringTree.Create(false);
   Undefines:=TStringToStringTree.Create(false);
   try
@@ -1744,18 +1850,19 @@ begin
       FreeAndNil(ConfigFiles);
       FreeAndNil(UnitPaths);
       FreeAndNil(IncludePaths);
+      FreeAndNil(UnitScopes);
       FreeAndNil(Undefines);
       FreeAndNil(Defines);
     end;
   end;
 end;
 
-function RunFPCVerbose(const CompilerFilename, TestFilename: string;
-  out ConfigFiles: TStrings; out RealCompilerFilename: string;
-  out UnitPaths: TStrings; out IncludePaths: TStrings;
+function RunFPCVerbose(const CompilerFilename, TestFilename: string; out
+  ConfigFiles: TStrings; out RealCompilerFilename: string; out
+  UnitPaths: TStrings; out IncludePaths: TStrings; out UnitScopes: TStrings;
   out Defines, Undefines: TStringToStringTree; const Options: string): boolean;
 var
-  Params: String;
+  Params: TStringListUTF8;
   Filename: String;
   WorkDir: String;
   List: TStringList;
@@ -1766,26 +1873,32 @@ begin
   RealCompilerFilename:='';
   UnitPaths:=nil;
   IncludePaths:=nil;
+  UnitScopes:=nil;
   Defines:=nil;
   Undefines:=nil;
 
-  // create empty file
-  try
-    fs:=TFileStreamUTF8.Create(TestFilename,fmCreate);
-    fs.Free;
-  except
-    debugln(['Warning: [RunFPCVerbose] unable to create test file "'+TestFilename+'"']);
-    exit;
-  end;
-
-  Params:='-va';
-  if Options<>'' then
-    Params:=Params+' '+Options;
-  Filename:=ExtractFileName(TestFilename);
-  WorkDir:=ExtractFilePath(TestFilename);
-  Params:=Params+' '+Filename;
+  Params:=TStringListUTF8.Create;
   List:=nil;
   try
+    Params.Add('-va');
+
+    if TestFilename<>'' then begin
+      // create empty file
+      try
+        fs:=TFileStreamUTF8.Create(TestFilename,fmCreate);
+        fs.Free;
+      except
+        debugln(['Warning: [RunFPCVerbose] unable to create test file "'+TestFilename+'"']);
+        exit;
+      end;
+      Filename:=ExtractFileName(TestFilename);
+      WorkDir:=ExtractFilePath(TestFilename);
+      Params.Add(Filename);
+    end else
+      WorkDir:='';
+
+    SplitCmdLineParams(Options,Params);
+
     //DebugLn(['RunFPCVerbose ',CompilerFilename,' ',Params,' ',WorkDir]);
     List:=RunTool(CompilerFilename,Params,WorkDir);
     if (List=nil) or (List.Count=0) then begin
@@ -1793,54 +1906,35 @@ begin
       exit;
     end;
     Result:=ParseFPCVerbose(List,WorkDir,ConfigFiles,RealCompilerFilename,
-                            UnitPaths,IncludePaths,Defines,Undefines);
+                            UnitPaths,IncludePaths,UnitScopes,Defines,Undefines);
   finally
+    Params.Free;
     List.Free;
-    DeleteFileUTF8(TestFilename);
+    if TestFilename<>'' then
+      DeleteFileUTF8(TestFilename);
   end;
 end;
 
 procedure GatherUnitsInSearchPaths(SearchUnitPaths, SearchIncludePaths: TStrings;
   const OnProgress: TDefinePoolProgress; out Units: TStringToStringTree;
-  out Includes: TStringToStringTree; CheckFPMkInst: boolean);
+  out Includes: TStringToStringTree);
 { returns a stringtree,
   where name is unitname and value is the full file name
 
   SearchUnitsPaths are searched from last to start
   first found wins
   pas, pp, p replaces ppu
-
-  check for each UnitPath of the form
-    lib/fpc/<FPCVer>/units/<FPCTarget>/<name>/
-  if there is lib/fpc/<FPCVer>/fpmkinst/><FPCTarget>/<name>.fpm
-  and search line SourcePath=<directory>
-  and search source files in this directory including subdirectories
 }
-
-  function SearchPriorPathDelim(var p: integer; const Filename: string): boolean; inline;
-  begin
-    repeat
-      dec(p);
-      if p<1 then exit(false)
-    until Filename[p]=PathDelim;
-    Result:=true;
-  end;
-
 var
   i: Integer;
   Directory: String;
-  FileCount, p, EndPos, FPCTargetEndPos: Integer;
+  FileCount: Integer;
   Abort: boolean;
   FileInfo: TSearchRec;
   ShortFilename: String;
   Filename: String;
   Ext: String;
-  File_Name, PkgName, FPMFilename, FPMSourcePath, Line, SrcFilename: String;
-  AVLNode: TAVLTreeNode;
-  S2SItem: PStringToStringItem;
-  FPMToUnitTree: TStringToPointerTree;// pkgname to TStringToStringTree (unitname to source filename)
-  sl: TStringListUTF8;
-  PkgUnitToFilename: TStringToStringTree;
+  File_Name: String;
 begin
   // units sources
   Units:=TStringToStringTree.Create(false);
@@ -1906,88 +2000,115 @@ begin
       end;
       FindCloseUTF8(FileInfo);
     end;
+end;
 
-  // units ppu
-  if CheckFPMkInst then begin
-    // try to resolve .ppu files via fpmkinst .fpm files
-    FPMToUnitTree:=nil;
-    try
-      AVLNode:=Units.Tree.FindLowest;
-      while AVLNode<>nil do begin
-        S2SItem:=PStringToStringItem(AVLNode.Data);
-        File_Name:=S2SItem^.Name;
-        Filename:=S2SItem^.Value; // trimmed and expanded filename
-        //if Pos('lazmkunit',Filename)>0 then
-        //  debugln(['GatherUnitsInSearchPaths ===== ',Filename]);
-        AVLNode:=Units.Tree.FindSuccessor(AVLNode);
-        if CompareFileExt(Filename,'ppu',false)<>0 then continue;
-        // check if filename has the form
-        //                  /something/lib/fpc/<FPCVer>/units/<FPCTarget>/<pkgname>/
-        // and if there is  /something/lib/fpc/<FPCVer>/fpmkinst/><FPCTarget>/<pkgname>.fpm
-        p:=length(Filename);
-        if not SearchPriorPathDelim(p,Filename) then exit;
-        // <pkgname>
-        EndPos:=p;
-        if not SearchPriorPathDelim(p,Filename) then exit;
-        PkgName:=copy(Filename,p+1,EndPos-p-1);
-        if PkgName='' then continue;
-        FPCTargetEndPos:=p;
-        if not SearchPriorPathDelim(p,Filename) then exit;
-        // <fpctarget>
-        EndPos:=p;
-        if not SearchPriorPathDelim(p,Filename) then exit;
-        // 'units'
-        if (EndPos-p<>6) or (CompareIdentifiers(@Filename[p+1],'units')<>0) then
-          continue;
-        FPMFilename:=copy(Filename,1,p)+'fpmkinst'
-                    +copy(Filename,EndPos,FPCTargetEndPos-EndPos+1)+PkgName+'.fpm';
-        if FPMToUnitTree=nil then begin
-          FPMToUnitTree:=TStringToPointerTree.Create(false);
-          FPMToUnitTree.FreeValues:=true;
-        end;
-        if not FPMToUnitTree.Contains(PkgName) then begin
-          FPMSourcePath:='';
-          if FileExistsCached(FPMFilename) then begin
-            //debugln(['GatherUnitsInSearchPaths Found .fpm: ',FPMFilename]);
-            sl:=TStringListUTF8.Create;
-            try
-              try
-                sl.LoadFromFile(FPMFilename);
-                for i:=0 to sl.Count-1 do begin
-                  Line:=sl[i];
-                  if LeftStr(Line,length('SourcePath='))='SourcePath=' then
-                  begin
-                    FPMSourcePath:=TrimAndExpandDirectory(copy(Line,length('SourcePath=')+1,length(Line)));
-                    break;
-                  end;
-                end;
-              except
-                on E: Exception do
-                  debugln(['Warning: (lazarus) [GatherUnitsInSearchPaths] ',E.Message]);
+procedure GatherUnitsInFPMSources(Units: TStringToStringTree; out
+  UnitToFPM: TStringToPointerTree; out FPMNameToFPM: TStringToPointerTree;
+  const OnProgress: TDefinePoolProgress);
+{ check for each UnitPath of the form
+    lib/fpc/<FPCVer>/units/<FPCTarget>/<name>/
+  if there is lib/fpc/<FPCVer>/fpmkinst/><FPCTarget>/<name>.fpm
+  and search line SourcePath=<directory>
+  then search source files in this directory including subdirectories
+}
+  function SearchPriorPathDelim(var p: integer; const Filename: string): boolean; inline;
+  begin
+    repeat
+      dec(p);
+      if p<1 then exit(false)
+    until Filename[p]=PathDelim;
+    Result:=true;
+  end;
+
+var
+  Abort: boolean;
+  AVLNode: TAVLTreeNode;
+  S2SItem: PStringToStringItem;
+  CurUnitName, Filename, PkgName, FPMFilename, FPMSourcePath, Line: String;
+  p, EndPos, FPCTargetEndPos, i, FileCount: Integer;
+  sl: TStringListUTF8;
+  FPM: TPCFPMFileState;
+begin
+  // try to resolve .ppu files via fpmkinst .fpm files
+  UnitToFPM:=TStringToPointerTree.Create(false);
+  FPMNameToFPM:=TStringToPointerTree.Create(false);
+  FPMNameToFPM.FreeValues:=true;
+  if Units=nil then exit;
+  FileCount:=0;
+  Abort:=false;
+  AVLNode:=Units.Tree.FindLowest;
+  while AVLNode<>nil do begin
+    S2SItem:=PStringToStringItem(AVLNode.Data);
+    CurUnitName:=S2SItem^.Name;
+    Filename:=S2SItem^.Value; // trimmed and expanded filename
+    //if Pos('lazmkunit',Filename)>0 then
+      //debugln(['GatherUnitsInFPMSources ===== ',Filename]);
+    AVLNode:=Units.Tree.FindSuccessor(AVLNode);
+    if CompareFileExt(Filename,'ppu',false)<>0 then continue;
+    // check if filename has the form
+    //                  /something/units/<FPCTarget>/<pkgname>/<unitname>.ppu
+    // and if there is  /something/fpmkinst/<FPCTarget>/<pkgname>.fpm
+    p:=length(Filename);
+    if not SearchPriorPathDelim(p,Filename) then exit;
+    // <pkgname>
+    EndPos:=p;
+    if not SearchPriorPathDelim(p,Filename) then exit;
+    PkgName:=copy(Filename,p+1,EndPos-p-1);
+    if PkgName='' then continue;
+    FPCTargetEndPos:=p;
+    if not SearchPriorPathDelim(p,Filename) then exit;
+    // <fpctarget>
+    EndPos:=p;
+    if not SearchPriorPathDelim(p,Filename) then exit;
+    // 'units'
+    if (EndPos-p<>6) or (CompareIdentifiers(@Filename[p+1],'units')<>0) then
+      continue;
+    FPMFilename:=copy(Filename,1,p)+'fpmkinst'
+                +copy(Filename,EndPos,FPCTargetEndPos-EndPos+1)+PkgName+'.fpm';
+
+    FPM:=TPCFPMFileState(FPMNameToFPM[PkgName]);
+    if FPM=nil then begin
+      inc(FileCount);
+      if (FileCount mod 100=0) and Assigned(OnProgress) then begin
+        OnProgress(nil, 0, -1, Format(ctsScannedFiles, [IntToStr(FileCount)]
+          ), Abort);
+        if Abort then break;
+      end;
+      FPMSourcePath:='';
+      if FileExistsCached(FPMFilename) then begin
+        //debugln(['GatherUnitsInFPMSources Found .fpm: ',FPMFilename]);
+        sl:=TStringListUTF8.Create;
+        try
+          try
+            sl.LoadFromFile(FPMFilename);
+            for i:=0 to sl.Count-1 do begin
+              Line:=sl[i];
+              if LeftStr(Line,length('SourcePath='))='SourcePath=' then
+              begin
+                FPMSourcePath:=TrimAndExpandDirectory(copy(Line,length('SourcePath=')+1,length(Line)));
+                break;
               end;
-            finally
-              sl.Free;
             end;
+          except
+            on E: Exception do
+              debugln(['Warning: (lazarus) [GatherUnitsInFPMSources] ',E.Message]);
           end;
-          if FPMSourcePath<>'' then begin
-            PkgUnitToFilename:=GatherUnitSourcesInDirectory(FPMSourcePath,5);
-            FPMToUnitTree[PkgName]:=PkgUnitToFilename;
-            //debugln(['GatherUnitsInSearchPaths Pkg=',PkgName,' UnitsFound=',PkgUnitToFilename.Count]);
-          end else
-            FPMToUnitTree[PkgName]:=nil; // mark as not found
+        finally
+          sl.Free;
         end;
+        FPM:=TPCFPMFileState.Create;
+        FPM.Name:=PkgName;
+        FPM.FPMFilename:=FPMFilename;
+        FPM.SourcePath:=FPMSourcePath;
+        FPMNameToFPM[PkgName]:=FPM;
+        UnitToFPM[CurUnitName]:=FPM;
 
-        PkgUnitToFilename:=TStringToStringTree(FPMToUnitTree[PkgName]);
-        if PkgUnitToFilename=nil then continue;
-        SrcFilename:=PkgUnitToFilename[File_Name];
-        if SrcFilename<>'' then begin
-          // unit source found in fppkg -> replace ppu with src file
-          //debugln(['GatherUnitsInSearchPaths ppu=',Filename,' -> fppkg src=',SrcFilename]);
-          Units[File_Name]:=SrcFilename;
+        if FPMSourcePath<>'' then begin
+          //debugln(['GatherUnitsInFPMSources ',FPMFilename,' ',FPMSourcePath]);
+          FreeAndNil(FPM.UnitToSrc);
+          FPM.UnitToSrc:=GatherUnitSourcesInDirectory(FPMSourcePath,3);
         end;
       end;
-    finally
-      FPMToUnitTree.Free;
     end;
   end;
 end;
@@ -2202,7 +2323,9 @@ begin
       Link:=TUnitNameLink(Node.Data);
       Result[Link.Unit_Name]:=Link.Filename;
       if (Link.ConflictFilename<>'') and (Link.Score>0) then begin
-        //DebugLn(['GatherUnitsInFPCSources Ambiguous: ',Link.Score,' ',Link.Filename,' ',Link.ConflictFilename]);
+        if (DebugUnitName<>'') and (SysUtils.CompareText(Link.Unit_Name,DebugUnitName)=0)
+        then
+          DebugLn(['GatherUnitsInFPCSources Ambiguous: ',Link.Score,' ',Link.Filename,' ',Link.ConflictFilename]);
         if Duplicates<>nil then
           Duplicates[Link.Unit_Name]:=Link.Filename+';'+Link.ConflictFilename;
       end;
@@ -2795,6 +2918,91 @@ begin
   end;
 end;
 
+{ TPCFPMFileState }
+
+constructor TPCFPMFileState.Create;
+begin
+  UnitToSrc:=TStringToStringTree.Create(false);
+end;
+
+destructor TPCFPMFileState.Destroy;
+begin
+  FreeAndNil(UnitToSrc);
+  inherited Destroy;
+end;
+
+procedure TPCFPMFileState.Clear;
+begin
+  UnitToSrc.Clear;
+  FileDate:=-1;
+end;
+
+procedure TPCFPMFileState.Assign(List: TPCFPMFileState);
+begin
+  // do not assign Name
+  FPMFilename:=List.FPMFilename;
+  FileDate:=List.FileDate;
+  SourcePath:=List.SourcePath;
+  UnitToSrc.Assign(List.UnitToSrc);
+end;
+
+function TPCFPMFileState.Equals(List: TPCFPMFileState; CheckDates: boolean
+  ): boolean;
+begin
+  Result:=false;
+  if Name<>List.Name then exit;
+  if FPMFilename<>List.FPMFilename then exit;
+  if CheckDates and (FileDate<>List.FileDate) then exit;
+  if SourcePath<>List.SourcePath then exit;
+  if not UnitToSrc.Equals(List.UnitToSrc) then exit;
+  Result:=true;
+end;
+
+procedure TPCFPMFileState.LoadFromXMLConfig(XMLConfig: TXMLConfig;
+  const Path: string);
+var
+  Cnt, i: Integer;
+  SubPath, CurName, CurFilename: String;
+begin
+  // do not read Name
+  FPMFilename:=XMLConfig.GetValue(Path+'FPMFile','');
+  FileDate:=XMLConfig.GetValue(Path+'FileDate',0);
+  SourcePath:=TrimAndExpandDirectory(XMLConfig.GetValue(Path+'SourcePath',''));
+  UnitToSrc.Clear;
+  Cnt:=XMLConfig.GetValue(Path+'Units/Count',0);
+  for i:=1 to Cnt do begin
+    SubPath:=Path+'Units/Item'+IntToStr(i)+'/';
+    CurName:=XMLConfig.GetValue(SubPath+'Name','');
+    CurFilename:=XMLConfig.GetValue(SubPath+'File','');
+    UnitToSrc[CurName]:=SourcePath+CurFilename;
+  end;
+end;
+
+procedure TPCFPMFileState.SaveToXMLConfig(XMLConfig: TXMLConfig;
+  const Path: string);
+var
+  Node: TAVLTreeNode;
+  S2PItem: PStringToStringItem;
+  i: Integer;
+  SubPath: String;
+begin
+  XMLConfig.SetDeleteValue(Path+'Name',Name,'');
+  XMLConfig.SetDeleteValue(Path+'File',FPMFilename,'');
+  XMLConfig.SetDeleteValue(Path+'FileDate',FileDate,0);
+  XMLConfig.SetDeleteValue(Path+'SourcePath',SourcePath,'');
+  XMLConfig.SetDeleteValue(Path+'Units/Count',UnitToSrc.Count,0);
+  i:=0;
+  Node:=UnitToSrc.Tree.FindLowest;
+  while Node<>nil do begin
+    S2PItem:=PStringToStringItem(Node.Data);
+    inc(i);
+    SubPath:=Path+'Units/Item'+IntToStr(i)+'/';
+    XMLConfig.SetDeleteValue(SubPath+'Name',S2PItem^.Name,'');
+    XMLConfig.SetDeleteValue(SubPath+'File',CreateRelativePath(S2PItem^.Value,SourcePath),'');
+    Node:=Node.Successor;
+  end;
+end;
+
 { TFPCParamValue }
 
 constructor TFPCParamValue.Create(const aName, aValue: string;
@@ -3036,7 +3244,7 @@ begin
       'e': Add('e',PChar(@p[1]),fpkValue);
       'F':
         case p[1] of
-        'a','f','i','l','o','u': Add('Fa',PChar(@p[2]),fpkMultiValue);
+        'a','f','i','l','N','o','u': Add('F'+p[1],PChar(@p[2]),fpkMultiValue);
         'c','C','D','e','E','L','m','M','r','R','U','W','w': Add('F'+p[1],PChar(@p[2]),fpkValue);
         else AddBooleanFlag(p,2);
         end;
@@ -3423,6 +3631,7 @@ begin
   or (CompareText(TargetOS,'freebsd')=0)
   or (CompareText(TargetOS,'netbsd')=0)
   or (CompareText(TargetOS,'openbsd')=0)
+  or (CompareText(TargetOS,'dragonfly')=0)
   or (CompareText(TargetOS,'darwin')=0)
   or (CompareText(TargetOS,'solaris')=0)
   or (CompareText(TargetOS,'haiku')=0)
@@ -3443,6 +3652,7 @@ begin
   if (CompareText(TargetOS,'freebsd')=0)
   or (CompareText(TargetOS,'netbsd')=0)
   or (CompareText(TargetOS,'openbsd')=0)
+  or (CompareText(TargetOS,'dragonfly')=0)
   or (CompareText(TargetOS,'darwin')=0)
   then
     Result:='bsd'
@@ -3543,11 +3753,21 @@ procedure GetTargetProcessors(const TargetCPU: string; aList: TStrings);
   begin
     aList.Add('ARMV3');
     aList.Add('ARMV4');
+    aList.Add('ARMV4T');
     aList.Add('ARMV5');
+    aList.Add('ARMV5T');
+    aList.Add('ARMV5TE');
+    aList.Add('ARMV5TEJ');
     aList.Add('ARMV6');
+    aList.Add('ARMV6K');
+    aList.Add('ARMV6T2');
+    aList.Add('ARMV6Z');
+    aList.Add('ARMV6M');
     aList.Add('ARMV7');
     aList.Add('ARMV7A');
+    aList.Add('ARMV7R');
     aList.Add('ARMV7M');
+    aList.Add('ARMV7EM');
     aList.Add('CORTEXM3');
   end;
 
@@ -3606,6 +3826,7 @@ procedure GetTargetProcessors(const TargetCPU: string; aList: TStrings);
   
   procedure AVR;
   begin
+    aList.Add('AVRTINY');
     aList.Add('AVR1');
     aList.Add('AVR2');
     aList.Add('AVR25');
@@ -3616,6 +3837,7 @@ procedure GetTargetProcessors(const TargetCPU: string; aList: TStrings);
     aList.Add('AVR5');
     aList.Add('AVR51');
     aList.Add('AVR6');
+    aList.Add('AVRXMEGA3');
   end;
   
   procedure M68k;
@@ -3657,18 +3879,58 @@ begin
   Result:=LowerCase(TargetCPU);
 end;
 
-function GetPascalCompilerFromExeName(Filename: string): TPascalCompiler;
+function IsPas2jsTargetOS(TargetOS: string): boolean;
+begin
+  TargetOS:=LowerCase(TargetOS);
+  Result:=(TargetOS='browser') or (TargetOS='nodejs');
+end;
+
+function IsPas2jsTargetCPU(TargetCPU: string): boolean;
+begin
+  TargetCPU:=LowerCase(TargetCPU);
+  Result:=Pos('ecmascript',TargetCPU)>0;
+end;
+
+function IsCTExecutable(AFilename: string; out ErrorMsg: string): boolean;
+begin
+  Result:=false;
+  AFilename:=ResolveDots(AFilename);
+  if AFilename='' then begin
+    ErrorMsg:='missing file name';
+    exit;
+  end;
+  if not FilenameIsAbsolute(AFilename) then begin
+    ErrorMsg:='file missing path';
+    exit;
+  end;
+  if not FileExistsCached(AFilename) then begin
+    ErrorMsg:='file not found';
+    exit;
+  end;
+  if DirPathExistsCached(AFilename) then begin
+    ErrorMsg:='file is a directory';
+    exit;
+  end;
+  if not FileIsExecutableCached(AFilename) then begin
+    ErrorMsg:='file is not executable';
+    exit;
+  end;
+  ErrorMsg:='';
+  Result:=true;
+end;
+
+function GuessPascalCompilerFromExeName(Filename: string): TPascalCompiler;
 var
   ShortFilename: String;
 begin
-  ShortFilename:=ExtractFileNameOnly(Filename);
+  ShortFilename:=LowerCase(ExtractFileNameOnly(Filename));
 
-  // pas2js*
-  if CompareText(LeftStr(ShortFilename,6),'pas2js')=0 then
+  // *pas2js*
+  if Pos('pas2js',ShortFilename)>0 then
     exit(pcPas2js);
 
   // dcc*.exe
-  if (CompareFilenames(LeftStr(ShortFilename,3),'dcc')=0)
+  if (LeftStr(ShortFilename,3)='dcc')
   and ((ExeExt='') or (CompareFileExt(Filename,ExeExt)=0))
   then
     exit(pcDelphi);
@@ -3676,44 +3938,102 @@ begin
   Result:=pcFPC;
 end;
 
-function IsFPCExecutable(AFilename: string; out ErrorMsg: string): boolean;
+function IsCompilerExecutable(AFilename: string; out ErrorMsg: string; out
+  Kind: TPascalCompiler; Run: boolean): boolean;
 var
-  ShortFilename: String;
+  ShortFilename, Line: String;
+  Params: TStringListUTF8;
+  Lines: TStringList;
+  i: Integer;
 begin
-  Result:=false;
-  AFilename:=ResolveDots(aFilename);
-  //debugln(['IsFPCExecutable ',AFilename]);
-  //debugln(['IsFPCompiler START ',aFilename]);
-  if aFilename='' then begin
-    ErrorMsg:='missing file name';
-    exit;
-  end;
-  if not FilenameIsAbsolute(AFilename) then begin
-    ErrorMsg:='file missing path';
-    exit;
-  end;
-  if not FileExistsCached(AFilename) then begin
-    ErrorMsg:='file not found';
-    exit;
-  end;
-  if DirPathExistsCached(AFilename) then begin
-    ErrorMsg:='file is a directory';
-    exit;
-  end;
-  if not FileIsExecutableCached(AFilename) then begin
-    ErrorMsg:='file is not executable';
-    exit;
-  end;
-  ErrorMsg:='';
+  Result:=False;
+  if not IsCTExecutable(AFilename,ErrorMsg) then exit;
+  Kind:=pcFPC;
 
   // allow scripts like fpc.sh and fpc.bat
   ShortFilename:=ExtractFileNameOnly(AFilename);
-  //debugln(['IsFPCompiler Short=',ShortFilename]);
-  if CompareFilenames(ShortFilename,'fpc')=0 then
+  //debugln(['IsCompilerExecutable Short=',ShortFilename]);
+
+  // check ppc*.exe
+  if CompareText(LeftStr(ShortFilename,3),'ppc')=0 then
+    exit(true);
+
+  // check pas2js*
+  if CompareText(LeftStr(ShortFilename,6),'pas2js')=0 then begin
+    Kind:=pcPas2js;
+    exit(true);
+  end;
+
+  // dcc*.exe
+  if (CompareFilenames(LeftStr(ShortFilename,3),'dcc')=0)
+      and ((ExeExt='') or (CompareFileExt(AFilename,ExeExt)=0))
+  then begin
+    Kind:=pcDelphi;
+    exit(true);
+  end;
+
+  if Run then begin
+    // run it and check for magics
+    debugln(['Note: (lazarus) [IsCompilerExecutable] run "',AFilename,'"']);
+    Params:=TStringListUTF8.Create;
+    Lines:=nil;
+    try
+      Params.Add('-va');
+      Lines:=RunTool(AFilename,Params);
+      if Lines<>nil then begin
+        for i:=0 to Lines.Count-1 do
+        begin
+          Line:=Lines[i];
+          if Pos('fpc.cfg',Line)>0 then
+          begin
+            Kind:=pcFPC;
+            exit(true);
+          end;
+          if Pos('pas2js.cfg',Line)>0 then
+          begin
+            Kind:=pcPas2js;
+            exit(true);
+          end;
+        end;
+        ErrorMsg:='Compiler -va does neither search for fpc.cfg nor pas2js.cfg. This is neither fpc nor pas2js.';
+        exit;
+      end;
+    finally
+      Params.Free;
+      Lines.Free;
+    end;
+  end;
+
+  // check fpc<something>
+  // Note: fpc.exe is just a wrapper, it can call pas2js
+  if CompareFilenames(LeftStr(ShortFilename,3),'fpc')=0 then
+    exit(true);
+
+  ErrorMsg:='fpc executable should start with fpc or ppc';
+end;
+
+function IsFPCExecutable(AFilename: string; out ErrorMsg: string; Run: boolean
+  ): boolean;
+var
+  ShortFilename: String;
+  Kind: TPascalCompiler;
+begin
+  if Run then begin
+    Result:=IsCompilerExecutable(AFilename,ErrorMsg,Kind,true) and (Kind=pcFPC);
+    exit;
+  end;
+
+  Result:=IsCTExecutable(AFilename,ErrorMsg);
+  if not Result then exit;
+
+  // allow scripts like fpc*.sh and fpc*.bat
+  ShortFilename:=LowerCase(ExtractFileNameOnly(AFilename));
+  //debugln(['IsFPCExecutable Short=',ShortFilename]);
+  if (LeftStr(ShortFilename,3)='fpc') then
     exit(true);
 
   // allow ppcxxx.exe
-  if (CompareFilenames(LeftStr(ShortFilename,3),'ppc')=0)
+  if (LeftStr(ShortFilename,3)='ppc')
   and ((ExeExt='') or (CompareFileExt(AFilename,ExeExt)=0))
   then
     exit(true);
@@ -3721,37 +4041,23 @@ begin
   ErrorMsg:='fpc executable should start with fpc or ppc';
 end;
 
-function IsPas2JSExecutable(AFilename: string; out ErrorMsg: string): boolean;
+function IsPas2JSExecutable(AFilename: string; out ErrorMsg: string;
+  Run: boolean): boolean;
 var
   ShortFilename: String;
+  Kind: TPascalCompiler;
 begin
-  Result:=false;
-  AFilename:=ResolveDots(aFilename);
-  if aFilename='' then begin
-    ErrorMsg:='missing file name';
+  if Run then begin
+    Result:=IsCompilerExecutable(AFilename,ErrorMsg,Kind,true) and (Kind=pcPas2js);
     exit;
   end;
-  if not FilenameIsAbsolute(AFilename) then begin
-    ErrorMsg:='file missing path';
-    exit;
-  end;
-  if not FileExistsCached(AFilename) then begin
-    ErrorMsg:='file not found';
-    exit;
-  end;
-  if DirPathExistsCached(AFilename) then begin
-    ErrorMsg:='file is a directory';
-    exit;
-  end;
-  if not FileIsExecutableCached(AFilename) then begin
-    ErrorMsg:='file is not executable';
-    exit;
-  end;
-  ErrorMsg:='';
 
-  // allow scripts like pas2js*
-  ShortFilename:=ExtractFileNameOnly(AFilename);
-  if CompareText(LeftStr(ShortFilename,6),'pas2js')=0 then
+  Result:=IsCTExecutable(AFilename,ErrorMsg);
+  if not Result then exit;
+
+  // allow scripts like *pas2js*
+  ShortFilename:=LowerCase(ExtractFileNameOnly(AFilename));
+  if Pos('pas2js',ShortFilename)>0 then
     exit(true);
 
   ErrorMsg:='pas2js executable should start with pas2js';
@@ -5998,7 +6304,7 @@ var
     end;
   end;
   
-var CmdLine: string;
+var
   i, OutLen, LineStart: integer;
   TheProcess: TProcessUTF8;
   OutputLine, Buf: String;
@@ -6006,6 +6312,7 @@ var CmdLine: string;
   SrcOS: string;
   SrcOS2: String;
   Step: String;
+  Params: TStringListUTF8;
 begin
   Result:=nil;
   //DebugLn('TDefinePool.CreateFPCTemplate PPC386Path="',CompilerPath,'" FPCOptions="',CompilerOptions,'"');
@@ -6023,20 +6330,22 @@ begin
   SetLength(Buf,1024);
   Step:='Init';
   try
-    CmdLine:=CompilerPath+' -va ';
-    if FileExistsCached(EnglishErrorMsgFilename) then
-      CmdLine:=CmdLine+'-Fr'+EnglishErrorMsgFilename+' ';
-    if CompilerOptions<>'' then
-      CmdLine:=CmdLine+CompilerOptions+' ';
-    CmdLine:=CmdLine+TestPascalFile;
-    //DebugLn('TDefinePool.CreateFPCTemplate CmdLine="',CmdLine,'"');
-
+    Params:=TStringListUTF8.Create;
     TheProcess := TProcessUTF8.Create(nil);
-    TheProcess.ParseCmdLine(CmdLine);
-    TheProcess.Options:= [poUsePipes, poStdErrToOutPut];
-    TheProcess.ShowWindow := swoHide;
-    Step:='Running '+CmdLine;
     try
+      TheProcess.Executable:=CompilerPath;
+      Params.Add('-va');
+      if (Pos('pas2js',lowercase(ExtractFileName(CompilerPath)))<1)
+          and FileExistsCached(EnglishErrorMsgFilename) then
+          Params.Add('-Fr'+EnglishErrorMsgFilename);
+      if CompilerOptions<>'' then
+        SplitCmdLineParams(CompilerOptions,Params,true);
+      Params.Add(TestPascalFile);
+      //DebugLn('TDefinePool.CreateFPCTemplate Params="',MergeCmdLineParams(Params),'"');
+      TheProcess.Parameters:=Params;
+      TheProcess.Options:= [poUsePipes, poStdErrToOutPut];
+      TheProcess.ShowWindow := swoHide;
+      Step:='Running '+MergeCmdLineParams(Params);
       TheProcess.Execute;
       OutputLine:='';
       repeat
@@ -6064,23 +6373,24 @@ begin
     finally
       //DebugLn('TDefinePool.CreateFPCTemplate Run with -va: OutputLine="',OutputLine,'"');
       TheProcess.Free;
+      Params.Free;
     end;
     DefineSymbol(FPCUnitPathMacroName,UnitSearchPath,'FPC default unit search path');
 
     //DebugLn('TDefinePool.CreateFPCTemplate First done UnitSearchPath="',UnitSearchPath,'"');
 
     // ask for target operating system -> ask compiler with switch -iTO
-    CmdLine:=CompilerPath;
-    if CompilerOptions<>'' then
-      CmdLine:=CmdLine+' '+CompilerOptions;
-    CmdLine:=CmdLine+' -iTO';
-
+    Params:=TStringListUTF8.Create;
     TheProcess := TProcessUTF8.Create(nil);
-    TheProcess.ParseCmdLine(CmdLine);
-    TheProcess.Options:= [poUsePipes, poStdErrToOutPut];
-    TheProcess.ShowWindow := swoHide;
-    Step:='Running '+CmdLine;
     try
+      TheProcess.Executable:=CompilerPath;
+      if CompilerOptions<>'' then
+        SplitCmdLineParams(CompilerOptions,Params,true);
+      Params.Add('-iTO');
+      TheProcess.Parameters:=Params;
+      TheProcess.Options:= [poUsePipes, poStdErrToOutPut];
+      TheProcess.ShowWindow := swoHide;
+      Step:='Running '+MergeCmdLineParams(Params);
       TheProcess.Execute;
       if (TheProcess.Output<>nil) then
         OutLen:=TheProcess.Output.Read(Buf[1],length(Buf))
@@ -6118,19 +6428,21 @@ begin
     finally
       //DebugLn('TDefinePool.CreateFPCTemplate Run with -iTO: OutputLine="',OutputLine,'"');
       TheProcess.Free;
+      Params.Free;
     end;
     
     // ask for target processor -> ask compiler with switch -iTP
+    Params:=TStringListUTF8.Create;
     TheProcess := TProcessUTF8.Create(nil);
-    CmdLine:=CompilerPath;
-    if CompilerOptions<>'' then
-      CmdLine:=CmdLine+' '+CompilerOptions;
-    CmdLine:=CmdLine+' -iTP';
-    TheProcess.ParseCmdLine(CmdLine);
-    TheProcess.Options:= [poUsePipes, poStdErrToOutPut];
-    TheProcess.ShowWindow := swoHide;
-    Step:='Running '+CmdLine;
     try
+      TheProcess.Executable:=CompilerPath;
+      if CompilerOptions<>'' then
+        SplitCmdLineParams(CompilerOptions,Params,true);
+      Params.Add('-iTP');
+      TheProcess.Parameters:=Params;
+      TheProcess.Options:= [poUsePipes, poStdErrToOutPut];
+      TheProcess.ShowWindow := swoHide;
+      Step:='Running '+MergeCmdLineParams(Params);
       TheProcess.Execute;
       if TheProcess.Output<>nil then
         OutLen:=TheProcess.Output.Read(Buf[1],length(Buf))
@@ -6244,571 +6556,6 @@ begin
       end;
     end;
     Def:=Def.Next;
-  end;
-end;
-
-function TDefinePool.CreateFPCSrcTemplate(
-  const FPCSrcDir, UnitSearchPath, PPUExt, DefaultTargetOS,
-  DefaultProcessorName: string;
-  UnitLinkListValid: boolean; var UnitLinkList: string;
-  Owner: TObject): TDefineTemplate;
-var
-  Dir, SrcOS, SrcOS2, TargetCPU, UnitLinks: string;
-  UnitTree: TAVLTree; // tree of TDefTemplUnitNameLink
-  IncPathMacro, DefaultSrcOS, DefaultSrcOS2: string;
-  ProgressID: integer;
-  
-  function d(const Filenames: string): string;
-  begin
-    Result:=GetForcedPathDelims(Filenames);
-  end;
-
-  function GatherUnits: boolean; forward;
-
-  function FindUnitLink(const AnUnitName: string): TUnitNameLink;
-  var ANode: TAVLTreeNode;
-    cmp: integer;
-  begin
-    if UnitTree=nil then GatherUnits;
-    ANode:=UnitTree.Root;
-    while ANode<>nil do begin
-      Result:=TUnitNameLink(ANode.Data);
-      cmp:=CompareText(AnUnitName,Result.Unit_Name);
-      if cmp<0 then
-        ANode:=ANode.Left
-      else if cmp>0 then
-        ANode:=ANode.Right
-      else
-        exit;
-    end;
-    Result:=nil;
-  end;
-
-  function GatherUnits: boolean;
-  
-    function FileNameMacroCount(const AFilename: string): integer;
-    // count number of macros in filename
-    // a macro looks like this '$(name)' without a SpecialChar in front
-    // macronames can contain macros themselves
-    var i: integer;
-    begin
-      Result:=0;
-      i:=1;
-      while (i<=length(AFilename)) do begin
-        if (AFilename[i]=SpecialChar) then
-          inc(i,2)
-        else if (AFilename[i]='$') then begin
-          inc(i);
-          if (i<=length(AFilename)) and (AFilename[i]='(') then
-            inc(Result);
-        end else
-          inc(i);
-      end;
-    end;
-    
-    function BuildMacroFilename(const AFilename: string;
-      var MacroCount, UsedMacroCount: integer): string;
-    // replace Operating System and Processor Type with macros
-    // MacroCount = number of macros are in the filename
-    // UsedMacroCount = number of macros fitting to the current settings
-    var DirStart, DirEnd, i: integer;
-      DirName: string;
-      
-      function ReplaceDir(const MacroValue, DefaultMacroValue,
-        MacroName: string): boolean;
-      begin
-        Result:=false;
-        if CompareText(MacroValue,DirName)=0 then begin
-          // this is a macro
-          if CompareText(DirName,DefaultMacroValue)=0 then begin
-            // the current settings would replace the macro to fit this filename
-            inc(UsedMacroCount);
-          end;
-          BuildMacroFilename:=copy(BuildMacroFilename,1,DirStart-1)+MacroName+
-            copy(BuildMacroFilename,DirEnd,length(BuildMacroFilename)-DirEnd+1);
-          inc(DirEnd,length(MacroName)-length(DirName));
-          DirName:=MacroName;
-          Result:=true;
-        end;
-      end;
-      
-    begin
-      MacroCount:=0;
-      Result:=copy(AFilename,length(Dir)+1,length(AFilename)-length(Dir));
-      DirStart:=1;
-      while (DirStart<=length(Result)) do begin
-        while (DirStart<=length(Result)) and (Result[DirStart]=PathDelim)
-        do
-          inc(DirStart);
-        DirEnd:=DirStart;
-        while (DirEnd<=length(Result)) and (Result[DirEnd]<>PathDelim) do
-          inc(DirEnd);
-        if DirEnd>length(Result) then break;
-        if DirEnd>DirStart then begin
-          DirName:=copy(Result,DirStart,DirEnd-DirStart);
-          // replace operating system
-          for i:=Low(FPCOperatingSystemNames) to High(FPCOperatingSystemNames)
-          do
-            if ReplaceDir(FPCOperatingSystemNames[i],DefaultTargetOS,TargetOSMacro)
-            then
-              break;
-          // replace operating system class
-          for i:=Low(FPCOperatingSystemAlternativeNames)
-              to High(FPCOperatingSystemAlternativeNames)
-          do
-            if ReplaceDir(FPCOperatingSystemAlternativeNames[i],DefaultSrcOS,
-              SrcOS)
-            then
-              break;
-          // replace operating system secondary class
-          for i:=Low(FPCOperatingSystemAlternative2Names)
-              to High(FPCOperatingSystemAlternative2Names)
-          do
-            if ReplaceDir(FPCOperatingSystemAlternative2Names[i],DefaultSrcOS2,
-              SrcOS2)
-            then
-              break;
-          // replace processor type
-          for i:=Low(FPCProcessorNames) to High(FPCProcessorNames) do
-            if ReplaceDir(FPCProcessorNames[i],DefaultProcessorName,
-              TargetCPU)
-            then
-              break;
-        end;
-        DirStart:=DirEnd;
-      end;
-      Result:=Dir+Result;
-    end;
-
-    function IsSpecialDirectory(Dir, SpecialDir: string): boolean;
-    var
-      p1: Integer;
-      p2: Integer;
-    begin
-      p1:=length(Dir);
-      p2:=length(SpecialDir);
-      if (p1>=1) and (Dir[p1]=PathDelim) then dec(p1);
-      if (p2>=1) and (SpecialDir[p2]=PathDelim) then dec(p2);
-      while (p1>=1) and (p2>=1)
-      and (UpChars[Dir[p1]]=UpChars[SpecialDir[p2]]) do begin
-        dec(p1);
-        dec(p2);
-      end;
-      Result:=(p2=0) and ((p1=0) or (Dir[p1]=PathDelim));
-    end;
-    
-    function BrowseDirectory(ADirPath: string; Priority: integer): boolean;
-    const
-      IgnoreDirs: array[1..16] of shortstring =(
-          '.', '..', 'CVS', '.svn', 'examples', 'example', 'tests', 'fake',
-          'ide', 'demo', 'docs', 'template', 'fakertl', 'install', 'installer',
-          'compiler'
-        );
-    var
-      AFilename, Ext, AUnitName, MacroFileName: string;
-      FileInfo: TSearchRec;
-      NewUnitLink, OldUnitLink: TUnitNameLink;
-      i: integer;
-      MacroCount, UsedMacroCount: integer;
-      MakeFileFPC: String;
-      SubDirs, GlobalSubDirs, TargetSubDirs: String;
-      SubPriority: Integer;
-    begin
-      Result:=true;
-      {$IFDEF VerboseFPCSrcScan}
-      DebugLn('Browse ',ADirPath);
-      {$ENDIF}
-      if ADirPath='' then exit;
-      ADirPath:=AppendPathDelim(ADirPath);
-
-      // check for special directories
-      if IsSpecialDirectory(ADirPath,'packages'+PathDelim+'amunits') then begin
-        {$IFDEF VerboseFPCSrcScan}
-        DebugLn(['BrowseDirectory skip ',ADirPath]);
-        {$ENDIF}
-        exit;
-      end;
-
-      inc(ProgressID);
-      if CheckAbort(ProgressID,-1,'') then exit(false);
-      // read Makefile.fpc to get some hints
-      MakeFileFPC:=ADirPath+'Makefile.fpc';
-      SubDirs:='';
-      if FileExistsUTF8(MakeFileFPC) then begin
-        ParseMakefileFPC(MakeFileFPC,DefaultTargetOS,GlobalSubDirs,TargetSubDirs);
-        SubDirs:=GlobalSubDirs;
-        if TargetSubDirs<>'' then begin
-          if SubDirs<>'' then
-            SubDirs:=SubDirs+';';
-          SubDirs:=SubDirs+TargetSubDirs;
-        end;
-        //debugln('BrowseDirectory ADirPath="',ADirPath,'" SubDirs="',SubDirs,'" SrcOS="',DefaultTargetOS,'"');
-      end;
-
-      // set directory priority
-      if System.Pos(Dir+'rtl'+PathDelim,ADirPath)>0 then
-        inc(Priority);
-      if System.Pos(Dir+'packages'+PathDelim+'fcl',ADirPath)>0 then // packages/fcl*
-        inc(Priority);
-      // search sources .pp,.pas
-      if FindFirstUTF8(ADirPath+FileMask,faAnyFile,FileInfo)=0 then begin
-        repeat
-          AFilename:=FileInfo.Name;
-          if (AFilename='') or (AFilename='.') or (AFilename='..') then
-            continue;
-          //debugln('Browse Filename=',AFilename,' IsDir=',(FileInfo.Attr and faDirectory)>0);
-          i:=High(IgnoreDirs);
-          while (i>=Low(IgnoreDirs)) and (AFilename<>IgnoreDirs[i]) do dec(i);
-          //if CompareText(AFilename,'fcl')=0 then
-          //  debugln('Browse ',AFilename,' IsDir=',(FileInfo.Attr and faDirectory)>0,' Ignore=',i>=Low(IgnoreDirs));
-          if i>=Low(IgnoreDirs) then continue;
-          AFilename:=ADirPath+AFilename;
-          if (FileInfo.Attr and faDirectory)>0 then begin
-            // directory -> recursively
-            // ToDo: prevent cycling in links
-            SubPriority:=0;
-            if CompareFilenames(AFilename,Dir+'rtl')=0
-            then begin
-              // units in 'rtl' have higher priority than other directories
-              inc(SubPriority);
-            end;
-            if (SubDirs<>'')
-            and (FindPathInSearchPath(@FileInfo.Name[1],length(FileInfo.Name),
-              PChar(SubDirs),length(SubDirs))<>nil)
-            then begin
-              // units in directories compiled by the Makefile have higher prio
-              inc(SubPriority);
-            end;
-            if not BrowseDirectory(AFilename,SubPriority) then exit(false);
-          end else begin
-            Ext:=UpperCaseStr(ExtractFileExt(AFilename));
-            if (Ext='.PP') or (Ext='.PAS') or (Ext='.P') then begin
-              // pascal unit found
-              AUnitName:=FileInfo.Name;
-              AUnitName:=copy(AUnitName,1,length(AUnitName)-length(Ext));
-              if AUnitName<>'' then begin
-                OldUnitLink:=FindUnitLink(AUnitName);
-                MacroCount:=0;
-                UsedMacroCount:=0;
-                MacroFileName:=
-                        BuildMacroFileName(AFilename,MacroCount,UsedMacroCount);
-                if OldUnitLink=nil then begin
-                  // first unit with this name
-                  NewUnitLink:=TUnitNameLink.Create;
-                  NewUnitLink.Unit_Name:=AUnitName;
-                  NewUnitLink.FileName:=MacroFileName;
-                  NewUnitLink.MacroCount:=MacroCount;
-                  NewUnitLink.UsedMacroCount:=UsedMacroCount;
-                  NewUnitLink.Score:=Priority;
-                  UnitTree.Add(NewUnitLink);
-                end else begin
-                  { there is another unit with this name
-
-                    the decision which filename is the right one is based on a
-                    simple heuristic:
-                    - a filename with macros is preferred above one without
-                      This skips the templates.
-                    - A macro fitting better with the current settings
-                      is preferred. For example:
-                      If the current OS is linux then on fpc 1.0.x:
-                        $(#FPCSrcDir)/fcl/classes/$(#TargetOS)/classes.pp
-                    - A unit in the rtl is preferred above one in the fcl
-
-                     FPC stores a unit many times, if there is different version
-                     for each Operating System or Processor Type. And sometimes
-                     units are stored in a combined OS (e.g. 'unix').
-                     Therefore every occurence of such values is replaced by a
-                     macro. And filenames without macros are always deleted if
-                     there is a filename with a macro. (The filename without
-                     macro is only used by the FPC team as a template source
-                     for the OS specific).
-                     If there are several macro filenames for the same unit, the
-                     filename with the highest number of default values is used.
-                     
-                     For example:
-                       classes.pp can be found in several places
-                       In fpc 1.0.x:
-
-                        <FPCSrcDir>/rtl/amiga/classes.pp
-                        <FPCSrcDir>/fcl/amiga/classes.pp
-                        <FPCSrcDir>/fcl/beos/classes.pp
-                        <FPCSrcDir>/fcl/qnx/classes.pp
-                        <FPCSrcDir>/fcl/sunos/classes.pp
-                        <FPCSrcDir>/fcl/template/classes.pp
-                        <FPCSrcDir>/fcl/classes/freebsd/classes.pp
-                        <FPCSrcDir>/fcl/classes/go32v2/classes.pp
-                        <FPCSrcDir>/fcl/classes/linux/classes.pp
-                        <FPCSrcDir>/fcl/classes/netbsd/classes.pp
-                        <FPCSrcDir>/fcl/classes/openbsd/classes.pp
-                        <FPCSrcDir>/fcl/classes/os2/classes.pp
-                        <FPCSrcDir>/fcl/classes/win32/classes.pp
-
-                       In fpc 1.9.x/2.0.x:
-                        <FPCSrcDir>/rtl/win32/classes.pp
-                        <FPCSrcDir>/rtl/watcom/classes.pp
-                        <FPCSrcDir>/rtl/go32v2/classes.pp
-                        <FPCSrcDir>/rtl/netwlibc/classes.pp
-                        <FPCSrcDir>/rtl/netbsd/classes.pp
-                        <FPCSrcDir>/rtl/linux/classes.pp
-                        <FPCSrcDir>/rtl/os2/classes.pp
-                        <FPCSrcDir>/rtl/freebsd/classes.pp
-                        <FPCSrcDir>/rtl/openbsd/classes.pp
-                        <FPCSrcDir>/rtl/netware/classes.pp
-                        <FPCSrcDir>/rtl/darwin/classes.pp
-                        <FPCSrcDir>/rtl/morphos/classes.pp
-                        <FPCSrcDir>/fcl/sunos/classes.pp
-                        <FPCSrcDir>/fcl/beos/classes.pp
-                        <FPCSrcDir>/fcl/qnx/classes.pp
-                        <FPCSrcDir>/fcl/classes/win32/classes.pp
-                        <FPCSrcDir>/fcl/classes/go32v2/classes.pp
-                        <FPCSrcDir>/fcl/classes/netbsd/classes.pp
-                        <FPCSrcDir>/fcl/classes/linux/classes.pp
-                        <FPCSrcDir>/fcl/classes/os2/classes.pp
-                        <FPCSrcDir>/fcl/classes/freebsd/classes.pp
-                        <FPCSrcDir>/fcl/classes/openbsd/classes.pp
-                        <FPCSrcDir>/fcl/template/classes.pp
-                        <FPCSrcDir>/fcl/amiga/classes.pp
-
-                       This means, there are several possible macro filenames:
-                        $(#FPCSrcDir)/rtl/$(#TargetOS)/classes.pp
-                        $(#FPCSrcDir)/fcl/$(#TargetOS)/classes.pp
-                        $(#FPCSrcDir)/fcl/classes/$(#TargetOS)/classes.pp
-                        
-                   Example: libc.pp
-                     <FPCSrcDir>/rtl/netwlibc/libc.pp
-                     <FPCSrcDir>/packages/base/libc/libc.pp
-                     There are no macros and no templates. This is a special case.
-                     
-                  }
-                  if (AUnitName='libc')
-                  and (System.Pos(AppendPathDelim(FPCSrcDir)+'packages'+PathDelim,ADirPath)>0)
-                  then begin
-                    // <FPCSrcDir>/rtl/netwlibc/libc.pp
-                    // <FPCSrcDir>/packages/base/libc/libc.pp
-                    inc(Priority,2);
-                  end;
-                  //DebugLn(['BrowseDirectory duplicate found: ',AUnitName,' OldUnitLink.Filename=',OldUnitLink.Filename,' MacroFileName=',MacroFileName,' Priority=',Priority,' OldUnitLink.Priority=',OldUnitLink.Score]);
-                  if (Priority>OldUnitLink.Score)
-                  or ((Priority=OldUnitLink.Score)
-                     and (UsedMacroCount>OldUnitLink.UsedMacroCount))
-                  then begin
-                    // take the new macro filename
-                    OldUnitLink.Filename:=MacroFileName;
-                    OldUnitLink.MacroCount:=MacroCount;
-                    OldUnitLink.Score:=Priority;
-                  end;
-                end;
-              end;
-            end;
-          end;
-        until FindNextUTF8(FileInfo)<>0;
-      end;
-      FindCloseUTF8(FileInfo);
-    end;
-  
-  begin
-    if UnitTree<>nil then exit(true);
-    UnitTree:=TAVLTree.Create(@CompareUnitLinkNodes);
-    Result:=BrowseDirectory(Dir,0);
-  end;
-  
-
-  procedure AddFPCSourceLinkForUnit(const AnUnitName: string);
-  var UnitLink: TUnitNameLink;
-    s: string;
-  begin
-    // search
-    if AnUnitName='' then exit;
-    UnitLink:=FindUnitLink(AnUnitName);
-    {$IFDEF VerboseFPCSrcScan}
-    DbgOut('AddFPCSourceLinkForUnit ',AnUnitName,' ');
-    if UnitLink<>nil then
-      DebugLn(' -> ',UnitLink.Filename)
-    else
-      DebugLn('MISSING');
-    {$ELSE}
-    if (UnitLink=nil) and (CTConsoleVerbosity>=0) then
-      DebugLn(['Warning: unable to find source of fpc unit ',AnUnitName]);
-    {$ENDIF}
-    if UnitLink=nil then exit;
-    s:=AnUnitName+' '+UnitLink.Filename+LineEnding;
-    UnitLinkList:=UnitLinkList+s;
-  end;
-
-  function FindStandardPPUSources: boolean;
-  var PathStart, PathEnd: integer;
-    ADirPath, AUnitName: string;
-    FileInfo: TSearchRec;
-    CurMask: String;
-  begin
-    Result:=false;
-    {$IFDEF VerboseFPCSrcScan}
-    DebugLn('FindStandardPPUSources ..');
-    {$ENDIF}
-    // try every ppu file in every reachable directory (CompUnitPath)
-    if UnitLinkListValid then exit(true);
-    UnitLinkList:='';
-    PathStart:=1;
-    CurMask:=PPUExt;
-    if CurMask='' then CurMask:='.ppu';
-    if CurMask[1]<>'.' then
-      CurMask:='.'+CurMask;
-    CurMask:='*'+CurMask;
-    //DebugLn('FindStandardPPUSources UnitSearchPath="',UnitSearchPath,'"');
-    while PathStart<=length(UnitSearchPath) do begin
-      while (PathStart<=length(UnitSearchPath))
-      and (UnitSearchPath[PathStart]=';') do
-        inc(PathStart);
-      PathEnd:=PathStart;
-      // extract single path from unit search path
-      while (PathEnd<=length(UnitSearchPath))
-      and (UnitSearchPath[PathEnd]<>';') do
-        inc(PathEnd);
-      if PathEnd>PathStart then begin
-        ADirPath:=copy(UnitSearchPath,PathStart,PathEnd-PathStart);
-        {$IFDEF VerboseFPCSrcScan}
-        DebugLn('FindStandardPPUSources Searching ',CurMask,' in ',ADirPath);
-        {$ENDIF}
-        inc(ProgressID);
-        if CheckAbort(ProgressID,-1,'') then exit(false);
-        // search all ppu files in this directory
-        if FindFirstUTF8(ADirPath+CurMask,faAnyFile,FileInfo)=0 then begin
-          repeat
-            AUnitName:=lowercase(ExtractFileNameOnly(FileInfo.Name));
-            {$IFDEF VerboseFPCSrcScan}
-            DebugLn('FindStandardPPUSources Found: ',AUnitName);
-            {$ENDIF}
-            if (UnitTree=nil) and (not GatherUnits) then exit;
-            AddFPCSourceLinkForUnit(AUnitName);
-            if (UnitTree=nil) or (UnitTree.Count=0) then exit;
-          until FindNextUTF8(FileInfo)<>0;
-        end;
-        FindCloseUTF8(FileInfo);
-      end;
-      PathStart:=PathEnd;
-    end;
-    UnitLinkListValid:=true;
-    Result:=true;
-  end;
-  
-  procedure AddProcessorTypeDefine(ParentDefTempl: TDefineTemplate);
-  // some FPC source files expects defines 'i386' instead of 'CPUi386'
-  // define them automatically with IF..THEN constructs
-  var
-    i: Integer;
-    CPUName: String;
-    IfTemplate: TDefineTemplate;
-  begin
-    // FPC defines CPUxxx defines (e.g. CPUI386, CPUPOWERPC).
-    // These defines are created by the compiler depending
-    // on xxx defines (i386, powerpc).
-    // Create:
-    //   IF CPUi386 then define i386
-    //   IF CPUpowerpc then define powerpc
-    //   ...
-    for i:=Low(FPCProcessorNames) to high(FPCProcessorNames) do begin
-      CPUName:=FPCProcessorNames[i];
-      IfTemplate:=TDefineTemplate.Create('IFDEF CPU'+CPUName,
-        'IFDEF CPU'+CPUName,'CPU'+CPUName,'',da_IfDef);
-      IfTemplate.AddChild(TDefineTemplate.Create('DEFINE '+CPUName,
-        'DEFINE '+CPUName,CPUName,'',da_DefineRecurse));
-      ParentDefTempl.AddChild(IfTemplate);
-    end;
-  end;
-  
-  procedure AddSrcOSDefines(ParentDefTempl: TDefineTemplate);
-  var
-    IfTargetOSIsNotSrcOS: TDefineTemplate;
-    RTLSrcOSDir: TDefineTemplate;
-    IfTargetOSIsNotSrcOS2: TDefineTemplate;
-    RTLSrcOS2Dir: TDefineTemplate;
-  begin
-    // if TargetOS<>SrcOS
-    IfTargetOSIsNotSrcOS:=TDefineTemplate.Create(
-      'IF TargetOS<>SrcOS',
-      ctsIfTargetOSIsNotSrcOS,'',''''+TargetOSMacro+'''<>'''+SrcOS+'''',da_If);
-    // rtl/$(#SrcOS)
-    RTLSrcOSDir:=TDefineTemplate.Create('SrcOS',SrcOS,'',
-      SrcOS,da_Directory);
-    IfTargetOSIsNotSrcOS.AddChild(RTLSrcOSDir);
-    RTLSrcOSDir.AddChild(TDefineTemplate.Create('Include Path',
-      'include path',
-      IncludePathMacroName,IncPathMacro+';inc',
-      da_Define));
-    RTLSrcOSDir.AddChild(TDefineTemplate.Create('Include Path',
-      'include path to TargetCPU directories',
-      IncludePathMacroName,IncPathMacro+';'+TargetCPU,
-      da_Define));
-    ParentDefTempl.AddChild(IfTargetOSIsNotSrcOS);
-
-    // if TargetOS<>SrcOS2
-    IfTargetOSIsNotSrcOS2:=TDefineTemplate.Create(
-      'IF TargetOS is not SrcOS2',
-      ctsIfTargetOSIsNotSrcOS,'',''''+TargetOSMacro+'''<>'''+SrcOS2+'''',da_If);
-    // rtl/$(#SrcOS2)
-    RTLSrcOS2Dir:=TDefineTemplate.Create('SrcOS2',SrcOS2,'',
-      SrcOS2,da_Directory);
-    IfTargetOSIsNotSrcOS2.AddChild(RTLSrcOS2Dir);
-    RTLSrcOS2Dir.AddChild(TDefineTemplate.Create('Include Path',
-      'include path to TargetCPU directories',
-      IncludePathMacroName,IncPathMacro+';'+TargetCPU,
-      da_DefineRecurse));
-    ParentDefTempl.AddChild(IfTargetOSIsNotSrcOS2);
-  end;
-
-var
-  DefTempl: TDefineTemplate;
-  Ok: Boolean;
-begin
-  {$IFDEF VerboseFPCSrcScan}
-  DebugLn('CreateFPCSrcTemplate ',FPCSrcDir,': length(UnitSearchPath)=',DbgS(length(UnitSearchPath)),' Valid=',DbgS(UnitLinkListValid),' PPUExt=',PPUExt);
-  {$ENDIF}
-  if UnitSearchPath='' then begin
-    DebugLn(['Note: [TDefinePool.CreateFPCSrcTemplate] UnitSearchPath empty']);
-  end;
-  Result:=nil;
-  ProgressID:=0;
-  Ok:=false;
-  try
-    Dir:=AppendPathDelim(FPCSrcDir);
-    SrcOS:='$('+ExternalMacroStart+'SrcOS)';
-    SrcOS2:='$('+ExternalMacroStart+'SrcOS2)';
-    TargetCPU:=TargetCPUMacro;
-    IncPathMacro:=IncludePathMacro;
-    DefaultSrcOS:=GetDefaultSrcOSForTargetOS(DefaultTargetOS);
-    DefaultSrcOS2:=GetDefaultSrcOS2ForTargetOS(DefaultTargetOS);
-
-    if (FPCSrcDir='') or (not DirPathExists(FPCSrcDir)) then begin
-      DebugLn(['Warning: [TDefinePool.CreateFPCSrcTemplate] FPCSrcDir does not exist: FPCSrcDir="',FPCSrcDir,'" (env FPCDIR)']);
-      exit;
-    end;
-    // try to find for every reachable ppu file the unit file in the FPC sources
-    UnitLinks:=UnitLinksMacroName;
-    UnitTree:=nil;
-    if not FindStandardPPUSources then exit;
-
-    Result:=CreateFPCSourceTemplate(FPCSrcDir,Owner);
-
-    DefTempl:=TDefineTemplate.Create('FPC Unit Links',
-      ctsSourceFilenamesForStandardFPCUnits,
-      UnitLinks,UnitLinkList,da_DefineRecurse);
-    Result.AddChild(DefTempl);
-
-    // clean up
-    if UnitTree<>nil then begin
-      UnitTree.FreeAndClear;
-      UnitTree.Free;
-    end;
-
-    Result.SetDefineOwner(Owner,true);
-    Result.SetFlags([dtfAutoGenerated],[],false);
-
-    Ok:=true;
-  finally
-    if not ok then
-      FreeAndNil(Result);
-    if (ProgressID>0) and Assigned(OnProgress) then
-      OnProgress(Self,ProgressID,ProgressID,'',Ok);
   end;
 end;
 
@@ -7420,6 +7167,44 @@ function TDefinePool.CreateFPCCommandLineDefines(const Name, CmdLine: string;
       AddUndefine(AName);
   end;
 
+  procedure DefineOpt(const Opt, Value: string);
+  var
+    tpl: TDefineTemplate;
+    Name, Descr, OptValue: string;
+    NewAction: TDefineAction;
+  begin
+    Name:='Option $' + Opt;
+    Descr:=Format('{$%s %s}', [Opt, Value]);
+    if Value = 'ON' then
+      OptValue:='1'
+    else
+      OptValue:='0';
+    if Result <> nil then
+      tpl:=Result.FindChildByName(Name)
+    else
+      tpl:=nil;
+    if tpl = nil then begin
+      if RecursiveDefines then
+        NewAction:=da_DefineRecurse
+      else
+        NewAction:=da_Define;
+      CreateMainTemplate;
+      tpl:=TDefineTemplate.Create(Name, Descr, Opt, OptValue, NewAction);
+      Result.AddChild(tpl);
+    end
+    else begin
+      tpl.Value:=OptValue;
+      tpl.Description:=Descr;
+    end;
+  end;
+
+  procedure DefineOpt(const Opt: char; Enabled: boolean);
+  const
+    Values: array[boolean] of string = ('OFF', 'ON');
+  begin
+    DefineOpt(CompilerSwitchesNames[Opt], Values[Enabled]);
+  end;
+
   function FindControllerUnit(const AControllerName: string): string;
   type
     TControllerType = record
@@ -7427,7 +7212,7 @@ function TDefinePool.CreateFPCCommandLineDefines(const Name, CmdLine: string;
       controllerunitstr: string[20];
     end;
   const
-    ControllerTypes: array[0..532] of TControllerType =
+    ControllerTypes: array[0..606] of TControllerType =
      ((controllertypestr:'';                  controllerunitstr:''),
       (controllertypestr:'LPC810M021FN8';     controllerunitstr:'LPC8xx'),
       (controllertypestr:'LPC811M001JDH16';   controllerunitstr:'LPC8xx'),
@@ -7818,150 +7603,226 @@ function TDefinePool.CreateFPCCommandLineDefines(const Name, CmdLine: string;
       (controllertypestr:'PIC32MX775F512L';   controllerunitstr:'PIC32MX7x5FxxxL'),
       (controllertypestr:'PIC32MX795F512H';   controllerunitstr:'PIC32MX7x5FxxxH'),
       (controllertypestr:'PIC32MX795F512L';   controllerunitstr:'PIC32MX7x5FxxxL'),
-      (controllertypestr:'ATMEGA645';         controllerunitstr:'ATMEGA645'),
-      (controllertypestr:'ATMEGA165A';        controllerunitstr:'ATMEGA165A'),
-      (controllertypestr:'ATTINY44A';         controllerunitstr:'ATTINY44A'),
-      (controllertypestr:'ATMEGA649A';        controllerunitstr:'ATMEGA649A'),
-      (controllertypestr:'ATMEGA32U4';        controllerunitstr:'ATMEGA32U4'),
-      (controllertypestr:'ATTINY26';          controllerunitstr:'ATTINY26'),
-      (controllertypestr:'AT90USB1287';       controllerunitstr:'AT90USB1287'),
-      (controllertypestr:'AT90PWM161';        controllerunitstr:'AT90PWM161'),
-      (controllertypestr:'ATTINY48';          controllerunitstr:'ATTINY48'),
-      (controllertypestr:'ATMEGA168P';        controllerunitstr:'ATMEGA168P'),
-      (controllertypestr:'ATTINY10';          controllerunitstr:'ATTINY10'),
-      (controllertypestr:'ATTINY84A';         controllerunitstr:'ATTINY84A'),
-      (controllertypestr:'AT90USB82';         controllerunitstr:'AT90USB82'),
-      (controllertypestr:'ATTINY2313';        controllerunitstr:'ATTINY2313'),
-      (controllertypestr:'ATTINY461';         controllerunitstr:'ATTINY461'),
-      (controllertypestr:'ATMEGA3250PA';      controllerunitstr:'ATMEGA3250PA'),
-      (controllertypestr:'ATMEGA3290A';       controllerunitstr:'ATMEGA3290A'),
-      (controllertypestr:'ATMEGA165P';        controllerunitstr:'ATMEGA165P'),
-      (controllertypestr:'ATTINY43U';         controllerunitstr:'ATTINY43U'),
-      (controllertypestr:'AT90USB162';        controllerunitstr:'AT90USB162'),
-      (controllertypestr:'ATMEGA16U4';        controllerunitstr:'ATMEGA16U4'),
-      (controllertypestr:'ATTINY24A';         controllerunitstr:'ATTINY24A'),
-      (controllertypestr:'ATMEGA88P';         controllerunitstr:'ATMEGA88P'),
-      (controllertypestr:'ATTINY88';          controllerunitstr:'ATTINY88'),
-      (controllertypestr:'ATMEGA6490P';       controllerunitstr:'ATMEGA6490P'),
-      (controllertypestr:'ATTINY40';          controllerunitstr:'ATTINY40'),
-      (controllertypestr:'ATMEGA324P';        controllerunitstr:'ATMEGA324P'),
-      (controllertypestr:'ATTINY167';         controllerunitstr:'ATTINY167'),
-      (controllertypestr:'ATMEGA328';         controllerunitstr:'ATMEGA328'),
-      (controllertypestr:'ATTINY861';         controllerunitstr:'ATTINY861'),
-      (controllertypestr:'ATTINY85';          controllerunitstr:'ATTINY85'),
-      (controllertypestr:'ATMEGA64M1';        controllerunitstr:'ATMEGA64M1'),
-      (controllertypestr:'ATMEGA645P';        controllerunitstr:'ATMEGA645P'),
-      (controllertypestr:'ATMEGA8U2';         controllerunitstr:'ATMEGA8U2'),
-      (controllertypestr:'ATMEGA329A';        controllerunitstr:'ATMEGA329A'),
-      (controllertypestr:'ATMEGA8A';          controllerunitstr:'ATMEGA8A'),
-      (controllertypestr:'ATMEGA324PA';       controllerunitstr:'ATMEGA324PA'),
-      (controllertypestr:'ATMEGA32HVB';       controllerunitstr:'ATMEGA32HVB'),
-      (controllertypestr:'AT90PWM316';        controllerunitstr:'AT90PWM316'),
-      (controllertypestr:'AT90PWM3B';         controllerunitstr:'AT90PWM3B'),
-      (controllertypestr:'AT90USB646';        controllerunitstr:'AT90USB646'),
-      (controllertypestr:'ATTINY20';          controllerunitstr:'ATTINY20'),
-      (controllertypestr:'ATMEGA16';          controllerunitstr:'ATMEGA16'),
-      (controllertypestr:'ATMEGA48A';         controllerunitstr:'ATMEGA48A'),
-      (controllertypestr:'ATTINY24';          controllerunitstr:'ATTINY24'),
-      (controllertypestr:'ATMEGA644';         controllerunitstr:'ATMEGA644'),
-      (controllertypestr:'ATMEGA1284';        controllerunitstr:'ATMEGA1284'),
-      (controllertypestr:'ATA6285';           controllerunitstr:'ATA6285'),
-      (controllertypestr:'AT90CAN64';         controllerunitstr:'AT90CAN64'),
-      (controllertypestr:'ATMEGA48';          controllerunitstr:'ATMEGA48'),
+      // AVR controllers
       (controllertypestr:'AT90CAN32';         controllerunitstr:'AT90CAN32'),
-      (controllertypestr:'ATTINY9';           controllerunitstr:'ATTINY9'),
-      (controllertypestr:'ATTINY87';          controllerunitstr:'ATTINY87'),
-      (controllertypestr:'ATMEGA1281';        controllerunitstr:'ATMEGA1281'),
-      (controllertypestr:'AT90PWM216';        controllerunitstr:'AT90PWM216'),
-      (controllertypestr:'ATMEGA3250A';       controllerunitstr:'ATMEGA3250A'),
-      (controllertypestr:'ATMEGA88A';         controllerunitstr:'ATMEGA88A'),
-      (controllertypestr:'ATMEGA128RFA1';     controllerunitstr:'ATMEGA128RFA1'),
-      (controllertypestr:'ATMEGA3290PA';      controllerunitstr:'ATMEGA3290PA'),
-      (controllertypestr:'AT90PWM81';         controllerunitstr:'AT90PWM81'),
-      (controllertypestr:'ATMEGA325P';        controllerunitstr:'ATMEGA325P'),
-      (controllertypestr:'ATTINY84';          controllerunitstr:'ATTINY84'),
-      (controllertypestr:'ATMEGA328P';        controllerunitstr:'ATMEGA328P'),
-      (controllertypestr:'ATTINY13A';         controllerunitstr:'ATTINY13A'),
-      (controllertypestr:'ATMEGA8';           controllerunitstr:'ATMEGA8'),
-      (controllertypestr:'ATMEGA1284P';       controllerunitstr:'ATMEGA1284P'),
-      (controllertypestr:'ATMEGA16U2';        controllerunitstr:'ATMEGA16U2'),
-      (controllertypestr:'ATTINY45';          controllerunitstr:'ATTINY45'),
-      (controllertypestr:'ATMEGA3250';        controllerunitstr:'ATMEGA3250'),
-      (controllertypestr:'ATMEGA329';         controllerunitstr:'ATMEGA329'),
-      (controllertypestr:'ATMEGA32A';         controllerunitstr:'ATMEGA32A'),
-      (controllertypestr:'ATTINY5';           controllerunitstr:'ATTINY5'),
+      (controllertypestr:'AT90CAN64';         controllerunitstr:'AT90CAN64'),
       (controllertypestr:'AT90CAN128';        controllerunitstr:'AT90CAN128'),
-      (controllertypestr:'ATMEGA6490';        controllerunitstr:'ATMEGA6490'),
-      (controllertypestr:'ATMEGA8515';        controllerunitstr:'ATMEGA8515'),
-      (controllertypestr:'ATMEGA88PA';        controllerunitstr:'ATMEGA88PA'),
-      (controllertypestr:'ATMEGA168A';        controllerunitstr:'ATMEGA168A'),
-      (controllertypestr:'ATMEGA128';         controllerunitstr:'ATMEGA128'),
-      (controllertypestr:'AT90USB1286';       controllerunitstr:'AT90USB1286'),
-      (controllertypestr:'ATMEGA164PA';       controllerunitstr:'ATMEGA164PA'),
-      (controllertypestr:'ATTINY828';         controllerunitstr:'ATTINY828'),
-      (controllertypestr:'ATMEGA88';          controllerunitstr:'ATMEGA88'),
-      (controllertypestr:'ATMEGA645A';        controllerunitstr:'ATMEGA645A'),
-      (controllertypestr:'ATMEGA3290P';       controllerunitstr:'ATMEGA3290P'),
-      (controllertypestr:'ATMEGA644P';        controllerunitstr:'ATMEGA644P'),
-      (controllertypestr:'ATMEGA164A';        controllerunitstr:'ATMEGA164A'),
-      (controllertypestr:'ATTINY4313';        controllerunitstr:'ATTINY4313'),
-      (controllertypestr:'ATMEGA162';         controllerunitstr:'ATMEGA162'),
-      (controllertypestr:'ATMEGA32C1';        controllerunitstr:'ATMEGA32C1'),
-      (controllertypestr:'ATMEGA128A';        controllerunitstr:'ATMEGA128A'),
-      (controllertypestr:'ATMEGA324A';        controllerunitstr:'ATMEGA324A'),
-      (controllertypestr:'ATTINY13';          controllerunitstr:'ATTINY13'),
-      (controllertypestr:'ATMEGA2561';        controllerunitstr:'ATMEGA2561'),
-      (controllertypestr:'ATMEGA169A';        controllerunitstr:'ATMEGA169A'),
-      (controllertypestr:'ATTINY261';         controllerunitstr:'ATTINY261'),
-      (controllertypestr:'ATMEGA644A';        controllerunitstr:'ATMEGA644A'),
-      (controllertypestr:'ATMEGA3290';        controllerunitstr:'ATMEGA3290'),
-      (controllertypestr:'ATMEGA64A';         controllerunitstr:'ATMEGA64A'),
-      (controllertypestr:'ATMEGA169P';        controllerunitstr:'ATMEGA169P'),
-      (controllertypestr:'ATMEGA2560';        controllerunitstr:'ATMEGA2560'),
-      (controllertypestr:'ATMEGA32';          controllerunitstr:'ATMEGA32'),
-      (controllertypestr:'ATTINY861A';        controllerunitstr:'ATTINY861A'),
-      (controllertypestr:'ATTINY28';          controllerunitstr:'ATTINY28'),
-      (controllertypestr:'ATMEGA48P';         controllerunitstr:'ATMEGA48P'),
-      (controllertypestr:'ATMEGA8535';        controllerunitstr:'ATMEGA8535'),
-      (controllertypestr:'ATMEGA168PA';       controllerunitstr:'ATMEGA168PA'),
-      (controllertypestr:'ATMEGA16M1';        controllerunitstr:'ATMEGA16M1'),
-      (controllertypestr:'ATMEGA16HVB';       controllerunitstr:'ATMEGA16HVB'),
-      (controllertypestr:'ATMEGA164P';        controllerunitstr:'ATMEGA164P'),
-      (controllertypestr:'ATMEGA325A';        controllerunitstr:'ATMEGA325A'),
-      (controllertypestr:'ATMEGA640';         controllerunitstr:'ATMEGA640'),
-      (controllertypestr:'ATMEGA6450';        controllerunitstr:'ATMEGA6450'),
-      (controllertypestr:'ATMEGA329P';        controllerunitstr:'ATMEGA329P'),
-      (controllertypestr:'ATA6286';           controllerunitstr:'ATA6286'),
-      (controllertypestr:'AT90USB647';        controllerunitstr:'AT90USB647'),
-      (controllertypestr:'ATMEGA168';         controllerunitstr:'ATMEGA168'),
-      (controllertypestr:'ATMEGA6490A';       controllerunitstr:'ATMEGA6490A'),
-      (controllertypestr:'ATMEGA32M1';        controllerunitstr:'ATMEGA32M1'),
-      (controllertypestr:'ATMEGA64C1';        controllerunitstr:'ATMEGA64C1'),
-      (controllertypestr:'ATMEGA32U2';        controllerunitstr:'ATMEGA32U2'),
-      (controllertypestr:'ATTINY4';           controllerunitstr:'ATTINY4'),
-      (controllertypestr:'ATMEGA644PA';       controllerunitstr:'ATMEGA644PA'),
       (controllertypestr:'AT90PWM1';          controllerunitstr:'AT90PWM1'),
-      (controllertypestr:'ATTINY44';          controllerunitstr:'ATTINY44'),
-      (controllertypestr:'ATMEGA325PA';       controllerunitstr:'ATMEGA325PA'),
-      (controllertypestr:'ATMEGA6450A';       controllerunitstr:'ATMEGA6450A'),
-      (controllertypestr:'ATTINY2313A';       controllerunitstr:'ATTINY2313A'),
-      (controllertypestr:'ATMEGA329PA';       controllerunitstr:'ATMEGA329PA'),
-      (controllertypestr:'ATTINY461A';        controllerunitstr:'ATTINY461A'),
-      (controllertypestr:'ATMEGA6450P';       controllerunitstr:'ATMEGA6450P'),
-      (controllertypestr:'ATMEGA64';          controllerunitstr:'ATMEGA64'),
-      (controllertypestr:'ATMEGA165PA';       controllerunitstr:'ATMEGA165PA'),
-      (controllertypestr:'ATMEGA16A';         controllerunitstr:'ATMEGA16A'),
-      (controllertypestr:'ATMEGA649';         controllerunitstr:'ATMEGA649'),
-      (controllertypestr:'ATMEGA1280';        controllerunitstr:'ATMEGA1280'),
       (controllertypestr:'AT90PWM2B';         controllerunitstr:'AT90PWM2B'),
-      (controllertypestr:'ATMEGA649P';        controllerunitstr:'ATMEGA649P'),
-      (controllertypestr:'ATMEGA3250P';       controllerunitstr:'ATMEGA3250P'),
+      (controllertypestr:'AT90PWM3B';         controllerunitstr:'AT90PWM3B'),
+      (controllertypestr:'AT90PWM81';         controllerunitstr:'AT90PWM81'),
+      (controllertypestr:'AT90PWM161';        controllerunitstr:'AT90PWM161'),
+      (controllertypestr:'AT90PWM216';        controllerunitstr:'AT90PWM216'),
+      (controllertypestr:'AT90PWM316';        controllerunitstr:'AT90PWM316'),
+      (controllertypestr:'AT90USB82';         controllerunitstr:'AT90USB82'),
+      (controllertypestr:'AT90USB162';        controllerunitstr:'AT90USB162'),
+      (controllertypestr:'AT90USB646';        controllerunitstr:'AT90USB646'),
+      (controllertypestr:'AT90USB647';        controllerunitstr:'AT90USB647'),
+      (controllertypestr:'AT90USB1286';       controllerunitstr:'AT90USB1286'),
+      (controllertypestr:'AT90USB1287';       controllerunitstr:'AT90USB1287'),
+      (controllertypestr:'ATA6285';           controllerunitstr:'ATA6285'),
+      (controllertypestr:'ATA6286';           controllerunitstr:'ATA6286'),
+      (controllertypestr:'ATMEGA8';           controllerunitstr:'ATMEGA8'),
+      (controllertypestr:'ATMEGA8A';          controllerunitstr:'ATMEGA8A'),
+      (controllertypestr:'ATMEGA8HVA';        controllerunitstr:'ATMEGA8HVA'),
+      (controllertypestr:'ATMEGA8U2';         controllerunitstr:'ATMEGA8U2'),
+      (controllertypestr:'ATMEGA16';          controllerunitstr:'ATMEGA16'),
+      (controllertypestr:'ATMEGA16A';         controllerunitstr:'ATMEGA16A'),
+      (controllertypestr:'ATMEGA16HVA';       controllerunitstr:'ATMEGA16HVA'),
+      (controllertypestr:'ATMEGA16HVB';       controllerunitstr:'ATMEGA16HVB'),
+      (controllertypestr:'ATMEGA16HVBREVB';   controllerunitstr:'ATMEGA16HVBREVB'),
+      (controllertypestr:'ATMEGA16M1';        controllerunitstr:'ATMEGA16M1'),
+      (controllertypestr:'ATMEGA16U2';        controllerunitstr:'ATMEGA16U2'),
+      (controllertypestr:'ATMEGA16U4';        controllerunitstr:'ATMEGA16U4'),
+      (controllertypestr:'ATMEGA32';          controllerunitstr:'ATMEGA32'),
+      (controllertypestr:'ATMEGA32A';         controllerunitstr:'ATMEGA32A'),
+      (controllertypestr:'ATMEGA32C1';        controllerunitstr:'ATMEGA32C1'),
+      (controllertypestr:'ATMEGA32HVB';       controllerunitstr:'ATMEGA32HVB'),
+      (controllertypestr:'ATMEGA32HVBREVB';   controllerunitstr:'ATMEGA32HVBREVB'),
+      (controllertypestr:'ATMEGA32M1';        controllerunitstr:'ATMEGA32M1'),
+      (controllertypestr:'ATMEGA32U2';        controllerunitstr:'ATMEGA32U2'),
+      (controllertypestr:'ATMEGA32U4';        controllerunitstr:'ATMEGA32U4'),
+      (controllertypestr:'ATMEGA48';          controllerunitstr:'ATMEGA48'),
+      (controllertypestr:'ATMEGA48A';         controllerunitstr:'ATMEGA48A'),
+      (controllertypestr:'ATMEGA48P';         controllerunitstr:'ATMEGA48P'),
       (controllertypestr:'ATMEGA48PA';        controllerunitstr:'ATMEGA48PA'),
-      (controllertypestr:'ATTINY1634';        controllerunitstr:'ATTINY1634'),
-      (controllertypestr:'ATMEGA325';         controllerunitstr:'ATMEGA325'),
+      (controllertypestr:'ATMEGA48PB';        controllerunitstr:'ATMEGA48PB'),
+      (controllertypestr:'ATMEGA64';          controllerunitstr:'ATMEGA64'),
+      (controllertypestr:'ATMEGA64A';         controllerunitstr:'ATMEGA64A'),
+      (controllertypestr:'ATMEGA64C1';        controllerunitstr:'ATMEGA64C1'),
+      (controllertypestr:'ATMEGA64HVE2';      controllerunitstr:'ATMEGA64HVE2'),
+      (controllertypestr:'ATMEGA64M1';        controllerunitstr:'ATMEGA64M1'),
+      (controllertypestr:'ATMEGA64RFR2';      controllerunitstr:'ATMEGA64RFR2'),
+      (controllertypestr:'ATMEGA88';          controllerunitstr:'ATMEGA88'),
+      (controllertypestr:'ATMEGA88A';         controllerunitstr:'ATMEGA88A'),
+      (controllertypestr:'ATMEGA88P';         controllerunitstr:'ATMEGA88P'),
+      (controllertypestr:'ATMEGA88PA';        controllerunitstr:'ATMEGA88PA'),
+      (controllertypestr:'ATMEGA88PB';        controllerunitstr:'ATMEGA88PB'),
+      (controllertypestr:'ATMEGA128';         controllerunitstr:'ATMEGA128'),
+      (controllertypestr:'ATMEGA128A';        controllerunitstr:'ATMEGA128A'),
+      (controllertypestr:'ATMEGA128RFA1';     controllerunitstr:'ATMEGA128RFA1'),
+      (controllertypestr:'ATMEGA128RFR2';     controllerunitstr:'ATMEGA128RFR2'),
+      (controllertypestr:'ATMEGA162';         controllerunitstr:'ATMEGA162'),
+      (controllertypestr:'ATMEGA164A';        controllerunitstr:'ATMEGA164A'),
+      (controllertypestr:'ATMEGA164P';        controllerunitstr:'ATMEGA164P'),
+      (controllertypestr:'ATMEGA164PA';       controllerunitstr:'ATMEGA164PA'),
+      (controllertypestr:'ATMEGA165A';        controllerunitstr:'ATMEGA165A'),
+      (controllertypestr:'ATMEGA165P';        controllerunitstr:'ATMEGA165P'),
+      (controllertypestr:'ATMEGA165PA';       controllerunitstr:'ATMEGA165PA'),
+      (controllertypestr:'ATMEGA168';         controllerunitstr:'ATMEGA168'),
+      (controllertypestr:'ATMEGA168A';        controllerunitstr:'ATMEGA168A'),
+      (controllertypestr:'ATMEGA168P';        controllerunitstr:'ATMEGA168P'),
+      (controllertypestr:'ATMEGA168PA';       controllerunitstr:'ATMEGA168PA'),
+      (controllertypestr:'ATMEGA168PB';       controllerunitstr:'ATMEGA168PB'),
+      (controllertypestr:'ATMEGA169A';        controllerunitstr:'ATMEGA169A'),
+      (controllertypestr:'ATMEGA169P';        controllerunitstr:'ATMEGA169P'),
       (controllertypestr:'ATMEGA169PA';       controllerunitstr:'ATMEGA169PA'),
+      (controllertypestr:'ATMEGA256RFR2';     controllerunitstr:'ATMEGA256RFR2'),
+      (controllertypestr:'ATMEGA324A';        controllerunitstr:'ATMEGA324A'),
+      (controllertypestr:'ATMEGA324P';        controllerunitstr:'ATMEGA324P'),
+      (controllertypestr:'ATMEGA324PA';       controllerunitstr:'ATMEGA324PA'),
+      (controllertypestr:'ATMEGA324PB';       controllerunitstr:'ATMEGA324PB'),
+      (controllertypestr:'ATMEGA325';         controllerunitstr:'ATMEGA325'),
+      (controllertypestr:'ATMEGA325A';        controllerunitstr:'ATMEGA325A'),
+      (controllertypestr:'ATMEGA325P';        controllerunitstr:'ATMEGA325P'),
+      (controllertypestr:'ATMEGA325PA';       controllerunitstr:'ATMEGA325PA'),
+      (controllertypestr:'ATMEGA328';         controllerunitstr:'ATMEGA328'),
+      (controllertypestr:'ATMEGA328P';        controllerunitstr:'ATMEGA328P'),
+      (controllertypestr:'ATMEGA328PB';       controllerunitstr:'ATMEGA328PB'),
+      (controllertypestr:'ATMEGA329';         controllerunitstr:'ATMEGA329'),
+      (controllertypestr:'ATMEGA329A';        controllerunitstr:'ATMEGA329A'),
+      (controllertypestr:'ATMEGA329P';        controllerunitstr:'ATMEGA329P'),
+      (controllertypestr:'ATMEGA329PA';       controllerunitstr:'ATMEGA329PA'),
+      (controllertypestr:'ATMEGA406';         controllerunitstr:'ATMEGA406'),
+      (controllertypestr:'ATMEGA640';         controllerunitstr:'ATMEGA640'),
+      (controllertypestr:'ATMEGA644';         controllerunitstr:'ATMEGA644'),
+      (controllertypestr:'ATMEGA644A';        controllerunitstr:'ATMEGA644A'),
+      (controllertypestr:'ATMEGA644P';        controllerunitstr:'ATMEGA644P'),
+      (controllertypestr:'ATMEGA644PA';       controllerunitstr:'ATMEGA644PA'),
+      (controllertypestr:'ATMEGA644RFR2';     controllerunitstr:'ATMEGA644RFR2'),
+      (controllertypestr:'ATMEGA645';         controllerunitstr:'ATMEGA645'),
+      (controllertypestr:'ATMEGA645A';        controllerunitstr:'ATMEGA645A'),
+      (controllertypestr:'ATMEGA645P';        controllerunitstr:'ATMEGA645P'),
+      (controllertypestr:'ATMEGA649';         controllerunitstr:'ATMEGA649'),
+      (controllertypestr:'ATMEGA649A';        controllerunitstr:'ATMEGA649A'),
+      (controllertypestr:'ATMEGA649P';        controllerunitstr:'ATMEGA649P'),
+      (controllertypestr:'ATMEGA808';         controllerunitstr:'ATMEGA808'),
+      (controllertypestr:'ATMEGA809';         controllerunitstr:'ATMEGA809'),
+      (controllertypestr:'ATMEGA1280';        controllerunitstr:'ATMEGA1280'),
+      (controllertypestr:'ATMEGA1281';        controllerunitstr:'ATMEGA1281'),
+      (controllertypestr:'ATMEGA1284';        controllerunitstr:'ATMEGA1284'),
+      (controllertypestr:'ATMEGA1284P';       controllerunitstr:'ATMEGA1284P'),
+      (controllertypestr:'ATMEGA1284RFR2';    controllerunitstr:'ATMEGA1284RFR2'),
+      (controllertypestr:'ATMEGA1608';        controllerunitstr:'ATMEGA1608'),
+      (controllertypestr:'ATMEGA1609';        controllerunitstr:'ATMEGA1609'),
+      (controllertypestr:'ATMEGA2560';        controllerunitstr:'ATMEGA2560'),
+      (controllertypestr:'ATMEGA2561';        controllerunitstr:'ATMEGA2561'),
+      (controllertypestr:'ATMEGA2564RFR2';    controllerunitstr:'ATMEGA2564RFR2'),
+      (controllertypestr:'ATMEGA3208';        controllerunitstr:'ATMEGA3208'),
+      (controllertypestr:'ATMEGA3209';        controllerunitstr:'ATMEGA3209'),
+      (controllertypestr:'ATMEGA3250';        controllerunitstr:'ATMEGA3250'),
+      (controllertypestr:'ATMEGA3250A';       controllerunitstr:'ATMEGA3250A'),
+      (controllertypestr:'ATMEGA3250P';       controllerunitstr:'ATMEGA3250P'),
+      (controllertypestr:'ATMEGA3250PA';      controllerunitstr:'ATMEGA3250PA'),
+      (controllertypestr:'ATMEGA3290';        controllerunitstr:'ATMEGA3290'),
+      (controllertypestr:'ATMEGA3290A';       controllerunitstr:'ATMEGA3290A'),
+      (controllertypestr:'ATMEGA3290P';       controllerunitstr:'ATMEGA3290P'),
+      (controllertypestr:'ATMEGA3290PA';      controllerunitstr:'ATMEGA3290PA'),
+      (controllertypestr:'ATMEGA4808';        controllerunitstr:'ATMEGA4808'),
+      (controllertypestr:'ATMEGA4809';        controllerunitstr:'ATMEGA4809'),
+      (controllertypestr:'ATMEGA6450';        controllerunitstr:'ATMEGA6450'),
+      (controllertypestr:'ATMEGA6450A';       controllerunitstr:'ATMEGA6450A'),
+      (controllertypestr:'ATMEGA6450P';       controllerunitstr:'ATMEGA6450P'),
+      (controllertypestr:'ATMEGA6490';        controllerunitstr:'ATMEGA6490'),
+      (controllertypestr:'ATMEGA6490A';       controllerunitstr:'ATMEGA6490A'),
+      (controllertypestr:'ATMEGA6490P';       controllerunitstr:'ATMEGA6490P'),
+      (controllertypestr:'ATMEGA8515';        controllerunitstr:'ATMEGA8515'),
+      (controllertypestr:'ATMEGA8535';        controllerunitstr:'ATMEGA8535'),
+      (controllertypestr:'ATTINY4';           controllerunitstr:'ATTINY4'),
+      (controllertypestr:'ATTINY5';           controllerunitstr:'ATTINY5'),
+      (controllertypestr:'ATTINY9';           controllerunitstr:'ATTINY9'),
+      (controllertypestr:'ATTINY10';          controllerunitstr:'ATTINY10'),
+      (controllertypestr:'ATTINY11';          controllerunitstr:'ATTINY11'),
+      (controllertypestr:'ATTINY12';          controllerunitstr:'ATTINY12'),
+      (controllertypestr:'ATTINY13';          controllerunitstr:'ATTINY13'),
+      (controllertypestr:'ATTINY13A';         controllerunitstr:'ATTINY13A'),
+      (controllertypestr:'ATTINY15';          controllerunitstr:'ATTINY15'),
+      (controllertypestr:'ATTINY20';          controllerunitstr:'ATTINY20'),
+      (controllertypestr:'ATTINY24';          controllerunitstr:'ATTINY24'),
+      (controllertypestr:'ATTINY24A';         controllerunitstr:'ATTINY24A'),
+      (controllertypestr:'ATTINY25';          controllerunitstr:'ATTINY25'),
+      (controllertypestr:'ATTINY26';          controllerunitstr:'ATTINY26'),
+      (controllertypestr:'ATTINY28';          controllerunitstr:'ATTINY28'),
+      (controllertypestr:'ATTINY40';          controllerunitstr:'ATTINY40'),
+      (controllertypestr:'ATTINY43U';         controllerunitstr:'ATTINY43U'),
+      (controllertypestr:'ATTINY44';          controllerunitstr:'ATTINY44'),
+      (controllertypestr:'ATTINY44A';         controllerunitstr:'ATTINY44A'),
+      (controllertypestr:'ATTINY45';          controllerunitstr:'ATTINY45'),
+      (controllertypestr:'ATTINY48';          controllerunitstr:'ATTINY48'),
+      (controllertypestr:'ATTINY84';          controllerunitstr:'ATTINY84'),
+      (controllertypestr:'ATTINY84A';         controllerunitstr:'ATTINY84A'),
+      (controllertypestr:'ATTINY85';          controllerunitstr:'ATTINY85'),
+      (controllertypestr:'ATTINY87';          controllerunitstr:'ATTINY87'),
+      (controllertypestr:'ATTINY88';          controllerunitstr:'ATTINY88'),
+      (controllertypestr:'ATTINY102';         controllerunitstr:'ATTINY102'),
+      (controllertypestr:'ATTINY104';         controllerunitstr:'ATTINY104'),
+      (controllertypestr:'ATTINY167';         controllerunitstr:'ATTINY167'),
+      (controllertypestr:'ATTINY202';         controllerunitstr:'ATTINY202'),
+      (controllertypestr:'ATTINY204';         controllerunitstr:'ATTINY204'),
+      (controllertypestr:'ATTINY212';         controllerunitstr:'ATTINY212'),
+      (controllertypestr:'ATTINY214';         controllerunitstr:'ATTINY214'),
+      (controllertypestr:'ATTINY261';         controllerunitstr:'ATTINY261'),
       (controllertypestr:'ATTINY261A';        controllerunitstr:'ATTINY261A'),
-      (controllertypestr:'ATTINY25';          controllerunitstr:'ATTINY25'));
+      (controllertypestr:'ATTINY402';         controllerunitstr:'ATTINY402'),
+      (controllertypestr:'ATTINY404';         controllerunitstr:'ATTINY404'),
+      (controllertypestr:'ATTINY406';         controllerunitstr:'ATTINY406'),
+      (controllertypestr:'ATTINY412';         controllerunitstr:'ATTINY412'),
+      (controllertypestr:'ATTINY414';         controllerunitstr:'ATTINY414'),
+      (controllertypestr:'ATTINY416';         controllerunitstr:'ATTINY416'),
+      (controllertypestr:'ATTINY416AUTO';     controllerunitstr:'ATTINY416AUTO'),
+      (controllertypestr:'ATTINY417';         controllerunitstr:'ATTINY417'),
+      (controllertypestr:'ATTINY441';         controllerunitstr:'ATTINY441'),
+      (controllertypestr:'ATTINY461';         controllerunitstr:'ATTINY461'),
+      (controllertypestr:'ATTINY461A';        controllerunitstr:'ATTINY461A'),
+      (controllertypestr:'ATTINY804';         controllerunitstr:'ATTINY804'),
+      (controllertypestr:'ATTINY806';         controllerunitstr:'ATTINY806'),
+      (controllertypestr:'ATTINY807';         controllerunitstr:'ATTINY807'),
+      (controllertypestr:'ATTINY814';         controllerunitstr:'ATTINY814'),
+      (controllertypestr:'ATTINY816';         controllerunitstr:'ATTINY816'),
+      (controllertypestr:'ATTINY817';         controllerunitstr:'ATTINY817'),
+      (controllertypestr:'ATTINY828';         controllerunitstr:'ATTINY828'),
+      (controllertypestr:'ATTINY841';         controllerunitstr:'ATTINY841'),
+      (controllertypestr:'ATTINY861';         controllerunitstr:'ATTINY861'),
+      (controllertypestr:'ATTINY861A';        controllerunitstr:'ATTINY861A'),
+      (controllertypestr:'ATTINY1604';        controllerunitstr:'ATTINY1604'),
+      (controllertypestr:'ATTINY1606';        controllerunitstr:'ATTINY1606'),
+      (controllertypestr:'ATTINY1607';        controllerunitstr:'ATTINY1607'),
+      (controllertypestr:'ATTINY1614';        controllerunitstr:'ATTINY1614'),
+      (controllertypestr:'ATTINY1616';        controllerunitstr:'ATTINY1616'),
+      (controllertypestr:'ATTINY1617';        controllerunitstr:'ATTINY1617'),
+      (controllertypestr:'ATTINY1624';        controllerunitstr:'ATTINY1624'),
+      (controllertypestr:'ATTINY1626';        controllerunitstr:'ATTINY1626'),
+      (controllertypestr:'ATTINY1627';        controllerunitstr:'ATTINY1627'),
+      (controllertypestr:'ATTINY1634';        controllerunitstr:'ATTINY1634'),
+      (controllertypestr:'ATTINY2313';        controllerunitstr:'ATTINY2313'),
+      (controllertypestr:'ATTINY2313A';       controllerunitstr:'ATTINY2313A'),
+      (controllertypestr:'ATTINY3214';        controllerunitstr:'ATTINY3214'),
+      (controllertypestr:'ATTINY3216';        controllerunitstr:'ATTINY3216'),
+      (controllertypestr:'ATTINY3217';        controllerunitstr:'ATTINY3217'),
+      (controllertypestr:'ATTINY4313';        controllerunitstr:'ATTINY4313'),
+      // AVR controller board aliases
+      (controllertypestr:'ARDUINOLEONARDO';   controllerunitstr:'ATMEGA32U4'),
+      (controllertypestr:'ARDUINOMEGA';       controllerunitstr:'ATMEGA2560'),
+      (controllertypestr:'ARDUINOMICRO';      controllerunitstr:'ATMEGA32U4'),
+      (controllertypestr:'ARDUINONANO';       controllerunitstr:'ATMEGA328P'),
+      (controllertypestr:'ARDUINONANOEVERY';  controllerunitstr:'ATMEGA4809'),
+      (controllertypestr:'ARDUINOUNO';        controllerunitstr:'ATMEGA328P'),
+      (controllertypestr:'ATMEGA256RFR2XPRO'; controllerunitstr:'ATMEGA256RFR2'),
+      (controllertypestr:'ATMEGA324PBXPRO';   controllerunitstr:'ATMEGA324PB'),
+      (controllertypestr:'ATMEGA1284PXPLAINED'; controllerunitstr:'ATMEGA1284P'),
+      (controllertypestr:'ATMEGA4809XPRO';    controllerunitstr:'ATMEGA4809'),
+      (controllertypestr:'ATTINY817XPRO';     controllerunitstr:'ATTINY817'),
+      (controllertypestr:'ATTINY3217XPRO';    controllerunitstr:'ATTINY3217'));
 
   var
     i: integer;
@@ -7984,6 +7845,7 @@ var
   i: Integer;
   Param, Namespaces: String;
   p: PChar;
+  MacMinVer: single;
 begin
   Result:=nil;
   if AlwaysCreate then
@@ -7992,22 +7854,24 @@ begin
   UnitPath:='';
   IncPath:='';
   Namespaces:='';
-  Params:=TStringList.Create;
+  Params:=TStringListUTF8.Create;
   try
     SplitCmdLineParams(CmdLine,Params);
     for i:=0 to Params.Count-1 do begin
       Param:=Params[i];
-      if Param='' then continue;
+      if Length(Param) < 2 then continue;
       p:=PChar(Param);
       if p^<>'-' then continue;
       // a parameter
       case p[1] of
       'F':
         case p[2] of
-        'u':
-          UnitPath+=';'+copy(Param,4,length(Param));
         'i':
           IncPath+=';'+copy(Param,4,length(Param));
+        'u':
+          UnitPath+=';'+copy(Param,4,length(Param));
+        'N':
+          Namespaces+=';'+copy(Param,4,length(Param));
         end;
 
       'd':
@@ -8026,16 +7890,17 @@ begin
         begin
           // syntax
           inc(p,2);
-          repeat
+          while p^ <> #0 do begin
             case p^ of
             '2': CompilerMode:='ObjFPC';
             'd': CompilerMode:='Delphi';
             'o': CompilerMode:='TP';
             'p': CompilerMode:='GPC';
-            else break;
+            'a': DefineOpt('C', p[1] <> '-');  // Assertions
+            'h': DefineOpt('H', p[1] <> '-');  // ansistrings
             end;
             inc(p);
-          until false;
+          end;
         end;
 
       'M':
@@ -8046,7 +7911,7 @@ begin
 
       'N':
         case p[2] of
-        'S': Namespaces:=Namespaces+copy(Param,4,length(Param))
+        'S': Namespaces+=';'+copy(Param,4,length(Param))
         end;
 
       'W':
@@ -8061,8 +7926,48 @@ begin
                 ctsDefine+MacroControllerUnit,MacroControllerUnit,
                 s);
           end;
+        'M':
+          begin
+            val(copy(Param,4,255),MacMinVer,m);
+            if m=0 then
+              AddDefine(MacOSMinSDKVersionMacro,MacOSMinSDKVersionMacro,
+                MacOSMinSDKVersionMacro,IntToStr(Round(MacMinVer*100)));
+          end;
         end;
-
+      'g':
+        begin
+          // Debug info
+          Inc(p, 2);
+          case p^ of
+            #0:
+              DefineOpt('D', True);
+            '-':
+              DefineOpt('D', False);
+            else
+              begin
+                while not (p^ in [#0, 'o']) do begin
+                  if p^ = 'w' then begin
+                    DefineOpt('D', True);
+                    break;
+                  end;
+                  Inc(p);
+                end;
+              end;
+          end;
+        end;
+      'C':
+        begin
+          // Code generator options
+          Inc(p, 2);
+          while p^ <> #0 do begin
+            case p^ of
+              'i': DefineOpt('I', p[1] <> '-');
+              'r': DefineOpt('R', p[1] <> '-');
+              'o': DefineOpt('Q', p[1] <> '-');
+            end;
+            Inc(p);
+          end;
+        end;
       end;
     end;
   finally
@@ -8385,12 +8290,13 @@ end;
 procedure TPCTargetConfigCache.Clear;
 begin
   // keep keys
+  Kind:=pcFPC;
   CompilerDate:=0;
   RealCompiler:='';
   RealCompilerDate:=0;
   RealTargetCPU:='';
   RealTargetOS:='';
-  RealCompilerInPath:='';
+  RealTargetCPUCompiler:='';
   FullVersion:='';
   HasPPUs:=false;
   ConfigFiles.Clear;
@@ -8400,8 +8306,11 @@ begin
   FreeAndNil(Undefines);
   FreeAndNil(UnitPaths);
   FreeAndNil(IncludePaths);
+  FreeAndNil(UnitScopes);
   FreeAndNil(Units);
   FreeAndNil(Includes);
+  FreeAndNil(UnitToFPM);
+  FreeAndNil(FPMNameToFPM); // this frees the FPMs
 end;
 
 function TPCTargetConfigCache.Equals(Item: TPCTargetConfigCache;
@@ -8433,6 +8342,9 @@ function TPCTargetConfigCache.Equals(Item: TPCTargetConfigCache;
     Result:=true;
   end;
 
+var
+  Node1, Node2: TAVLTreeNode;
+  S2PItem1, S2PItem2: PStringToPointerTreeItem;
 begin
   Result:=false;
   if CompareKey then begin
@@ -8449,7 +8361,7 @@ begin
     or (RealCompilerDate<>Item.RealCompilerDate)
     or (RealTargetOS<>Item.RealTargetOS)
     or (RealTargetCPU<>Item.RealTargetCPU)
-    or (RealCompilerInPath<>Item.RealCompilerInPath)
+    or (RealTargetCPUCompiler<>Item.RealTargetCPUCompiler)
     or (FullVersion<>Item.FullVersion)
     or (HasPPUs<>Item.HasPPUs)
     or (not ConfigFiles.Equals(Item.ConfigFiles,true))
@@ -8459,14 +8371,53 @@ begin
   if not CompareStringTrees(Undefines,Item.Undefines) then exit;
   if not CompareStrings(UnitPaths,Item.UnitPaths) then exit;
   if not CompareStrings(IncludePaths,Item.IncludePaths) then exit;
+  if not CompareStrings(UnitScopes,Item.UnitScopes) then exit;
   if not CompareStringTrees(Units,Item.Units) then exit;
   if not CompareStringTrees(Includes,Item.Includes) then exit;
+
+  if UnitToFPM<>nil then begin
+    if Item.UnitToFPM=nil then exit;
+    if UnitToFPM.Count<>Item.UnitToFPM.Count then exit;
+    Node1:=UnitToFPM.Tree.FindLowest;
+    Node2:=Item.UnitToFPM.Tree.FindLowest;
+    while Node1<>nil do begin
+      S2PItem1:=PStringToPointerTreeItem(Node1.Data);
+      S2PItem2:=PStringToPointerTreeItem(Node2.Data);
+      if S2PItem1^.Name<>S2PItem2^.Name then
+        exit;
+      if TPCFPMFileState(S2PItem1^.Value).Name<>TPCFPMFileState(S2PItem2^.Value).Name then
+        exit;
+      Node1:=Node1.Successor;
+      Node2:=Node2.Successor;
+    end;
+  end;
+
+  if FPMNameToFPM<>nil then begin
+    if Item.FPMNameToFPM=nil then exit;
+    if FPMNameToFPM.Count<>Item.FPMNameToFPM.Count then exit;
+    Node1:=FPMNameToFPM.Tree.FindLowest;
+    Node2:=Item.FPMNameToFPM.Tree.FindLowest;
+    while Node1<>nil do begin
+      S2PItem1:=PStringToPointerTreeItem(Node1.Data);
+      S2PItem2:=PStringToPointerTreeItem(Node2.Data);
+      if S2PItem1^.Name<>S2PItem2^.Name then
+        exit;
+      if not TPCFPMFileState(S2PItem1^.Value).Equals(TPCFPMFileState(S2PItem2^.Value),true) then
+        exit;
+      Node1:=Node1.Successor;
+      Node2:=Node2.Successor;
+    end;
+  end;
+
   Result:=true;
 end;
 
 procedure TPCTargetConfigCache.Assign(Source: TPersistent);
 var
   Item: TPCTargetConfigCache;
+  Node: TAVLTreeNode;
+  FPM: TPCFPMFileState;
+  S2PItem: PStringToPointerTreeItem;
 
   procedure AssignStringTree(var Dest: TStringToStringTree; const Src: TStringToStringTree);
   begin
@@ -8503,7 +8454,7 @@ begin
     RealCompilerDate:=Item.RealCompilerDate;
     RealTargetOS:=Item.RealTargetOS;
     RealTargetCPU:=Item.RealTargetCPU;
-    RealCompilerInPath:=Item.RealCompilerInPath;
+    RealTargetCPUCompiler:=Item.RealTargetCPUCompiler;
     FullVersion:=Item.FullVersion;
     HasPPUs:=Item.HasPPUs;
     ConfigFiles.Assign(Item.ConfigFiles);
@@ -8512,8 +8463,35 @@ begin
     AssignStringTree(Undefines,Item.Undefines);
     AssignStringList(UnitPaths,Item.UnitPaths);
     AssignStringList(IncludePaths,Item.IncludePaths);
+    AssignStringList(UnitScopes,Item.UnitScopes);
     AssignStringTree(Units,Item.Units);
     AssignStringTree(Includes,Item.Includes);
+
+    FreeAndNil(UnitToFPM);
+    FreeAndNil(FPMNameToFPM);
+    if (Item.FPMNameToFPM<>nil) and (Item.UnitToFPM=nil) then begin
+      FPMNameToFPM:=TStringToPointerTree.Create(false);
+      FPMNameToFPM.FreeValues:=true;
+      UnitToFPM:=TStringToPointerTree.Create(false);
+      // clone TPCFPMFileState objects
+      Node:=Item.FPMNameToFPM.Tree.FindLowest;
+      while Node<>nil do begin
+        S2PItem:=PStringToPointerTreeItem(Node.Data);
+        FPM:=TPCFPMFileState.Create;
+        FPM.Name:=S2PItem^.Name;
+        FPM.Assign(TPCFPMFileState(S2PItem^.Value));
+        FPMNameToFPM[FPM.Name]:=FPM;
+        Node:=Node.Successor;
+      end;
+      // clone UnitToFPM
+      Node:=Item.UnitToFPM.Tree.FindLowest;
+      while Node<>nil do begin
+        S2PItem:=PStringToPointerTreeItem(Node.Data);
+        FPM:=TPCFPMFileState(FPMNameToFPM[TPCFPMFileState(S2PItem^.Value).Name]);
+        UnitToFPM[S2PItem^.Name]:=FPM;
+        Node:=Node.Successor;
+      end;
+    end;
 
     ErrorMsg:=Item.ErrorMsg;
     ErrorTranslatedMsg:=Item.ErrorTranslatedMsg;
@@ -8523,21 +8501,12 @@ end;
 
 procedure TPCTargetConfigCache.LoadFromXMLConfig(XMLConfig: TXMLConfig;
   const Path: string);
-var
-  Cnt: integer;
-  SubPath: String;
-  DefineName, DefineValue: String;
-  s: String;
-  i: Integer;
-  p: Integer;
-  StartPos: Integer;
-  Filename: String;
 
   procedure LoadPathsFor(out ADest: TStrings; const ASubPath: string);
   var
     i: Integer;
     List: TStringList;
-    BaseDir: String;
+    BaseDir, s: String;
   begin
     // Paths: format: semicolon separated compressed list
     List:=TStringList.Create;
@@ -8563,19 +8532,36 @@ var
     end;
   end;
 
+  procedure LoadSemicolonList(out UnitScopes: TStrings; const ASubPath: string);
+  var
+    s, Scope: String;
+    p: Integer;
+  begin
+    UnitScopes:=TStringList.Create;
+    s:=XMLConfig.GetValue(Path+ASubPath,'');
+    p:=1;
+    while p<=length(s) do begin
+      Scope:=GetNextDelimitedItem(s,';',p);
+      if Scope<>'' then
+        UnitScopes.Add(Scope);
+    end;
+  end;
+
   procedure LoadFilesFor(var ADest: TStringToStringTree; const ASubPath: string);
   var
     i: Integer;
     List: TStringList;
-    File_Name: String;
+    File_Name, CurPath, s, Filename: String;
     FileList: TStringList;
   begin
     // files: format: ASubPath+Values semicolon separated list of compressed filename
+    if ADest=nil then
+      ADest:=TStringToStringTree.Create(false);
     List:=TStringList.Create;
     FileList:=nil;
     try
-      SubPath:=Path+ASubPath+'Value';
-      s:=XMLConfig.GetValue(SubPath,'');
+      CurPath:=Path+ASubPath+'Value';
+      s:=XMLConfig.GetValue(CurPath,'');
       List.Delimiter:=';';
       List.StrictDelimiter:=true;
       List.DelimitedText:=s;
@@ -8584,11 +8570,9 @@ var
         Filename:=TrimFilename(FileList[i]);
         File_Name:=ExtractFileNameOnly(Filename);
         if (File_Name='') or not IsDottedIdentifier(File_Name) then begin
-          DebugLn(['Warning: [TPCTargetConfigCache.LoadFromXMLConfig] invalid filename "',File_Name,'" in "',XMLConfig.Filename,'" at "',SubPath,'"']);
+          DebugLn(['Warning: [TPCTargetConfigCache.LoadFromXMLConfig] invalid filename "',File_Name,'" in "',XMLConfig.Filename,'" at "',CurPath,'"']);
           continue;
         end;
-        if ADest=nil then
-          ADest:=TStringToStringTree.Create(false);
         ADest[File_Name]:=Filename;
       end;
     finally
@@ -8597,6 +8581,15 @@ var
     end;
   end;
 
+var
+  Cnt: integer;
+  SubPath: String;
+  DefineName, DefineValue: String;
+  s, CurUnitName, CurFPMName: String;
+  i: Integer;
+  p: Integer;
+  StartPos: Integer;
+  FPM: TPCFPMFileState;
 begin
   Clear;
 
@@ -8610,7 +8603,7 @@ begin
   RealCompilerDate:=XMLConfig.GetValue(Path+'RealCompiler/Date',0);
   RealTargetOS:=XMLConfig.GetValue(Path+'RealCompiler/OS','');
   RealTargetCPU:=XMLConfig.GetValue(Path+'RealCompiler/CPU','');
-  RealCompilerInPath:=XMLConfig.GetValue(Path+'RealCompiler/InPath','');
+  RealTargetCPUCompiler:=XMLConfig.GetValue(Path+'RealCompiler/InPath','');
   FullVersion:=XMLConfig.GetValue(Path+'RealCompiler/FullVersion','');
   HasPPUs:=XMLConfig.GetValue(Path+'HasPPUs',true);
   ConfigFiles.LoadFromXMLConfig(XMLConfig,Path+'Configs/');
@@ -8651,25 +8644,55 @@ begin
   LoadPathsFor(UnitPaths,'UnitPaths/');
   LoadPathsFor(IncludePaths,'IncludePaths/');
 
+  // Unit scopes
+  LoadSemicolonList(UnitScopes, 'UnitScopes');
+
   // Files
   LoadFilesFor(Units,'Units/');
   LoadFilesFor(Includes,'Includes/');
+
+  // read FPMNameToFPM before UnitToFPM!
+  Cnt:=XMLConfig.GetValue(Path+'FPMs/Count',0);
+  if Cnt>0 then begin
+    FPMNameToFPM:=TStringToPointerTree.Create(false);
+    FPMNameToFPM.FreeValues:=true;
+    UnitToFPM:=TStringToPointerTree.Create(false);
+    for i:=1 to Cnt do begin
+      SubPath:=Path+'FPMs/Item'+IntToStr(i)+'/';
+      FPM:=TPCFPMFileState.Create;
+      FPM.Name:=XMLConfig.GetValue(SubPath+'Name','');
+      if FPM.Name='' then
+        FPM.Free
+      else
+        FPM.LoadFromXMLConfig(XMLConfig,SubPath);
+      FPMNameToFPM[FPM.Name]:=FPM;
+    end;
+  end;
+
+  // UnitToFPM
+  Cnt:=XMLConfig.GetValue(Path+'UnitToFPM/Count',0);
+  if UnitToFPM<>nil then begin
+    for i:=1 to Cnt do begin
+      SubPath:=Path+'UnitToFPM/Item'+IntToStr(i)+'/';
+      CurUnitName:=XMLConfig.GetValue(SubPath+'Unit','');
+      if CurUnitName='' then continue;
+      CurFPMName:=XMLConfig.GetValue(SubPath+'FPM','');
+      if CurFPMName='' then continue;
+      FPM:=TPCFPMFileState(FPMNameToFPM[CurFPMName]);
+      if FPM=nil then exit;
+      UnitToFPM[CurUnitName]:=FPM;
+    end;
+  end;
 end;
 
 procedure TPCTargetConfigCache.SaveToXMLConfig(XMLConfig: TXMLConfig;
   const Path: string);
-var
-  Node: TAVLTreeNode;
-  Item: PStringToStringItem;
-  Cnt: Integer;
-  SubPath: String;
-  s: String;
 
   procedure SavePathsFor(const ASource: TStrings; const ASubPath: string);
   var
     List: TStringList;
     RelativeUnitPaths: TStringList;
-    BaseDir: string;
+    BaseDir, s: string;
   begin
     // Paths: write as semicolon separated compressed list
     s:='';
@@ -8693,11 +8716,26 @@ var
     XMLConfig.SetDeleteValue(Path+ASubPath+'Value',s,'');
   end;
 
+  procedure SaveSemicolonList(List: TStrings; const ASubPath: string);
+  var
+    i: Integer;
+    s: String;
+  begin
+    s:='';
+    if List<>nil then
+      for i:=0 to List.Count-1 do
+        s:=s+';'+List[i];
+    delete(s,1,1);
+    XMLConfig.SetDeleteValue(Path+ASubPath,s,'');
+  end;
+
   procedure SaveFilesFor(const ASource: TStringToStringTree; const ASubPath: string);
   var
     List: TStringList;
     FileList: TStringList;
-    Filename: String;
+    Filename, s: String;
+    Node: TAVLTreeNode;
+    Item: PStringToStringItem;
   begin
     // Files: ASubPath+Values semicolon separated list of compressed filenames
     // Files contains thousands of file names. This needs compression.
@@ -8731,6 +8769,14 @@ var
     XMLConfig.SetDeleteValue(Path+ASubPath+'Value',s,'');
   end;
 
+var
+  Node: TAVLTreeNode;
+  Item: PStringToStringItem;
+  Cnt, i: Integer;
+  SubPath: String;
+  s: String;
+  S2PItem: PStringToPointerTreeItem;
+  FPM: TPCFPMFileState;
 begin
   XMLConfig.SetDeleteValue(Path+'Kind',PascalCompilerNames[Kind],PascalCompilerNames[pcFPC]);
   XMLConfig.SetDeleteValue(Path+'TargetOS',TargetOS,'');
@@ -8742,7 +8788,7 @@ begin
   XMLConfig.SetDeleteValue(Path+'RealCompiler/Date',RealCompilerDate,0);
   XMLConfig.SetDeleteValue(Path+'RealCompiler/OS',RealTargetOS,'');
   XMLConfig.SetDeleteValue(Path+'RealCompiler/CPU',RealTargetCPU,'');
-  XMLConfig.SetDeleteValue(Path+'RealCompiler/InPath',RealCompilerInPath,'');
+  XMLConfig.SetDeleteValue(Path+'RealCompiler/InPath',RealTargetCPUCompiler,'');
   XMLConfig.SetDeleteValue(Path+'RealCompiler/FullVersion',FullVersion,'');
   XMLConfig.SetDeleteValue(Path+'HasPPUs',HasPPUs,true);
   ConfigFiles.SaveToXMLConfig(XMLConfig,Path+'Configs/');
@@ -8783,9 +8829,45 @@ begin
   SavePathsFor(UnitPaths, 'UnitPaths/');
   SavePathsFor(IncludePaths, 'IncludePaths/');
 
+  // Unit scopes
+  SaveSemicolonList(UnitScopes, 'UnitScopes');
+
   // Files
   SaveFilesFor(Units, 'Units/');
   SaveFilesFor(Includes, 'Includes/');
+
+  // UnitToFPM
+  if UnitToFPM<>nil then begin
+    // write as UnitToFPM/Item<i>/Unit,FPM
+    i:=0;
+    Node:=UnitToFPM.Tree.FindLowest;
+    while Node<>nil do begin
+      inc(i);
+      SubPath:=Path+'UnitToFPM/Item'+IntToStr(i)+'/';
+      S2PItem:=PStringToPointerTreeItem(Node.Data);
+      XMLConfig.SetValue(SubPath+'Unit',S2PItem^.Name);
+      FPM:=TPCFPMFileState(S2PItem^.Value);
+      XMLConfig.SetValue(SubPath+'FPM',FPM.Name);
+      Node:=Node.Successor;
+    end;
+    XMLConfig.SetDeleteValue(Path+'UnitToFPM/Count',i,0);
+  end;
+
+  // FPMNameToFPM
+  if FPMNameToFPM<>nil then begin
+    // write as FPMs/Item<i>/
+    i:=0;
+    Node:=FPMNameToFPM.Tree.FindLowest;
+    while Node<>nil do begin
+      inc(i);
+      SubPath:=Path+'FPMs/Item'+IntToStr(i)+'/';
+      S2PItem:=PStringToPointerTreeItem(Node.Data);
+      FPM:=TPCFPMFileState(S2PItem^.Value);
+      FPM.SaveToXMLConfig(XMLConfig,SubPath);
+      Node:=Node.Successor;
+    end;
+    XMLConfig.SetDeleteValue(Path+'FPMs/Count',i,0);
+  end;
 end;
 
 procedure TPCTargetConfigCache.LoadFromFile(Filename: string);
@@ -8819,6 +8901,7 @@ var
   AFilename: String;
 begin
   Result:=true;
+
   if (not FileExistsCached(Compiler)) then begin
     if CTConsoleVerbosity>0 then
       debugln(['Hint: [TPCTargetConfigCache.NeedsUpdate] TargetOS="',TargetOS,'" TargetCPU="',TargetCPU,'" Options="',CompilerOptions,'" compiler file missing "',Compiler,'"']);
@@ -8840,10 +8923,10 @@ begin
   end;
   // fpc searches via PATH for the real compiler, resolves any symlink
   // and that is the RealCompiler
-  AFilename:=FindRealCompilerInPath(TargetCPU,true);
-  if RealCompilerInPath<>AFilename then begin
+  AFilename:=FindDefaultTargetCPUCompiler(TargetCPU,true);
+  if RealTargetCPUCompiler<>AFilename then begin
     if CTConsoleVerbosity>0 then
-      debugln(['Hint: [TPCTargetConfigCache.NeedsUpdate] TargetOS="',TargetOS,'" TargetCPU="',TargetCPU,'" Options="',CompilerOptions,'" real compiler in PATH changed from "',RealCompilerInPath,'" to "',AFilename,'"']);
+      debugln(['Hint: [TPCTargetConfigCache.NeedsUpdate] TargetOS="',TargetOS,'" TargetCPU="',TargetCPU,'" Options="',CompilerOptions,'" real compiler in PATH changed from "',RealTargetCPUCompiler,'" to "',AFilename,'"']);
     exit;
   end;
   for i:=0 to ConfigFiles.Count-1 do begin
@@ -8885,6 +8968,16 @@ end;
 
 function TPCTargetConfigCache.Update(TestFilename: string;
   ExtraOptions: string; const OnProgress: TDefinePoolProgress): boolean;
+
+  procedure PreparePaths(APaths: TStrings);
+  var
+    i: Integer;
+  begin
+    if APaths<>nil then
+      for i:=0 to APaths.Count-1 do
+        APaths[i]:=ChompPathDelim(TrimFilename(APaths[i]));
+  end;
+
 var
   i: Integer;
   OldOptions: TPCTargetConfigCache;
@@ -8896,17 +8989,7 @@ var
   Infos: TFPCInfoStrings;
   InfoTypes: TFPCInfoTypes;
   BaseDir: String;
-  FullFilename: String;
-
-  procedure PreparePaths(APaths: TStrings);
-  var
-    i: Integer;
-  begin
-    if APaths<>nil then
-      for i:=0 to APaths.Count-1 do
-        APaths[i]:=ChompPathDelim(TrimFilename(APaths[i]));
-  end;
-
+  FullFilename, KindErrorMsg: String;
 begin
   OldOptions:=TPCTargetConfigCache.Create(nil);
   CfgFiles:=nil;
@@ -8917,18 +9000,23 @@ begin
 
     if CTConsoleVerbosity>0 then
       debugln(['Hint: [TPCTargetConfigCache.NeedsUpdate] ',Compiler,' TargetOS=',TargetOS,' TargetCPU=',TargetCPU,' CompilerOptions=',CompilerOptions,' ExtraOptions=',ExtraOptions,' PATH=',GetEnvironmentVariableUTF8('PATH')]);
-    CompilerDate:=FileAgeCached(Compiler);
+    CompilerDate:=-1;
     if FileExistsCached(Compiler) then begin
-      ExtraOptions:=GetFPCInfoCmdLineOptions(ExtraOptions);
+      CompilerDate:=FileAgeCached(Compiler);
+      ExtraOptions:=GetFPCInfoCmdLineOptions(ExtraOptions);// add -TTargetOS and -PTargetCPU
       BaseDir:='';
 
-      // get version and real OS and CPU
+      // check if this is a FPC compatible compiler and get version, OS and CPU
+      // Note: fpc.exe calls the real compiler depending on -T and -P
       InfoTypes:=[fpciTargetOS,fpciTargetProcessor,fpciFullVersion];
       Info:=RunFPCInfo(Compiler,InfoTypes,ExtraOptions);
       if ParseFPCInfo(Info,InfoTypes,Infos) then begin
+        // fpc or pas2js
         RealTargetOS:=Infos[fpciTargetOS];
         RealTargetCPU:=Infos[fpciTargetProcessor];
         FullVersion:=Infos[fpciFullVersion];
+        if FullVersion='' then
+          debugln(['Warning: [TPCTargetConfigCache.Update] cannot determine compiler version: Compiler="'+Compiler+'" Options="'+ExtraOptions+'"']);
       end else begin
         RealTargetOS:=TargetOS;
         if RealTargetOS='' then
@@ -8937,20 +9025,40 @@ begin
         if RealTargetCPU='' then
           RealTargetCPU:=GetCompiledTargetCPU;
       end;
-      RealCompilerInPath:=FindRealCompilerInPath(TargetCPU,true);
 
-      // run fpc and parse output
-      HasPPUs:=false;
-      RunFPCVerbose(Compiler,TestFilename,CfgFiles,RealCompiler,UnitPaths,
-                    IncludePaths,Defines,Undefines,ExtraOptions);
+      if FullVersion<>'' then begin
+        // run fpc/pas2js and parse output
+
+        if (Pos('-Fr',ExtraOptions)<1) and (Pos('-Fr',Caches.ExtraOptions)>0) then
+          ExtraOptions:=Trim(ExtraOptions+' '+Caches.ExtraOptions);
+        RunFPCVerbose(Compiler,TestFilename,CfgFiles,RealCompiler,UnitPaths,
+                      IncludePaths,UnitScopes,Defines,Undefines,ExtraOptions);
+        //debugln(['TPCTargetConfigCache.Update UnitPaths="',UnitPaths.Text,'"']);
+        //debugln(['TPCTargetConfigCache.Update UnitScopes="',UnitScopes.Text,'"']);
+        //debugln(['TPCTargetConfigCache.Update IncludePaths="',IncludePaths.Text,'"']);
+      end;
+
+      if Defines<>nil then begin
+        if Defines.Contains('PAS2JS') and Defines.Contains('PAS2JS_FULLVERSION') then
+          Kind:=pcPas2js
+        else if Defines.Contains('FPC') and Defines.Contains('FPC_FULLVERSION') then
+          Kind:=pcFPC
+        else begin
+          IsCompilerExecutable(Compiler,KindErrorMsg,Kind,false);
+          if KindErrorMsg<>'' then
+            debugln(['Warning: [TPCTargetConfigCache.Update] cannot determine type of compiler: Compiler="'+Compiler+'" Options="'+ExtraOptions+'"']);
+        end;
+      end;
+      if Kind=pcFPC then
+        RealTargetCPUCompiler:=FindDefaultTargetCPUCompiler(TargetCPU,true);
       PreparePaths(UnitPaths);
       PreparePaths(IncludePaths);
       // store the real compiler file and date
       if (RealCompiler<>'') and FileExistsCached(RealCompiler) then begin
         RealCompilerDate:=FileAgeCached(RealCompiler);
-      end else begin
+      end else if Kind=pcFPC then begin
         if CTConsoleVerbosity>=-1 then
-          debugln(['Warning: [TPCTargetConfigCache.Update] invalid compiler: Compiler="'+Compiler+'" Options="'+ExtraOptions+'" RealCompiler="',RealCompiler,'"']);
+          debugln(['Warning: [TPCTargetConfigCache.Update] cannot find real compiler for this platform: Compiler="'+Compiler+'" Options="'+ExtraOptions+'" RealCompiler="',RealCompiler,'"']);
       end;
       // store the list of tried and read cfg files
       if CfgFiles<>nil then
@@ -8961,7 +9069,7 @@ begin
           Filename:=copy(Filename,2,length(Filename));
           FullFilename:=ExpandFileNameUTF8(TrimFileName(Filename),BaseDir);
           if CfgFileExists<>FileExistsCached(FullFilename) then begin
-            debugln(['Warning: [TPCTargetConfigCache.Update] fpc found cfg a file, the IDE did not: "',Filename,'"']);
+            debugln(['Warning: [TPCTargetConfigCache.Update] '+ExtractFileName(Compiler)+' found cfg a file, the IDE did not: "',Filename,'"']);
             CfgFileExists:=not CfgFileExists;
           end;
           CfgFileDate:=0;
@@ -8969,14 +9077,33 @@ begin
             CfgFileDate:=FileAgeCached(Filename);
           ConfigFiles.Add(Filename,CfgFileExists,CfgFileDate);
         end;
-      // gather all units in all unit and inc files search paths
-      GatherUnitsInSearchPaths(UnitPaths,IncludePaths,OnProgress,Units,Includes,true);
-      if (UnitPaths.Count=0) then begin
+      // gather all units and include files in search paths
+      GatherUnitsInSearchPaths(UnitPaths,IncludePaths,OnProgress,Units,Includes);
+      GatherUnitsInFPMSources(Units,UnitToFPM,FPMNameToFPM,OnProgress);
+      //if Kind=pcPas2js then begin
+      //  debugln(['TPCTargetConfigCache.Update Units:']);
+      //  for e in Units do
+      //    debugln(['  ',E^.Name,' ',E^.Value]);
+      //end;
+      if (UnitPaths<>nil) and (UnitPaths.Count=0) then begin
         if CTConsoleVerbosity>=-1 then
           debugln(['Warning: [TPCTargetConfigCache.Update] no unit paths: ',Compiler,' ',ExtraOptions]);
       end;
       // check if the system ppu exists
-      HasPPUs:=CompareFileExt(Units['system'],'ppu',false)=0;
+      HasPPUs:=(Kind=pcFPC) and (Units<>nil)
+          and (CompareFileExt(Units['system'],'ppu',false)=0);
+      // check compiler version define
+      if (CTConsoleVerbosity>=-1) and (Defines<>nil) then begin
+        case Kind of
+          pcFPC:
+            if not Defines.Contains('FPC_FULLVERSION') then
+              debugln(['Warning: [TPCTargetConfigCache.Update] invalid fpc: Compiler="'+Compiler+'" Options="'+ExtraOptions+'" RealCompiler="',RealCompiler,'" missing FPC_FULLVERSION']);
+          pcDelphi: ;
+          pcPas2js:
+            if not Defines.Contains('PAS2JS_FULLVERSION') then
+              debugln(['Warning: [TPCTargetConfigCache.Update] invalid pas2js: Compiler="'+Compiler+'" Options="'+ExtraOptions+'" missing PAS2JS_FULLVERSION']);
+        end;
+      end;
     end;
     // check for changes
     if not Equals(OldOptions) then begin
@@ -8991,7 +9118,7 @@ begin
   end;
 end;
 
-function TPCTargetConfigCache.FindRealCompilerInPath(aTargetCPU: string;
+function TPCTargetConfigCache.FindDefaultTargetCPUCompiler(aTargetCPU: string;
   ResolveLinks: boolean): string;
 
   function Search(const ShortFileName: string): string;
@@ -9031,11 +9158,12 @@ var
   Postfix: String;
 begin
   Result:='';
+  if Kind<>pcFPC then exit;
 
   CompiledTargetCPU:=GetCompiledTargetCPU;
   if aTargetCPU='' then
     aTargetCPU:=CompiledTargetCPU;
-  Cross:=aTargetCPU<>CompiledTargetCPU;
+  Cross:=not SameText(aTargetCPU,CompiledTargetCPU);
 
   // The -V<postfix> parameter searches for ppcx64-postfix instead of ppcx64
   Postfix:=GetLastFPCParameter(CompilerOptions,'-V');
@@ -9065,9 +9193,11 @@ function TPCTargetConfigCache.GetFPCVerNumbers(out FPCVersion, FPCRelease,
 var
   v: string;
 begin
+  // get default FPC version
   v:={$I %FPCVERSION%};
   Result:=SplitFPCVersion(v,FPCVersion,FPCRelease,FPCPatch);
   if Defines<>nil then begin
+    // use defines
     FPCVersion:=StrToIntDef(Defines['FPC_VERSION'],FPCVersion);
     FPCRelease:=StrToIntDef(Defines['FPC_RELEASE'],FPCRelease);
     FPCPatch:=StrToIntDef(Defines['FPC_PATCH'],FPCPatch);
@@ -9874,19 +10004,31 @@ end;
 function TCompilerDefinesCache.GetFPCVersion(const CompilerFilename, TargetOS,
   TargetCPU: string; UseCompiledVersionAsDefault: boolean): string;
 var
+  Kind: TPascalCompiler;
+begin
+  Result:=GetPCVersion(CompilerFilename,TargetOS,TargetCPU,UseCompiledVersionAsDefault,Kind);
+  if Kind=pcFPC then ;
+end;
+
+function TCompilerDefinesCache.GetPCVersion(const CompilerFilename, TargetOS,
+  TargetCPU: string; UseCompiledVersionAsDefault: boolean; out
+  Kind: TPascalCompiler): string;
+var
   CfgCache: TPCTargetConfigCache;
   ErrorMsg: string;
 begin
+  Kind:=pcFPC;
   if UseCompiledVersionAsDefault then
     Result:={$I %FPCVersion%}
   else
     Result:='';
-  if not IsFPCExecutable(CompilerFilename,ErrorMsg) then
+  if not IsCTExecutable(CompilerFilename,ErrorMsg) then
     exit;
   CfgCache:=ConfigCaches.Find(CompilerFilename,ExtraOptions,TargetOS,TargetCPU,true);
   if CfgCache.NeedsUpdate
   and not CfgCache.Update(TestFilename,ExtraOptions) then
     exit;
+  Kind:=CfgCache.Kind;
   if CfgCache.FullVersion='' then exit;
   Result:=CfgCache.FullVersion;
 end;
@@ -10155,15 +10297,19 @@ begin
   if (fuscfSrcRulesNeedUpdate in fFlags)
   or (fRulesStampOfConfig<>Cfg.ChangeStamp) then begin
     Exclude(fFlags,fuscfSrcRulesNeedUpdate);
-    NewRules:=DefaultFPCSourceRules.Clone;
-    try
-      if Cfg.Units<>nil then
-        AdjustFPCSrcRulesForPPUPaths(Cfg.Units,NewRules);
-      fSourceRules.Assign(NewRules); // increases ChangeStamp if something changed
-      fRulesStampOfConfig:=Cfg.ChangeStamp;
-    finally
-      NewRules.Free;
+    if Cfg.Kind=pcFPC then begin
+      NewRules:=DefaultFPCSourceRules.Clone;
+      try
+        if Cfg.Units<>nil then
+          AdjustFPCSrcRulesForPPUPaths(Cfg.Units,NewRules);
+        fSourceRules.Assign(NewRules); // increases ChangeStamp if something changed
+      finally
+        NewRules.Free;
+      end;
+    end else begin
+      fSourceRules.Clear;
     end;
+    fRulesStampOfConfig:=Cfg.ChangeStamp;
   end;
   Result:=fSourceRules;
 end;
@@ -10181,37 +10327,46 @@ begin
   SrcRules:=GetSourceRules(AutoUpdate);
   ConfigCache:=GetConfigCache(false); // Note: update already done by GetSourceRules(AutoUpdate)
 
-  if (fuscfUnitTreeNeedsUpdate in fFlags)
-  or (fUnitStampOfFPC<>ConfigCache.ChangeStamp)
-  or (fUnitStampOfFiles<>Src.ChangeStamp)
-  or (fUnitStampOfRules<>SrcRules.ChangeStamp)
-  then begin
-    Exclude(fFlags,fuscfUnitTreeNeedsUpdate);
-    NewSrcDuplicates:=nil;
-    NewUnitToSourceTree:=nil;
-    try
-      NewSrcDuplicates:=TStringToStringTree.Create(false);
-      NewUnitToSourceTree:=GatherUnitsInFPCSources(Src.Files,
-                     ConfigCache.RealTargetOS,ConfigCache.RealTargetCPU,
-                     NewSrcDuplicates,SrcRules);
-      if NewUnitToSourceTree=nil then
-        NewUnitToSourceTree:=TStringToStringTree.Create(false);
-      // ToDo: add/replace sources in PPU search paths
-      if not fUnitToSourceTree.Equals(NewUnitToSourceTree) then begin
-        fUnitToSourceTree.Assign(NewUnitToSourceTree);
-        IncreaseChangeStamp;
+  if ConfigCache.Kind=pcFPC then begin
+    if (fuscfUnitTreeNeedsUpdate in fFlags)
+    or (fUnitStampOfFPC<>ConfigCache.ChangeStamp)
+    or (fUnitStampOfFiles<>Src.ChangeStamp)
+    or (fUnitStampOfRules<>SrcRules.ChangeStamp)
+    then begin
+      Exclude(fFlags,fuscfUnitTreeNeedsUpdate);
+      NewSrcDuplicates:=nil;
+      NewUnitToSourceTree:=nil;
+      try
+        NewSrcDuplicates:=TStringToStringTree.Create(false);
+        NewUnitToSourceTree:=GatherUnitsInFPCSources(Src.Files,
+                       ConfigCache.RealTargetOS,ConfigCache.RealTargetCPU,
+                       NewSrcDuplicates,SrcRules);
+        if NewUnitToSourceTree=nil then
+          NewUnitToSourceTree:=TStringToStringTree.Create(false);
+        // ToDo: add/replace sources in PPU search paths
+        if not fUnitToSourceTree.Equals(NewUnitToSourceTree) then begin
+          fUnitToSourceTree.Assign(NewUnitToSourceTree);
+          IncreaseChangeStamp;
+        end;
+        if not fSrcDuplicates.Equals(NewSrcDuplicates) then begin
+          fSrcDuplicates.Assign(NewSrcDuplicates);
+          IncreaseChangeStamp;
+        end;
+        fUnitStampOfFPC:=ConfigCache.ChangeStamp;
+        fUnitStampOfFiles:=Src.ChangeStamp;
+        fUnitStampOfRules:=SrcRules.ChangeStamp;
+      finally
+        NewUnitToSourceTree.Free;
+        NewSrcDuplicates.Free;
       end;
-      if not fSrcDuplicates.Equals(NewSrcDuplicates) then begin
-        fSrcDuplicates.Assign(NewSrcDuplicates);
-        IncreaseChangeStamp;
-      end;
-      fUnitStampOfFPC:=ConfigCache.ChangeStamp;
-      fUnitStampOfFiles:=Src.ChangeStamp;
-      fUnitStampOfRules:=SrcRules.ChangeStamp;
-    finally
-      NewUnitToSourceTree.Free;
-      NewSrcDuplicates.Free;
     end;
+  end else begin
+    fUnitToSourceTree.Clear;
+    fSrcDuplicates.Clear;
+    Exclude(fFlags,fuscfUnitTreeNeedsUpdate);
+    fUnitStampOfFPC:=ConfigCache.ChangeStamp;
+    fUnitStampOfFiles:=Src.ChangeStamp;
+    fUnitStampOfRules:=SrcRules.ChangeStamp;
   end;
   Result:=fUnitToSourceTree;
 end;
@@ -10318,17 +10473,48 @@ function TFPCUnitSetCache.GetFirstFPCCfg: string;
 var
   Cfg: TPCTargetConfigCache;
   i: Integer;
+  Files: TPCConfigFileStateList;
 begin
   Result:='';
   Cfg:=GetConfigCache(false);
   if Cfg=nil then exit;
-  if Cfg.ConfigFiles=nil then exit;
-  for i:=0 to Cfg.ConfigFiles.Count-1 do begin
-    if Cfg.ConfigFiles[i].FileExists then begin
-      Result:=Cfg.ConfigFiles[i].Filename;
+  Files:=Cfg.ConfigFiles;
+  if Files=nil then exit;
+  for i:=0 to Files.Count-1 do begin
+    if Files[i].FileExists then begin
+      Result:=Files[i].Filename;
       exit;
     end;
   end;
+end;
+
+function TFPCUnitSetCache.GetUnitScopes: string;
+var
+  Cfg: TPCTargetConfigCache;
+  Scopes: TStrings;
+  Scope: String;
+  i: Integer;
+begin
+  Result:='';
+  Cfg:=GetConfigCache(false);
+  if Cfg=nil then exit;
+  Scopes:=Cfg.UnitScopes;
+  if Scopes=nil then exit;
+  for i:=0 to Scopes.Count-1 do begin
+    Scope:=Scopes[i];
+    if Scope='' then continue;
+    Result:=Result+';'+Scope;
+  end;
+  Delete(Result,1,1);
+end;
+
+function TFPCUnitSetCache.GetCompilerKind: TPascalCompiler;
+var
+  Cfg: TPCTargetConfigCache;
+begin
+  Cfg:=GetConfigCache(false);
+  if Cfg=nil then exit(pcFPC);
+  Result:=Cfg.Kind;
 end;
 
 initialization

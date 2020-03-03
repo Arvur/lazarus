@@ -69,6 +69,8 @@ type
 
   TSynGutterCodeFolding = class(TSynGutterPartBase)
   private
+    const cNodeOffset = 1;
+  private
     FMouseActionsCollapsed: TSynEditMouseInternalActions;
     FMouseActionsExpanded: TSynEditMouseInternalActions;
     FPopUp: TPopupMenu;
@@ -76,6 +78,7 @@ type
     FIsFoldHidePreviousLine: Boolean;
     FPopUpImageList: TSynGutterImageList;
     FReversePopMenuOrder: Boolean;
+    FPpiPenWidth: Integer;
     procedure FPopUpOnPopup(Sender: TObject);
     function GetMouseActionsCollapsed: TSynEditMouseActions;
     function GetMouseActionsExpanded: TSynEditMouseActions;
@@ -93,9 +96,11 @@ type
     procedure CreatePopUpMenuEntries(var APopUp: TPopupMenu; ALine: Integer); virtual;
     procedure PopClicked(Sender: TObject);
     function CreateMouseActions: TSynEditMouseInternalActions; override;
+    procedure SetWidth(const AValue: integer); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    procedure ScalePPI(const AScaleFactor: Double); override;
 
     procedure Paint(Canvas: TCanvas; AClip: TRect; FirstLine, LastLine: integer);
       override;
@@ -105,7 +110,6 @@ type
     function DoHandleMouseAction(AnAction: TSynEditMouseAction;
                                  var AnInfo: TSynEditMouseActionInfo): Boolean; override;
     procedure ResetMouseActions; override; // set mouse-actions according to current Options / may clear them
-    procedure ScalePPI(const AScaleFactor: Double); override;
   published
     property MarkupInfo;
     property MouseActionsExpanded: TSynEditMouseActions
@@ -355,6 +359,7 @@ end;
 
 constructor TSynGutterCodeFolding.Create(AOwner: TComponent);
 begin
+  FPpiPenWidth := 1;
   FReversePopMenuOrder := true;
   FMouseActionsExpanded := TSynEditMouseActionsGutterFoldExpanded.Create(self);
   FMouseActionsCollapsed := TSynEditMouseActionsGutterFoldCollapsed.Create(self);
@@ -379,6 +384,12 @@ begin
   inherited Destroy;
 end;
 
+procedure TSynGutterCodeFolding.ScalePPI(const AScaleFactor: Double);
+begin
+  inherited ScalePPI(AScaleFactor);
+  FPpiPenWidth := Max(1, Scale96ToFont(1));
+end;
+
 procedure TSynGutterCodeFolding.PopClicked(Sender: TObject);
 var
   inf: TFoldViewNodeInfo;
@@ -396,6 +407,14 @@ end;
 function TSynGutterCodeFolding.CreateMouseActions: TSynEditMouseInternalActions;
 begin
   Result := TSynEditMouseActionsGutterFold.Create(self);
+end;
+
+procedure TSynGutterCodeFolding.SetWidth(const AValue: integer);
+begin
+  if (Width=AValue) or (AutoSize) then exit;
+  inherited SetWidth(AValue);
+
+  FPpiPenWidth := Max(1, Scale96ToFont(1));
 end;
 
 procedure TSynGutterCodeFolding.DoOnGutterClick(X, Y : integer);
@@ -510,17 +529,11 @@ begin
   FMouseActionsCollapsed.ResetUserActions;
 end;
 
-procedure TSynGutterCodeFolding.ScalePPI(const AScaleFactor: Double);
-begin
-  AutoSize := False;
-  inherited ScalePPI(AScaleFactor);
-end;
-
 procedure TSynGutterCodeFolding.DrawNodeSymbol(Canvas: TCanvas; Rect: TRect;
   NodeType: TSynEditFoldLineCapability; SubType: TDrawNodeSymbolOptions);
 var
   Points: Array [0..3] of TPoint;
-  X, Y, LineBorder: Integer;
+  X, Y, LineBorder, c, LineBorderEnd: Integer;
   AliasMode: TAntialiasingMode;
   OdlCosmetic: Boolean;
 begin
@@ -535,10 +548,13 @@ begin
     Canvas.Pen.Style := psDash;
     Canvas.Pen.Cosmetic := False;
   end;
+  Canvas.Pen.JoinStyle := pjsMiter;
   Canvas.Rectangle(Rect);
   Canvas.Pen.Style := psSolid;
   Canvas.Pen.Cosmetic := OdlCosmetic;
-  LineBorder := Round((Rect.Right-Rect.Left) / 5);
+  c := Canvas.Pen.Width div 2;
+  LineBorder := Round((Rect.Right-Rect.Left) / 5) + c;
+  LineBorderEnd := LineBorder + c;
   X := (Rect.Left - 1 + Rect.Right) div 2;
   Y := (Rect.Top - 1 + Rect.Bottom) div 2;
 
@@ -547,7 +563,7 @@ begin
       begin
         // [-]
         Canvas.MoveTo(Rect.Left + LineBorder, Y);
-        Canvas.LineTo(Rect.Right - LineBorder, Y);
+        Canvas.LineTo(Rect.Right - LineBorderEnd, Y);
       end;
     cfHideStart:
       begin
@@ -559,9 +575,9 @@ begin
       begin
         // [+]
         Canvas.MoveTo(Rect.Left + LineBorder, Y);
-        Canvas.LineTo(Rect.Right - LineBorder, Y);
+        Canvas.LineTo(Rect.Right - LineBorderEnd, Y);
         Canvas.MoveTo(X, Rect.Top + LineBorder);
-        Canvas.LineTo(X, Rect.Bottom - LineBorder);
+        Canvas.LineTo(X, Rect.Bottom - LineBorderEnd);
       end;
     cfCollapsedHide:
       begin
@@ -594,18 +610,19 @@ begin
 end;
 
 function TSynGutterCodeFolding.PreferedWidth: Integer;
+const PrefFullWidth = 10;
 begin
-  Result := 10;
+  Result :=
+    Max(PrefFullWidth div 2, Min(PrefFullWidth, TCustomSynEdit(SynEdit).LineHeight - cNodeOffset));
 end;
 
 procedure TSynGutterCodeFolding.Paint(Canvas : TCanvas; AClip : TRect; FirstLine, LastLine : integer);
-const cNodeOffset = 1;
 var
   iLine: integer;
   rcLine: TRect;
   rcCodeFold: TRect;
   tmp: TSynEditFoldLineCapability;
-  LineHeight, LineOffset, BoxSize: Integer;
+  LineHeight, TextHeight, LineOffset, HalfBoxSize: Integer;
 
   procedure DrawNodeBox(rcCodeFold: TRect; NodeType: TSynEditFoldLineCapability);
   var
@@ -613,7 +630,9 @@ var
     ptCenter : TPoint;
     isPrevLine: Boolean;
     DrawOpts: TDrawNodeSymbolOptions;
+    c: Integer;
   begin
+
     isPrevLine := IsFoldHidePreviousLine(iLine);
     LineOffset := 0;
     DrawOpts := [];
@@ -625,17 +644,19 @@ var
 
     //center of the draw area
     ptCenter.X := (rcCodeFold.Left + rcCodeFold.Right) div 2;
-    ptCenter.Y := (rcCodeFold.Top + rcCodeFold.Bottom) div 2;
+    ptCenter.Y := Max(HalfBoxSize,
+                      (rcCodeFold.Top + Min(rcCodeFold.Top+TextHeight, rcCodeFold.Bottom)) div 2);
 
     // If belongs to line above, draw at very top
     if isPrevLine then
-      ptCenter.Y := rcCodeFold.Top + (BoxSize div 2) - 1;
+      ptCenter.Y := rcCodeFold.Top + (HalfBoxSize) - 1;
+    c := Canvas.Pen.Width div 2;
 
     //area of drawbox
-    rcNode.Left   := ptCenter.X - (BoxSize div 2) + 1;
-    rcNode.Right  := ptCenter.X + (BoxSize div 2);
-    rcNode.Top    := ptCenter.Y - (BoxSize div 2) + 1;
-    rcNode.Bottom := ptCenter.Y + (BoxSize div 2);
+    rcNode.Left   := ptCenter.X - (HalfBoxSize) + 1 + c;
+    rcNode.Right  := ptCenter.X + (HalfBoxSize) - c;
+    rcNode.Top    := ptCenter.Y - (HalfBoxSize) + 1 + c;
+    rcNode.Bottom := ptCenter.Y + (HalfBoxSize) - c;
 
     Canvas.Brush.Style := bsClear;
 
@@ -698,11 +719,12 @@ var
 begin
   if not Visible then exit;
   LineHeight := TCustomSynEdit(SynEdit).LineHeight;
+  TextHeight := LineHeight - Max(0, TCustomSynEdit(SynEdit).ExtraLineSpacing);
   LineOffset := 0;
   if (FirstLine > 0) and
      (FoldView.FoldType[FirstLine-1] - [cfFoldBody] = [cfFoldEnd]) then
     LineOffset := 2;
-  BoxSize := Min(Width, LineHeight - cNodeOffset*2);
+  HalfBoxSize := Min(Width, LineHeight - cNodeOffset*2) div 2;
 
   if MarkupInfo.Background <> clNone then
   begin
@@ -714,7 +736,8 @@ begin
   with Canvas do
   begin
     Pen.Color := MarkupInfo.Foreground;
-    Pen.Width := 1;
+    Pen.EndCap := pecSquare;
+    Pen.Width := Min(Max(1, Min(Width, HalfBoxSize*2 - cNodeOffset*2) div 5), FPpiPenWidth);
 
     rcLine.Bottom := AClip.Top;
     for iLine := FirstLine to LastLine do

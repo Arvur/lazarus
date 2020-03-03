@@ -109,9 +109,20 @@ SET PATCHDIR=%CD%\..\patches
 :: it should have the debugger with the name gdb.exe in its bin subdirectory
 SET GDBDIR=%LAZSVNBINDIR%\%FPCFULLTARGET%\gdb
 
+:: OPENSSL
+SET OPENSSLDIR=%LAZSVNBINDIR%\%FPCFULLTARGET%\openssl
+for /F %%i in ('dir /b "%OPENSSLDIR%\*.*"') do (
+   SET HASOPENSSL=1
+)
+
 :: Path to the directory containing the qtinf dll matching the qt4.pas from 
 :: http://users.pandora.be/Jan.Van.hijfte/qtforfpc/fpcqt4.html
 SET QTINFDIR=%LAZSVNBINDIR%\%FPCFULLTARGET%\qt
+
+SET QT5INFDIR=%LAZSVNBINDIR%\%FPCFULLTARGET%\qt5
+for /F %%i in ('dir /b "%QT5INFDIR%\*.*"') do (
+   SET HASQT5=1
+)
 
 ::---------------------------------------------------------------------
 FOR /F %%L IN ('%FPCBINDIR%\gdate.exe +%%Y%%m%%d') DO SET DATESTAMP=%%L
@@ -143,11 +154,11 @@ call build-fpc.bat
 :: INSTALL_BINDIR is set by build-fpc.bat
 %SVN% export -q %FPCBINDIR% %BUILDDIR%\fpcbins >> %LOGFILE%
 IF %ERRORLEVEL% NEQ 0 GOTO SVNERR
-:: copy from 32 bit, missing in 64ibt
-for %%T in ( cpp.exe gcc.exe windres.exe  ) DO copy %FPCSVNDIR%\install\binw32\%%T %INSTALL_BINDIR%\
 mv %BUILDDIR%\fpcbins\*.* %INSTALL_BINDIR%
 %FPCBINDIR%\rm -rf %BUILDDIR%\fpcbins
 del %INSTALL_BINDIR%\gdb.exe
+:: copy from 32 bit, missing in 64bit
+for %%T in ( cpp.exe gcc.exe windres.exe windres.h ) DO if not exist %INSTALL_BINDIR%\%%T copy %FPCSVNDIR%\install\binw32\%%T %INSTALL_BINDIR%\
 
 :: exit if no compiler has been made
 if not exist %INSTALL_BINDIR%\fpc.exe goto WARNING_NO_COMPILER_MADE

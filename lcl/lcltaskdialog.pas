@@ -126,7 +126,7 @@ interface
 {$MODE DELPHI}
 
 uses
-  LCLType, LCLStrConsts, LCLIntf,
+  LCLType, LCLStrConsts, LCLIntf, InterfaceBase,
   {$IFDEF MSWINDOWS}
   Windows, CommCtrl, Messages,
   {$ENDIF}
@@ -446,7 +446,7 @@ end;
 
 const
   TD_BTNMOD: array[TCommonButton] of Integer = (
-    mrOk, mrYes, mrNo, mrCancel, mrRetry, mrAbort);
+    mrOk, mrYes, mrNo, mrCancel, mrRetry, mrClose);
 
 function TD_BTNS(button: TCommonButton): pointer;
 begin
@@ -735,7 +735,7 @@ begin
   W := aWidth-X-8;
   R.Right := W;
   R.Bottom := result.Height;
-  DrawText(result.Canvas.Handle,PChar(Text),Length(Text),R,DT_CALCRECT or DT_WORDBREAK);//lazarus does not return box height on OSX (Lazarus bug), the height is stored in the rect in all cases, so we don't need to use the result
+  LCLIntf.DrawText(result.Canvas.Handle,PChar(Text),Length(Text),R,DT_CALCRECT or DT_WORDBREAK);//lazarus does not return box height on OSX (Lazarus bug), the height is stored in the rect in all cases, so we don't need to use the result
 
   result.SetBounds(X,Y,W,R.Bottom);
   result.Caption := Text;
@@ -785,6 +785,7 @@ end;
 var
   PngImg: TPortableNetworkGraphic;
   IconHandle: HICON;
+  ARadioOffset: integer;
 begin
   if (byte(aCommonButtons)=0) and (Buttons='') then begin
     aCommonButtons := [cbOk];
@@ -803,7 +804,8 @@ begin
       aParent := 0;
   Dialog.OnButtonClicked := aOnButtonClicked;
   {$ifdef MSWINDOWS}
-  if Assigned(TaskDialogIndirect) and not aNonNative and
+  if (WidgetSet.GetLCLCapability(lcNativeTaskDialog) = LCL_CAPABILITY_YES) and
+    Assigned(TaskDialogIndirect) and not aNonNative and
      not (tdfQuery in aFlags) and (Selection='') then begin
     Dialog.Emulated := False;
     // use Vista/Seven TaskDialog implementation (not tdfQuery nor Selection)
@@ -887,13 +889,15 @@ begin
       IconBorder := 10 else
       IconBorder := 24;
 
-     if (LAZ_ICONS[aDialogIcon]<>'') {$IFDEF MSWINDOWS}or (WIN_ICONS[aDialogIcon]<>nil){$ENDIF} then
+     if (LAZ_ICONS[aDialogIcon]<>'') {$IFDEF MSWINDOWS}or
+      ((WidgetSet.GetLCLCapability(lcNativeTaskDialog) = LCL_CAPABILITY_YES) and (WIN_ICONS[aDialogIcon]<>nil)){$ENDIF} then
      begin
       Image := TImage.Create(Dialog.Form);
       Image.Parent := Par;
       {$IFDEF MSWINDOWS}
-      if WIN_ICONS[aDialogIcon]<>nil then
-        IconHandle := LoadIcon(0,WIN_ICONS[aDialogIcon])
+      if (WidgetSet.GetLCLCapability(lcNativeTaskDialog) = LCL_CAPABILITY_YES) and
+        (WIN_ICONS[aDialogIcon]<>nil) then
+          IconHandle := LoadIcon(0,WIN_ICONS[aDialogIcon])
       else
         IconHandle := 0;
       {$ELSE}
@@ -983,6 +987,15 @@ begin
       end;
     // add radio buttons
     if Radios<>'' then
+    begin
+      {$IFDEF MSWINDOWS}
+      if WidgetSet.GetLCLCapability(lcNativeTaskDialog) = LCL_CAPABILITY_NO then
+        ARadioOffset := 1
+      else
+        ARadioOffset := 0;
+      {$ELSE}
+      ARadioOffset := 1;
+      {$ENDIF}
       with TStringList.Create do
       try
         Text := SysUtils.trim(Radios);
@@ -991,13 +1004,13 @@ begin
           Rad[i] := TRadioButton.Create(Dialog.Form);
           with Rad[i] do begin
             Parent := Par;
-            SetBounds(X+16,Y,aWidth-32-X,6-FontHeight);
+            SetBounds(X+16,Y,aWidth-32-X, (6-FontHeight) + ARadioOffset);
             Caption := NoCR(Strings[i]);
             if aHint<>'' then begin
               ShowHint := true;
               Hint := aHint; // note shown as Hint
             end;
-            inc(Y,Height);
+            inc(Y,Height + ARadioOffset);
             if (i=0) or (i+200=aRadioDef) then
               Checked := true;
           end;
@@ -1006,6 +1019,7 @@ begin
       finally
         Free;
       end;
+    end;
     // add selection list or query editor
     if Selection<>'' then begin
       List := TStringList.Create;
@@ -1085,7 +1099,7 @@ begin
       if XB<>0 then
         AddBevel else
         inc(Y,16);
-      if (LAZ_FOOTERICONS[aFooterIcon]<>'') {$IFDEF MSWINDOWS}or (WIN_FOOTERICONS[aFooterIcon]<>nil){$ENDIF} then
+      if (LAZ_FOOTERICONS[aFooterIcon]<>'') {$IFDEF MSWINDOWS}or ((WidgetSet.GetLCLCapability(lcNativeTaskDialog) = LCL_CAPABILITY_YES) and (WIN_FOOTERICONS[aFooterIcon]<>nil)){$ENDIF} then
       begin
         Image := TImage.Create(Dialog.Form);
         Image.Parent := Par;
@@ -1095,7 +1109,7 @@ begin
         try
           Bmp.Transparent := true;
           {$IFDEF MSWINDOWS}
-          if WIN_FOOTERICONS[aFooterIcon]<>nil then
+          if (WIN_FOOTERICONS[aFooterIcon]<>nil) and (WidgetSet.GetLCLCapability(lcNativeTaskDialog) = LCL_CAPABILITY_YES) then
           begin
             IconHandle := LoadIcon(0,WIN_FOOTERICONS[aFooterIcon]);
             if IconHandle<>0 then
@@ -1125,8 +1139,9 @@ begin
             else
             begin
               {$IFDEF MSWINDOWS}
-              DrawIconEx(Bmp.Canvas.Handle,0,0,Ico.Handle,Bmp.Width,Bmp.Height,0,
-                Bmp.Canvas.Brush.{%H-}Handle,DI_NORMAL);
+              if (WidgetSet.GetLCLCapability(lcNativeTaskDialog) = LCL_CAPABILITY_YES) then
+                DrawIconEx(Bmp.Canvas.Handle,0,0,Ico.Handle,Bmp.Width,Bmp.Height,0,
+                  Bmp.Canvas.Brush.{%H-}Handle,DI_NORMAL);
               {$ENDIF}
             end;
             Image.Picture.Bitmap := Bmp;
@@ -1191,8 +1206,11 @@ begin
       Dialog.Form.Element[element].Caption := CR(Text)
     {$IFDEF MSWINDOWS}
     else
-      SendMessageW(Dialog.Wnd,TDM_UPDATE_ELEMENT_TEXT,ord(element),
-        {%H-}NativeInt(PWideChar(_WS(Text))))
+    begin
+      if (WidgetSet.GetLCLCapability(lcNativeTaskDialog) = LCL_CAPABILITY_YES) then
+        SendMessageW(Dialog.Wnd,TDM_UPDATE_ELEMENT_TEXT,ord(element),
+          {%H-}NativeInt(PWideChar(_WS(Text))))
+    end
     {$ENDIF};
   tdeEdit:
     if Dialog.Emulated then

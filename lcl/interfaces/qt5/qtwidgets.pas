@@ -60,7 +60,8 @@ type
   {state is setted up only when LCL is doing changes.}
   TQtWidgetState = (qtwsColorUpdating, qtwsFontUpdating, qtwsSizeUpdating,
     qtwsPositionUpdating, qtwsInsideRightMouseButtonPressEvent,
-    qtwsHiddenInsideRightMouseButtonPressEvent);
+    qtwsHiddenInsideRightMouseButtonPressEvent,
+    qtwsForceSendMove {mantis #34589 , LM_MOVE from ScrollWindowEx(SW_SCROLLCHILDREN)});
 
   TQtWidgetStates = set of TQtWidgetState;
 
@@ -90,6 +91,7 @@ type
     procedure setSelection(const AStart, ALength: Integer);
     procedure setBorder(const ABorder: Boolean);
     procedure setCursorPosition(const ACursorPosition: Integer);
+    procedure setTextHint(const ATextHint: string);
     procedure Cut;
     procedure Copy;
     procedure Paste;
@@ -204,7 +206,7 @@ type
     function SlotMouseMove(Sender: QObjectH; Event: QEventH): Boolean; cdecl;
     function SlotMouseWheel(Sender: QObjectH; Event: QEventH): Boolean; cdecl;
     procedure SlotMove(Event: QEventH); cdecl;
-    procedure SlotPaintBg(Sender: QObjectH; Event: QEventH); cdecl;
+    procedure SlotPaintBg(Sender: QObjectH; Event: QEventH); cdecl; virtual;
     procedure SlotPaint(Sender: QObjectH; Event: QEventH); cdecl;
     procedure SlotResize(Event: QEventH); cdecl;
     function SlotContextMenu(Sender: QObjectH; Event: QEventH): Boolean; cdecl;
@@ -407,6 +409,7 @@ type
     function CreateWidget(const AParams: TCreateParams):QWidgetH; override;
   public
     function CanPaintBackground: Boolean; override;
+    procedure SlotPaintBg(Sender: QObjectH; Event: QEventH); cdecl; override;
     procedure setFocusPolicy(const APolicy: QtFocusPolicy); override;
     procedure setFrameStyle(p1: Integer);
     procedure setFrameShape(p1: QFrameShape);
@@ -460,7 +463,7 @@ type
     destructor Destroy; override;
     function EventFilter(Sender: QObjectH; Event: QEventH): Boolean; cdecl; override;
     procedure ViewPortEventFilter(event: QEventH; retval: PBoolean); cdecl;
-
+    procedure Destroyed; cdecl; override;
     procedure DestroyNotify(AWidget: TQtWidget); override;
   public
     function CanAdjustClientRectOnResize: Boolean; override;
@@ -846,6 +849,7 @@ type
     procedure setTextMargins(ARect: TRect);
   protected
     function CreateWidget(const AParams: TCreateParams):QWidgetH; override;
+    procedure setTextHint(const ATextHint: string);
   public
     function getAlignment: QtAlignment;
     function getCursorPosition: TPoint;
@@ -898,6 +902,7 @@ type
     procedure SetAcceptRichText(AValue: Boolean);
   protected
     function CreateWidget(const AParams: TCreateParams):QWidgetH; override;
+    procedure setTextHint(const ATextHint: string);
   public
     FList: TStrings;
     procedure Append(const AStr: WideString);
@@ -1044,6 +1049,7 @@ type
     procedure setReadOnly(const AReadOnly: Boolean);
     procedure setSelection(const AStart, ALength: Integer);
     procedure setCursorPosition(const ACursorPosition: Integer);
+    procedure setTextHint(const ATextHint: string);
     procedure Cut;
     procedure Copy;
     procedure Paste;
@@ -1118,6 +1124,7 @@ type
     procedure setSelection(const AStart, ALength: Integer);
     procedure setCursorPosition(const ACursorPosition: Integer);
     procedure SignalLineEditTextChanged(AnonParam1: PWideString); virtual; cdecl;
+    procedure setTextHint(const ATextHint: string);
     procedure Cut;
     procedure Copy;
     procedure Paste;
@@ -1848,6 +1855,7 @@ type
     FActivatedHook: QCalendarWidget_hookH;
     FSelectionChangedHook: QCalendarWidget_hookH;
     FCurrentPageChangedHook: QCalendarWidget_hookH;
+    function DeliverDayChanged(ADate: QDateH): boolean;
     function GetDateTime: TDateTime;
     procedure SetDateTime(const AValue: TDateTime);
     procedure SetSelectedDate(const AValue: QDateH);
@@ -2090,7 +2098,7 @@ begin
   // Sets it's initial properties
 
   // set focus policy
-  if (LCLObject <> nil) then
+  if Assigned(LCLObject) then
   begin
     if (Self is TQtMainWindow) and
       (
@@ -2127,25 +2135,27 @@ begin
       else
         setFocusPolicy(QtClickFocus);
     end;
+
     if LCLObject.Perform(LM_NCHITTEST, 0, 0)=HTTRANSPARENT then
     begin
       setAttribute(QtWA_TransparentForMouseEvents);
       setWindowFlags(windowFlags or QtWindowTransparentForInput);
     end;
+
+    if (csDesigning in LCLObject.ComponentState) and not
+       (Self is TQtMainWindow) and
+       HasPaint and
+       getAutoFillBackground or
+       ((csDesigning in LCLObject.ComponentState) and
+        (ClassType = TQtTabWidget)) then
+      setAutoFillBackground(False);
   end;
 
-  if (csDesigning in LCLObject.ComponentState) and not
-     (Self is TQtMainWindow) and
-     HasPaint and
-     getAutoFillBackground or
-     ((csDesigning in LCLObject.ComponentState) and
-      (ClassType = TQtTabWidget)) then
-    setAutoFillBackground(False);
 
   // Set mouse move messages policy
   QWidget_setMouseTracking(Widget, True);
 
-  if FWidgetNeedFontColorInitialization then
+  if Assigned(LCLObject) and FWidgetNeedFontColorInitialization then
     setInitialFontColor(LCLObject);
   if (FParams.Style and WS_VISIBLE) = 0 then
     QWidget_hide(Widget)
@@ -3044,8 +3054,8 @@ var
     // Enter, Return and Backspace should be sent to LCL in UTF8KeyPress,
     // so skip them here
 
-    Result :=
-      ((AQtKey >= QtKey_Escape) and (AQtKey <= QtKey_Backtab)) or
+    Result := (AQtKey = QtKey_Backtab) or // issue #35448
+      // ((AQtKey >= QtKey_Escape) and (AQtKey <= QtKey_Backtab)) or
       ((AQtKey >= QtKey_Insert) and (AQtKey <= QtKey_Clear)) or
       ((AQtKey >= QtKey_Home) and (AQtKey <= QtKey_PageDown)) or
       ((AQtKey >= QtKey_F1) and (AQtKey <= QtKey_Direction_L)) or
@@ -3324,6 +3334,20 @@ begin
         ScanCode := ScanCode + 39;
       KeyMsg.CharCode := Word(ScanCode);
       if (Modifiers = QtShiftModifier or QtControlModifier) then
+        Text := '';
+    end;
+  end else
+  if (Modifiers = QtShiftModifier or QtAltModifier) then
+  begin
+    ScanCode := QKeyEvent_nativeScanCode(QKeyEventH(Event));
+    if (length(Text) = 1) and (ScanCode in [10..19]) then
+    begin
+      if ScanCode = 19 then
+        ScanCode := 48
+      else
+        ScanCode := ScanCode + 39;
+      KeyMsg.CharCode := Word(ScanCode);
+      if (Modifiers = QtShiftModifier or QtAltModifier) then
         Text := '';
     end;
   end;
@@ -3738,7 +3762,7 @@ begin
     if AIsKeyEvent then
       Result := Result or KF_ALTDOWN
     else
-      Result := Result or $20000000;
+      Result := Result or MK_ALT;
   end;
     // $20000000;
   { TODO: add support for ALT, META and NUMKEYPAD }
@@ -3886,7 +3910,7 @@ begin
     Msg.State := [ssShift];
   if (ModifierState and MK_CONTROL) <> 0 then
     Msg.State := [ssCtrl] + Msg.State;
-  if (ModifierState and $20000000) <> 0 then
+  if (ModifierState and MK_ALT) <> 0 then
     Msg.State := [ssAlt] + Msg.State;
 
   LastMouse.WinControl := LCLObject;
@@ -3969,6 +3993,7 @@ var
   {$ENDIF}
   {$ENDIF}
   FrameRect, WindowRect: TRect;
+  ForceSendMove: boolean;
 begin
   {$ifdef VerboseQt}
     WriteLn('TQtWidget.SlotMove');
@@ -3977,9 +4002,27 @@ begin
   if QtWidgetSet.IsWidgetAtCache(HWND(Self)) then
     QtWidgetSet.InvalidateWidgetAtCache;
   // do not loop with LCL
-  if InUpdate then
+  if InUpdate {$ifdef darwin} and not (qtwsForceSendMove in WidgetState){$endif} then
     exit;
 
+  ForceSendMove := False; {mantis #34589}
+  if not QEvent_spontaneous(Event) and Assigned(LCLObject) and Assigned(LCLObject.Parent) then
+    // only children of 1st level should move.
+    ForceSendMove := qtwsForceSendMove in TQtWidget(LCLObject.Parent.Handle).WidgetState;
+
+  {$ifdef darwin}
+  // issue #34698
+  if not ForceSendMove and not QEvent_spontaneous(Event) and Assigned(LCLObject) and
+    (Self is TQtMainWindow) and not TQtMainWindow(Self).IsMdiChild then
+  begin
+    ForceSendMove := qtwsForceSendMove in WidgetState;
+    Exclude(FWidgetState, qtwsForceSendMove);
+  end;
+  {$endif}
+
+  if ForceSendMove then
+    // send message mantis #34589
+  else
   if not QEvent_spontaneous(Event) or
     (not QEvent_spontaneous(Event) and
     ((Self is TQtMainWindow) and not
@@ -7047,7 +7090,13 @@ begin
       QMdiSubWindowH(Widget))
   else
     inherited Activate;
+  {$IFDEF DARWIN}
+  QWidget_raise(Widget);
+  {$ENDIF}
   {$IFDEF HASX11}
+  if IsWayland then
+    QWidget_raise(Widget)
+  else
   if (QtWidgetSet.WindowManagerName = 'xfwm4') and not IsMDIChild and
     QWidget_isModal(Widget) then
   begin
@@ -7453,7 +7502,10 @@ begin
           begin
             if (MDIChildArea.ActiveSubWindow = nil) or
               (MDIChildArea.ActiveSubWindow = Widget) then
-              QMdiArea_activatePreviousSubWindow(QMDIAreaH(MDIChildArea.Widget));
+            begin
+              if not QWidget_isVisibleTo(Widget, MDIChildArea.Widget) then
+                QMdiArea_activatePreviousSubWindow(QMDIAreaH(MDIChildArea.Widget));
+            end;
           end;
         end;
       end;
@@ -7788,6 +7840,11 @@ begin
       end;
       QEventResize:
       begin
+        // issue #34698
+        {$ifdef darwin}
+        if (QResizeEvent_oldSize(QResizeEventH(Event))^.cx = -1) and (QResizeEvent_oldSize(QResizeEventH(Event))^.cy = -1) then
+          include(FWidgetState, qtwsForceSendMove);
+        {$endif}
         {$IFDEF QTSCROLLABLEFORMS}
         if not Assigned(ScrollArea) then
         {$ENDIF}
@@ -8562,9 +8619,11 @@ begin
     R1 := Rect(0, 0, 0, 0);
   Result := R;
   OffsetRect(Result, -Result.Left, -Result.Top);
+  {$IFNDEF HASX11}
   if testAttribute(QtWA_Mapped) and QWidget_testAttribute(FCentralWidget, QtWA_Mapped) then
     QWidget_rect(FCentralWidget, @Result)
   else
+  {$ENDIF}
   begin
     if Assigned(FCentralWidget) and not IsRectEmpty(R1) then
     begin
@@ -8706,11 +8765,34 @@ end;
 function TQtFrame.CanPaintBackground: Boolean;
 begin
   Result := CanSendLCLMessage and getEnabled and
-    (LCLObject.Color <> clBackground);
-  if Result and (LCLObject is TCustomPanel) then
+    (LCLObject.Color <> clBackground) and (LCLObject.Color <> clDefault);
+end;
+
+procedure TQtFrame.SlotPaintBg(Sender: QObjectH; Event: QEventH); cdecl;
+var
+  Painter: QPainterH;
+  Brush: QBrushH;
+  Color: TQColor;
+  R: TRect;
+begin
+  if CanSendLCLMessage and (LCLObject is TWinControl) then
   begin
-    Result := (TCustomPanel(LCLObject).BevelInner = bvNone) and
-     (TCustomPanel(LCLObject).BevelOuter = bvNone);
+    if LCLObject.Color = clDefault then
+      Color := Palette.DefaultColor
+    else
+      ColorRefToTQColor(ColorToRGB(LCLObject.Color), Color);
+    Painter := QPainter_create(QWidget_to_QPaintDevice(QWidgetH(Sender)));
+    Brush := QBrush_create(@Color, QtSolidPattern);
+    try
+      QPaintEvent_rect(QPaintEventH(Event), @R);
+      QPainter_fillRect(Painter, @R, Brush);
+      if (LCLObject is TCustomPanel) and (TCustomPanel(LCLObject).BorderStyle <> bsNone) then
+        q_DrawShadePanel(Painter, PRect(@R), Palette.Handle, True, 2);
+      QPainter_end(Painter);
+    finally
+      QBrush_destroy(Brush);
+      QPainter_destroy(Painter);
+    end;
   end;
 end;
 
@@ -9666,12 +9748,17 @@ begin
     CachedSelectionLen := -1;
   end;
 
+  if (ChildOfComplexWidget = ccwComboBox) and (QEvent_type(Event) = QEventMove) then
+    exit;
+
   if (ChildOfComplexWidget = ccwComboBox) and
     ((QEvent_type(Event) = QEventPaint) or (QEvent_type(Event) = QEventResize))
     and (LCLObject.HandleAllocated) then
   begin
     Result := TQtComboBox(LCLObject.Handle).InUpdate or
       (csDesigning in LCLObject.ComponentState);
+    if (QEvent_type(Event) = QEventPaint) and (csDesigning in LCLObject.ComponentState) then
+      QObject_event(Sender, Event);
     if Result then
       QEvent_ignore(Event)
     else
@@ -9741,6 +9828,14 @@ end;
 procedure TQtLineEdit.setText(const AText: WideString);
 begin
   QLineEdit_setText(QLineEditH(Widget), @AText);
+end;
+
+procedure TQtLineEdit.setTextHint(const ATextHint: string);
+var
+  W: WideString;
+begin
+  W := UTF8ToUTF16(ATextHint);
+  QLineEdit_setPlaceholderText(QLineEditH(Widget), @W);
 end;
 
 procedure TQtLineEdit.setTextMargins(ARect: TRect);
@@ -10091,6 +10186,14 @@ begin
   QTextEdit_setPlainText(QTextEditH(Widget), @AText);
 end;
 
+procedure TQtTextEdit.setTextHint(const ATextHint: string);
+var
+  W: WideString;
+begin
+  W := UTF8ToUTF16(ATextHint);
+  QTextEdit_setPlaceholderText(QTextEditH(Widget), @W);
+end;
+
 procedure TQtTextEdit.setReadOnly(const AReadOnly: Boolean);
 begin
   QTextEdit_setReadOnly(QTextEditH(Widget), AReadOnly);
@@ -10137,7 +10240,7 @@ begin
   QTextEdit_undo(QTextEditH(Widget));
 end;
 
-procedure TQtTextEdit.SetAlignment(const AAlignment: QtAlignment);
+procedure TQtTextEdit.setAlignment(const AAlignment: QtAlignment);
 var
   TextCursor: QTextCursorH;
 begin
@@ -11089,6 +11192,12 @@ begin
     LineEdit.setCursorPosition(ACursorPosition);
 end;
 
+procedure TQtComboBox.setTextHint(const ATextHint: string);
+begin
+  if getEditable then
+    LineEdit.setTextHint(ATextHint);
+end;
+
 procedure TQtComboBox.Cut;
 begin
   if LineEdit <> nil then
@@ -11742,6 +11851,17 @@ begin
   Msg.Msg := CM_TEXTCHANGED;
   if not InUpdate then
     DeliverMessage(Msg);
+end;
+
+procedure TQtAbstractSpinBox.setTextHint(const ATextHint: string);
+var
+  W: WideString;
+begin
+  if Assigned(FLineEdit) and not (csDesigning in LCLObject.ComponentState) then
+  begin
+    W := UTF8ToUTF16(ATextHint);
+    QLineEdit_setPlaceholderText(FLineEdit, @W);
+  end;
 end;
 
 function TQtAbstractSpinBox.CreateWidget(const AParams: TCreateParams): QWidgetH;
@@ -12414,7 +12534,7 @@ var
   TopItem: Integer;
   i: Integer;
   VHeight: Integer; // viewport height
-  RowHeight: Integer;
+  RowHeight, AImagesWidth: Integer;
   item: QListWidgetItemH;
   v, v2, v3: QVariantH;
   WStr: WideString;
@@ -12423,8 +12543,9 @@ var
   AImageIndex: TImageIndex;
   Bmp: TBitmap;
   AIcon: QIconH;
-  AOk: Boolean;
+  AOk, AStateImages: Boolean;
   ASize: TSize;
+  ImgListRes: TScaledImageListResolution;
 begin
 
   {do not set items during design time}
@@ -12460,23 +12581,40 @@ begin
         if (TopItem < 0) or (TopItem > TCustomListViewHack(LCLObject).Items.Count - 1) then
           break;
 
+        AStateImages := False;
         ImgList := TCustomListViewHack(LCLObject).SmallImages;
         if Assigned(ImgList) then
+          AImagesWidth := TCustomListViewHack(LCLObject).SmallImagesWidth
+        else
         begin
+          ImgList := TCustomListViewHack(LCLObject).StateImages;
+          if Assigned(ImgList) then
+            AImagesWidth := TCustomListViewHack(LCLObject).StateImagesWidth;
+          AStateImages := True;
+        end;
+        if Assigned(ImgList) then
+        begin
+          ImgListRes := ImgList.ResolutionForPPI[
+            AImagesWidth,
+            TCustomListViewHack(LCLObject).Font.PixelsPerInch,
+            TCustomListViewHack(LCLObject).GetCanvasScaleFactor];
           QListWidgetItem_sizeHint(item, @ASize);
-          if (ASize.cx <> ImgList.Width) or (ASize.cx <> ImgList.Height) then
+          if (ASize.cx <> ImgListRes.Width) or (ASize.cx <> ImgListRes.Height) then
           begin
-            ASize.cx := ImgList.Width;
-            ASize.cy := ImgList.Height;
+            ASize.cx := ImgListRes.Width;
+            ASize.cy := ImgListRes.Height;
             QListWidgetItem_setSizeHint(item, @ASize);
           end;
-          AImageIndex := TCustomListViewHack(LCLObject).Items[TopItem].ImageIndex;
-          if (ImgList.Count > 0) and
-            ((AImageIndex >= 0) and (AImageIndex < ImgList.Count)) then
+          if AStateImages then
+            AImageIndex := TCustomListViewHack(LCLObject).Items[TopItem].StateIndex
+          else
+            AImageIndex := TCustomListViewHack(LCLObject).Items[TopItem].ImageIndex;
+          if (ImgListRes.Count > 0) and
+            ((AImageIndex >= 0) and (AImageIndex < ImgListRes.Count)) then
           begin
             Bmp := TBitmap.Create;
             try
-              ImgList.GetBitmap(AImageIndex, Bmp);
+              ImgListRes.GetBitmap(AImageIndex, Bmp);
               v2 := QVariant_create;
               QListWidgetItem_data(item, v2, QtListViewOwnerDataRole);
               if not QVariant_isNull(v2) then
@@ -12778,6 +12916,7 @@ var
   ALCLEvent: QLCLMessageEventH;
   R: TRect;
   DC: TQtDeviceContext;
+  AMsgData: PtrUInt;
 
   procedure SendEventToParent;
   begin
@@ -12825,6 +12964,8 @@ begin
           QListWidgetItem_checkState(Item)) then
         begin
           MousePos := QtPoint(0, 0); // shutup compiler
+          if QLCLMessageEvent_getMsg(ALCLEvent) > 0 then
+            QListWidgetItem_setCheckState(Item, GetItemLastCheckState(Item));
           HandleCheckChangedEvent(MousePos, Item, Event);
         end;
       end else
@@ -12859,7 +13000,11 @@ begin
             Item := itemAt(MousePos.x, MousePos.y);
             if (Item <> nil) then
             begin
-              ALCLEvent := QLCLMessageEvent_create(LCLQt_ItemViewAfterMouseRelease, 0,
+              if Assigned(LCLObject) and LCLObject.Dragging then
+                AMsgData := Ord(QListWidgetItem_checkState(Item)) + 1
+              else
+                AMsgData := 0;
+              ALCLEvent := QLCLMessageEvent_create(LCLQt_ItemViewAfterMouseRelease, AMsgData,
                 PtrUInt(Item), PtrUInt(Item), 0);
               QCoreApplication_postEvent(Sender, ALCLEvent);
             end;
@@ -14442,6 +14587,7 @@ var
   R: TRect;
   DC: TQtDeviceContext;
   x: Integer;
+  AMsgData: PtrUInt;
 begin
   Result := False;
   QEvent_accept(Event);
@@ -14475,6 +14621,8 @@ begin
           QTreeWidgetItem_checkState(Item, 0)) then
         begin
           MousePos := QtPoint(0, 0); // shutup compiler
+          if QLCLMessageEvent_getMsg(ALCLEvent) > 0 then
+            QTreeWidgetItem_setCheckState(Item, 0, GetItemLastCheckStateInternal(Item));
           HandleCheckChangedEvent(MousePos, Item, Event);
         end;
       end else
@@ -14519,13 +14667,34 @@ begin
             if Item <> nil then
             begin
               Item := topLevelItem(GetRow(Item));
-              ALCLEvent := QLCLMessageEvent_create(LCLQt_ItemViewAfterMouseRelease, 0,
+              if Assigned(LCLObject) and LCLObject.Dragging then
+                AMsgData := Ord(QTreeWidgetItem_checkState(Item, 0)) + 1
+              else
+                AMsgData := 0;
+              ALCLEvent := QLCLMessageEvent_create(LCLQt_ItemViewAfterMouseRelease, AMsgData,
                 PtrUInt(Item), PtrUInt(Item), 0);
               QCoreApplication_postEvent(Sender, ALCLEvent);
             end;
           end;
           Result := inherited itemViewViewportEventFilter(Sender, Event);
         end;
+      end else
+      if (QEvent_type(Event) = QEventMouseMove) and (LCLObject <> nil) then
+      begin
+        W := QTreeView_header(QTreeViewH(Widget));
+        if QWidget_isVisible(W) and QWidget_isVisibleTo(W, Widget) then
+        begin
+          BeginEventProcessing;
+          try
+            Result := SlotMouseMove(Sender, Event);
+            // allow dnd inside listview (vsReport and vsList only).
+            if not Result and Assigned(LCLObject) and LCLObject.Dragging then
+              Result := True;
+          finally
+            EndEventProcessing;
+          end;
+        end else
+          Result := inherited itemViewViewportEventFilter(Sender, Event);
       end;
     end else
     begin
@@ -14561,7 +14730,7 @@ var
   j: Integer;
   ChildCount: Integer;
   VHeight: Integer; // viewport height
-  RowHeight: Integer;
+  RowHeight, AImagesWidth: Integer;
   item: QTreeWidgetItemH;
   itemChild: QTreeWidgetItemH;
   v,v2,v3: QVariantH;
@@ -14570,9 +14739,10 @@ var
   ImgList: TCustomImageList;
   AImageIndex: TImageIndex;
   Bmp: TBitmap;
-  AOk: Boolean;
+  AOk, AStateImages: Boolean;
   AIcon: QIconH;
   ASize: TSize;
+  ImgListRes: TScaledImageListResolution;
 begin
   {do not set items during design time}
   if csDesigning in LCLObject.ComponentState then
@@ -14624,24 +14794,41 @@ begin
             QVariant_destroy(v2);
           end;
 
+          AStateImages := False;
           // set imageindex, part of comment in issue #27233
           ImgList := TCustomListViewHack(LCLObject).SmallImages;
           if Assigned(ImgList) then
+            AImagesWidth := TCustomListViewHack(LCLObject).SmallImagesWidth
+          else
           begin
+            ImgList := TCustomListViewHack(LCLObject).StateImages;
+            if Assigned(ImgList) then
+              AImagesWidth := TCustomListViewHack(LCLObject).StateImagesWidth;
+            AStateImages := True;
+          end;
+          if Assigned(ImgList) then
+          begin
+            ImgListRes := ImgList.ResolutionForPPI[
+              AImagesWidth,
+              TCustomListViewHack(LCLObject).Font.PixelsPerInch,
+              TCustomListViewHack(LCLObject).GetCanvasScaleFactor];
             QTreeWidgetItem_sizeHint(item, @ASize, 0);
-            if (ASize.cx <> ImgList.Width) or (ASize.cx <> ImgList.Height) then
+            if (ASize.cx <> ImgListRes.Width) or (ASize.cx <> ImgListRes.Height) then
             begin
-              ASize.cx := ImgList.Width;
-              ASize.cy := ImgList.Height;
+              ASize.cx := ImgListRes.Width;
+              ASize.cy := ImgListRes.Height;
               QTreeWidgetItem_setSizeHint(item, 0, @ASize);
             end;
-            AImageIndex := TCustomListViewHack(LCLObject).Items[TopItem].ImageIndex;
-            if (ImgList.Count > 0) and
-              ((AImageIndex >= 0) and (AImageIndex < ImgList.Count)) then
+            if AStateImages then
+              AImageIndex := TCustomListViewHack(LCLObject).Items[TopItem].StateIndex
+            else
+              AImageIndex := TCustomListViewHack(LCLObject).Items[TopItem].ImageIndex;
+            if (ImgListRes.Count > 0) and
+              ((AImageIndex >= 0) and (AImageIndex < ImgListRes.Count)) then
             begin
               Bmp := TBitmap.Create;
               try
-                ImgList.GetBitmap(AImageIndex, Bmp);
+                ImgListRes.GetBitmap(AImageIndex, Bmp);
                 v2 := QVariant_create;
                 QTreeWidgetItem_data(item, v2, 0, QtListViewOwnerDataRole);
                 if not QVariant_isNull(v2) then
@@ -14938,6 +15125,7 @@ begin
     FHeader := TQtHeaderView.CreateFrom(LCLObject, QTreeView_header(QTreeViewH(Widget)));
     FHeader.FOwner := Self;
     FHeader.FChildOfComplexWidget := ccwTreeWidget;
+    QHeaderView_setSectionsMovable(QHeaderViewH(FHeader.Widget), False);
     {$IFDEF TEST_QT_SORTING}
     FSortChanged := QHeaderView_hook_create(FHeader.Widget);
     QHeaderView_hook_hook_sortIndicatorChanged(FSortChanged,
@@ -16815,6 +17003,8 @@ begin
   FHasPaint := False;
   FDialog := ADialog;
   Widget := CreateWidget(parent, f);
+  setProperty(Widget, 'lclwidget', Int64(PtrUInt(Self)));
+  QtWidgetSet.AddHandle(Self);
 end;
 
 procedure TQtDialog.AttachEvents;
@@ -16939,6 +17129,7 @@ begin
       end;
       Result := inherited EventFilter(Sender, Event);
     end;
+    QEventMove: ; // do not flood LCL with viewport position
     QEventResize:
     begin
       // immediate update clientRect !
@@ -17510,6 +17701,12 @@ begin
   end;
 end;
 
+procedure TQtCustomControl.Destroyed; cdecl;
+begin
+  viewportDelete;
+  inherited Destroyed;
+end;
+
 procedure TQtCustomControl.DestroyNotify(AWidget: TQtWidget);
 begin
   if AWidget = FCornerWidget then
@@ -17804,16 +18001,24 @@ end;
 function TQtCalendar.AreaViewEventFilter(Sender: QObjectH; Event: QEventH
   ): Boolean; cdecl;
 var
-  AKey: PtrInt;
+  ADate: QDateH;
+  AKey: Integer;
 begin
   Result := False;
   if (LCLObject <> nil) and ((QEvent_type(Event) = QEventKeyPress) or
     (QEvent_type(Event) = QEventKeyRelease)) then
   begin
     AKey := QKeyEvent_key(QKeyEventH(Event));
-    if (AKey <> QtKey_Up) and (AKey <> QtKey_Left) and (AKey <> QtKey_Right) and
-      (AKey <> QtKey_Down) then
     Result := SlotKey(Widget, Event);
+    if (QEvent_type(Event) = QEventKeyRelease) and
+      ( (AKey = QtKey_Up) or (AKey = QtKey_Left) or
+        (AKey = QtKey_Right) or (AKey = QtKey_Down) ) then
+    begin
+      ADate := QDate_create();
+      QCalendarWidget_selectedDate(QCalendarWidgetH(Widget), ADate);
+      DeliverDayChanged(ADate);
+      QDate_destroy(ADate);
+    end;
   end;
 end;
 
@@ -17909,6 +18114,25 @@ begin
   QCalendarWidget_setSelectionMode(QCalendarWidgetH(Widget), ASelMode);
 end;
 
+function TQtCalendar.DeliverDayChanged(ADate: QDateH): boolean;
+var
+  y,m,d: Integer;
+  Msg: TLMessage;
+begin
+  Result := False;
+  FillChar(Msg{%H-}, SizeOf(Msg), #0);
+  Msg.Msg := LM_DAYCHANGED;
+  y := QDate_year(ADate);
+  m := QDate_month(ADate);
+  d := QDate_day(ADate);
+  Result := (y <> aYear) or (m <> aMonth) or (d <> aDay);
+  if Result then
+    DeliverMessage(Msg);
+  aYear := y;
+  aMonth := m;
+  aDay := d;
+end;
+
 {------------------------------------------------------------------------------
   Function: TQtCalendar.SignalActivated
   Params:  None
@@ -17917,8 +18141,6 @@ end;
  ------------------------------------------------------------------------------}
 procedure TQtCalendar.SignalActivated(ADate: QDateH); cdecl;
 var
-  y,m,d: Integer;
-  Msg: TLMMouse;
   AKeyEvent: QKeyEventH;
   AMouseEvent: QMouseEventH;
   APos, AGlobalPos: TQtPoint;
@@ -17928,16 +18150,7 @@ begin
   writeln('TQtCalendar.signalActivated ');
   {$ENDIF}
 
-  FillChar(Msg{%H-}, SizeOf(Msg), #0);
-  Msg.Msg := LM_DAYCHANGED;
-  y := QDate_year(ADate);
-  m := QDate_month(ADate);
-  d := QDate_day(ADate);
-  if (y <> aYear) or (m <> aMonth) or (d <> aDay) then
-    DeliverMessage(Msg);
-  aYear := y;
-  aMonth := m;
-  aDay := d;
+  DeliverDayChanged(ADate);
 
   {avoid OnAcceptDate() to trigger twice if doubleclicked
    via FMouseDoubleClicked, also send dummy Key events to LCL when item
@@ -17978,8 +18191,6 @@ end;
  ------------------------------------------------------------------------------}
 procedure TQtCalendar.SignalClicked(ADate: QDateH); cdecl;
 var
-  Msg: TLMessage;
-  y, m, d: Integer;
   AEvent: QMouseEventH;
   APos, AGlobalPos: TQtPoint;
   APosF, AGlobalPosF: TQtPointF;
@@ -17987,17 +18198,7 @@ begin
   {$IFDEF VerboseQt}
   writeln('TQtCalendar.signalClicked');
   {$ENDIF}
-  FillChar(Msg{%H-}, SizeOf(Msg), #0);
-  Msg.Msg := LM_DAYCHANGED;
-  y := QDate_year(ADate);
-  m := QDate_month(ADate);
-  d := QDate_day(ADate);
-  if (y <> aYear) or (m <> aMonth) or (d <> aDay) then
-    DeliverMessage(Msg);
-
-  aYear := y;
-  aMonth := m;
-  aDay := d;
+  DeliverDayChanged(ADate);
 
   if QWidget_underMouse(Widget) then
   begin
@@ -19721,6 +19922,8 @@ begin
     AParent := QApplication_activeWindow;
   {$ENDIF}
   Widget := CreateWidget(AParent);
+  setProperty(Widget, 'lclwidget', Int64(PtrUInt(Self)));
+  QtWidgetSet.AddHandle(Self);
 end;
 
 procedure TQtMessageBox.AttachEvents;

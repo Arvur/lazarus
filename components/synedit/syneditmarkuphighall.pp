@@ -26,9 +26,14 @@ unit SynEditMarkupHighAll;
 interface
 
 uses
-  Classes, SysUtils, ExtCtrls, SynEditMarkup, SynEditTypes, SynEditSearch,
-  SynEditMiscClasses, Controls, LCLProc, SynEditHighlighter, SynEditPointClasses,
-  SynEditMiscProcs, SynEditFoldedView, SynEditTextBase, LazClasses, LazUTF8;
+  Classes, SysUtils,
+  // LCL
+  LCLProc, Controls, ExtCtrls,
+  // LazUtils
+  LazClasses, LazUTF8, LazMethodList,
+  // SynEdit
+  SynEditMarkup, SynEditTypes, SynEditSearch, SynEditMiscClasses, SynEditHighlighter,
+  SynEditPointClasses, SynEditMiscProcs, SynEditFoldedView, SynEditTextBase;
 
 type
 
@@ -796,7 +801,7 @@ begin
   end else begin
     if l > 0 then
       Result := CompareByte(s1[1], s2[1], l);
-    if Result = 0 then
+    if (Result = 0) and (Length(s2) > l) then
       Result := -1;
   end;
 end;

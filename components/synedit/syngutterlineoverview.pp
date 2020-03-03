@@ -30,7 +30,7 @@ uses
   Classes, Graphics, Controls, LCLProc, LCLType, LCLIntf, Forms, LMessages,
   FPCanvas, sysutils, math, SynGutterBase, SynEditTypes, LazSynEditText,
   SynEditTextBuffer, SynEditMarks, SynEditMiscClasses, SynEditFoldedView,
-  SynEditMouseCmds;
+  SynEditMouseCmds, LazUtilities;
 
 type
   TSynGutterLineOverview = class;
@@ -290,6 +290,7 @@ type
     FLineMarks: TSynGutterLOvLineMarksList;
     FMouseActionsForMarks: TSynEditMouseInternalActions;
     FState: TSynGutterLOvStateFlags;
+    FPpiPenWidth: Integer;
     function GetMarkHeight: Integer;
     function GetMouseActionsForMarks: TSynEditMouseActions;
     procedure SetMarkHeight(const AValue: Integer);
@@ -348,9 +349,7 @@ begin
   if Result <> 0 then exit;
   Result := Column - Other.Column;
   if Result <> 0 then exit;
-  {$PUSH}{$Q-} // Overflow is allowed to occur
-  Result := Integer(PtrUint(self) - PtrUInt(Other));
-  {$POP}
+  Result := ComparePointers(Pointer(self), Pointer(Other));
 end;
 
 function TSynGutterLOvMark.CompareByLine(Other: TSynGutterLOvMark): Integer;
@@ -361,9 +360,7 @@ begin
   if Result <> 0 then exit;
   Result := Priority - Other.Priority;
   if Result <> 0 then exit;
-  {$PUSH}{$Q-} // Overflow is allowed to occur
-  Result := Integer(PtrUint(self) - PtrUInt(Other));
-  {$POP}
+  Result := ComparePointers(Pointer(self), Pointer(Other));
 end;
 
 procedure TSynGutterLOvMark.DoChange;
@@ -462,9 +459,7 @@ function TSynGutterLOvLineMarks.Compare(Other: TSynGutterLOvLineMarks): Integer;
 begin
   Result := PixLine - Other.PixLine;
   if Result <> 0 then exit;
-  {$PUSH}{$Q-} // Overflow is allowed to occur
-  Result := PtrUint(self) - PtrUInt(Other);
-  {$POP}
+  Result := ComparePointers(Pointer(self), Pointer(Other));
 end;
 
 constructor TSynGutterLOvLineMarks.Create;
@@ -902,14 +897,10 @@ var
 begin
   if ALine < 0 then exit(-1);
   c := Max(1, TextBuffer.Count);
-  if c = 0 then
-    Result := -1
-  else begin
-    Result := (Int64(ALine - 1) * Int64(Height)) div c;
-    n      := (Int64(ALine)     * Int64(Height)) div c - 1; // next line - 1 pix
-    if n > Result then
-      Result := n;
-  end;
+  Result := (Int64(ALine - 1) * Int64(Height)) div c;
+  n      := (Int64(ALine)     * Int64(Height)) div c - 1; // next line - 1 pix
+  if n > Result then
+    Result := n;
 end;
 
 function TSynGutterLineOverviewProvider.PixelLineToText(ALineIdx: Integer): Integer;
@@ -1308,8 +1299,6 @@ constructor TSynChildWinControl.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   BorderStyle := bsNone;
-  if AOwner is TWinControl then
-    DoubleBuffered := TWinControl(AOwner).DoubleBuffered;
 end;
 
 { TSynGutterLineOverview }
@@ -1321,7 +1310,6 @@ begin
   TSynEditStringList(TextBuffer).AddNotifyHandler(senrTextBufferChanged, @BufferChanged);
   FWinControl := TSynChildWinControl.Create(Self);
   FWinControl.Parent := SynEdit;
-  FWinControl.DoubleBuffered := SynEdit.DoubleBuffered;
   FWinControl.OnPaint := @PaintWinControl;
 
   FLineMarks := TSynGutterLOvLineMarksList.Create;
@@ -1427,14 +1415,10 @@ var
 begin
   if ALine < 0 then exit(-1);
   c := Max(1, TextBuffer.Count);
-  if c = 0 then
-    Result := -1
-  else begin
-    Result := (Int64(ALine - 1) * Int64(Height)) div c;
-    n      := (Int64(ALine)     * Int64(Height)) div c - 1; // next line - 1 pix
-    if n > Result then
-      Result := n;
-  end;
+  Result := (Int64(ALine - 1) * Int64(Height)) div c;
+  n      := (Int64(ALine)     * Int64(Height)) div c - 1; // next line - 1 pix
+  if n > Result then
+    Result := n;
 end;
 
 procedure TSynGutterLineOverview.DoResize(Sender: TObject);
@@ -1474,6 +1458,8 @@ begin
   AClip.Right := Width;
   FWinControl.Canvas.Brush.Color := MarkupInfo.Background;
   FWinControl.Canvas.FillRect(AClip);
+  FWinControl.Canvas.Pen.Width := FPpiPenWidth;
+  FWinControl.Canvas.Pen.JoinStyle := pjsMiter;
 
   for i := 0 to Providers.Count - 1 do
     Providers[i].Paint(FWinControl.Canvas, AClip, 0);
@@ -1485,6 +1471,7 @@ end;
 constructor TSynGutterLineOverview.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  FPpiPenWidth := 1;
   FMouseActionsForMarks := TSynEditMouseInternalActions.Create(Self);
 end;
 
@@ -1544,8 +1531,8 @@ end;
 
 procedure TSynGutterLineOverview.ScalePPI(const AScaleFactor: Double);
 begin
-  AutoSize := False;
   FLineMarks.ItemHeight := Round(FLineMarks.ItemHeight*AScaleFactor);
+  FPpiPenWidth := Max(1, Scale96ToFont(1));
   inherited ScalePPI(AScaleFactor);
 end;
 

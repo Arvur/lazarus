@@ -26,9 +26,13 @@ interface
 {$endif}
 
 uses
-  SysUtils, Types, Classes, LCLStrConsts, LCLType, LCLProc, LResources, Controls,
-  Forms, StdCtrls, lMessages, GraphType, Graphics, LCLIntf, CustomTimer, Themes,
-  LCLClasses, Menus, PopupNotifier, ImgList, contnrs, FGL;
+  SysUtils, Types, Classes, contnrs, FGL,
+  // LCL
+  LCLStrConsts, LCLType, LCLProc, LResources, LMessages, Controls, Forms,
+  StdCtrls, GraphType, Graphics, LCLIntf, CustomTimer, Themes, LCLClasses, Menus,
+  PopupNotifier, ImgList,
+  // LazUtils
+  LazLoggerBase, LazUtilities;
 
 type
 
@@ -44,6 +48,7 @@ type
     FOnBeforeShow: TBeforeShowPageEvent;
     function GetPageIndex: Integer;
   protected
+    class procedure WSRegisterClass; override;
     procedure SetParent(AParent: TWinControl); override;
   public
     constructor Create(TheOwner: TComponent); override;
@@ -266,7 +271,6 @@ type
     FPen: TPen;
     FBrush: TBrush;
     FShape: TShapeType;
-    function GetStarAngle(N: Integer; ADown: boolean): Double;
     procedure SetBrush(Value: TBrush);
     procedure SetPen(Value: TPen);
     procedure SetShape(Value: TShapeType);
@@ -414,6 +418,7 @@ type
     property Color;
     property Constraints;
     property Cursor;
+    property DoubleBuffered;
     property Height;
     property MinSize;
     property OnCanOffset;
@@ -423,8 +428,12 @@ type
     property OnMouseWheel;
     property OnMouseWheelDown;
     property OnMouseWheelUp;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
     property OnPaint;
     property ParentColor;
+    property ParentDoubleBuffered;
     property ParentShowHint;
     property PopupMenu;
     property ResizeAnchor;
@@ -478,6 +487,9 @@ type
     property OnMouseWheel;
     property OnMouseWheelDown;
     property OnMouseWheelUp;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
     property OnPaint;
     property OnResize;
 //    property OnStartDock;
@@ -587,6 +599,9 @@ type
     property OnMouseWheel;
     property OnMouseWheelDown;
     property OnMouseWheelUp;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
     property OnPaint;
     property OnPictureChanged;
     property OnPaintBackground;
@@ -732,6 +747,7 @@ type
     property ColumnLayout;
     property Columns;
     property Constraints;
+    property DoubleBuffered;
     property DragCursor;
     property DragMode;
     property Enabled;
@@ -764,6 +780,7 @@ type
     property ParentBidiMode;
     property ParentFont;
     property ParentColor;
+    property ParentDoubleBuffered;
     property ParentShowHint;
     property PopupMenu;
     property ShowHint;
@@ -847,6 +864,7 @@ type
     property ColumnLayout;
     property Columns;
     property Constraints;
+    property DoubleBuffered;
     property DragCursor;
     property DragMode;
     property Enabled;
@@ -878,6 +896,7 @@ type
     property ParentBiDiMode;
     property ParentFont;
     property ParentColor;
+    property ParentDoubleBuffered;
     property ParentShowHint;
     property PopupMenu;
     property ShowHint;
@@ -894,12 +913,17 @@ type
     constructor Create(TheOwner: TComponent); override;
     property FocusControl;
   published
+    property AnchorSideLeft stored False;
+    property AnchorSideTop stored False;
+    property AnchorSideRight stored False;
+    property AnchorSideBottom stored False;
+    property Left stored False;
+    property Top stored False;
     property Caption;
     property Color;
     property DragCursor;
     property DragMode;
     property Height;
-    property Left;
     property ParentColor;
     property ParentFont;
     property ParentShowHint;
@@ -974,6 +998,7 @@ type
     property CharCase;
     property Color;
     property Constraints;
+    property DoubleBuffered;
     property DragCursor;
     property DragMode;
     property EchoMode;
@@ -985,6 +1010,7 @@ type
     property MaxLength;
     property ParentBidiMode;
     property ParentColor;
+    property ParentDoubleBuffered;
     property ParentFont;
     property ParentShowHint;
     property PasswordChar;
@@ -1092,6 +1118,7 @@ type
     property Color;
     property Constraints;
     property DockSite;
+    property DoubleBuffered;
     property DragCursor;
     property DragKind;
     property DragMode;
@@ -1101,6 +1128,7 @@ type
     property ParentBackground;
     property ParentBidiMode;
     property ParentColor;
+    property ParentDoubleBuffered;
     property ParentFont;
     property ParentShowHint;
     property PopupMenu;
@@ -1131,6 +1159,9 @@ type
     property OnMouseWheel;
     property OnMouseWheelDown;
     property OnMouseWheelUp;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
     property OnPaint;
     property OnResize;
     property OnStartDock;
@@ -1154,24 +1185,29 @@ type
     waAvoid,   // try not to wrap after this control, if the control is already at the beginning of the row, wrap though
     waForbid); // never wrap after this control
 
-  TFlowPanelControl = class(TCollectionItem)
+  TFlowPanelControl = class(TCollectionItem, IObjInspInterface)
   private
     FControl: TControl;
     FWrapAfter: TWrapAfter;
     procedure SetControl(const aControl: TControl);
     procedure SetWrapAfter(const AWrapAfter: TWrapAfter);
   protected
+    function GetDisplayName: String; override;
     procedure SetIndex(Value: Integer); override;
     procedure AssignTo(Dest: TPersistent); override;
     function FPCollection: TFlowPanelControlList;
     function FPOwner: TCustomFlowPanel;
+  public
+    // These methods are used by the Object Inspector only
+    function AllowAdd: Boolean;
+    function AllowDelete: Boolean;
   published
     property Control: TControl read FControl write SetControl;
     property WrapAfter: TWrapAfter read FWrapAfter write SetWrapAfter;
     property Index;
   end;
 
-  TFlowPanelControlList = class(TOwnedCollection)
+  TFlowPanelControlList = class(TOwnedCollection, IObjInspInterface)
   private
     function GetItem(Index: Integer): TFlowPanelControl;
     procedure SetItem(Index: Integer; const AItem: TFlowPanelControl);
@@ -1185,8 +1221,11 @@ type
     constructor Create(AOwner: TPersistent);
   public
     function IndexOf(AControl: TControl): Integer;
-
     property Items[Index: Integer]: TFlowPanelControl read GetItem write SetItem; default;
+  public
+    // These methods are used by the Object Inspector only
+    function AllowAdd: Boolean;
+    function AllowDelete: Boolean;
   end;
 
   TCustomFlowPanel = class(TCustomPanel)
@@ -1231,6 +1270,7 @@ type
     property BevelWidth;
     property BiDiMode;
     property BorderWidth;
+    property BorderSpacing;
     property BorderStyle;
     property Caption;
     property Color;
@@ -1249,6 +1289,7 @@ type
     property Font;
     property ParentBiDiMode;
     property ParentColor;
+    property ParentDoubleBuffered;
     property ParentFont;
     property ParentShowHint;
     property PopupMenu;
@@ -1386,7 +1427,7 @@ type
   TBandInfoEvent = procedure (Sender: TObject; Control: TControl;
     var Insets: TRect; var PreferredSize, RowCount: Integer) of object;
   TBandMoveEvent = procedure (Sender: TObject; Control: TControl; var ARect: TRect) of object;
-  TBandPaintEvent = procedure (Sender: TObject; Control: TControl; Canvas: TCanvas;
+  TBandPaintEvent = procedure (Sender: TObject; Control: TControl; ACanvas: TCanvas;
     var ARect: TRect; var Options: TBandPaintOptions) of object;
 
   TRowSize = 1..MaxInt;
@@ -1577,6 +1618,7 @@ type
     property Color;
     property Constraints;
     property DockSite;
+    property DoubleBuffered;
     property DragCursor;
     property DragKind;
     property DragMode;
@@ -1586,6 +1628,7 @@ type
     property GradientEndColor;
     property GradientStartColor;
     property ParentColor;
+    property ParentDoubleBuffered;
     property ParentFont;
     property ParentShowHint;
     property Picture;
@@ -1678,7 +1721,5 @@ end;
 
 initialization
   DockSplitterClass := TSplitter;
-  RegisterPropertyToSkip(TPage, 'ClientHeight', 'This property was published for a long time in Lazarus 0.9.31', '');
-  RegisterPropertyToSkip(TPage, 'ClientWidth', 'This property was published for a long time in Lazarus 0.9.31', '');
 
 end.

@@ -267,7 +267,7 @@ Var
         Dec(P.X, BoundsOffset.Left);
         Dec(P.Y, BoundsOffset.Top);
       end;
-      ACursor := Screen.Cursor;
+      ACursor := Screen.RealCursor;
       if ACursor = crDefault then
       begin
         // statictext controls do not get WM_SETCURSOR messages...
@@ -1192,7 +1192,7 @@ begin
           WM_CHAR:
           begin
             // if want chars, then handled already
-            PLMsg^.Result := CallDefaultWindowProc(Window, WM_GETDLGCODE, 0, 0) and DLGC_WANTCHARS;
+            PLMsg^.Result := CallDefaultWindowProc(Window, WM_GETDLGCODE, WParam, 0) and DLGC_WANTCHARS;
             LMChar.CharCode := Word(WParam);
             LMChar.Msg := LM_CHAR;
           end;

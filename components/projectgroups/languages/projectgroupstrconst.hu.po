@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"X-Generator: Poedit 1.5.4\n"
+"X-Generator: Poedit 1.8.7.1\n"
 
 #: projectgroupstrconst.lisabort
 msgid "Abort"
@@ -20,6 +20,7 @@ msgid "Abort loading project group"
 msgstr "A projektcsoport betöltésének megszakítása"
 
 #: projectgroupstrconst.lisactivetarget
+#, object-pascal-format
 msgid "Target: %s"
 msgstr "Cél: %s"
 
@@ -32,10 +33,12 @@ msgid "Be patient!"
 msgstr "Türelem!"
 
 #: projectgroupstrconst.lisbuildmode
+#, object-pascal-format
 msgid ", build mode \"%s\""
 msgstr ", építési mód \"%s\""
 
 #: projectgroupstrconst.lisbuildmode2
+#, object-pascal-format
 msgid "Build Mode \"%s\""
 msgstr "Építési mód \"%s\""
 
@@ -44,14 +47,25 @@ msgid "Build mode not found"
 msgstr "Építési mód nem található."
 
 #: projectgroupstrconst.lisbuildmodenotfound2
+#, object-pascal-format
 msgid "Build mode \"%s\" not found."
 msgstr "A(z) \"%s\" építési mód nem található."
 
+#: projectgroupstrconst.lischangesgetlostatreload
+msgid "There are unsaved changes that get lost if you reload the project group. Do you really want to reload?"
+msgstr ""
+
+#: projectgroupstrconst.liscompileandbuildcompiletarget
+msgid "\"Compile\" and \"Build\" compile target"
+msgstr "\"Fordítás\" és \"Építés\" a projektcsoportnak megfelelően"
+
 #: projectgroupstrconst.liscompilepackage
+#, object-pascal-format
 msgid "Compile Package %s"
 msgstr "Csomag fordítása: %s"
 
 #: projectgroupstrconst.liscompileproject
+#, object-pascal-format
 msgid "Compile Project %s"
 msgstr "Projekt fordítása: %s"
 
@@ -59,27 +73,42 @@ msgstr "Projekt fordítása: %s"
 msgid "Discard changes"
 msgstr "Változások eldobása"
 
+#: projectgroupstrconst.lisenabletoshowtargetfilenameswithpaths
+msgid "Enable to show target filenames with paths."
+msgstr "Engedélyezi a célfájlok nevei útvonalakkal együtt jelenjenek meg."
+
 #: projectgroupstrconst.liserrnosuchfile
+#, object-pascal-format
 msgid ""
 "Could not find target file\n"
 "\"%s\"\n"
-"What do you want to do?\n"
+"What do you want to do?"
 msgstr ""
 "A célfájl nem található:\n"
 "\"%s\"\n"
-"Mi történjen most?\n"
+"Mi történjen most?"
 
 #: projectgroupstrconst.liserronlyprojectgroupallowed
 msgid "Only target type \"projectgroup\" is allowed for root project group."
 msgstr "Csak a \"projektgroup\" típus lehet a projektcsoport gyökere."
 
 #: projectgroupstrconst.liserrorreadingprojectgroupfile
+#, object-pascal-format
 msgid "Error reading project group file \"%s\"%s%s"
 msgstr "Hiba a projektcsoport fájljának olvasása közben: \"%s\"%s%s"
 
 #: projectgroupstrconst.liserrtargetdoesnotexist
 msgid "Target does not exist. Remove?"
 msgstr "A cél nem létezik. Eltávolítás?"
+
+#: projectgroupstrconst.lisidecommandscompileandbuildinvokecompilebuildselect
+msgid "IDE commands \"Compile\" and \"Build\" invoke compile/build selected target in project group editor"
+msgstr "Az IDE \"Fordítás\" és \"Építés\" parancsai a projektcsoport beállításaiban kiválasztott fordítási/építési célt használják"
+
+#: projectgroupstrconst.lisinfo
+msgctxt "projectgroupstrconst.lisinfo"
+msgid "Info"
+msgstr "Infó"
 
 #: projectgroupstrconst.lisinvalidcycleaprojectgroupcannothaveitselfastarget
 msgid "Invalid cycle. A project group cannot have itself as target."
@@ -90,6 +119,7 @@ msgid "Invalid File"
 msgstr "Érvénytelen fájl"
 
 #: projectgroupstrconst.lisinvalidxmlfilename
+#, object-pascal-format
 msgid "Invalid XML file name \"%s\"."
 msgstr "Érvénytelen XML fájlnév: \"%s\"."
 
@@ -105,6 +135,10 @@ msgstr "Lazarus projektcsoportok (*.lpg)"
 msgid "Lazarus projects (*.lpi)"
 msgstr "Lazarus projektek (*.lpi)"
 
+#: projectgroupstrconst.lislazarussupportedinprojectgroups
+msgid "Lazarus files (*.lpi;*.lpk;*.lpg;*.pas;*.pp;*.p)"
+msgstr "Lazarus fájlok (*.lpi;*.lpk;*.lpg;*.pas;*.pp;*.p)"
+
 #: projectgroupstrconst.lislazbuildnotfound
 msgid "lazbuild not found"
 msgstr "lazbuild nem található"
@@ -113,11 +147,8 @@ msgstr "lazbuild nem található"
 msgid "More"
 msgstr "Továbbiak"
 
-#: projectgroupstrconst.lisneedsave
-msgid "Need save"
-msgstr "Mentés szükséges"
-
 #: projectgroupstrconst.lisnewprojectgroup
+msgctxt "projectgroupstrconst.lisnewprojectgroup"
 msgid "New project group"
 msgstr "Új projektcsoport"
 
@@ -153,6 +184,14 @@ msgstr "Eltávolított célok"
 msgid "Targets"
 msgstr "Célok"
 
+#: projectgroupstrconst.lisonidestartreopenlastopengroup
+msgid "On IDE start reopen last open group."
+msgstr "Az IDE indításakor újra megnyitásra kerül a legutóbb nyitott csoport."
+
+#: projectgroupstrconst.lisopenlastgrouponstart
+msgid "Open last group on start"
+msgstr "Legutóbbi csoport megnyitása indításkor"
+
 #: projectgroupstrconst.lisopenprojectgroup
 msgid "Open Project Group ..."
 msgstr "Projektcsoport megnyitása ..."
@@ -160,6 +199,10 @@ msgstr "Projektcsoport megnyitása ..."
 #: projectgroupstrconst.lisopenrecentprojectgroup
 msgid "Open Recent Project Group"
 msgstr "Legutóbbi projektcsoport megnyitása"
+
+#: projectgroupstrconst.lisoptions
+msgid "Options"
+msgstr "Beállítások"
 
 #: projectgroupstrconst.lisotherproject
 msgid "Other Project"
@@ -174,6 +217,7 @@ msgid "Package not found"
 msgstr "Csomag nem található"
 
 #: projectgroupstrconst.lispackagenotfound2
+#, object-pascal-format
 msgid "Package \"%s\" not found."
 msgstr "A(z) \"%s\" csomag nem található."
 
@@ -181,28 +225,44 @@ msgstr "A(z) \"%s\" csomag nem található."
 msgid "Pascal files (*.pas;*.pp;*.p)"
 msgstr "Pascal fájlok (*.pas;*.pp;*.p)"
 
-#: projectgroupstrconst.lispleasesaveyourchangesbeforereloadingtheprojectgrou
-msgctxt "projectgroupstrconst.lispleasesaveyourchangesbeforereloadingtheprojectgrou"
-msgid "Please save your changes before reloading the project group."
-msgstr "Menteni kell a változásokat mielőtt újra betölti a projektcsoportot."
-
 #: projectgroupstrconst.lisprojectgroup
+#, object-pascal-format
 msgid "Project group %s"
 msgstr "Projektcsoport: %s"
 
 #: projectgroupstrconst.lisprojectgroup2
+#, object-pascal-format
 msgid "Project Group: %s"
 msgstr "Projektcsoport: %s"
 
-#: projectgroupstrconst.lisprojectgroupaddexistingcaption
+#: projectgroupstrconst.lisprojectgroupaddcaption
+msgctxt "projectgroupstrconst.lisprojectgroupaddcaption"
 msgid "Add"
 msgstr "Hozzáadás"
+
+#: projectgroupstrconst.lisprojectgroupaddcurrentprojectcaption
+msgid "Add current project"
+msgstr "Aktuális projekt hozzáadása"
+
+#: projectgroupstrconst.lisprojectgroupaddcurrentprojecthint
+msgid "Add current project to project group"
+msgstr "Aktuális projekt hozzáadása a projektcsoporthoz"
+
+#: projectgroupstrconst.lisprojectgroupaddexistingcaption
+msgctxt "projectgroupstrconst.lisprojectgroupaddexistingcaption"
+msgid "Add from file"
+msgstr "Hozzáadás fájlból"
 
 #: projectgroupstrconst.lisprojectgroupaddexistinghint
 msgid "Add existing target to project group"
 msgstr "Létező cél hozzáadása a projektcsoporthoz"
 
+#: projectgroupstrconst.lisprojectgroupaddhint
+msgid "Add targets to project group"
+msgstr "Cél hozzáadása a projektcsoporthoz"
+
 #: projectgroupstrconst.lisprojectgroupaddnewcaption
+msgctxt "projectgroupstrconst.lisprojectgroupaddnewcaption"
 msgid "New"
 msgstr "Új"
 
@@ -223,12 +283,23 @@ msgid "Project group modified"
 msgstr "Projektcsoport módosítva"
 
 #: projectgroupstrconst.lisprojectgroupmodifiedconfirm
+#, object-pascal-format
 msgid ""
 "Project group \"%s\" is modified.\n"
-"What do you want to do?\n"
+"What do you want to do?"
 msgstr ""
 "A(z) \"%s\" projektcsoport módosult.\n"
-"Mi történjen most?\n"
+"Mi történjen most?"
+
+#: projectgroupstrconst.lisprojectgroupnewcaption
+msgctxt "projectgroupstrconst.lisprojectgroupnewcaption"
+msgid "New"
+msgstr "Új"
+
+#: projectgroupstrconst.lisprojectgroupnewhint
+msgctxt "projectgroupstrconst.lisprojectgroupnewhint"
+msgid "New project group"
+msgstr "Új projektcsoport"
 
 #: projectgroupstrconst.lisprojectgroupreload
 msgid "Reload"
@@ -255,9 +326,17 @@ msgctxt "projectgroupstrconst.lisprojectgroupsavehint"
 msgid "Save project group"
 msgstr "Projektcsoport mentése"
 
+#: projectgroupstrconst.lisprojectgroupssourcepaths
+msgid "Project group's source paths"
+msgstr ""
+
 #: projectgroupstrconst.lisreaderror
 msgid "Read error"
 msgstr "Olvasási hiba"
+
+#: projectgroupstrconst.lisredo
+msgid "Redo"
+msgstr "Újra"
 
 #: projectgroupstrconst.lisremovetarget
 msgctxt "projectgroupstrconst.lisremovetarget"
@@ -278,9 +357,17 @@ msgstr "Projektcsoport mentése"
 msgid "Save Project Group As ..."
 msgstr "Projektcsoport mentése másként ..."
 
+#: projectgroupstrconst.lisshowtargetpaths
+msgid "Show target paths"
+msgstr "Cél útvonalak megjelenítése"
+
 #: projectgroupstrconst.lisskipalltargets
 msgid "Remove all invalid targets"
 msgstr "Minden érvénytelen cél eltávolítása"
+
+#: projectgroupstrconst.lissourcedirectoriesofprojectgroup
+msgid "Source directories of project group:"
+msgstr "A projektcsoport forráskönyvtárai:"
 
 #: projectgroupstrconst.listargetactivate
 msgid "Activate target"
@@ -331,10 +418,11 @@ msgid "Compile selected target"
 msgstr "A kiválasztott cél fordítása"
 
 #: projectgroupstrconst.listargetcopyfilename
-msgid "Copy file name"
+msgid "Copy Filename"
 msgstr "Fájlnév másolása"
 
 #: projectgroupstrconst.listargetcount
+#, object-pascal-format
 msgid "%d targets"
 msgstr "%d cél"
 
@@ -349,6 +437,11 @@ msgstr "Korábban"
 #: projectgroupstrconst.listargetearlierhint
 msgid "Build target earlier"
 msgstr "Cél építése korábban"
+
+#: projectgroupstrconst.listargetinfocaption
+msgctxt "projectgroupstrconst.listargetinfocaption"
+msgid "Info ..."
+msgstr "Infó ..."
 
 #: projectgroupstrconst.listargetinstall
 msgctxt "projectgroupstrconst.listargetinstall"
@@ -432,6 +525,7 @@ msgid "Uninstall selected target"
 msgstr "A kiválasztott cél eltávolítása"
 
 #: projectgroupstrconst.listhelazbuildwasnotfound
+#, object-pascal-format
 msgid "The lazbuild%s was not found."
 msgstr "A lazbuild%s nem található."
 
@@ -440,22 +534,30 @@ msgid "There is still another build in progress."
 msgstr "Egy másik építési még folyamatban van."
 
 #: projectgroupstrconst.lisunabletocreatefile
+#, object-pascal-format
 msgid "Unable to create file \"%s\": %s"
 msgstr "A(z) \"%s\" fájl létrehozása nem lehetséges: %s"
 
 #: projectgroupstrconst.lisunabletoloadfile
+#, object-pascal-format
 msgid "Unable to load file \"%s\""
 msgstr "A(z) \"%s\" fájl betöltése nem lehetséges"
 
 #: projectgroupstrconst.lisunabletowriteprojectgroupfile
+#, object-pascal-format
 msgid "Unable to write project group file \"%s\"%s%s"
 msgstr "Nem lehet írni a projektcsoport fájlját: \"%s\"%s%s"
+
+#: projectgroupstrconst.lisundo
+msgid "Undo"
+msgstr "Visszavonás"
 
 #: projectgroupstrconst.liswriteerror
 msgid "Write error"
 msgstr "Írási hiba"
 
 #: projectgroupstrconst.lisxmlsyntaxerrorinfile
+#, object-pascal-format
 msgid "XML syntax error in file \"%s\": %s"
 msgstr "XML szintaxis hiba a(z) \"%s\" fájlban: %s"
 

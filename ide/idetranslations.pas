@@ -38,7 +38,7 @@ uses
   // Codetools
   FileProcs, CodeToolManager, DirectoryCacher, CodeCache,
   // IDE
-  IDEProcs, LazarusIDEStrConsts;  { IDE Language (Human, not computer) }
+  LazarusIDEStrConsts;  { IDE Language (Human, not computer) }
 
 type
   { TLazarusTranslation }
@@ -240,7 +240,7 @@ begin
       if (Ext<>'.rst') and (Ext<>'.rsj') and (Ext<>'.lrj') then
         continue;
       if POFilename='' then
-        OutputFilename:=PODirectory+ChangeFileExt(Files[i],'.po')
+        OutputFilename:=PODirectory+ChangeFileExt(Files[i],'.pot')
       else
         OutputFilename:=PODirectory+POFilename;
       //DebugLn(['ConvertRSTFiles RSTFilename=',RSTFilename,' OutputFilename=',OutputFilename]);
@@ -377,6 +377,8 @@ begin
     if POBuf<>nil then
       BasePOFile.ReadPOText(POBuf.Source);
     BasePOFile.Tag:=1;
+    // untagging is done only once for BasePoFile
+    BasePOFile.UntagAll;
 
     // Update po file with lrj or/and rst/rsj files
     for i:=0 to SrcFiles.Count-1 do begin
@@ -394,6 +396,9 @@ begin
       SrcLines.Text:=SrcBuf.Source;
       BasePOFile.UpdateStrings(SrcLines,FileType);
     end;
+    // once all rst/rsj/lrj files are processed, remove all unneeded (missing in them) items
+    BasePOFile.RemoveTaggedItems(0);
+
     SrcLines.Clear;
     if Assigned(ExcludedIdentifiers) then
       BasePOFile.RemoveIdentifiers(ExcludedIdentifiers);
@@ -423,27 +428,23 @@ end;
 function FindTranslatedPoFiles(const BasePOFilename: string): TStringList;
 var
   Path: String;
-  Name: String;
   NameOnly: String;
   Dir: TCTDirectoryCache;
   Files: TStrings;
   Filename: String;
+  CurUnitName: String;
+  CurLang: String;
 begin
   Result:=TStringList.Create;
   Path:=ExtractFilePath(BasePOFilename);
-  Name:=ExtractFileName(BasePOFilename);
-  NameOnly:=ExtractFileNameOnly(Name);
+  NameOnly:=ExtractFileNameOnly(BasePOFilename);
   Dir:=CodeToolBoss.DirectoryCachePool.GetCache(Path);
   Files:=TStringList.Create;
   try
     Dir.GetFiles(Files,false);
     for Filename in Files do begin
-      if CompareFilenames(Filename,Name)=0 then continue;
-      if CompareFileExt(Filename,'.po',false)<>0 then continue;
-      if (CompareFilenames(LeftStr(Filename,length(NameOnly)),NameOnly)<>0)
-      then
-        continue;
-      Result.Add(Path+Filename);
+      if GetPOFilenameParts(Filename, CurUnitName, CurLang) and (NameOnly=CurUnitName) then
+        Result.Add(Path+Filename);
     end;
   finally
     Files.Free;

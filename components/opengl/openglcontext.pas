@@ -42,6 +42,16 @@ unit OpenGLContext;
     {$DEFINE OpenGLTargetDefined}
   {$ENDIF}
 {$ENDIF}
+{$IFDEF LCLGTK3}
+  {$IF defined(Linux) or defined(FreeBSD)}
+    {$DEFINE UseGtk3GLX}
+    {$DEFINE UsesModernGL}
+    {$DEFINE HasRGBA}
+    {$DEFINE HasRGBBits}
+    {$DEFINE HasDebugContext}
+    {$DEFINE OpenGLTargetDefined}
+  {$ENDIF}
+{$ENDIF}
 {$IFDEF LCLCarbon}
   {$DEFINE UseCarbonAGL}
   {$DEFINE HasRGBA}
@@ -68,6 +78,13 @@ unit OpenGLContext;
   {$DEFINE HasRGBBits}
   {$DEFINE OpenGLTargetDefined}
 {$ENDIF}
+{$IFDEF LCLQT5}
+  {$DEFINE UseQTGLX}
+  {$DEFINE UsesModernGL}
+  {$DEFINE HasRGBA}
+  {$DEFINE HasRGBBits}
+  {$DEFINE OpenGLTargetDefined}
+{$ENDIF}
 {$IFNDEF OpenGLTargetDefined}
   {$ERROR this LCL widgetset/OS is not yet supported}
 {$ENDIF}
@@ -82,6 +99,9 @@ uses
 {$ENDIF}
 {$IFDEF UseGtk2GLX}
   GLGtkGlxContext;
+{$ENDIF}
+{$IFDEF UseGtk3GLX}
+  GLGtk3GlxContext;
 {$ENDIF}
 {$IFDEF UseCarbonAGL}
   GLCarbonAGLContext;
@@ -125,7 +145,6 @@ type
     FAutoResizeViewport: boolean;
     FCanvas: TCanvas; // only valid at designtime
     FDebugContext: boolean;
-    FDoubleBuffered: boolean;
     FFrameDiffTime: integer;
     FOnMakeCurrent: TOpenGlCtrlMakeCurrentEvent;
     FOnPaint: TNotifyEvent;
@@ -144,7 +163,6 @@ type
     function GetSharingControls(Index: integer): TCustomOpenGLControl;
     procedure SetAutoResizeViewport(const AValue: boolean);
     procedure SetDebugContext(AValue: boolean);
-    procedure SetDoubleBuffered(const AValue: boolean);
     procedure SetOpenGLMajorVersion(AValue: Cardinal);
     procedure SetOpenGLMinorVersion(AValue: Cardinal);
     procedure SetOptions(AValue: TOpenGLControlOptions);
@@ -166,6 +184,7 @@ type
     procedure WMSize(var Message: TLMSize); message LM_SIZE;
     procedure UpdateFrameTimeDiff;
     procedure OpenGLAttributesChanged;
+    procedure CMDoubleBufferedChanged(var Message: TLMessage); message CM_DOUBLEBUFFEREDCHANGED;
   public
     constructor Create(TheOwner: TComponent); override;
     destructor Destroy; override;
@@ -189,7 +208,8 @@ type
                                                  write SetSharedControl;
     property AutoResizeViewport: boolean read FAutoResizeViewport
                                          write SetAutoResizeViewport default false;
-    property DoubleBuffered: boolean read FDoubleBuffered write SetDoubleBuffered default true;
+    property DoubleBuffered stored True default True;
+    property ParentDoubleBuffered default False;
     property DebugContext: boolean read FDebugContext write SetDebugContext default false; // create context with debugging enabled. Requires OpenGLMajorVersion!
     property RGBA: boolean read FRGBA write SetRGBA default true;
     {$IFDEF HasRGBBits}
@@ -275,6 +295,7 @@ type
     class function CreateHandle(const AWinControl: TWinControl;
                                 const AParams: TCreateParams): HWND; override;
     class procedure DestroyHandle(const AWinControl: TWinControl); override;
+    class function GetDoubleBuffered(const AWinControl: TWinControl): Boolean; override;
   end;
 
 
@@ -320,10 +341,9 @@ begin
   OpenGLAttributesChanged;
 end;
 
-procedure TCustomOpenGLControl.SetDoubleBuffered(const AValue: boolean);
+procedure TCustomOpenGLControl.CMDoubleBufferedChanged(var Message: TLMessage);
 begin
-  if FDoubleBuffered=AValue then exit;
-  FDoubleBuffered:=AValue;
+  inherited;
   OpenGLAttributesChanged;
 end;
 
@@ -523,6 +543,7 @@ end;
 constructor TCustomOpenGLControl.Create(TheOwner: TComponent);
 begin
   inherited Create(TheOwner);
+  ParentDoubleBuffered:=False;
   FDoubleBuffered:=true;
   FRGBA:=true;
   {$IFDEF HasRGBBits}
@@ -721,6 +742,12 @@ begin
   LOpenGLDestroyContextInfo(AWinControl);
   // do not use "inherited DestroyHandle", because the LCL changes the hierarchy at run time
   TWSWinControlClass(ClassParent).DestroyHandle(AWinControl);
+end;
+
+class function TWSOpenGLControl.GetDoubleBuffered(const AWinControl: TWinControl): Boolean;
+begin
+  Result := False;
+  if AWinControl=nil then ;
 end;
 
 initialization

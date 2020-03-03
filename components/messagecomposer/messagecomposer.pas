@@ -26,8 +26,13 @@ unit MessageComposer;
 interface
 
 uses
-  Classes, SysUtils, LResources, LCLType, Forms, Controls, Graphics, Dialogs,
+  Classes, SysUtils,
+  // LCL
+  LResources, LCLType, Forms, Controls, Graphics, Dialogs,
   StdCtrls, ExtCtrls, Spin, Grids, ActnList, Buttons, EditBtn,
+  // LazUtils
+  UITypes,
+  // IdeIntf
   IDECommands, MenuIntf, LazIDEIntf, SrcEditorIntf;
 
 type
@@ -35,12 +40,16 @@ type
   { TFormMessagesComposer }
 
   TFormMessagesComposer = class(TForm)
+    HCenterBevel: TBevel;
+    HCenterBevel1: TBevel;
+    HCenterBevel2: TBevel;
     KindMessageComboBox: TComboBox;
     KindMessageLabel: TLabel;
     MsgMemo: TMemo;
     ButtonsNotebook: TNotebook;
     PageString: TPage;
     ButtonPanel: TPanel;
+    PositionBevel1: TBevel;
     SourceNotebook: TNotebook;
     Page1: TPage;
     Page2: TPage;
@@ -106,6 +115,7 @@ type
     procedure ButtonsStringGridSelectEditor(Sender: TObject; aCol,
       {%H-}aRow: Integer; var Editor: TWinControl);
     procedure DelConstExecute(Sender: TObject);
+    procedure FormShow(Sender: TObject);
     procedure GetMessageForSourceExecute(Sender: TObject);
     procedure GetParamsFmtExecute(Sender: TObject);
     procedure MessageSetupExecute(Sender: TObject);
@@ -114,9 +124,9 @@ type
     procedure TestExecute(Sender: TObject);
     procedure UpdateQuestioDlgResultExecute(Sender: TObject);
   private
-    { private declarations }
+
   public
-    { public declarations }
+
   end;
 
 procedure Register;
@@ -311,6 +321,12 @@ begin
   ButtonsStringGrid.RowCount := ButtonsStringGrid.RowCount-1;
   ButtonsStringGrid.AutoAdjustColumns;
   UpdateQuestioDlgResult.Execute;
+end;
+
+procedure TFormMessagesComposer.FormShow(Sender: TObject);
+begin
+  OKButton.Constraints.MinWidth := CancelButton.Width;
+  TestButton.Constraints.MinWidth := CancelButton.Width;
 end;
 
 procedure TFormMessagesComposer.GetMessageForSourceExecute(Sender: TObject);

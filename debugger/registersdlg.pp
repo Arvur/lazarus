@@ -48,6 +48,8 @@ type
   TRegistersDlg = class(TDebuggerDlg)
     actCopyName: TAction;
     actCopyValue: TAction;
+    actCopyNameValue: TAction;
+    actCopyAll: TAction;
     actPower: TAction;
     ActionList1: TActionList;
     ImageList1: TImageList;
@@ -58,6 +60,8 @@ type
     DispOct: TMenuItem;
     DispDec: TMenuItem;
     DispRaw: TMenuItem;
+    popCopyAll: TMenuItem;
+    popCopyNameValue: TMenuItem;
     PopDispDefault: TMenuItem;
     PopDispHex: TMenuItem;
     PopDispBin: TMenuItem;
@@ -74,7 +78,9 @@ type
     ToolButton1: TToolButton;
     ToolButtonDispType: TToolButton;
     ToolButtonPower: TToolButton;
+    procedure actCopyAllExecute(Sender: TObject);
     procedure actCopyNameExecute(Sender: TObject);
+    procedure actCopyNameValueExecute(Sender: TObject);
     procedure actCopyValueExecute(Sender: TObject);
     procedure actPowerExecute(Sender: TObject);
     procedure DispDefaultClick(Sender: TObject);
@@ -153,6 +159,8 @@ begin
 
   actCopyName.Caption := lisLocalsDlgCopyName;
   actCopyValue.Caption := lisLocalsDlgCopyValue;
+  actCopyNameValue.Caption := lisLocalsDlgCopyNameValue;
+  actCopyAll.Caption := lisLocalsDlgCopyAll;
 
   ToolButtonDispType.Hint := regdlgDisplayTypeForSelectedRegisters;
 
@@ -183,9 +191,6 @@ begin
   PopDispRaw.Tag := ord(rdRaw);
 
   popFormat.Caption := regdlgFormat;
-
-  actCopyName.Caption := lisLocalsDlgCopyName;
-  actCopyValue.Caption := lisLocalsDlgCopyValue;
 
   for i := low(COL_WIDTHS) to high(COL_WIDTHS) do
     lvRegisters.Column[i].Width := COL_WIDTHS[i];
@@ -221,6 +226,31 @@ procedure TRegistersDlg.actCopyValueExecute(Sender: TObject);
 begin
   Clipboard.Open;
   Clipboard.AsText := lvRegisters.Selected.SubItems[0];
+  Clipboard.Close;
+end;
+
+procedure TRegistersDlg.actCopyNameValueExecute(Sender: TObject);
+begin
+  Clipboard.Open;
+  Clipboard.AsText := Concat(lvRegisters.Selected.Caption, '=',
+    lvRegisters.Selected.SubItems[0]);
+  Clipboard.Close;
+end;
+
+procedure TRegistersDlg.actCopyAllExecute(Sender: TObject);
+var
+  T: string;
+  I: Integer;
+  LI: TListItem;
+begin
+  Clipboard.Open;
+  T := '';
+  for I := 0 to Pred(lvRegisters.Items.Count) do
+  begin
+    LI := lvRegisters.Items[I];
+    T := Concat(T, LI.Caption, '=', LI.SubItems[0], sLineBreak);
+  end;
+  Clipboard.AsText := T;
   Clipboard.Close;
 end;
 
@@ -282,6 +312,8 @@ begin
   popFormat.Enabled := j > 0;
   actCopyName.Enabled := j > 0;
   actCopyValue.Enabled := j > 0;
+  actCopyNameValue.Enabled := j > 0;
+  actCopyAll.Enabled := lvRegisters.Items.Count > 0;
 
   PopDispDefault.Checked := False;
   PopDispHex.Checked := False;
@@ -363,15 +395,22 @@ begin
   end;
   FNeedUpdateAgain := False;
 
-  Reg := GetCurrentRegisters;
-  if Reg = nil then begin
-    lvRegisters.Items.Clear;
-    exit;
-  end;
-
-  List := TStringList.Create;
+  BeginUpdate;
   try
-    BeginUpdate;
+    Reg := GetCurrentRegisters;
+    if (Reg = nil) or (reg.DataValidity<> ddsValid) then begin
+      if (DebugBoss = nil) or not (DebugBoss.State in [dsPause, dsInternalPause, dsRun]) then
+        lvRegisters.Items.Clear;
+
+      if (reg <> nil) then
+        reg.Count;
+      for n := 0 to lvRegisters.Items.Count - 1 do
+        if lvRegisters.Items[n].SubItems[0] <> '<Unavailable>' then
+          lvRegisters.Items[n].SubItems[0] := '<Unavailable>';
+      exit;
+    end;
+
+    List := TStringList.Create;
     try
       //Get existing items
       for n := 0 to lvRegisters.Items.Count - 1 do
@@ -412,10 +451,10 @@ begin
         lvRegisters.Items.Delete(TListItem(List.Objects[n]).Index);
 
     finally
-      EndUpdate;
+      List.Free;
     end;
   finally
-    List.Free;
+    EndUpdate;
   end;
 
   lvRegistersSelectItem(nil, nil, True);
@@ -428,12 +467,16 @@ end;
 
 procedure TRegistersDlg.DoBeginUpdate;
 begin
+  {$IFnDEF WINDOWS}
   lvRegisters.BeginUpdate;
+  {$ENDIF}
 end;
 
 procedure TRegistersDlg.DoEndUpdate;
 begin
+  {$IFnDEF WINDOWS}
   lvRegisters.EndUpdate;
+  {$ENDIF}
   if FNeedUpdateAgain then RegistersChanged(nil);
 end;
 

@@ -403,9 +403,10 @@ begin
       end;
     end else
     begin
+      Data.GradientColor := clNone;
       Data.ShapeType := frstRoundRect;
-      Data.FillColor := ColorToRGB(View.ShadowColor);
-      Data.FrameColor := Data.FillColor; //ColorToRGB(View.FrameColor);
+      Data.FillColor := View.ShadowColor;
+      Data.FrameColor := clNone;
       Data.FrameWidth := 0;
       Data.FrameStyle := frsSolid;
       SWidth := trunc(View.ShadowWidth * PDFEscx + 0.5);
@@ -415,14 +416,18 @@ begin
 
     // draw roundrect
     Data.ShapeType := frstRoundRect;
-    if View.FillColor=clNone then
-      Data.FillColor := clNone
+    if View.FillColor=clNone then begin
+      if not View.ShowGradian and (View.ShadowWidth>0) then
+        Data.FillColor := clWhite
+      else
+        Data.FillColor := clNone
+    end
     else
       Data.FillColor := ColorToRGB(View.FillColor);
     if View.Frames=[] then
-      Data.FrameColor := Data.FillColor
+      Data.FrameColor := clNone
     else
-      Data.FrameColor := ColorToRGB(View.FrameColor);
+      Data.FrameColor := View.FrameColor;
     Data.FrameWidth := View.FrameWidth;
     Data.FrameStyle := View.FrameStyle;
     AddShape(Data, x, y, h - SWidth, w - SWidth);

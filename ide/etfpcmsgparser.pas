@@ -35,13 +35,13 @@ uses
   // RTL
   Classes, SysUtils, strutils, math,
   // CodeTools
-  KeywordFuncLists, CodeToolsFPCMsgs, CodeCache, FileProcs,
-  CodeToolManager, DirectoryCacher, BasicCodeTools, DefineTemplates, SourceLog,
+  KeywordFuncLists, CodeToolsFPCMsgs, CodeCache, FileProcs, CodeToolManager,
+  DirectoryCacher, BasicCodeTools, DefineTemplates, SourceLog, LinkScanner,
   // LazUtils
-  LConvEncoding, LazUTF8, FileUtil, LazFileUtils, AvgLvlTree,
+  LConvEncoding, LazUTF8, FileUtil, LazFileUtils, LazFileCache, LazUtilities,
+  AvgLvlTree,
   // IDEIntf
-  IDEExternToolIntf, PackageIntf, LazIDEIntf, ProjectIntf, MacroIntf,
-  IDEUtils, LazFileCache,
+  IDEExternToolIntf, PackageIntf, LazIDEIntf, ProjectIntf, MacroIntf, IDEUtils,
   // IDE
   IDECmdLine, LazarusIDEStrConsts, EnvironmentOpts, LazConf, TransferMacros,
   etMakeMsgParser;
@@ -111,14 +111,14 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     function LoadCurrentEnglishFile(UpdateFromDisk: boolean;
-      AThread: TThread): TFPCMsgFilePoolItem; // don't forget UnloadFile
+      AThread: TThread): TFPCMsgFilePoolItem; virtual; // don't forget UnloadFile
     function LoadFile(aFilename: string; UpdateFromDisk: boolean;
       AThread: TThread): TFPCMsgFilePoolItem; // don't forget UnloadFile
     procedure UnloadFile(var aFile: TFPCMsgFilePoolItem);
     procedure EnterCriticalsection;
     procedure LeaveCriticalSection;
     procedure GetMsgFileNames(CompilerFilename, TargetOS, TargetCPU: string;
-      out anEnglishFile, aTranslationFile: string); // (main thread)
+      out anEnglishFile, aTranslationFile: string); virtual; // (main thread)
     property DefaultEnglishFile: string read FDefaultEnglishFile write SetDefaultEnglishFile;
     property DefaulTranslationFile: string read FDefaultTranslationFile write SetDefaultTranslationFile;
     property OnLoadFile: TETLoadFileEvent read FOnLoadFile write FOnLoadFile; // (main or workerthread)
@@ -166,6 +166,7 @@ type
     fLineToMsgID: TPatternToMsgIDs;
     fMissingFPCMsgItem: TFPCMsgItem;
     fMsgID: Integer; // current message id given by ReadLine (-vq)
+    fMsgIsStdErr: boolean;
     fMsgItemCantFindUnitUsedBy: TFPCMsgItem;
     fMsgItemCompilationAborted: TFPCMsgItem;
     fMsgItemErrorWhileCompilingResources: TFPCMsgItem;
@@ -193,6 +194,7 @@ type
     function CheckForWindresErrors(p: PChar): boolean;
     function CheckForLinkerErrors(p: PChar): boolean;
     function CheckForAssemblerErrors(p: PChar): boolean;
+    function CheckForUnspecificStdErr(p: PChar): boolean;
     function CreateMsgLine: TMessageLine;
     procedure AddLinkingMessages;
     procedure AddResourceMessages;
@@ -214,6 +216,9 @@ type
     function ReverseInstantFPCCacheDir(var aFilename: string; aSynchronized: boolean): boolean;
     function ReverseTestBuildDir(MsgLine: TMessageLine; var aFilename: string): boolean;
     function LongenFilename(MsgLine: TMessageLine; aFilename: string): string; // (worker thread)
+  protected
+    function GetDefaultPCFullVersion: LongWord; virtual;
+    function ToUTF8(const Line: string): string; virtual;
   public
     DirectoryStack: TStrings;
     MsgFilename: string; // e.g. /path/to/fpcsrc/compiler/msg/errore.msg
@@ -223,13 +228,14 @@ type
     InstantFPCCache: string; // with trailing pathdelim
     TestBuildDir: string; // with trailing pathdelim
     VirtualProjectFiles: TFilenameToPointerTree;
-    FPC_FullVersion: cardinal;
+    PC_FullVersion: LongWord;
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     procedure Init; override; // called after macros resolved, before starting thread (main thread)
     procedure InitReading; override; // called when process started, before first line (worker thread)
     procedure Done; override; // called after process stopped (worker thread)
-    procedure ReadLine(Line: string; OutputIndex: integer; var Handled: boolean); override;
+    procedure ReadLine(Line: string; OutputIndex: integer; IsStdErr: boolean;
+      var Handled: boolean); override;
     procedure AddMsgLine(MsgLine: TMessageLine); override;
     procedure ImproveMessages(aPhase: TExtToolParserSyncPhase); override;
     function GetFPCMsgIDPattern(MsgID: integer): string; override;
@@ -247,6 +253,7 @@ type
     class function GetFPCMsgPattern(Msg: TMessageLine): string; override;
     class function GetFPCMsgValue1(Msg: TMessageLine): string; override;
     class function GetFPCMsgValues(Msg: TMessageLine; out Value1, Value2: string): boolean; override;
+    class function MsgFilePool: TFPCMsgFilePool; virtual;
   end;
 
 var
@@ -828,6 +835,7 @@ begin
   Result:=nil;
   GetMsgFileNames(EnvironmentOptions.GetParsedCompilerFilename,'','',
     anEnglishFile,aTranslationFile);
+  //writeln('TFPCMsgFilePool.LoadCurrentEnglishFile ',anEnglishFile);
   if not FilenameIsAbsolute(anEnglishFile) then exit;
   Result:=LoadFile(anEnglishFile,UpdateFromDisk,AThread);
 end;
@@ -1001,7 +1009,7 @@ var
   FPCVer: String;
   FPCSrcDir: String;
   aFilename: String;
-  ErrMsg: string;
+  CompilerKind: TPascalCompiler;
 begin
   if fMsgFileStamp<>CompilerParseStamp then begin
     fCurrentEnglishFile:=DefaultEnglishFile;
@@ -1009,10 +1017,10 @@ begin
     // English msg file
     // => use fpcsrcdir/compiler/msg/errore.msg
     // the fpcsrcdir might depend on the FPC version
-    if IsFPCExecutable(CompilerFilename,ErrMsg) then
-      FPCVer:=CodeToolBoss.CompilerDefinesCache.GetFPCVersion(CompilerFilename,TargetOS,TargetCPU,false)
-    else
-      FPCVer:='';
+    FPCVer:=CodeToolBoss.CompilerDefinesCache.GetPCVersion(
+              CompilerFilename,TargetOS,TargetCPU,false,CompilerKind);
+    if CompilerKind<>pcFPC then
+      ;// ToDo
     FPCSrcDir:=EnvironmentOptions.GetParsedFPCSourceDirectory(FPCVer);
     if FilenameIsAbsolute(FPCSrcDir) then begin
       // FPCSrcDir exists => use the errore.msg
@@ -1072,9 +1080,9 @@ begin
   FreeAndNil(fFileExists);
   FreeAndNil(fCurSource);
   if TranslationFile<>nil then
-    FPCMsgFilePool.UnloadFile(TranslationFile);
+    MsgFilePool.UnloadFile(TranslationFile);
   if MsgFile<>nil then
-    FPCMsgFilePool.UnloadFile(MsgFile);
+    MsgFilePool.UnloadFile(MsgFile);
   FreeAndNil(DirectoryStack);
   FreeAndNil(fLineToMsgID);
   inherited Destroy;
@@ -1089,7 +1097,7 @@ procedure TIDEFPCParser.Init;
       debugln(['WARNING: TFPCParser.Init missing msg file'])
     else if (aFilename<>'') and (List=nil) then begin
       try
-        List:=FPCMsgFilePool.LoadFile(aFilename,true,nil);
+        List:=MsgFilePool.LoadFile(aFilename,true,nil);
         {$IFDEF VerboseExtToolThread}
         debugln(['LoadMsgFile successfully read ',aFilename]);
         {$ENDIF}
@@ -1107,20 +1115,14 @@ var
   p: PChar;
   aTargetOS: String;
   aTargetCPU: String;
-  FPCVersion: integer;
-  FPCRelease: integer;
-  FPCPatch: integer;
   aProject: TLazProject;
   aProjFile: TLazProjectFile;
 begin
   inherited Init;
 
-  // get FPC version
-  CodeToolBoss.GetFPCVersionForDirectory(Tool.WorkerDirectory, FPCVersion,
-    FPCRelease, FPCPatch);
-  FPC_FullVersion:=FPCVersion*10000+FPCRelease*100+FPCPatch;
+  PC_FullVersion:=GetDefaultPCFullVersion;
 
-  if FPCMsgFilePool<>nil then begin
+  if MsgFilePool<>nil then begin
     aTargetOS:='';
     aTargetCPU:='';
     for i:=0 to Tool.Process.Parameters.Count-1 do begin
@@ -1133,7 +1135,7 @@ begin
       else if p[1]='P' then
         aTargetCPU:=copy(Param,3,255);
     end;
-    FPCMsgFilePool.GetMsgFileNames(Tool.Process.Executable,aTargetOS,aTargetCPU,
+    MsgFilePool.GetMsgFileNames(Tool.Process.Executable,aTargetOS,aTargetCPU,
       MsgFilename,TranslationFilename);
   end;
 
@@ -1258,7 +1260,7 @@ begin
   end;
   MsgLine:=CreateMsgLine;
   MsgLine.Urgency:=mluProgress;
-  MsgLine.SubTool:=SubToolFPC;
+  MsgLine.SubTool:=DefaultSubTool;
   MsgLine.Filename:=AFilename;
   MsgLine.Msg:=OldP;
   inherited AddMsgLine(MsgLine);
@@ -1276,7 +1278,7 @@ begin
   if (not Result) and (not CompStr('Assembling ',p)) then exit;
   MsgLine:=CreateMsgLine;
   MsgLine.Urgency:=mluProgress;
-  MsgLine.SubTool:=SubToolFPC;
+  MsgLine.SubTool:=DefaultSubTool;
   MsgLine.Urgency:=mluProgress;
   MsgLine.Msg:=OldP;
   inherited AddMsgLine(MsgLine);
@@ -1341,7 +1343,7 @@ begin
       CheckFinalNote;
     end;
   end
-  else if ReadString(p,'Warn: ') then
+  else if ReadString(p,'Warn: ') or ReadString(p,'Warning:') then
     MsgType:=mluWarning
   else if ReadString(p,'Note: ') then
     MsgType:=mluNote
@@ -1380,7 +1382,7 @@ begin
           TranslatedItem:=TranslationFile.GetMsg(fMsgID);
         Translate(p,MsgItem,TranslatedItem,TranslatedMsg,MsgType);
         if (TranslatedItem=nil) and (MsgItem=nil) then begin
-          if ConsoleVerbosity>=0 then
+          if ConsoleVerbosity>=1 then
             debugln(['TFPCParser.CheckForGeneralMessage msgid not found: ',fMsgID]);
         end;
       end;
@@ -1393,7 +1395,7 @@ begin
   end;
   MsgLine:=CreateMsgLine;
   MsgLine.Urgency:=MsgType;
-  MsgLine.SubTool:=SubToolFPC;
+  MsgLine.SubTool:=DefaultSubTool;
   MsgLine.Msg:=p;
   MsgLine.TranslatedMsg:=TranslatedMsg;
   AddMsgLine(MsgLine);
@@ -1414,7 +1416,7 @@ begin
   if not ReadNumberWithThousandSep(p) then exit;
   if not ReadChar(p,' ') then exit;
   MsgLine:=CreateMsgLine;
-  MsgLine.SubTool:=SubToolFPC;
+  MsgLine.SubTool:=DefaultSubTool;
   MsgLine.Urgency:=mluProgress;
   MsgLine.Msg:=OldP;
   inherited AddMsgLine(MsgLine);
@@ -1436,7 +1438,7 @@ begin
   end;
   Result:=true;
   MsgLine:=CreateMsgLine;
-  MsgLine.SubTool:=SubToolFPC;
+  MsgLine.SubTool:=DefaultSubTool;
   if ShowLinesCompiled then
     MsgLine.Urgency:=mluImportant
   else
@@ -1472,7 +1474,7 @@ begin
   end;
   Result:=true;
   MsgLine:=CreateMsgLine;
-  MsgLine.SubTool:=SubToolFPC;
+  MsgLine.SubTool:=DefaultSubTool;
   MsgLine.Urgency:=mluProgress;
   MsgLine.Msg:=OldStart;
   inherited AddMsgLine(MsgLine);
@@ -1500,12 +1502,14 @@ end;
 
 function TIDEFPCParser.CheckForLinkerErrors(p: PChar): boolean;
 const
-  pat: String = 'Undefined symbols for architecture';
+  patUndefinedSymbol: String = 'Undefined symbols for architecture';
+  patLD: String = '/usr/bin/ld: ';
 var
   MsgLine: TMessageLine;
+  Urgency: TMessageLineUrgency;
+  s: string;
 begin
-  Result:=CompareMem(PChar(pat),p,length(pat));
-  if Result then
+  if CompareMem(PChar(patUndefinedSymbol),p,length(patUndefinedSymbol)) then
   begin
     MsgLine:=CreateMsgLine;
     MsgLine.MsgID:=0;
@@ -1513,7 +1517,28 @@ begin
     MsgLine.Urgency:=mluError;
     MsgLine.Msg:='linker: '+p;
     inherited AddMsgLine(MsgLine);
+    exit(true);
   end;
+  if CompareMem(PChar(patLD),p,length(patLD)) then
+  begin
+    MsgLine:=CreateMsgLine;
+    MsgLine.MsgID:=0;
+    MsgLine.SubTool:=SubToolFPCLinker;
+    s:=p;
+    Urgency:=mluHint;
+    if fMsgIsStdErr then
+    begin
+      Urgency:=mluWarning;
+      if (Pos('link.res',s)>0) and (Pos(' -T',s)>0) then
+        // /usr/bin/ld: warning: /path/link.res contains output sections; did you forget -T?
+        Urgency:=mluVerbose;
+    end;
+    MsgLine.Urgency:=Urgency;
+    MsgLine.Msg:='linker: '+s;
+    inherited AddMsgLine(MsgLine);
+    exit(true);
+  end;
+  Result:=false;
 end;
 
 function TIDEFPCParser.CheckForAssemblerErrors(p: PChar): boolean;
@@ -1538,10 +1563,23 @@ begin
   AddMsgLine(MsgLine);
 end;
 
+function TIDEFPCParser.CheckForUnspecificStdErr(p: PChar): boolean;
+var
+  MsgLine: TMessageLine;
+begin
+  if not fMsgIsStdErr then exit(false);
+  Result:=true;
+  MsgLine:=CreateMsgLine;
+  MsgLine.SubTool:=SubToolFPC;
+  MsgLine.Urgency:=mluError;
+  MsgLine.Msg:=p;
+  AddMsgLine(MsgLine);
+end;
+
 function TIDEFPCParser.CheckForInfos(p: PChar): boolean;
 
   function ReadFPCLogo(PatternItem: PPatternToMsgID;
-    out FPCVersionAsInt: cardinal): boolean;
+    out FPCVersionAsInt: LongWord): boolean;
   var
     Line: string;
     Ranges: TFPCMsgRanges;
@@ -1580,7 +1618,7 @@ var
   MsgLine: TMessageLine;
   MsgType: TMessageLineUrgency;
   PatternItem: PPatternToMsgID;
-  aFPCVersion: cardinal;
+  aFPCVersion: LongWord;
 begin
   Result:=false;
   PatternItem:=fLineToMsgID.LineToPattern(p);
@@ -1598,13 +1636,13 @@ begin
   if MsgType=mluNone then
     MsgType:=mluVerbose;
   MsgLine:=CreateMsgLine;
-  MsgLine.SubTool:=SubToolFPC;
+  MsgLine.SubTool:=DefaultSubTool;
   MsgLine.Urgency:=MsgType;
   if (fMsgID=FPCMsgIDLogo) and ReadFPCLogo(PatternItem,aFPCVersion) then begin
-    if aFPCVersion<>FPC_FullVersion then begin
+    if aFPCVersion<>PC_FullVersion then begin
       // unexpected FPC version => always show
       MsgLine.Urgency:=mluImportant;
-      FPC_FullVersion:=aFPCVersion;
+      PC_FullVersion:=aFPCVersion;
     end;
   end;
   AddMsgLine(MsgLine);
@@ -1614,6 +1652,8 @@ function TIDEFPCParser.CreateMsgLine: TMessageLine;
 begin
   Result:=inherited CreateMsgLine(fOutputIndex);
   Result.MsgID:=fMsgID;
+  if fMsgIsStdErr then
+    Result.Flags:=Result.Flags+[mlfStdErr];
 end;
 
 procedure TIDEFPCParser.AddLinkingMessages;
@@ -1652,6 +1692,15 @@ For example:
         _COCOAINT_TCOCOAWIDGETSET_$__GETKEYSTATE$LONGINT$$SMALLINT in cocoaint.o
   ld: symbol(s) not found for architecture x86_64
   An error occurred while linking
+
+  Linking IDE:
+  (9015) Linking ../lazarus
+  /usr/bin/ld: cannot find -lGL
+  make[2]: *** [lazarus] Error 1
+  make[1]: *** [idepkg] Error 2
+  make: *** [idepkg] Error 2
+  /home/mattias/pascal/wichtig/lazarus/ide/lazarus.pp(161,1) Error: (9013) Error while linking
+
 }
 var
   i: Integer;
@@ -1661,6 +1710,7 @@ begin
   i:=Tool.WorkerMessages.Count-1;
   while i>=0 do begin
     MsgLine:=Tool.WorkerMessages[i];
+    //debugln(['TIDEFPCParser.AddLinkingMessages ',i,' ',dbgs(MsgLine.Urgency),' ',MsgLine.Msg]);
     if MsgLine.Urgency<mluHint then
       MsgLine.Urgency:=mluImportant
     else
@@ -1672,6 +1722,7 @@ begin
   i:=Tool.WorkerMessages.Count-1;
   if i<0 then exit;
   MsgLine:=Tool.WorkerMessages[i];
+  //debugln(['TIDEFPCParser.AddLinkingMessages MsgLine.OutputIndex=',MsgLine.OutputIndex,' fOutputIndex=',fOutputIndex]);
   for i:=MsgLine.OutputIndex+1 to fOutputIndex-1 do begin
     MsgLine:=inherited CreateMsgLine(i);
     MsgLine.MsgID:=0;
@@ -1733,7 +1784,7 @@ begin
   if MsgLine.MsgID=MsgID then exit(true);
   Result:=false;
   if MsgLine.MsgID<>0 then exit;
-  if MsgLine.SubTool<>SubToolFPC then exit;
+  if MsgLine.SubTool<>DefaultSubTool then exit;
   if Item=nil then begin
     Item:=MsgFile.GetMsg(MsgID);
     if Item=nil then
@@ -2483,7 +2534,7 @@ begin
   //debugln(['TIDEFPCParser.FindSrcViaPPU i=',i,' PPUFilename="',PPUFilename,'" Filename="',aFilename,'"']);
   if (i>0) then begin
     PrevMsgLine:=Tool.WorkerMessages[i-1];
-    if (PrevMsgLine.SubTool=SubToolFPC)
+    if (PrevMsgLine.SubTool=DefaultSubTool)
     and (CompareFilenames(PPUFilename,PrevMsgLine.Attribute['PPU'])=0)
     and FilenameIsAbsolute(PrevMsgLine.Filename)
     and (CompareFilenames(ExtractFilename(PrevMsgLine.Filename),ExtractFilename(aFilename))=0)
@@ -2589,7 +2640,7 @@ begin
   FFilesToIgnoreUnitNotUsed:=TStringList.Create;
   HideHintsSenderNotUsed:=true;
   HideHintsUnitNotUsedInMainSource:=true;
-  FPC_FullVersion:=GetCompiledFPCVersion;
+  PC_FullVersion:=GetCompiledFPCVersion;
 end;
 
 function TIDEFPCParser.FileExists(const Filename: string; aSynchronized: boolean
@@ -2688,7 +2739,7 @@ begin
     if ShowLinesCompiled then MsgUrgency:=mluImportant;
   end;
   MsgLine:=CreateMsgLine;
-  MsgLine.SubTool:=SubToolFPC;
+  MsgLine.SubTool:=DefaultSubTool;
   MsgLine.Urgency:=MsgUrgency;
   MsgLine.Msg:=Msg;
   MsgLine.TranslatedMsg:=TranslatedMsg;
@@ -2780,11 +2831,13 @@ begin
   if not ReadChar(p,')') then exit;
   if not ReadChar(p,' ') then exit;
   MsgType:=mluNote;
-  if ReadString(p,'Hint:') then begin
+  if ReadString(p,'Info:') then begin
+    MsgType:=mluVerbose;
+  end else if ReadString(p,'Hint:') then begin
     MsgType:=mluHint;
   end else if ReadString(p,'Note:') then begin
     MsgType:=mluNote;
-  end else if ReadString(p,'Warn:') then begin
+  end else if ReadString(p,'Warn:') or ReadString(p,'Warning: ') then begin
     MsgType:=mluWarning;
   end else if ReadString(p,'Error:') then begin
     MsgType:=mluError;
@@ -2822,13 +2875,15 @@ begin
           TranslatedItem:=TranslationFile.GetMsg(fMsgID);
         if (MsgFile<>nil) then
           MsgItem:=MsgFile.GetMsg(fMsgID);
-        Translate(p,MsgItem,TranslatedItem,TranslatedMsg,MsgType);
         if (TranslatedItem=nil) and (MsgItem=nil) then begin
-          if ConsoleVerbosity>=0 then
+          if ConsoleVerbosity>=1 then
             debugln(['TFPCParser.CheckForFileLineColMessage msgid not found: ',fMsgID]);
-        end else if MsgType=mluNone then begin
-          if ConsoleVerbosity>=0 then
-            debugln(['TFPCParser.CheckForFileLineColMessage msgid has no type: ',fMsgID]);
+        end else begin
+          Translate(p,MsgItem,TranslatedItem,TranslatedMsg,MsgType);
+          if MsgType=mluNone then begin
+            if ConsoleVerbosity>=1 then
+              debugln(['TFPCParser.CheckForFileLineColMessage msgid has no type: ',fMsgID]);
+          end;
         end;
       end;
     end;
@@ -2839,7 +2894,7 @@ begin
     Column:=0;
 
   MsgLine:=CreateMsgLine;
-  MsgLine.SubTool:=SubToolFPC;
+  MsgLine.SubTool:=DefaultSubTool;
   MsgLine.Urgency:=MsgType;
   aFilename:=GetString(FileStartPos,FileEndPos-FileStartPos);
   if PPUFileStartPos<>nil then
@@ -2871,7 +2926,7 @@ begin
     if not ReadString(p,') unit ') then exit;
   end;
   MsgLine:=CreateMsgLine;
-  MsgLine.SubTool:=SubToolFPC;
+  MsgLine.SubTool:=DefaultSubTool;
   MsgLine.Urgency:=mluProgress;
   MsgLine.Msg:=OldP;
   AddMsgLine(MsgLine);
@@ -2879,7 +2934,7 @@ begin
 end;
 
 procedure TIDEFPCParser.ReadLine(Line: string; OutputIndex: integer;
-  var Handled: boolean);
+  IsStdErr: boolean; var Handled: boolean);
 { returns true, if it is a compiler message
    Examples for freepascal compiler messages:
      Compiling <filename>
@@ -2897,18 +2952,11 @@ var
   p: PChar;
 begin
   if Line='' then exit;
-  if FPC_FullVersion>=20701 then
-    Line:=ConsoleToUTF8(Line)
-  else begin
-    {$IFDEF MSWINDOWS}
-    Line:=WinCPToUTF8(Line);
-    {$ELSE}
-    Line:=SysToUTF8(Line);
-    {$ENDIF}
-  end;
+  Line:=ToUTF8(Line);
   p:=PChar(Line);
   fOutputIndex:=OutputIndex;
   fMsgID:=0;
+  fMsgIsStdErr:=IsStdErr;
 
   // skip time [0.000]
   if (p^='[') and (p[1] in ['0'..'9']) then begin
@@ -2939,6 +2987,8 @@ begin
 
   Handled:=true;
 
+  //debugln(['TIDEFPCParser.ReadLine ',IsStdErr,' ',Line]);
+
   // check for (msgid) message
   if CheckForMsgId(p) then exit;
   // check for 'filename(line,column) Error: message'
@@ -2965,6 +3015,9 @@ begin
   if CheckForLinkerErrors(p) then exit;
   // check for assembler errors
   if CheckForAssemblerErrors(p) then exit;
+
+  // last: check for unknown std error
+  if CheckForUnspecificStdErr(p) then exit;
 
   {$IFDEF VerboseFPCParser}
   debugln('TFPCParser.ReadLine UNKNOWN: ',Line);
@@ -3063,6 +3116,28 @@ begin
   MsgLine.Attribute[FPCMsgAttrWorkerDirectory]:=Tool.WorkerDirectory;
 end;
 
+function TIDEFPCParser.GetDefaultPCFullVersion: LongWord;
+var
+  Kind: TPascalCompiler;
+begin
+  // get compiler version
+  Result:=LongWord(CodeToolBoss.GetPCVersionForDirectory(Tool.WorkerDirectory,Kind));
+  if Kind=pcFPC then ;
+end;
+
+function TIDEFPCParser.ToUTF8(const Line: string): string;
+begin
+  if PC_FullVersion>=20701 then
+    Result:=ConsoleToUTF8(Line)
+  else begin
+    {$IFDEF MSWINDOWS}
+    Result:=WinCPToUTF8(Line);
+    {$ELSE}
+    Result:=SysToUTF8(Line);
+    {$ENDIF}
+  end;
+end;
+
 procedure TIDEFPCParser.ImproveMessages(aPhase: TExtToolParserSyncPhase);
 var
   i: Integer;
@@ -3085,7 +3160,7 @@ begin
     Y:=MsgLine.Line;
     X:=MsgLine.Column;
     if (Y>0) and (X>0)
-    and (MsgLine.SubTool=SubToolFPC) and (MsgLine.Filename<>'')
+    and (MsgLine.SubTool=DefaultSubTool) and (MsgLine.Filename<>'')
     then begin
       if mlfTestBuildFile in MsgLine.Flags then
         aFilename:=MsgLine.Attribute[MsgAttrDiskFilename]
@@ -3103,7 +3178,7 @@ begin
         // short file name => 1. search the full file name in previous message
         if i>0 then begin
           PrevMsgLine:=Tool.WorkerMessages[i-1];
-          if (PrevMsgLine.SubTool=SubToolFPC)
+          if (PrevMsgLine.SubTool=DefaultSubTool)
           and FilenameIsAbsolute(PrevMsgLine.Filename)
           and (CompareFilenames(ExtractFilename(PrevMsgLine.Filename),ExtractFilename(aFilename))=0)
           then begin
@@ -3126,7 +3201,7 @@ begin
           // include path is valid and in worker thread
           // -> search file
           aFilename:=FileUtil.SearchFileInPath(aFilename,MsgWorkerDir,fIncludePath,';',
-                                 [FileUtil.sffSearchLoUpCase]);
+                                 [FileUtil.sffSearchLoUpCase,sffFile]);
           if aFilename<>'' then
             MsgLine.Filename:=aFilename;
         end;
@@ -3220,15 +3295,15 @@ var
   MsgItem: TFPCMsgItem;
 begin
   Result:='';
-  if CompareText(SubTool,SubToolFPC)=0 then begin
-    CurMsgFile:=FPCMsgFilePool.LoadCurrentEnglishFile(false,nil);
+  if CompareText(SubTool,DefaultSubTool)=0 then begin
+    CurMsgFile:=MsgFilePool.LoadCurrentEnglishFile(false,nil);
     if CurMsgFile=nil then exit;
     try
       MsgItem:=CurMsgFile.GetMsg(MsgID);
       if MsgItem=nil then exit;
       Result:=MsgItem.GetTrimmedComment(false,true);
     finally
-      FPCMsgFilePool.UnloadFile(CurMsgFile);
+      MsgFilePool.UnloadFile(CurMsgFile);
     end;
   end;
 end;
@@ -3241,9 +3316,9 @@ var
 begin
   Result:='';
   Urgency:=mluNone;
-  if CompareText(SubTool,SubToolFPC)=0 then begin
-    if FPCMsgFilePool=nil then exit;
-    CurMsgFile:=FPCMsgFilePool.LoadCurrentEnglishFile(false,nil);
+  if CompareText(SubTool,DefaultSubTool)=0 then begin
+    if MsgFilePool=nil then exit;
+    CurMsgFile:=MsgFilePool.LoadCurrentEnglishFile(false,nil);
     if CurMsgFile=nil then exit;
     try
       MsgItem:=CurMsgFile.GetMsg(MsgID);
@@ -3251,7 +3326,7 @@ begin
       Result:=MsgItem.Pattern;
       Urgency:=FPCMsgToMsgUrgency(MsgItem);
     finally
-      FPCMsgFilePool.UnloadFile(CurMsgFile);
+      MsgFilePool.UnloadFile(CurMsgFile);
     end;
   end;
 end;
@@ -3284,7 +3359,7 @@ begin
   Value1:='';
   Value2:='';
   if Msg=nil then exit(false);
-  if Msg.SubTool<>SubToolFPC then exit(false);
+  if Msg.SubTool<>DefaultSubTool then exit(false);
   if (Msg.MsgID<>MsgId)
   and (Msg.MsgID<>0) then exit(false);
   Result:=true;
@@ -3330,7 +3405,7 @@ class function TIDEFPCParser.GetFPCMsgValue1(Msg: TMessageLine): string;
 begin
   Result:='';
   if Msg.MsgID<=0 then exit;
-  if Msg.SubTool<>SubToolFPC then exit;
+  if Msg.SubTool<>DefaultSubTool then exit;
   if not etFPCMsgParser.GetFPCMsgValue1(Msg.Msg,GetFPCMsgPattern(Msg),Result) then
     Result:='';
 end;
@@ -3340,14 +3415,19 @@ class function TIDEFPCParser.GetFPCMsgValues(Msg: TMessageLine; out Value1,
 begin
   Result:=false;
   if Msg.MsgID<=0 then exit;
-  if Msg.SubTool<>SubToolFPC then exit;
+  if Msg.SubTool<>DefaultSubTool then exit;
   Result:=etFPCMsgParser.GetFPCMsgValues2(Msg.Msg,GetFPCMsgPattern(Msg),Value1,Value2);
+end;
+
+class function TIDEFPCParser.MsgFilePool: TFPCMsgFilePool;
+begin
+  Result:=FPCMsgFilePool;
 end;
 
 initialization
   IDEFPCParser:=TIDEFPCParser;
 finalization
-  FreeAndNil(FPCMsgFilePool)
+  FreeAndNil(FPCMsgFilePool);
 
 end.
 

@@ -802,7 +802,16 @@ end;
 
 procedure TSynEditStringList.SetIsUndoing(const AValue: Boolean);
 begin
+  if FIsUndoing = AValue then
+    exit;
+
+  if not AValue then
+    SendNotification(senrEndUndoRedo, Self); // before UNDO ends
+
   FIsUndoing := AValue;
+
+  if AValue then
+    SendNotification(senrBeginUndoRedo, Self); // after UNDO started
 end;
 
 function TSynEditStringList.GetIsUndoing: Boolean;
@@ -812,7 +821,16 @@ end;
 
 procedure TSynEditStringList.SetIsRedoing(const AValue: Boolean);
 begin
+  if FIsRedoing = AValue then
+    exit;
+
+  if not AValue then
+    SendNotification(senrEndUndoRedo, Self); // before UNDO ends
+
   FIsRedoing := AValue;
+
+  if AValue then
+    SendNotification(senrBeginUndoRedo, Self); // after UNDO started
 end;
 
 function TSynEditStringList.GetIsRedoing: Boolean;
@@ -1281,13 +1299,13 @@ begin
     exit;
   IncIsInEditAction;
   s := Strings[LogY - 1];
-  if LogX - 1 > Length(s) then
-    exit;
-  Result := copy(s, LogX, ByteLen);
-  Strings[LogY - 1] := copy(s,1, LogX - 1) + copy(s, LogX +  ByteLen, length(s));
-  if Result <> '' then
-    CurUndoList.AddChange(TSynEditUndoTxtDelete.Create(LogX, LogY, Result));
-  MarkModified(LogY, LogY);
+  if LogX - 1 <= Length(s) then begin
+    Result := copy(s, LogX, ByteLen);
+    Strings[LogY - 1] := copy(s,1, LogX - 1) + copy(s, LogX +  ByteLen, length(s));
+    if Result <> '' then
+      CurUndoList.AddChange(TSynEditUndoTxtDelete.Create(LogX, LogY, Result));
+    MarkModified(LogY, LogY);
+  end;
   SendNotification(senrEditAction, self, LogY, 0, LogX, -ByteLen, '');
   DecIsInEditAction;
 end;

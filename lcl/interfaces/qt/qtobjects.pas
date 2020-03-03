@@ -376,15 +376,13 @@ type
     SelFont: TQtFont;
     SelBrush: TQtBrush;
     SelPen: TQtPen;
-    PenColor: TQColor;
     FMetrics: TQtFontMetrics;
     function GetMetrics: TQtFontMetrics;
     function GetRop: Integer;
     function DeviceSupportsComposition: Boolean;
     function DeviceSupportsRasterOps: Boolean;
     function R2ToQtRasterOp(AValue: Integer): QPainterCompositionMode;
-    procedure RestorePenColor;
-    procedure RestoreTextColor;
+    procedure SetTextColor;
     procedure SetRop(const AValue: Integer);
   public
     { public fields }
@@ -2472,8 +2470,10 @@ begin
   if AColor = nil then
     AColor := BackgroundBrush.getColor;
   // stop asserts from qtlib
+  {issue #36411. Seem that assert triggered in Qt4 < 4.7 only.
   if (w < x) or (h < y) then
     exit;
+  }
   q_DrawPlainRect(Widget, x, y, w, h, AColor, lineWidth, FillBrush);
 end;
 
@@ -2526,7 +2526,7 @@ begin
       Palette := QWidget_palette(Parent);
   end;
   // since q_DrawWinPanel doesnot supports lineWidth we should do it ourself
-  for i := 1 to lineWidth - 2 do
+  for i := 1 to lineWidth - 1 do
   begin
     q_DrawWinPanel(Widget, x, y, w, h, Palette, Sunken);
     inc(x);
@@ -2721,19 +2721,6 @@ begin
   end;
 end;
 
-{------------------------------------------------------------------------------
-  Function: TQtDeviceContext.RestorePenColor
-  Params:  None
-  Returns: Nothing
- ------------------------------------------------------------------------------}
-procedure TQtDeviceContext.RestorePenColor;
-begin
-  {$ifdef VerboseQt}
-  writeln('TQtDeviceContext.RestorePenColor() ');
-  {$endif}
-  QPainter_setPen(Widget, @PenColor);
-end;
-
 function TQtDeviceContext.GetRop: Integer;
 begin
   Result := FRopMode;
@@ -2745,23 +2732,20 @@ begin
 end;
 
 {------------------------------------------------------------------------------
-  Function: TQtDeviceContext.RestoreTextColor
+  Function: TQtDeviceContext.SetTextColor
   Params:  None
   Returns: Nothing
  ------------------------------------------------------------------------------}
-procedure TQtDeviceContext.RestoreTextColor;
+procedure TQtDeviceContext.SetTextColor;
 var
-  CurPen: QPenH;
   TxtColor: TQColor;
 begin
   {$ifdef VerboseQt}
   writeln('TQtDeviceContext.RestoreTextColor() ');
   {$endif}
-  CurPen := QPainter_Pen(Widget);
-  QPen_color(CurPen, @PenColor);
-  TxtColor := PenColor;
+  TxtColor := Default(TQColor);
   ColorRefToTQColor(vTextColor, TxtColor);
-  QPainter_setPen(Widget, @txtColor);
+  QPainter_setPen(Widget, PQColor(@txtColor));
 end;
 
 procedure TQtDeviceContext.SetRop(const AValue: Integer);
@@ -2822,8 +2806,9 @@ end;
   To get a correct behavior we need to sum the text's height to the Y coordinate.
  ------------------------------------------------------------------------------}
 procedure TQtDeviceContext.drawText(x: Integer; y: Integer; s: PWideString);
-{$IFDEF DARWIN}
 var
+  APen: QPenH;
+{$IFDEF DARWIN}
   OldBkMode: Integer;
 {$ENDIF}
 begin
@@ -2842,11 +2827,15 @@ begin
   // what about Metrics.descent and Metrics.leading ?
   y := y + Metrics.ascent;
 
-  RestoreTextColor;
+  APen := QPen_create(QPainter_pen(Widget));
+  SetTextColor;
 
   // The ascent is only applied here, because it also needs
   // to be rotated
   {$IFDEF DARWIN}
+  if getBKMode = OPAQUE then
+    QPainter_fillRect(Widget, x, y - Metrics.ascent, Font.Metrics.width(s), Font.Metrics.height, QPainter_brush(Widget));
+
   OldBkMode := SetBkMode(TRANSPARENT);
   {$ENDIF}
   if Font.Angle <> 0 then
@@ -2856,9 +2845,9 @@ begin
   {$IFDEF DARWIN}
   SetBkMode(OldBkMode);
   {$ENDIF}
-  
-  RestorePenColor;
-  
+  QPainter_setPen(Widget, APen);
+  QPen_destroy(APen);
+
   // Restore previous angle
   if Font.Angle <> 0 then
   begin
@@ -2879,8 +2868,9 @@ end;
   Returns: Nothing
  ------------------------------------------------------------------------------}
 procedure TQtDeviceContext.drawText(x, y, w, h, flags: Integer; s: PWideString);
-{$IFDEF DARWIN}
 var
+  APen: QPenH;
+{$IFDEF DARWIN}
   OldBkMode: Integer;
 {$ENDIF}
 begin
@@ -2896,8 +2886,12 @@ begin
     Rotate(-0.1 * Font.Angle);
   end;
 
-  RestoreTextColor;
+  APen := QPen_create(QPainter_pen(Widget));
+  SetTextColor;
   {$IFDEF DARWIN}
+  if getBKMode = OPAQUE then
+    QPainter_fillRect(Widget, x, y, w, h, QPainter_brush(Widget));
+
   OldBkMode := SetBkMode(TRANSPARENT);
   {$ENDIF}
   if Font.Angle <> 0 then
@@ -2907,7 +2901,8 @@ begin
   {$IFDEF DARWIN}
   SetBkMode(OldBkMode);
   {$ENDIF}
-  RestorePenColor;
+  QPainter_setPen(Widget, APen);
+  QPen_destroy(APen);
 
   // Restore previous angle
   if Font.Angle <> 0 then
@@ -3137,8 +3132,9 @@ begin
   SelFont := AFont;
   if (AFont.FHandle <> nil) and (Widget <> nil) then
   begin
-    QFnt := QPainter_font(Widget);
-    AssignQtFont(AFont.FHandle, QFnt);
+    QFnt := QFont_Create(AFont.FHandle);
+    QPainter_setFont(Widget, QFnt);
+    QFont_destroy(QFnt);
     vFont.Angle := AFont.Angle;
   end;
 end;
@@ -3436,6 +3432,8 @@ var
   ScaledMask: QImageH;
   NewRect: TRect;
   ARenderHint: Boolean;
+  ATransformation: QtTransformationMode;
+  ARenderHints: QPainterRenderHints;
 
   function NeedScaling: boolean;
   var
@@ -3570,9 +3568,17 @@ begin
         ScaledImage := QImage_create();
         try
           QImage_copy(Image, ScaledImage, 0, 0, QImage_width(Image), QImage_height(Image));
-          // use smooth transformation when scaling image. issue #29883
+          {use smooth transformation when scaling image. issue #29883
+           check if antialiasing is on, if not then don''t call smoothTransform. issue #330011}
+          ARenderHints := QPainter_renderHints(Widget);
+          if (ARenderHints and QPainterAntialiasing <> 0) or (ARenderHints and QPainterSmoothPixmapTransform <> 0) or
+            (ARenderHints and QPainterHighQualityAntialiasing <> 0) then
+              ATransformation := QtSmoothTransformation
+          else
+            ATransformation := QtFastTransformation;
+
           QImage_scaled(ScaledImage, ScaledImage, LocalRect.Right - LocalRect.Left,
-            LocalRect.Bottom - LocalRect.Top, QtIgnoreAspectRatio, QtSmoothTransformation);
+            LocalRect.Bottom - LocalRect.Top, QtIgnoreAspectRatio, ATransformation);
           NewRect := sourceRect^;
           NewRect.Right := (LocalRect.Right - LocalRect.Left) + sourceRect^.Left;
           NewRect.Bottom := (LocalRect.Bottom - LocalRect.Top) + sourceRect^.Top;
@@ -3582,13 +3588,19 @@ begin
         end;
       end else
       begin
-        // smooth a bit. issue #29883
-        ARenderHint := QPainter_testRenderHint(Widget, QPainterSmoothPixmapTransform);
-        if (QImage_format(image) = QImageFormat_ARGB32) and (flags = QtAutoColor) and
+        {smooth a bit. issue #29883
+         check if antialiasing is on, if not then don''t call smoothTransform. issue #330011}
+
+        ARenderHints := QPainter_renderHints(Widget);
+        ARenderHint := (ARenderHints and QPainterAntialiasing <> 0) or (ARenderHints and QPainterSmoothPixmapTransform <> 0) or
+          (ARenderHints and QPainterHighQualityAntialiasing <> 0);
+
+        if ARenderHint and (QImage_format(image) = QImageFormat_ARGB32) and (flags = QtAutoColor) and
           not EqualRect(LocalRect, sourceRect^) then
             QPainter_setRenderHint(Widget, QPainterSmoothPixmapTransform, True);
         QPainter_drawImage(Widget, PRect(@LocalRect), image, sourceRect, flags);
-        QPainter_setRenderHint(Widget, QPainterSmoothPixmapTransform, ARenderHint);
+        if ARenderHint then
+          QPainter_setRenderHint(Widget, QPainterSmoothPixmapTransform, not ARenderHint);
       end;
     end;
   end;
@@ -4419,7 +4431,8 @@ var
   Str: WideString;
 begin
   Str := AValue;
-  QPrinter_setPrinterName(FHandle, @Str);
+  if getPrinterName <> AValue then
+    QPrinter_setPrinterName(FHandle, @Str);
 end;
 
 function TQtPrinter.getPrinterName: WideString;
@@ -4742,12 +4755,14 @@ end;
 
 constructor TQtStringList.Create;
 begin
+  inherited Create;
   FHandle := QStringList_create();
   FOwnHandle := True;
 end;
 
 constructor TQtStringList.Create(Source: QStringListH);
 begin
+  inherited Create;
   FHandle := Source;
   FOwnHandle := False;
 end;

@@ -37,7 +37,7 @@ interface
 uses
   Classes, SysUtils, LCLProc, Forms, Controls, Dialogs, StdCtrls, Buttons, Spin,
   ExtCtrls, Graphics, IDECommands, PropEdits, IDEDialogs, LazarusIDEStrConsts,
-  IDEOptionDefs, IDEImagesIntf;
+  IDEOptionDefs, IDEImagesIntf, EnvironmentOpts;
 
 type
 
@@ -159,6 +159,7 @@ type
     TopRefTopSpeedButton: TSpeedButton;
     TopSiblingComboBox: TComboBox;
     TopSiblingLabel: TLabel;
+    procedure FormActivate(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure FormShow(Sender: TObject);
@@ -247,7 +248,7 @@ begin
   end;
 end;
 
-procedure SetEnabledControls(AEnabled: Boolean; AControls: array of TControl);
+procedure SetEnabledControls(AEnabled: Boolean; const AControls: array of TControl);
 var
   i: Integer;
 begin
@@ -466,18 +467,18 @@ end;
 
 procedure TAnchorDesigner.LoadGlyphs;
 begin
-  TIDEImages.AssignImage(LeftRefLeftSpeedButton.Glyph, 'anchor_left_left');
-  TIDEImages.AssignImage(LeftRefCenterSpeedButton.Glyph, 'anchor_left_center');
-  TIDEImages.AssignImage(LeftRefRightSpeedButton.Glyph, 'anchor_left_right');
-  TIDEImages.AssignImage(RightRefLeftSpeedButton.Glyph, 'anchor_right_left');
-  TIDEImages.AssignImage(RightRefCenterSpeedButton.Glyph, 'anchor_right_center');
-  TIDEImages.AssignImage(RightRefRightSpeedButton.Glyph, 'anchor_right_right');
-  TIDEImages.AssignImage(TopRefTopSpeedButton.Glyph, 'anchor_top_top');
-  TIDEImages.AssignImage(TopRefCenterSpeedButton.Glyph, 'anchor_top_center');
-  TIDEImages.AssignImage(TopRefBottomSpeedButton.Glyph, 'anchor_top_bottom');
-  TIDEImages.AssignImage(BottomRefTopSpeedButton.Glyph, 'anchor_bottom_top');
-  TIDEImages.AssignImage(BottomRefCenterSpeedButton.Glyph, 'anchor_bottom_center');
-  TIDEImages.AssignImage(BottomRefBottomSpeedButton.Glyph, 'anchor_bottom_bottom');
+  IDEImages.AssignImage(LeftRefLeftSpeedButton, 'anchor_left_left');
+  IDEImages.AssignImage(LeftRefCenterSpeedButton, 'anchor_left_center');
+  IDEImages.AssignImage(LeftRefRightSpeedButton, 'anchor_left_right');
+  IDEImages.AssignImage(RightRefLeftSpeedButton, 'anchor_right_left');
+  IDEImages.AssignImage(RightRefCenterSpeedButton, 'anchor_right_center');
+  IDEImages.AssignImage(RightRefRightSpeedButton, 'anchor_right_right');
+  IDEImages.AssignImage(TopRefTopSpeedButton, 'anchor_top_top');
+  IDEImages.AssignImage(TopRefCenterSpeedButton, 'anchor_top_center');
+  IDEImages.AssignImage(TopRefBottomSpeedButton, 'anchor_top_bottom');
+  IDEImages.AssignImage(BottomRefTopSpeedButton, 'anchor_bottom_top');
+  IDEImages.AssignImage(BottomRefCenterSpeedButton, 'anchor_bottom_center');
+  IDEImages.AssignImage(BottomRefBottomSpeedButton, 'anchor_bottom_bottom');
 end;
 
 procedure TAnchorDesigner.CreateSideControls;
@@ -562,9 +563,8 @@ begin
         CurControl.AnchorSide[Kind].Side,
         ReferenceControl,ReferenceSide,CheckPosition))
       then begin
-        if IDEMessageDialog(lisCCOWarningCaption,
-          lisThisWillCreateACircularDependency, mtWarning, [mbIgnore, mbCancel])<>
-            mrIgnore
+        if IDEMessageDialog(lisCCOWarningCaption, lisThisWillCreateACircularDependency,
+                            mtWarning, [mbIgnore, mbCancel]) <> mrIgnore
         then begin
           Refresh;
           exit;
@@ -581,7 +581,7 @@ begin
       else
         CurControl.Anchors:=CurControl.Anchors-[Kind];
     end;
-    GlobalDesignHook.Modified(Self);
+    GlobalDesignHook.Modified(Self, 'Anchors');
     GlobalDesignHook.RefreshPropertyValues;
   end;
 end;
@@ -628,7 +628,7 @@ begin
       else
         CurControl.BorderSpacing.Space[Kind]:=NewValue;
     end;
-    GlobalDesignHook.Modified(Self);
+    GlobalDesignHook.Modified(Self, 'Anchors');
     GlobalDesignHook.RefreshPropertyValues;
   end;
 end;
@@ -813,9 +813,10 @@ begin
       end;
     end;
 
-    GlobalDesignHook.Modified(Self);
+    GlobalDesignHook.Modified(Self, 'Anchors');
     GlobalDesignHook.RefreshPropertyValues;
-    if UseNeighbours then TComboBox(Sender).Caption:=NewValue;
+    if UseNeighbours then
+      TComboBox(Sender).Caption:=NewValue;
   end;
 end;
 
@@ -911,7 +912,7 @@ begin
       CurControl:=TControl(SelectedControls[i]);
       CurControl.AnchorSide[Kind].Side:=SideRef;
     end;
-    GlobalDesignHook.Modified(Self);
+    GlobalDesignHook.Modified(Self, 'Anchors');
     GlobalDesignHook.RefreshPropertyValues;
 end;
 
@@ -1116,6 +1117,14 @@ begin
       end;
     end;
   end;
+end;
+
+procedure TAnchorDesigner.FormActivate(Sender: TObject);
+begin
+  LeftSiblingComboBox.DropDownCount:=EnvironmentOptions.DropDownCount;
+  RightSiblingComboBox.DropDownCount:=EnvironmentOptions.DropDownCount;
+  TopSiblingComboBox.DropDownCount:=EnvironmentOptions.DropDownCount;
+  BottomSiblingComboBox.DropDownCount:=EnvironmentOptions.DropDownCount;
 end;
 
 class function TAnchorDesigner.ControlToStr(AControl: TControl): string;

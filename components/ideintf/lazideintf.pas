@@ -16,9 +16,14 @@ unit LazIDEIntf;
 interface
 
 uses
-  Classes, SysUtils, LCLProc, Forms, Controls, Dialogs, PropEdits, LazHelpHTML,
-  IDEOptionsIntf, CompOptsIntf, ProjectIntf,
-  IDEExternToolIntf, SrcEditorIntf, IDEWindowIntf;
+  Classes, SysUtils,
+  // LCL
+  LCLProc, Forms, Controls, Dialogs, LazHelpHTML,
+  // LazUtils
+  LazMethodList,
+  // IdeIntf
+  BaseIDEIntf, IDEOptionsIntf, IDEOptEditorIntf, CompOptsIntf, ProjectIntf,
+  IDEExternToolIntf, SrcEditorIntf, IDEWindowIntf, PropEdits;
 
 type
   TIDEDirective = (
@@ -153,12 +158,6 @@ type
     );
   TProjectBuildFlags = set of TProjectBuildFlag;
   
-  TScanModeFPCSources = (
-    smsfsSkip,
-    smsfsWaitTillDone, // scan now and wait till finished
-    smsfsBackground    // start in background
-    );
-
   // new filename flags
   // Normally you don't need to pass any flags.
   TSearchIDEFileFlag = (
@@ -215,11 +214,13 @@ type
     ): boolean of object;
 
   TSaveEditorFileStep = (
-    sefsBeforeWrite,
-    sefsAfterWrite
+    sefsSaveAs, // called after user selected a new filename and IDE did some sanity checks
+    sefsBeforeWrite, // called before writing to disk, aFile.Filename=TargetFilename
+    sefsAfterWrite, // called after writing to disk, aFile.Filename=TargetFilename
+    sefsSavedAs // see sefsSaveAs, called after writing and cleaning up, TargetFilename is old filename
     );
   TSaveEditorFileEvent = function(Sender: TObject; aFile: TLazProjectFile;
-     SaveStep: TSaveEditorFileStep; TargetFilename: string): TModalResult of object;
+    SaveStep: TSaveEditorFileStep; TargetFilename: string): TModalResult of object;
 
   TShowDesignerFormOfSourceFunction = procedure(Sender: TObject; AEditor: TSourceEditorInterface;
                                  AComponentPaletteClassSelected: Boolean) of object;
@@ -231,6 +232,7 @@ type
     lihtSavingAll, // called before IDE saves everything
     lihtSavedAll,  // called after IDE saved everything
     lihtSaveEditorFile, // called when IDE saves an editor file to disk
+    lihtSaveAsEditorFile, // called after user selected a new filename for an editor file
     lihtIDERestoreWindows, // called when IDE is restoring the windows (before opening the first project)
     lihtIDEClose, // called when IDE is shutting down (after closequery, so no more interactivity)
     lihtProjectOpened,// called after IDE opened a project
@@ -300,10 +302,8 @@ type
                                        var Handled: boolean): TModalResult;
     procedure DoCallNotifyHandler(HandlerType: TLazarusIDEHandlerType;
                                   Sender: TObject); overload;
-    procedure DoCallShowDesignerFormOfSourceHandler(
-      HandlerType: TLazarusIDEHandlerType;
-      Sender: TObject; AEditor: TSourceEditorInterface;
-      AComponentPaletteClassSelected: Boolean);
+    procedure DoCallShowDesignerFormOfSourceHandler(Sender: TObject;
+      AEditor: TSourceEditorInterface; AComponentPaletteClassSelected: Boolean);
     procedure DoCallBuildingFinishedHandler(HandlerType: TLazarusIDEHandlerType;
       Sender: TObject; BuildSuccessful: Boolean);
 
@@ -402,6 +402,7 @@ type
                           NewOwner: TObject; Flags: TSearchIDEFileFlags;
                           TryWithoutNumber: boolean): string; virtual; abstract;
     function GetTestBuildDirectory: string; virtual; abstract;
+    function GetCompilerFilename: string; virtual; abstract;
     function GetFPCompilerFilename: string; virtual; abstract;
     function GetFPCFrontEndOptions: string; virtual; abstract;
 
@@ -564,6 +565,7 @@ type
     function GetTabDisplayState: TTabDisplayState; virtual; abstract;
     function GetTabDisplayStateEditor(Index: TSourceEditorInterface): TTabDisplayState; virtual; abstract;
   public
+    function AutoSizeInShowDesigner(AControl: TControl): Boolean; virtual; abstract;
     procedure ToggleFormUnit; virtual; abstract;
     procedure JumpToCompilerMessage(ASourceEditor: TSourceEditorInterface); virtual; abstract;
 
@@ -715,14 +717,13 @@ begin
   FLazarusIDEHandlers[HandlerType].CallNotifyEvents(Sender);
 end;
 
-procedure TLazIDEInterface.DoCallShowDesignerFormOfSourceHandler(
-  HandlerType: TLazarusIDEHandlerType; Sender: TObject;
+procedure TLazIDEInterface.DoCallShowDesignerFormOfSourceHandler(Sender: TObject;
   AEditor: TSourceEditorInterface; AComponentPaletteClassSelected: Boolean);
 var
   i: Integer;
   Handler: TMethodList;
 begin
-  Handler:=FLazarusIDEHandlers[HandlerType];
+  Handler:=FLazarusIDEHandlers[lihtShowDesignerFormOfSource];
   i := Handler.Count;
   while Handler.NextDownIndex(i) do
     TShowDesignerFormOfSourceFunction(Handler[i])(Sender, AEditor,

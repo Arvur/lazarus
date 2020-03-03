@@ -5,9 +5,14 @@ unit Unit1;
 interface
 
 uses
-  Classes, SysUtils, LCLProc, Forms, Controls, Graphics, Dialogs, StdCtrls,
-  Menus, ExtCtrls, Buttons, ComCtrls, XMLPropStorage, LazFileUtils, SimpleFrm,
-  AnchorDocking, AnchorDockStorage, AnchorDockOptionsDlg, AnchorDockPanel;
+  Classes, SysUtils,
+  // LCL
+  LCLProc, Forms, Controls, Graphics, Dialogs, StdCtrls,
+  Menus, Buttons, ComCtrls, XMLPropStorage,
+  // LazUtils
+  LazFileUtils,
+  // AnchorDocking
+  SimpleFrm, AnchorDocking, AnchorDockStorage, AnchorDockOptionsDlg, AnchorDockPanel;
 
 type
 
@@ -317,6 +322,7 @@ begin
     try
       // save the current layout of all forms
       DockMaster.SaveLayoutToConfig(XMLConfig);
+      DockMaster.SaveSettingsToConfig(XMLConfig);
       XMLConfig.WriteToDisk;
     finally
       XMLConfig.Free;
@@ -341,6 +347,7 @@ begin
       // restore the layout
       // this will close unneeded forms and call OnCreateControl for all needed
       DockMaster.LoadLayoutFromConfig(XMLConfig,true);
+      DockMaster.LoadSettingsFromConfig(XMLConfig);
     finally
       XMLConfig.Free;
     end;

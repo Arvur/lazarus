@@ -255,9 +255,9 @@ begin
 
   if RawMode then
   begin
-    Doc1.pDocName := PChar(Title);
+    Doc1.pDocName := PChar(UTF8ToWinCP(Title));
     if Filename <> '' then
-      Doc1.pOutputFile := PChar(Filename)
+      Doc1.pOutputFile := PChar(UTF8ToWinCP(Filename))
     else
       Doc1.pOutputFile := nil;
     Doc1.pDataType := 'RAW';
@@ -283,12 +283,12 @@ begin
 
     FillChar(Inf, SizeOf(Inf), 0);
     Inf.cbSize := SizeOf(Inf);
-    Inf.lpszDocName := PChar(Title);
+    Inf.lpszDocName := PChar(UTF8ToWinCP(Title));
     if FileName <> '' then
-      Inf.lpszOutput := PChar(Filename);
+      Inf.lpszOutput := PChar(UTF8ToWinCP(Filename));
 
     StartDoc(fDC,@Inf);
-    StartPage(fDC);
+    Windows.StartPage(fDC);
   end;
 end;
 
@@ -302,10 +302,28 @@ begin
     StartPagePrinter(FPrinterHandle);
     
   end else begin
-    EndPage(fDC);
+    Windows.EndPage(fDC);
     StartPage(fDC);
     Canvas.Refresh;
   end;
+end;
+
+procedure TWinPrinter.DoBeginPage;
+begin
+  if RawMode then
+    StartPagePrinter(FPrinterHandle)
+  else begin
+    StartPage(fDC);
+    Canvas.Refresh;
+  end;
+end;
+
+procedure TWinPrinter.DoEndPage;
+begin
+  if RawMode then
+    EndPagePrinter(FPrinterHandle)
+  else
+    Windows.EndPage(fDC);
 end;
 
 procedure TWinPrinter.DoEndDoc(aAborded: Boolean);
@@ -321,7 +339,7 @@ begin
     FPrinterHandle:=0;
     }
   end else begin
-    EndPage(fDC);
+    Windows.EndPage(fDC);
     if not aAborded then
       WinUtilPrn.EndDoc(fDC);
   end;
@@ -608,7 +626,9 @@ begin
         // See note on doGetPaperName
         i := IndexOf(PDev.DefaultPaperName);
         if i<0 then
-          Result := Strings[0];
+          Result := Strings[0]
+        else
+          Result := Strings[i];
       end;
     end;
   end;
@@ -622,8 +642,11 @@ begin
   if GetCurrentDevModeW(dmW) then begin
     i:=PaperSize.SupportedPapers.IndexOf(aName);
     if i<>-1 then begin
-      ClearDC;
+      if not Printing then
+        ClearDC;
       dmW^.dmPaperSize := SHORT(ptrint(PaperSize.SupportedPapers.Objects[i]));
+      if Printing then
+        ResetDCW(fDC, dmW^);
     end;
   end;
 end;
@@ -769,8 +792,11 @@ var
 begin
   inherited DoSetOrientation(aValue);
   if GetCurrentDevModeW(dmW) then begin
-    ClearDC;
+    if not Printing then
+      ClearDC;
     dmW^.dmOrientation := Win32Orientations[aValue];
+    if Printing then
+      ResetDCW(fDC, dmW^);
   end;
 end;
 

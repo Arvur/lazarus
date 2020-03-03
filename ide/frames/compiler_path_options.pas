@@ -5,11 +5,16 @@ unit compiler_path_options;
 interface
 
 uses
-  Classes, SysUtils, LCLProc, LazFileUtils, LazFileCache, Controls, Dialogs,
-  Buttons, StdCtrls, LCLType, IDEOptionsIntf, MacroIntf, IDEDialogs,
-  CompOptsIntf, Project, CompilerOptions, LazarusIDEStrConsts, IDEImagesIntf,
-  PathEditorDlg, IDEProcs, CheckCompilerOpts, ShowCompilerOpts,
-  ImExportCompilerOpts;
+  Classes, SysUtils,
+  // LCL
+  LCLProc, LCLType,Controls, Dialogs, Buttons, StdCtrls,
+  // LazUtils
+  LazFileUtils, LazFileCache,
+  // IdeIntf
+  IDEOptionsIntf, IDEOptEditorIntf, MacroIntf, CompOptsIntf, IDEImagesIntf, IDEDialogs,
+  // IDE
+  Project, CompilerOptions, LazarusIDEStrConsts, PathEditorDlg, IDEProcs,
+  CheckCompilerOpts, ShowCompilerOpts, ImExportCompilerOpts;
 
 type
 
@@ -438,7 +443,7 @@ function TCompilerPathOptionsFrame.PathEditBtnExecuted(Context: String; var NewP
 var
   ExpandedPath: string;
 begin
-  NewPath := FCompilerOpts.ShortenPath(NewPath, False);
+  NewPath := FCompilerOpts.ShortenPath(NewPath);
   ExpandedPath := TrimSearchPath(NewPath, FCompilerOpts.BaseDirectory, true);
   Result := CheckSearchPath(Context, ExpandedPath, ccomlHints);
 end;
@@ -447,7 +452,6 @@ procedure TCompilerPathOptionsFrame.FileBrowseBtnClick(Sender: TObject);
 var
   OpenDialog: TOpenDialog;
   DefaultFilename: string;
-  NewFilename: string;
 begin
   OpenDialog := TSelectDirectoryDialog.Create(Self);
   try
@@ -465,12 +469,8 @@ begin
     else
       OpenDialog.InitialDir := FCompilerOpts.BaseDirectory;
     if OpenDialog.Execute then
-    begin
-      NewFilename := TrimFilename(OpenDialog.Filename);
-      NewFilename := FCompilerOpts.ShortenPath(NewFilename, False);
       if Sender = btnUnitOutputDir then
         UnitOutputDirEdit.Text := OpenDialog.Filename;
-    end;
   finally
     OpenDialog.Free;
   end;
@@ -636,7 +636,7 @@ begin
 
   // register special buttons in the dialog itself
   btnShowOptions := CreateButton(dlgCOShowOptions);
-  TIDEImages.AssignImage(btnShowOptions.Glyph, 'menu_compiler_options');
+  IDEImages.AssignImage(btnShowOptions, 'menu_compiler_options');
   btnShowOptions.OnClick := @DoShowOptions;
   // Check
   btnCheck := CreateButton(lisCompTest);
@@ -657,7 +657,7 @@ begin
   btnLoadSave.Hint := dlgCOLoadSaveHint;
   btnLoadSave.LoadGlyphFromStock(idButtonOpen);
   if btnLoadSave.Glyph.Empty then
-    TIDEImages.AssignImage(btnLoadSave.Glyph, 'laz_save');
+    IDEImages.AssignImage(btnLoadSave, 'laz_save');
 
   ADialog.AddButtonSeparator;
 

@@ -21,13 +21,13 @@ interface
 uses
   Classes, Controls, ComCtrls, Calendar, StdCtrls, Arrow, Spin,
   Dialogs, ExtCtrls, ExtDlgs, Buttons, CheckLst, Forms, Grids, Menus,
-  PairSplitter, ImgList, WSLCLClasses;
+  ImgList, PairSplitter, WSLCLClasses;
 
 
 // imglist
-function RegisterCustomImageList: Boolean;
+function RegisterCustomImageListResolution: Boolean;
 // controls
-function RegisterDragImageList: Boolean;
+function RegisterDragImageListResolution: Boolean;
 function RegisterLazAccessibleObject: Boolean;
 function RegisterControl: Boolean;
 function RegisterWinControl: Boolean;
@@ -137,20 +137,20 @@ uses
 uses
   Gtk3WSImgList, Gtk3WSControls, Gtk3WSForms, Gtk3WSButtons, Gtk3WSStdCtrls,
   Gtk3WSComCtrls, Gtk3WSExtCtrls, Gtk3WSSpin, Gtk3WSMenus, Gtk3WSCalendar,
-  Gtk3WSDialogs, Gtk3WSCheckLst, Gtk3WSExtDlgs;
+  Gtk3WSDialogs, Gtk3WSCheckLst, Gtk3WSExtDlgs, gtk3wssplitter, Gtk3WSTrayIcon;
 
 // imglist
-function RegisterCustomImageList: Boolean; alias : 'WSRegisterCustomImageList';
+function RegisterCustomImageListResolution: Boolean; alias : 'WSRegisterCustomImageListResolution';
 begin
   //  RegisterWSComponent(TImageList, TGtk3WSImageList);
-  RegisterWSComponent(TCustomImageList, TGtk3WSCustomImageList);
+  RegisterWSComponent(TCustomImageListResolution, TGtk3WSCustomImageListResolution);
   Result := True;
 end;
 
 // controls
-function RegisterDragImageList: Boolean; alias : 'WSRegisterDragImageList';
+function RegisterDragImageListResolution: Boolean; alias : 'WSRegisterDragImageListResolution';
 begin
-  // RegisterWSComponent(TDragImageList, TGtk3WSDragImageList);
+  // RegisterWSComponent(TDragImageListResolution, TGtk3WSDragImageListResolution);
   Result := False;
 end;
 
@@ -402,9 +402,8 @@ end;
 
 function RegisterCustomSplitter: Boolean; alias : 'WSRegisterCustomSplitter';
 begin
-//  RegisterWSComponent(TCustomSplitter, TGtk2WSCustomSplitter);
-//  RegisterWSComponent(TSplitter, TGtk2WSSplitter);
-  Result := False;
+  RegisterWSComponent(TCustomSplitter, TGtk3WSCustomSplitter);
+  Result := true;
 end;
 
 function RegisterPaintBox: Boolean; alias : 'WSRegisterPaintBox';
@@ -458,7 +457,11 @@ end;
 function RegisterCustomTrayIcon: Boolean; alias : 'WSRegisterCustomTrayIcon';
 begin
   // RegisterWSComponent(TCustomTrayIcon, TGtk2WSCustomTrayIcon);
-  Result := False;
+  Result := True;
+  if Gtk3AppIndicatorInit then
+     RegisterWSComponent(TCustomTrayIcon, TGtk3WSTrayIcon)
+  else
+     Result := False;
 end;
 
 //ExtDlgs
@@ -597,16 +600,14 @@ end;
 
 function RegisterPairSplitterSide: Boolean; alias : 'WSRegisterPairSplitterSide';
 begin
-//  RegisterWSComponent(TPairSplitterSide, TGtk2WSPairSplitterSide); { GTK1 }
-//  RegisterWSComponent(TPairSplitterSide, TGtk2WSPairSplitterSide);
-  Result := False;
+  RegisterWSComponent(TPairSplitterSide, TGtk3WSPairSplitterSide);
+  Result := true;
 end;
 
 function RegisterCustomPairSplitter: Boolean; alias : 'WSRegisterCustomPairSplitter';
 begin
-  // RegisterWSComponent(TCustomPairSplitter, TGtk2WSCustomPairSplitter, TGtkPrivatePaned); { GTK1 }
-  // RegisterWSComponent(TCustomPairSplitter, TGtk2WSCustomPairSplitter);
-  Result := False;
+  RegisterWSComponent(TCustomPairSplitter, TGtk3WSCustomPairSplitter);
+  Result := true;
 end;
 
 function RegisterCustomFloatSpinEdit: Boolean; alias : 'WSRegisterCustomFloatSpinEdit';

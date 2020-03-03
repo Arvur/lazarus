@@ -59,7 +59,6 @@ type
     function GetIsEmpry: Boolean;
     procedure SetIcoFileName(AValue: String);
     procedure SetIconData(const AValue: TIconData);
-    procedure SetFileNames(const MainFilename: string);
     procedure SetIsEmpty(const AValue: Boolean);
   public
     constructor Create; override;
@@ -135,11 +134,10 @@ var
   ItemStream: TStream;
 begin
   Result := True;
-
   if FData = nil then
     Exit;
 
-  SetFileNames(MainFilename);
+  IcoFileName := ExtractFilePath(MainFilename)+ExtractFileNameOnly(MainFileName)+'.ico';
   if FilenameIsAbsolute(FIcoFileName) then
     if not SaveIconFile then begin
       debugln(['TProjectIcon.UpdateResources CreateIconFile "'+FIcoFileName+'" failed']);
@@ -195,10 +193,7 @@ begin
     exit(true);
   // write ico file
   try
-    if FileExistsUTF8(FIcoFileName) then
-      fs:=TFileStreamUTF8.Create(IcoFileName,fmOpenWrite)
-    else
-      fs:=TFileStreamUTF8.Create(IcoFileName,fmCreate);
+    fs:=TFileStreamUTF8.Create(IcoFileName,fmCreate);
     try
       fs.Write(FData[0],length(FData));
       InvalidateFileStateCache(IcoFileName);
@@ -212,15 +207,6 @@ begin
     on E: Exception do
       debugln(['TProjectIcon.CreateIconFile "'+FIcoFileName+'": '+E.Message]);
   end;
-end;
-
-{-----------------------------------------------------------------------------
- TProjectIcon SetFileNames
------------------------------------------------------------------------------}
-procedure TProjectIcon.SetFileNames(const MainFilename: string);
-begin
-  IcoFileName := ExtractFilePath(MainFilename) +
-    ExtractFileNameWithoutExt(ExtractFileName(MainFileName)) + '.ico';
 end;
 
 procedure TProjectIcon.SetIsEmpty(const AValue: Boolean);

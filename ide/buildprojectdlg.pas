@@ -32,7 +32,7 @@ uses
   // LCL
   Forms, Controls, Dialogs, ButtonPanel, StdCtrls, ComCtrls, Masks, LCLIntf,
   // LazUtils
-  LazFileUtils, LazFileCache, LazUtilities, AvgLvlTree,
+  LazFileUtils, LazFileCache, LazStringUtils, AvgLvlTree,
   // codetools
   FileProcs, CodeToolManager, DirectoryCacher,
   // IDEIntf
@@ -143,6 +143,10 @@ begin
   ImageIndexFile := IDEImages.LoadImage('laz_delete');
 
   ButtonPanel1.OKButton.ModalResult:=mrNone;
+  ProjOutMaskComboBox.DropDownCount:=EnvironmentOptions.DropDownCount;
+  ProjSrcMaskComboBox.DropDownCount:=EnvironmentOptions.DropDownCount;
+  PkgOutMaskComboBox.DropDownCount:=EnvironmentOptions.DropDownCount;
+  PkgSrcMaskComboBox.DropDownCount:=EnvironmentOptions.DropDownCount;
 end;
 
 procedure TCleanBuildProjectDialog.FormDestroy(Sender: TObject);

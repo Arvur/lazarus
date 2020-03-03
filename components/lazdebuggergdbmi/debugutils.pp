@@ -35,7 +35,11 @@ unit DebugUtils;
 interface 
 
 uses
-  DbgIntfBaseTypes, Classes, LCLProc, LazUTF8;
+  Classes,
+  // LazUtils
+  LazLoggerBase, LazUTF8,
+  // DebuggerIntf
+  DbgIntfBaseTypes;
 
 type
 
@@ -46,6 +50,7 @@ type
 
   TGdbUnEscapeFlags = set of (uefOctal, uefTab, uefNewLine);
 
+function IsSehFinallyFuncName(AName: String): Boolean;
 function GetLine(var ABuffer: String): String;
 function ConvertToCString(const AText: String): String;
 function ConvertPathDelims(const AFileName: String): String;
@@ -81,6 +86,14 @@ var
   LastSmartWritelnStr: string;
   LastSmartWritelnCount: integer;
   LastSmartWritelnTime: double;
+
+function IsSehFinallyFuncName(AName: String): Boolean;
+var
+  i: SizeInt;
+begin
+  i := pos('fin$', AName);
+  Result := (i > 0) and (i <= 3);
+end;
 
 procedure SmartWriteln(const s: string);
 var

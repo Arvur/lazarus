@@ -3,13 +3,13 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Project-Id-Version: \n"
 "POT-Creation-Date: \n"
-"PO-Revision-Date: 2017-05-24 10:11+0200\n"
+"PO-Revision-Date: 2020-01-04 16:12+0100\n"
 "Last-Translator: Vasseur Gilles <gillesvasseur58@gmail.com>\n"
 "Language-Team: http://lazarus.developpez.com/\n"
 "MIME-Version: 1.0\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Language: fr\n"
-"X-Generator: Poedit 2.0.1\n"
+"X-Generator: Poedit 2.2.4\n"
 
 #: projectgroupstrconst.lisabort
 msgid "Abort"
@@ -20,6 +20,7 @@ msgid "Abort loading project group"
 msgstr "Arrêter le chargement du groupe de projets"
 
 #: projectgroupstrconst.lisactivetarget
+#, object-pascal-format
 msgid "Target: %s"
 msgstr "Cible : %s"
 
@@ -32,10 +33,12 @@ msgid "Be patient!"
 msgstr "Patientez !"
 
 #: projectgroupstrconst.lisbuildmode
+#, object-pascal-format
 msgid ", build mode \"%s\""
 msgstr "- mode de construction \"%s\""
 
 #: projectgroupstrconst.lisbuildmode2
+#, object-pascal-format
 msgid "Build Mode \"%s\""
 msgstr "Mode de construction  \"%s\""
 
@@ -44,14 +47,25 @@ msgid "Build mode not found"
 msgstr "Mode de construction introuvable"
 
 #: projectgroupstrconst.lisbuildmodenotfound2
+#, object-pascal-format
 msgid "Build mode \"%s\" not found."
 msgstr "Le mode de construction \"%s\" est introuvable."
 
+#: projectgroupstrconst.lischangesgetlostatreload
+msgid "There are unsaved changes that get lost if you reload the project group. Do you really want to reload?"
+msgstr ""
+
+#: projectgroupstrconst.liscompileandbuildcompiletarget
+msgid "\"Compile\" and \"Build\" compile target"
+msgstr "Cible de \"Compiler\" et \"Construire\""
+
 #: projectgroupstrconst.liscompilepackage
+#, object-pascal-format
 msgid "Compile Package %s"
 msgstr "Compiler le paquet %s"
 
 #: projectgroupstrconst.liscompileproject
+#, object-pascal-format
 msgid "Compile Project %s"
 msgstr "Compiler le projet %s"
 
@@ -59,27 +73,42 @@ msgstr "Compiler le projet %s"
 msgid "Discard changes"
 msgstr "Ignorer les modifications"
 
+#: projectgroupstrconst.lisenabletoshowtargetfilenameswithpaths
+msgid "Enable to show target filenames with paths."
+msgstr "Montrer les fichiers cibles avec leurs chemins."
+
 #: projectgroupstrconst.liserrnosuchfile
+#, object-pascal-format
 msgid ""
 "Could not find target file\n"
 "\"%s\"\n"
-"What do you want to do?\n"
+"What do you want to do?"
 msgstr ""
 "Impossible de trouver le fichier cible\n"
 "\"%s\"\n"
-"Que voulez-vous faire ?\n"
+"Que voulez-vous faire ?"
 
 #: projectgroupstrconst.liserronlyprojectgroupallowed
 msgid "Only target type \"projectgroup\" is allowed for root project group."
 msgstr "Seul le type de cible \"projectgroup\" est autorisé comme groupe de projets racine."
 
 #: projectgroupstrconst.liserrorreadingprojectgroupfile
+#, object-pascal-format
 msgid "Error reading project group file \"%s\"%s%s"
 msgstr "Erreur de lecture du fichier de groupe de projets \"%s\"%s%s"
 
 #: projectgroupstrconst.liserrtargetdoesnotexist
 msgid "Target does not exist. Remove?"
 msgstr "La cible n'existe pas. Faut-il la retirer ?"
+
+#: projectgroupstrconst.lisidecommandscompileandbuildinvokecompilebuildselect
+msgid "IDE commands \"Compile\" and \"Build\" invoke compile/build selected target in project group editor"
+msgstr "Les commandes \"Compiler\" et \"Construire\" de l'EDI invoquent la cible sélectionnée dans l'éditeur du groupe"
+
+#: projectgroupstrconst.lisinfo
+msgctxt "projectgroupstrconst.lisinfo"
+msgid "Info"
+msgstr "Informations"
 
 #: projectgroupstrconst.lisinvalidcycleaprojectgroupcannothaveitselfastarget
 msgid "Invalid cycle. A project group cannot have itself as target."
@@ -90,6 +119,7 @@ msgid "Invalid File"
 msgstr "Fichier incorrect"
 
 #: projectgroupstrconst.lisinvalidxmlfilename
+#, object-pascal-format
 msgid "Invalid XML file name \"%s\"."
 msgstr "Nom de fichier XML incorrect : \"%s\"."
 
@@ -105,6 +135,10 @@ msgstr "Groupes projets Lazarus (*.lpg)"
 msgid "Lazarus projects (*.lpi)"
 msgstr "Projets Lazarus (*.lpi)"
 
+#: projectgroupstrconst.lislazarussupportedinprojectgroups
+msgid "Lazarus files (*.lpi;*.lpk;*.lpg;*.pas;*.pp;*.p)"
+msgstr "Fichiers Lazarus (*.lpi;*.lpk;*.lpg;*.pas;*.pp;*.p)"
+
 #: projectgroupstrconst.lislazbuildnotfound
 msgid "lazbuild not found"
 msgstr "lazbuild introuvable"
@@ -113,11 +147,8 @@ msgstr "lazbuild introuvable"
 msgid "More"
 msgstr "Plus"
 
-#: projectgroupstrconst.lisneedsave
-msgid "Need save"
-msgstr "Enregistrement nécessaire"
-
 #: projectgroupstrconst.lisnewprojectgroup
+msgctxt "projectgroupstrconst.lisnewprojectgroup"
 msgid "New project group"
 msgstr "Nouveau groupe de projets"
 
@@ -153,6 +184,14 @@ msgstr "Cibles supprimées"
 msgid "Targets"
 msgstr "Cibles"
 
+#: projectgroupstrconst.lisonidestartreopenlastopengroup
+msgid "On IDE start reopen last open group."
+msgstr "Ouvrir le dernier groupe au démarrage de l'EDI."
+
+#: projectgroupstrconst.lisopenlastgrouponstart
+msgid "Open last group on start"
+msgstr "Ouvrir le dernier groupe au démarrage"
+
 #: projectgroupstrconst.lisopenprojectgroup
 msgid "Open Project Group ..."
 msgstr "Ouvrir le groupe de projets..."
@@ -160,6 +199,10 @@ msgstr "Ouvrir le groupe de projets..."
 #: projectgroupstrconst.lisopenrecentprojectgroup
 msgid "Open Recent Project Group"
 msgstr "Ouvrir un groupe de projets récent"
+
+#: projectgroupstrconst.lisoptions
+msgid "Options"
+msgstr "Options"
 
 #: projectgroupstrconst.lisotherproject
 msgid "Other Project"
@@ -174,6 +217,7 @@ msgid "Package not found"
 msgstr "Paquet non trouvé"
 
 #: projectgroupstrconst.lispackagenotfound2
+#, object-pascal-format
 msgid "Package \"%s\" not found."
 msgstr "Paquet \"%s\" non trouvé."
 
@@ -181,28 +225,44 @@ msgstr "Paquet \"%s\" non trouvé."
 msgid "Pascal files (*.pas;*.pp;*.p)"
 msgstr "Fichiers Pascal (*.pas;*.pp;*.p)"
 
-#: projectgroupstrconst.lispleasesaveyourchangesbeforereloadingtheprojectgrou
-msgctxt "projectgroupstrconst.lispleasesaveyourchangesbeforereloadingtheprojectgrou"
-msgid "Please save your changes before reloading the project group."
-msgstr "Veuillez enregistrer les modifications avant de recharger le groupe de projets."
-
 #: projectgroupstrconst.lisprojectgroup
+#, object-pascal-format
 msgid "Project group %s"
 msgstr "Groupe de projets %s"
 
 #: projectgroupstrconst.lisprojectgroup2
+#, object-pascal-format
 msgid "Project Group: %s"
 msgstr "Groupe de projets : %s"
 
-#: projectgroupstrconst.lisprojectgroupaddexistingcaption
+#: projectgroupstrconst.lisprojectgroupaddcaption
+msgctxt "projectgroupstrconst.lisprojectgroupaddcaption"
 msgid "Add"
 msgstr "Ajouter"
+
+#: projectgroupstrconst.lisprojectgroupaddcurrentprojectcaption
+msgid "Add current project"
+msgstr "Ajouter le projet en cours"
+
+#: projectgroupstrconst.lisprojectgroupaddcurrentprojecthint
+msgid "Add current project to project group"
+msgstr "Ajouter le projet en cours au groupe"
+
+#: projectgroupstrconst.lisprojectgroupaddexistingcaption
+msgctxt "projectgroupstrconst.lisprojectgroupaddexistingcaption"
+msgid "Add from file"
+msgstr "Ajouter depuis un fichier"
 
 #: projectgroupstrconst.lisprojectgroupaddexistinghint
 msgid "Add existing target to project group"
 msgstr "Ajouter une cible existante au groupe de projets"
 
+#: projectgroupstrconst.lisprojectgroupaddhint
+msgid "Add targets to project group"
+msgstr "Ajouter des cibles au groupe de projets"
+
 #: projectgroupstrconst.lisprojectgroupaddnewcaption
+msgctxt "projectgroupstrconst.lisprojectgroupaddnewcaption"
 msgid "New"
 msgstr "Nouveau"
 
@@ -223,12 +283,23 @@ msgid "Project group modified"
 msgstr "Groupe de projets modifié"
 
 #: projectgroupstrconst.lisprojectgroupmodifiedconfirm
+#, object-pascal-format
 msgid ""
 "Project group \"%s\" is modified.\n"
-"What do you want to do?\n"
+"What do you want to do?"
 msgstr ""
 "Le groupe de projets \"%s\" a été modifié.\n"
-"Que voulez-vous faire ?\n"
+"Que voulez-vous faire ?"
+
+#: projectgroupstrconst.lisprojectgroupnewcaption
+msgctxt "projectgroupstrconst.lisprojectgroupnewcaption"
+msgid "New"
+msgstr "Nouveau"
+
+#: projectgroupstrconst.lisprojectgroupnewhint
+msgctxt "projectgroupstrconst.lisprojectgroupnewhint"
+msgid "New project group"
+msgstr "Nouveau groupe de projets"
 
 #: projectgroupstrconst.lisprojectgroupreload
 msgid "Reload"
@@ -255,9 +326,17 @@ msgctxt "projectgroupstrconst.lisprojectgroupsavehint"
 msgid "Save project group"
 msgstr "Enregistrer le groupe de projets"
 
+#: projectgroupstrconst.lisprojectgroupssourcepaths
+msgid "Project group's source paths"
+msgstr "Chemins sources du groupe"
+
 #: projectgroupstrconst.lisreaderror
 msgid "Read error"
 msgstr "Erreur de lecture"
+
+#: projectgroupstrconst.lisredo
+msgid "Redo"
+msgstr "Refaire"
 
 #: projectgroupstrconst.lisremovetarget
 msgctxt "projectgroupstrconst.lisremovetarget"
@@ -278,9 +357,17 @@ msgstr "Enregistrer le groupe de projets"
 msgid "Save Project Group As ..."
 msgstr "Enregistrer le groupe de projets sous..."
 
+#: projectgroupstrconst.lisshowtargetpaths
+msgid "Show target paths"
+msgstr "Montrer les chemins cibles"
+
 #: projectgroupstrconst.lisskipalltargets
 msgid "Remove all invalid targets"
 msgstr "Supprimer toutes les cibles incorrectes"
+
+#: projectgroupstrconst.lissourcedirectoriesofprojectgroup
+msgid "Source directories of project group:"
+msgstr "Dossiers sources du groupe :"
 
 #: projectgroupstrconst.listargetactivate
 msgid "Activate target"
@@ -331,10 +418,11 @@ msgid "Compile selected target"
 msgstr "Compiler la cible choisie"
 
 #: projectgroupstrconst.listargetcopyfilename
-msgid "Copy file name"
+msgid "Copy Filename"
 msgstr "Copier le nom du fichier"
 
 #: projectgroupstrconst.listargetcount
+#, object-pascal-format
 msgid "%d targets"
 msgstr "%d cibles"
 
@@ -349,6 +437,11 @@ msgstr "Plus tôt"
 #: projectgroupstrconst.listargetearlierhint
 msgid "Build target earlier"
 msgstr "Construire la cible plus tôt"
+
+#: projectgroupstrconst.listargetinfocaption
+msgctxt "projectgroupstrconst.listargetinfocaption"
+msgid "Info ..."
+msgstr "Informations..."
 
 #: projectgroupstrconst.listargetinstall
 msgctxt "projectgroupstrconst.listargetinstall"
@@ -432,6 +525,7 @@ msgid "Uninstall selected target"
 msgstr "Désinstaller la cible choisie"
 
 #: projectgroupstrconst.listhelazbuildwasnotfound
+#, object-pascal-format
 msgid "The lazbuild%s was not found."
 msgstr "Le lazbuild%s est introuvable."
 
@@ -440,22 +534,30 @@ msgid "There is still another build in progress."
 msgstr "Il y a encore une construction en cours."
 
 #: projectgroupstrconst.lisunabletocreatefile
+#, object-pascal-format
 msgid "Unable to create file \"%s\": %s"
 msgstr "Impossible de créer le fichier \"%s\" : %s"
 
 #: projectgroupstrconst.lisunabletoloadfile
+#, object-pascal-format
 msgid "Unable to load file \"%s\""
 msgstr "Impossible de charger le fichier \"%s\""
 
 #: projectgroupstrconst.lisunabletowriteprojectgroupfile
+#, object-pascal-format
 msgid "Unable to write project group file \"%s\"%s%s"
 msgstr "Impossible d'écrire le fichier du groupe de projets \"%s\"%s%s"
+
+#: projectgroupstrconst.lisundo
+msgid "Undo"
+msgstr "Défaire"
 
 #: projectgroupstrconst.liswriteerror
 msgid "Write error"
 msgstr "Erreur d'écriture"
 
 #: projectgroupstrconst.lisxmlsyntaxerrorinfile
+#, object-pascal-format
 msgid "XML syntax error in file \"%s\": %s"
 msgstr "Erreur de syntaxe XML dans le fichier \"%s\" : %s"
 

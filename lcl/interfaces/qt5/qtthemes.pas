@@ -383,8 +383,12 @@ begin
             QStyleCC_TitleBar, QStyleCC_MdiControls:
             begin
               opt := QStyleOptionTitleBar_create();
-              QStyleOptionTitleBar_setTitleBarFlags(QStyleOptionTitleBarH(opt),
-                QtWindow or QtWindowSystemMenuHint);
+              if Element.SubControls = QStyleSC_TitleBarLabel then
+                QStyleOptionTitleBar_setTitleBarFlags(QStyleOptionTitleBarH(opt),
+                  QtWindow or QtWindowTitleHint)
+              else
+                QStyleOptionTitleBar_setTitleBarFlags(QStyleOptionTitleBarH(opt),
+                  QtWindow or QtWindowSystemMenuHint);
               // workaround: qt has own minds about position of requested part -
               // but we need a way to draw it at our position
               Context.translate(ARect.Left, ARect.Top);
@@ -431,6 +435,10 @@ begin
                 opt := QStyleOptionFocusRect_create();
               end;
             QStylePE_PanelTipLabel:
+              begin
+                opt := QStyleOptionFrame_create();
+              end;
+            QStylePE_FrameLineEdit:
               begin
                 opt := QStyleOptionFrame_create();
               end;
@@ -558,7 +566,7 @@ var
   Context: TQtDeviceContext;
   Widget: QWidgetH;
   W: WideString;
-  TextRect: TRect;
+  TextRect, SelRect: TRect;
   AOldMode: Integer;
   ATextPalette: Cardinal;
   AQColor: TQColor;
@@ -616,6 +624,9 @@ begin
           Context.save;
           try
             Context.SetBkMode(TRANSPARENT);
+            if Details.State = TREIS_DISABLED then
+              QPalette_setCurrentColorGroup(Palette, QPaletteDisabled)
+            else
             if Details.State = TREIS_SELECTEDNOTFOCUS then
               QPalette_setCurrentColorGroup(Palette, QPaletteInactive)
             else
@@ -690,6 +701,19 @@ begin
           Context.Translate(R.Left, R.Top);
           Context.Rotate(-0.1 * Context.Font.Angle);
           OffsetRect(R, -R.Left, -R.Top);
+        end;
+
+        if (Details.Element = teEdit) then
+        begin
+          if IsDisabled(Details) then
+            QPalette_setCurrentColorGroup(Palette, QPaletteDisabled);
+          if GetControlState(Details) and QStyleState_Selected <> 0 then
+          begin
+            Context.font.Metrics.boundingRect(@SelRect, @R, DTFlagsToQtFlags(Flags), @W);
+            ColorRefToTQColor(ColorToRGB(clHighlight), AQColor);
+            QPainter_fillRect(Context.Widget, @SelRect,  PQColor(@AQColor));
+            ATextPalette := QPaletteHighlightedText;
+          end;
         end;
 
         QStyle_drawItemText(Style, Context.Widget, @R,
@@ -825,9 +849,24 @@ begin
         Result := Result or QStyleState_Active or QStyleState_HasFocus or QStyleState_MouseOver;
     end;
   end;
+  if (Details.Element = teEdit) and (Details.Part in [EP_EDITTEXT, EP_BACKGROUND, EP_BACKGROUNDWITHBORDER]) then
+  begin
+    if Details.State = ETS_FOCUSED then
+      Result := Result or QStyleState_Active or QStyleState_Enabled or QStyleState_HasFocus;
+
+    if Details.State = ETS_HOT then
+      Result := Result or QStyleState_MouseOver
+    else
+    if Details.State = ETS_READONLY then
+      Result := Result or QStyleState_ReadOnly
+    else
+    if Details.State = ETS_SELECTED then
+      Result := Result or QStyleState_Selected;
+  end;
   if (Details.Element = teWindow) then
   begin
-    if Details.Part in [WP_FRAMELEFT,
+    if Details.Part in [WP_SMALLCAPTION,
+          WP_FRAMELEFT,
           WP_FRAMERIGHT,
           WP_FRAMEBOTTOM,
           WP_SMALLFRAMELEFT,
@@ -877,6 +916,11 @@ begin
         Result.cy := -1;
         Result.cx := QStyle_pixelMetric(Style, QStylePM_MenuButtonIndicator, nil, nil);
       end else
+        Result := inherited;
+    teHeader:
+      if Details.Part = HP_HEADERSORTARROW then
+        Result := Size(-1, -1) // not yet supported
+      else
         Result := inherited;
     else
       Result := inherited;
@@ -1009,7 +1053,9 @@ begin
           Result.ComplexControl := QStyleCC_ComboBox;
           Result.SubControls := QStyleSC_ComboBoxArrow;
           if Details.Part = CP_DROPDOWNBUTTONLEFT then
-            Result.Features := Ord(QtRightToLeft);
+            Result.Features := Ord(QtRightToLeft)
+          else
+            Result.Features := 0;
         end else
         if not (Details.Part = CP_READONLY) then
         begin
@@ -1076,6 +1122,12 @@ begin
             end;
         end;
       end;
+    teEdit:
+      begin
+        Result.DrawVariant := qdvPrimitive;
+        if Details.Part in [0, EP_EDITTEXT, EP_CARET, EP_BACKGROUND, EP_BACKGROUNDWITHBORDER] then
+          Result.PrimitiveElement := QStylePE_FrameLineEdit;
+      end;
     teSpin:
       begin
         Result.DrawVariant := qdvComplexControl;
@@ -1111,7 +1163,7 @@ begin
             Result.StandardPixmap := QStyleSP_TitleBarCloseButton;
             exit;
           end;
-
+          WP_SMALLCAPTION: Result.SubControls := QStyleSC_TitleBarLabel;
           WP_SYSBUTTON: Result.SubControls := QStyleSC_TitleBarSysMenu;
           WP_MINBUTTON: Result.SubControls := QStyleSC_TitleBarMinButton;
           WP_MAXBUTTON: Result.SubControls := QStyleSC_TitleBarMaxButton;

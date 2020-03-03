@@ -25,10 +25,12 @@ interface
 
 uses
   Classes, SysUtils, TypInfo, Laz_AVL_Tree,
+  // LazUtils
+  LazLoggerBase,
   // LCL
-  LCLProc, Dialogs, Controls, ComCtrls, Graphics,
+  LCLProc, Dialogs, Forms, Controls, ComCtrls, Graphics,
   // IdeIntf
-  ObjInspStrConsts, PropEdits, PropEditUtils, IDEImagesIntf;
+  ObjInspStrConsts, PropEdits, PropEditUtils, ComponentEditors, IDEImagesIntf;
   
 type
   TCTVGetImageIndexEvent = procedure(APersistent: TPersistent;
@@ -42,7 +44,6 @@ type
     FOnComponentGetImageIndex: TCTVGetImageIndexEvent;
     FOnModified: TNotifyEvent;
     FPropertyEditorHook: TPropertyEditorHook;
-    FImageList: TImageList;
     function CollectionCaption(ACollection: TCollection; DefaultName: string): string;
     function CollectionItemCaption(ACollItem: TCollectionItem): string;
     function ComponentCaption(AComponent: TComponent): String;
@@ -99,24 +100,24 @@ type
     Added: boolean;
   end;
 
-  TGetPersistentProc = procedure(APersistent: TPersistent; PropName: string) of object;
-
   { TComponentWalker }
 
   TComponentWalker = class
+  private
     FComponentTV: TComponentTreeView;
     FCandidates: TAvlTree;
     FLookupRoot: TComponent;
     FNode: TTreeNode;
-  protected
-    procedure GetOwnedPersistents(AComponent: TComponent; AProc: TGetPersistentProc);
+    procedure AddCollection(AColl: TCollection; AParentNode: TTreeNode);
+    procedure AddOwnedPersistent(APers: TPersistent; APropName: String;
+      AParentNode: TTreeNode);
+    procedure GetOwnedPersistents(APers: TPersistent; AParentNode: TTreeNode);
+    function PersistentFoundInNode(APers: TPersistent): Boolean;
+    procedure Walk(AComponent: TComponent);
   public
     constructor Create(
       ATreeView: TComponentTreeView; ACandidates: TAvlTree;
       ALookupRoot: TComponent; ANode: TTreeNode);
-
-    procedure Walk(AComponent: TComponent);
-    procedure AddOwnedPersistent(APersistent: TPersistent; PropName: string);
   end;
 
   TComponentAccessor = class(TComponent);
@@ -135,46 +136,107 @@ end;
 
 { TComponentWalker }
 
-procedure TComponentWalker.GetOwnedPersistents(AComponent: TComponent;
-  AProc: TGetPersistentProc);
+constructor TComponentWalker.Create(ATreeView: TComponentTreeView;
+  ACandidates: TAvlTree; ALookupRoot: TComponent; ANode: TTreeNode);
+begin
+  {$IFDEF VerboseComponentTVWalker}
+  DebugLn(['TComponentWalker.Create ALookupRoot=',DbgSName(ALookupRoot)]);
+  {$ENDIF}
+  FComponentTV := ATreeView;
+  FCandidates := ACandidates;
+  FLookupRoot := ALookupRoot;
+  FNode := ANode;
+end;
+
+procedure TComponentWalker.AddCollection(AColl: TCollection; AParentNode: TTreeNode);
+var
+  ItemNode: TTreeNode;
+  Item: TCollectionItem;
+  i: integer;
+begin
+  for i := 0 to AColl.Count - 1 do
+  begin
+    Item := AColl.Items[i];
+    {$IFDEF VerboseComponentTVWalker}
+    DebugLn(['TComponentWalker.AddCollection, Adding CollectionItem ',
+             Item.DisplayName, ':', Item.ClassName]);
+    {$ENDIF}
+    ItemNode := FComponentTV.Items.AddChild(AParentNode,
+                                       FComponentTV.CollectionItemCaption(Item));
+    ItemNode.Data := Item;
+    ItemNode.ImageIndex := FComponentTV.GetImageFor(Item);
+    ItemNode.SelectedIndex := ItemNode.ImageIndex;
+    ItemNode.MultiSelected := FComponentTV.Selection.IndexOf(Item) >= 0;
+    // Collections can be nested. Add possible Collections under a CollectionItem.
+    GetOwnedPersistents(Item, ItemNode);
+  end;
+end;
+
+procedure TComponentWalker.AddOwnedPersistent(APers: TPersistent;
+  APropName: String; AParentNode: TTreeNode);
+var
+  TVNode: TTreeNode;
+  TheRoot: TPersistent;
+begin
+  if (APers is TComponent)
+  and (csDestroying in TComponent(APers).ComponentState) then Exit;
+  TheRoot := GetLookupRootForComponent(APers);
+  {$IFDEF VerboseComponentTVWalker}
+  DebugLn(['TComponentWalker.AddOwnedPersistent'+
+           ' PropName=',APropName,' Persistent=',DbgSName(APers),
+           ' its root=',DbgSName(TheRoot),' FLookupRoot=',DbgSName(FLookupRoot)]);
+  {$ENDIF}
+  if TheRoot <> FLookupRoot then Exit;
+  if PersistentFoundInNode(APers) then Exit;
+  TVNode := FComponentTV.Items.AddChild(AParentNode,
+                          FComponentTV.CreateNodeCaption(APers, APropName));
+  TVNode.Data := APers;
+  TVNode.ImageIndex := FComponentTV.GetImageFor(APers);
+  TVNode.SelectedIndex := TVNode.ImageIndex;
+  TVNode.MultiSelected := FComponentTV.Selection.IndexOf(APers) >= 0;
+  if APers is TCollection then
+    AddCollection(TCollection(APers), TVNode);
+  //AParentNode.Expanded := True;
+end;
+
+procedure TComponentWalker.GetOwnedPersistents(APers: TPersistent; AParentNode: TTreeNode);
 var
   PropList: PPropList;
-  i, PropCount: Integer;
-  Pers: TPersistent;
+  PropCount, i: Integer;
   PropInfo: PPropInfo;
-  PropEdit: TPropertyEditorClass;
+  PropPers: TPersistent;
 begin
-  PropCount := GetPropList(AComponent, PropList);
+  PropCount := GetPropList(APers, PropList);
   try
     for i := 0 to PropCount - 1 do begin
       PropInfo:=PropList^[i];
-      if (PropInfo^.PropType^.Kind <> tkClass) then continue;
+      if (PropInfo^.PropType^.Kind <> tkClass) then Continue;
       {$IFDEF ShowOwnedObjectsOI}
-      Pers := TPersistent(GetObjectProp(AComponent, PropInfo, TPersistent));
+      PropPers := TPersistent(GetObjectProp(APers, PropInfo, TPersistent));
       {$ELSE}
-      Pers := TPersistent(GetObjectProp(AComponent, PropInfo, TCollection));
+      PropPers := TPersistent(GetObjectProp(APers, PropInfo, TCollection));
       {$ENDIF}
-      if Pers=nil then continue;
-      if GetLookupRootForComponent(Pers)<>FLookupRoot then continue;
-      PropEdit:=GetEditorClass(PropInfo,AComponent);
-      if (PropEdit=nil) then continue;
-      AProc(Pers,PropInfo^.Name);
+      if PropPers=nil then Continue;
+      if GetEditorClass(PropInfo, APers)=nil then Continue;
+      {$IFDEF VerboseComponentTVWalker}
+      DebugLn(['TComponentWalker.GetOwnedPersistents Persistent=',DbgSName(APers),
+               ' PropName=',PropInfo^.Name,' FLookupRoot=',DbgSName(FLookupRoot)]);
+      {$ENDIF}
+      AddOwnedPersistent(PropPers, PropInfo^.Name, AParentNode);
     end;
   finally
     FreeMem(PropList);
   end;
 end;
 
-constructor TComponentWalker.Create(ATreeView: TComponentTreeView;
-  ACandidates: TAvlTree; ALookupRoot: TComponent; ANode: TTreeNode);
+function TComponentWalker.PersistentFoundInNode(APers: TPersistent): Boolean;
+var
+  i: Integer;
 begin
-  {$IFDEF VerboseComponentTVWalker}
-  debugln(['TComponentWalker.Create ALookupRoot=',DbgSName(ALookupRoot)]);
-  {$ENDIF}
-  FComponentTV := ATreeView;
-  FCandidates := ACandidates;
-  FLookupRoot := ALookupRoot;
-  FNode := ANode;
+  for i:=0 to FNode.Count-1 do
+    if TObject(FNode[i].Data) = APers then
+      Exit(True);
+  Result := False;
 end;
 
 procedure TComponentWalker.Walk(AComponent: TComponent);
@@ -201,7 +263,7 @@ begin
   FNode.SelectedIndex := FNode.ImageIndex;
   FNode.MultiSelected := FComponentTV.Selection.IndexOf(AComponent) >= 0;
 
-  GetOwnedPersistents(AComponent, @AddOwnedPersistent);
+  GetOwnedPersistents(AComponent, FNode);
 
   if (csInline in AComponent.ComponentState) or (AComponent.Owner = nil) then
     Root := AComponent
@@ -216,48 +278,6 @@ begin
   FNode.Expanded := True;
 end;
 
-procedure TComponentWalker.AddOwnedPersistent(APersistent: TPersistent;
-  PropName: string);
-var
-  TVNode, ItemNode: TTreeNode;
-  i: integer;
-  Item: TCollectionItem;
-  ACollection: TCollection;
-begin
-  {$IFDEF VerboseComponentTVWalker}
-  debugln(['TComponentWalker.AddOwnedPersistent APersistent=',DbgSName(APersistent),' PropName=',PropName,' FLookupRoot=',DbgSName(FLookupRoot),' GetLookupRootForComponent(APersistent)=',DbgSName(GetLookupRootForComponent(APersistent))]);
-  {$ENDIF}
-  if (APersistent is TComponent)
-  and (csDestroying in TComponent(APersistent).ComponentState) then Exit;
-  if GetLookupRootForComponent(APersistent) <> FLookupRoot then Exit;
-
-  for i:=0 to FNode.Count-1 do
-    if TObject(FNode[i].Data) = APersistent then exit;
-
-  TVNode := FComponentTV.Items.AddChild(FNode,
-                          FComponentTV.CreateNodeCaption(APersistent,PropName));
-  TVNode.Data := APersistent;
-  TVNode.ImageIndex := FComponentTV.GetImageFor(APersistent);
-  TVNode.SelectedIndex := TVNode.ImageIndex;
-  TVNode.MultiSelected := FComponentTV.Selection.IndexOf(APersistent) >= 0;
-
-  if APersistent is TCollection then
-  begin
-    ACollection := TCollection(APersistent);
-    for i := 0 to ACollection.Count - 1 do
-    begin
-      Item := ACollection.Items[i];
-      ItemNode := FComponentTV.Items.AddChild(TVNode, FComponentTV.CollectionItemCaption(Item));
-      ItemNode.Data := Item;
-      ItemNode.ImageIndex := FComponentTV.GetImageFor(Item);
-      ItemNode.SelectedIndex := ItemNode.ImageIndex;
-      ItemNode.MultiSelected := FComponentTV.Selection.IndexOf(Item) >= 0;
-    end;
-  end;
-
-  FNode.Expanded := True;
-end;
-  
 { TComponentTreeView }
 
 procedure TComponentTreeView.SetSelection(NewSelection: TPersistentSelectionList);
@@ -272,7 +292,6 @@ begin
      and FComponentList.IsEqual(PropertyEditorHook.LookupRoot, NewSelection) then
   begin
     // nodes ok, but maybe node values need update
-    DebugLn('TComponentTreeView.SetSelection: Updating component node values.');
     UpdateComponentNodesValues;
     Exit;
   end;
@@ -322,22 +341,32 @@ end;
 
 procedure TComponentTreeView.DragDrop(Source: TObject; X, Y: Integer);
 var
-  Node, SelNode: TTreeNode;
+  Node, ParentNode, SelNode: TTreeNode;
   ACollection: TCollection;
-  AContainer: TWinControl;
+  AContainer, OldContainer: TWinControl;
   AControl: TControl;
-  ParentNode: TTreeNode;
   InsertType: TTreeViewInsertMarkType;
+  RootDesigner: TIDesigner;
+  CompEditDsg: TComponentEditorDesigner;
   NewIndex, AIndex: Integer;
   ok: Boolean;
 begin
   GetComponentInsertMarkAt(X, Y, Node, InsertType);
   SetInsertMark(nil, tvimNone);
-  ParentNode := Node;
   if InsertType in [tvimAsNextSibling, tvimAsPrevSibling] then
-    ParentNode := ParentNode.Parent;
+    ParentNode := Node.Parent
+  else
+    ParentNode := Node;
   if Assigned(ParentNode) then
   begin
+    // Find designer for Undo actions.
+    Assert(Assigned(FPropertyEditorHook), 'TComponentTreeView.DragDrop: PropertyEditorHook=Nil.');
+    RootDesigner := FindRootDesigner(FPropertyEditorHook.LookupRoot);
+    if (RootDesigner is TComponentEditorDesigner) then
+      CompEditDsg := TComponentEditorDesigner(RootDesigner) //if CompEditDsg.IsUndoLocked then Exit;
+    else
+      CompEditDsg := nil;
+
     if TObject(ParentNode.Data) is TWinControl then
     begin
       AContainer := TWinControl(ParentNode.Data);
@@ -349,7 +378,11 @@ begin
           AControl := TControl(SelNode.Data);
           ok:=false;
           try
+            OldContainer := AControl.Parent;
             AControl.Parent := AContainer;
+            if Assigned(CompEditDsg) then
+              CompEditDsg.AddUndoAction(AControl, uopChange, True, 'Parent',
+                                        OldContainer.Name, AContainer.Name);
             ok:=true;
             DoModified;
           except
@@ -588,22 +621,19 @@ begin
   DragMode := dmAutomatic;
   FComponentList:=TBackupComponentList.Create;
   Options := Options + [tvoAllowMultiselect, tvoAutoItemHeight, tvoKeepCollapsedNodes, tvoReadOnly];
-  FImageList := TImageList.Create(nil);
-  FImageList.Width := TIDEImages.ScaledSize;
-  FImageList.Height := TIDEImages.ScaledSize;
-  ImgIndexForm := TIDEImages.AddImageToImageList(FImageList, 'oi_form');
-  ImgIndexComponent := TIDEImages.AddImageToImageList(FImageList, 'oi_comp');
-  ImgIndexControl := TIDEImages.AddImageToImageList(FImageList, 'oi_control');
-  ImgIndexBox := TIDEImages.AddImageToImageList(FImageList, 'oi_box');
-  ImgIndexCollection := TIDEImages.AddImageToImageList(FImageList, 'oi_collection');
-  ImgIndexItem := TIDEImages.AddImageToImageList(FImageList, 'oi_item');
-  Images := FImageList;
+  MultiSelectStyle := MultiSelectStyle + [msShiftSelect];
+  ImgIndexForm := IDEImages.GetImageIndex('oi_form');
+  ImgIndexComponent := IDEImages.GetImageIndex('oi_comp');
+  ImgIndexControl := IDEImages.GetImageIndex('oi_control');
+  ImgIndexBox := IDEImages.GetImageIndex('oi_box');
+  ImgIndexCollection := IDEImages.GetImageIndex('oi_collection');
+  ImgIndexItem := IDEImages.GetImageIndex('oi_item');
+  Images := IDEImages.Images_16;
 end;
 
 destructor TComponentTreeView.Destroy;
 begin
   FreeThenNil(FComponentList);
-  FreeThenNil(FImageList);
   inherited Destroy;
 end;
 
@@ -681,7 +711,7 @@ begin
       // first add the lookup root
       RootNode := Items.Add(nil, CreateNodeCaption(RootObject));
       RootNode.Data := RootObject;
-      RootNode.ImageIndex := 0;
+      RootNode.ImageIndex := ImgIndexForm;
       RootNode.SelectedIndex := RootNode.ImageIndex;
       RootNode.MultiSelected := Selection.IndexOf(RootObject) >= 0;
 

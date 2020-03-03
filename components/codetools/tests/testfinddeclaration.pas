@@ -100,6 +100,11 @@ type
     procedure TestFindDeclaration_Arrays;
     procedure TestFindDeclaration_GuessType;
     procedure TestFindDeclaration_Attributes;
+    procedure TestFindDeclaration_BracketOpen;
+    procedure TestFindDeclaration_AnonymProc;
+    procedure TestFindDeclaration_AnonymProc_ExprDot;
+    procedure TestFindDeclaration_ArrayMultiDimDot;
+    procedure TestFindDeclaration_VarArgsOfType;
     // test all files in directories:
     procedure TestFindDeclaration_FPCTests;
     procedure TestFindDeclaration_LazTests;
@@ -176,6 +181,8 @@ procedure TCustomTestFindDeclaration.FindDeclarations(aCode: TCodeBuffer);
   end;
 
   function NodeAsPath(Tool: TFindDeclarationTool; Node: TCodeTreeNode): string;
+  var
+    aName: String;
   begin
     Result:='';
     while Node<>nil do begin
@@ -187,7 +194,12 @@ procedure TCustomTestFindDeclaration.FindDeclarations(aCode: TCodeBuffer);
       ctnInterface,ctnUnit:
         PrependPath(Tool.GetSourceName(false),Result);
       ctnProcedure:
-        PrependPath(Tool.ExtractProcName(Node,[]),Result);
+        begin
+        aName:=Tool.ExtractProcName(Node,[]);
+        if aName='' then
+          aName:='$ano';
+        PrependPath(aName,Result);
+        end;
       ctnProperty:
         PrependPath(Tool.ExtractPropName(Node,false),Result);
       ctnUseUnit:
@@ -597,7 +609,15 @@ begin
   StartProgram;
   Add([
   '{$mode objfpc}',
+  'type',
+  '  TBird = class',
+  '    generic class function Fly<T>(const AValues:array of T):T;',
+  '  end;',
   'generic function RandomFrom<T>(const AValues:array of T):T;',
+  'begin',
+  '  Result:=Avalue[1];',
+  'end;',
+  'generic class function TBird.Fly<T>(const AValues:array of T):T;',
   'begin',
   '  Result:=Avalue[1];',
   'end;',
@@ -899,6 +919,124 @@ begin
       end;
     end;
   end;
+end;
+
+procedure TTestFindDeclaration.TestFindDeclaration_BracketOpen;
+begin
+  StartProgram;
+  Add([
+  'var c: integer;',
+  'procedure DoIt(i: integer);',
+  '  procedure WriteStr(s: string);',
+  '  begin',
+  '  end;',
+  'begin',
+  '  begin',
+  '    DoIt(c{declaration:c}',
+  '  end;',
+  '  begin',
+  '    WriteStr(c{declaration:c}',
+  '  end;',
+  'end;',
+  'begin',
+  'end.',
+  '']);
+  FindDeclarations(Code);
+end;
+
+procedure TTestFindDeclaration.TestFindDeclaration_AnonymProc;
+begin
+  StartProgram;
+  Add([
+  '{$mode objfpc}{$modeswitch closures}',
+  'type',
+  '  int = word;',
+  '  TFunc = function(i: int): int;',
+  'var f: TFunc;',
+  'procedure DoIt(a: int);',
+  '  procedure Sub(b: int);',
+  '  begin',
+  '    f:=function(c: int{declaration:int}): int{declaration:int}',
+  '      begin',
+  '        f{declaration:f}:=nil;',
+  '        a{declaration:doit.a}:=b{declaration:doit.sub.b}+c{declaration:doit.sub.$ano.c};',
+  '      end;',
+  '    DoIt(function(i: int{declaration:int}): int{declaration:int}',
+  '      begin',
+  '        a{declaration:doit.a}:=b{declaration:doit.sub.b}+i{declaration:doit.sub.$ano.i};',
+  '      end);',
+  '  end;',
+  'begin',
+  'end;',
+  'begin',
+  'end.',
+  '']);
+  FindDeclarations(Code);
+end;
+
+procedure TTestFindDeclaration.TestFindDeclaration_AnonymProc_ExprDot;
+begin
+  StartProgram;
+  Add([
+  '{$mode objfpc}{$modeswitch closures}',
+  'type',
+  '  int = word;',
+  '  TFunc = function(i: int): int;',
+  'var f: TFunc;',
+  'function DoIt(f: TProc): TObject{declaration:system.tobject};',
+  'begin',
+  '  DoIt(nil).ClassInfo{declaration:system.tobject.classinfo};',
+  '  DoIt(function(c: int{declaration:int}): int{declaration:int}',
+  '      type t = record o:byte end;',
+  '      var w: t;',
+  '      const v = 4;',
+  '      begin',
+  '        repeat until true;',
+  '        asm end;',
+  '        try except end;',
+  '      end).ClassInfo{declaration:system.tobject.classinfo};',
+  'end;',
+  'begin',
+  'end.',
+  '']);
+  FindDeclarations(Code);
+end;
+
+procedure TTestFindDeclaration.TestFindDeclaration_ArrayMultiDimDot;
+begin
+  StartProgram;
+  Add([
+  'type',
+  '  TmyClass = class',
+  '    Field: integer;',
+  '  end;',
+  '  TArray1 = array of TmyClass;',
+  '  TArray2 = array of TArray1;',
+  'var',
+  '  tmp: TArray2;',
+  'begin',
+  '  tmp[0,0].Field{declaration:tmyclass.field};',
+  'end.']);
+  FindDeclarations(Code);
+end;
+
+procedure TTestFindDeclaration.TestFindDeclaration_VarArgsOfType;
+begin
+  StartProgram;
+  Add([
+  'procedure Run; varargs of word;',
+  'begin',
+  '  Run{declaration:run}(1,2);',
+  'end;',
+  'procedure Fly; varargs;',
+  'begin',
+  '  Run{declaration:run}(2,3);',
+  'end;',
+  'begin',
+  '  Run{declaration:run}(3);',
+  '  Fly{declaration:fly}(4);',
+  'end.']);
+  FindDeclarations(Code);
 end;
 
 procedure TTestFindDeclaration.TestFindDeclaration_FPCTests;

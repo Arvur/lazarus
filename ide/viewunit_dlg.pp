@@ -45,7 +45,7 @@ uses
   LCLType, LCLIntf,
   Controls, Forms, Buttons, StdCtrls, ExtCtrls, ButtonPanel, Menus, ComCtrls,
   // LazUtils
-  LazUTF8SysUtils, LazFileUtils, LazFileCache, AvgLvlTree,
+  LazSysUtils, LazFileUtils, LazFileCache, AvgLvlTree,
   // Codetools
   CodeToolManager, FileProcs,
   // LazControls
@@ -150,7 +150,7 @@ type
     procedure UpdateEntries;
   public
     procedure Init(const aCaption: string;
-      AllowMultiSelect, EnableMultiSelect: Boolean; aItemType: TIDEProjectItem;
+      EnableMultiSelect: Boolean; aItemType: TIDEProjectItem;
       TheEntries: TViewUnitEntries; aStartFilename: string = '');
     property SortAlphabetically: boolean read FSortAlphabetically write SetSortAlphabetically;
     property ItemType: TIDEProjectItem read FItemType write SetItemType;
@@ -158,8 +158,8 @@ type
   end;
 
 // Entries is a list of TViewUnitsEntry(s)
-function ShowViewUnitsDlg(Entries: TViewUnitEntries; AllowMultiSelect: boolean;
-  var CheckMultiSelect: Boolean; const aCaption: string; ItemType: TIDEProjectItem;
+function ShowViewUnitsDlg(Entries: TViewUnitEntries; CheckMultiSelect: Boolean;
+  const aCaption: string; ItemType: TIDEProjectItem;
   StartFilename: string = '' // if StartFilename is given the Entries are automatically updated
   ): TModalResult;
 
@@ -167,21 +167,16 @@ implementation
 
 {$R *.lfm}
 
-function ShowViewUnitsDlg(Entries: TViewUnitEntries; AllowMultiSelect: boolean;
-  var CheckMultiSelect: Boolean; const aCaption: string;
-  ItemType: TIDEProjectItem; StartFilename: string): TModalResult;
+function ShowViewUnitsDlg(Entries: TViewUnitEntries; CheckMultiSelect: Boolean;
+  const aCaption: string; ItemType: TIDEProjectItem; StartFilename: string): TModalResult;
 var
   ViewUnitDialog: TViewUnitDialog;
 begin
   ViewUnitDialog:=TViewUnitDialog.Create(nil);
   try
-    ViewUnitDialog.Init(aCaption,AllowMultiSelect,CheckMultiSelect,ItemType,Entries,
-         StartFilename);
+    ViewUnitDialog.Init(aCaption,CheckMultiSelect,ItemType,Entries,StartFilename);
     // Show the dialog
     Result:=ViewUnitDialog.ShowModal;
-    if Result=mrOk then begin
-      CheckMultiSelect := ViewUnitDialog.mniMultiselect.Checked;
-    end;
   finally
     ViewUnitDialog.Free;
   end;
@@ -322,8 +317,7 @@ begin
   ButtonPanel.HelpButton.Caption:=lisMenuHelp;
   ButtonPanel.CancelButton.Caption:=lisCancel;
   SortAlphabeticallySpeedButton.Hint:=lisPESortFilesAlphabetically;
-  TIDEImages.AssignImage(SortAlphabeticallySpeedButton.Glyph, 'pkg_sortalphabetically');
-  TIDEImages.AssignImage(FilterEdit.Glyph, 'btnfiltercancel');
+  IDEImages.AssignImage(SortAlphabeticallySpeedButton, 'pkg_sortalphabetically');
 end;
 
 procedure TViewUnitDialog.FormDestroy(Sender: TObject);
@@ -339,7 +333,7 @@ begin
   IDEDialogLayoutList.SaveLayout(Self);
 end;
 
-procedure TViewUnitDialog.Init(const aCaption: string; AllowMultiSelect,
+procedure TViewUnitDialog.Init(const aCaption: string;
   EnableMultiSelect: Boolean; aItemType: TIDEProjectItem;
   TheEntries: TViewUnitEntries; aStartFilename: string);
 var
@@ -350,7 +344,7 @@ begin
   Caption:=aCaption;
   ItemType:=aItemType;
   fEntries:=TheEntries;
-  mniMultiselect.Enabled := AllowMultiSelect;
+  mniMultiselect.Enabled := EnableMultiSelect;
   mniMultiselect.Checked := EnableMultiSelect;
   ListBox.MultiSelect := mniMultiselect.Enabled;
   ShowEntries;
@@ -377,13 +371,17 @@ end;
 
 procedure TViewUnitDialog.ListboxDrawItem(Control: TWinControl; Index: Integer;
   ARect: TRect; State: TOwnerDrawState);
+var
+  aTop: Integer;
 begin
   if Index < 0 then Exit;
   with ListBox do
   begin
     Canvas.FillRect(ARect);
-    IDEImages.Images_16.Draw(Canvas, 1, ARect.Top, FImageIndex);
-    Canvas.TextRect(ARect, ARect.Left + IDEImages.Images_16.Width + Scale96ToFont(4), ARect.Top, Items[Index]);
+    aTop := (ARect.Bottom + ARect.Top - IDEImages.Images_16.Height) div 2;
+    IDEImages.Images_16.Draw(Canvas, 1, aTop, FImageIndex);
+    aTop := (ARect.Bottom + ARect.Top - Canvas.TextHeight('Šj9')) div 2;
+    Canvas.TextRect(ARect, ARect.Left + IDEImages.Images_16.Width + Scale96ToFont(4), aTop, Items[Index]);
   end;
 end;
 

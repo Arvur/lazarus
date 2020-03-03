@@ -22,6 +22,7 @@ uses
 
 const
   DEF_AXIS_INDEX = -1;
+  DEF_ERR_ENDLENGTH = 5;
 
 type
   TNearestPointParams = record
@@ -49,11 +50,13 @@ type
   strict private
     FAxisIndexX: TChartAxisIndex;
     FAxisIndexY: TChartAxisIndex;
+    FDepthBrightnessDelta: Integer;
     FLegend: TChartSeriesLegend;
     FToolTargets: TNearestPointTargets;
     FTitle: String;
     procedure SetAxisIndexX(AValue: TChartAxisIndex);
     procedure SetAxisIndexY(AValue: TChartAxisIndex);
+    procedure SetDepthBrightnessDelta(AValue: Integer);
     procedure SetLegend(AValue: TChartSeriesLegend);
 
   protected
@@ -84,6 +87,8 @@ type
     function LegendTextStyle(AStyle: TChartStyle): String;
     procedure SetIndex(AValue: Integer); override;
     function TitleIsStored: Boolean; virtual;
+    property DepthBrightnessDelta: Integer
+      read FDepthBrightnessDelta write SetDepthBrightnessDelta default 0;
     property ToolTargets: TNearestPointTargets
       read FToolTargets write FToolTargets default [nptPoint];
 
@@ -94,6 +99,7 @@ type
     function GetAxisX: TChartAxis;
     function GetAxisY: TChartAxis;
     function GetAxisBounds(AAxis: TChartAxis; out AMin, AMax: Double): Boolean; override;
+    function GetDepthColor(AColor: Integer; Opposite: boolean = false): Integer; virtual;
     function GetGraphBounds: TDoubleRect; override;
     function GraphToAxis(APoint: TDoublePoint): TDoublePoint;
     function GraphToAxisX(AX: Double): Double; override;
@@ -151,6 +157,7 @@ type
     procedure AfterAdd; override;
     procedure AfterDraw; override;
     procedure BeforeDraw; override;
+    procedure CheckSource(ASource: TCustomChartSource);
     procedure GetBounds(var ABounds: TDoubleRect); override;
     function GetGraphPoint(AIndex: Integer): TDoublePoint; overload;
     function GetGraphPoint(AIndex, AXIndex, AYIndex: Integer): TDoublePoint; overload;
@@ -163,6 +170,7 @@ type
     procedure SourceChanged(ASender: TObject); virtual;
     procedure VisitSources(
       AVisitor: TChartOnSourceVisitor; AAxis: TChartAxis; var AData); override;
+    class procedure GetXYCountNeeded(out AXCount, AYCount: Cardinal); virtual;
   strict protected
     function LegendTextPoint(AIndex: Integer): String; inline;
   protected
@@ -218,6 +226,8 @@ type
       AIndex: Integer; AFormat: String = ''; AYIndex: Integer = 0): String;
     function IsEmpty: Boolean; override;
     function ListSource: TListChartSource;
+    property Marks: TChartMarks
+      read FMarks write SetMarks;
     property Source: TCustomChartSource
       read GetSource write SetSource stored IsSourceStored;
   public
@@ -233,7 +243,6 @@ type
     property YValues[AIndex, AYIndex: Integer]: Double read GetYValues write SetYValues;
   published
     property Active default true;
-    property Marks: TChartMarks read FMarks write SetMarks;
     property ShowInLegend;
     property Title;
     property ZPosition;
@@ -243,7 +252,7 @@ type
 
   TLabelDirection = (ldLeft, ldTop, ldRight, ldBottom);
 
-  TLinearMarkPositions = (lmpOutside, lmpPositive, lmpNegative, lmpInside, lmpInsideCenter);
+  TLinearMarkPositions = (lmpOutside, lmpPositive, lmpNegative, lmpInside);
 
   TSeriesPointerCustomDrawEvent = procedure (
     ASender: TChartSeries; ADrawer: IChartDrawer; AIndex: Integer;
@@ -252,52 +261,81 @@ type
   TSeriesPointerStyleEvent = procedure (ASender: TChartSeries;
     AValueIndex: Integer; var AStyle: TSeriesPointerStyle) of object;
 
+  TStackedNaN = (snReplaceByZero, snDoNotDraw);
+
   { TBasicPointSeries }
 
   TBasicPointSeries = class(TChartSeries)
   strict private
     FMarkPositions: TLinearMarkPositions;
+    FErrorBars: array[0..1] of TChartErrorBar;
     FOnCustomDrawPointer: TSeriesPointerCustomDrawEvent;
     FOnGetPointerStyle: TSeriesPointerStyleEvent;
-    function GetLabelDirection(AIndex: Integer): TLabelDirection;
+    function GetErrorBars(AIndex: Integer): TChartErrorBar;
+    function IsErrorBarsStored(AIndex: Integer): Boolean;
+    procedure SetErrorBars(AIndex: Integer; AValue: TChartErrorBar);
+    procedure SetMarkPositionCentered(AValue: Boolean);
     procedure SetMarkPositions(AValue: TLinearMarkPositions);
     procedure SetPointer(AValue: TSeriesPointer);
     procedure SetStacked(AValue: Boolean);
-    procedure SetUseReticule(AValue: Boolean);
-  strict protected
+    procedure SetStackedNaN(AValue: TStackedNaN);
+  //strict
+  protected
     FGraphPoints: array of TDoublePoint;
     FLoBound: Integer;
     FMinXRange: Double;
     FPointer: TSeriesPointer;
     FStacked: Boolean;
+    FStackedNaN: TStackedNaN;
     FUpBound: Integer;
-    FUseReticule: Boolean;
     FOptimizeX: Boolean;
+    FSupportsZeroLevel: Boolean;
+    FMarkPositionCentered: Boolean;
 
     procedure AfterDrawPointer(
       ADrawer: IChartDrawer; AIndex: Integer; const APos: TPoint); virtual;
-    procedure DrawLabels(ADrawer: IChartDrawer);
-    procedure DrawPointers(ADrawer: IChartDrawer; AStyleIndex: Integer = 0);
+    procedure DrawErrorBars(ADrawer: IChartDrawer);
+    procedure DrawLabels(ADrawer: IChartDrawer; AYIndex: Integer = -1);
+    procedure DrawPointers(ADrawer: IChartDrawer; AStyleIndex: Integer = 0;
+      UseDataColors: Boolean = false);
     procedure FindExtentInterval(
       const AExtent: TDoubleRect; AFilterByExtent: Boolean);
-    function GetLabelDataPoint(AIndex: Integer): TDoublePoint; virtual;
+    function GetLabelDataPoint(AIndex, AYIndex: Integer): TDoublePoint; virtual;
+    function GetLabelDirection(AValue: Double;
+      const ACenterLevel: Double): TLabelDirection;
     procedure GetLegendItemsRect(AItems: TChartLegendItems; ABrush: TBrush);
     function GetXRange(AX: Double; AIndex: Integer): Double;
     function GetZeroLevel: Double; virtual;
+    function HasMissingYValue(AIndex: Integer; AMaxYIndex: Integer = MaxInt): Boolean;
     function NearestXNumber(var AIndex: Integer; ADir: Integer): Double;
     procedure PrepareGraphPoints(
       const AExtent: TDoubleRect; AFilterByExtent: Boolean);
+    function SkipMissingValues(AIndex: Integer): Boolean; virtual;
     function ToolTargetDistance(const AParams: TNearestPointParams;
       AGraphPt: TDoublePoint; APointIdx, AXIdx, AYIdx: Integer): Integer; virtual;
     procedure UpdateGraphPoints(AIndex: Integer; ACumulative: Boolean); overload; inline;
     procedure UpdateGraphPoints(AIndex, ALo, AUp: Integer; ACumulative: Boolean); overload;
+    procedure UpdateLabelDirectionReferenceLevel(AIndex, AYIndex: Integer;
+      var ALevel: Double); virtual;
     procedure UpdateMinXRange;
 
     property Pointer: TSeriesPointer read FPointer write SetPointer;
     property Stacked: Boolean read FStacked write SetStacked;
+    property StackedNaN: TStackedNaN read FStackedNaN write SetStackedNaN default snReplaceByZero;
+
   protected
     procedure AfterAdd; override;
+    procedure SourceChanged(ASender: TObject); override;
     procedure UpdateMargins(ADrawer: IChartDrawer; var AMargins: TRect); override;
+
+    property MarkPositionCentered: Boolean
+      read FMarkPositionCentered write SetMarkPositionCentered default false;
+    property MarkPositions: TLinearMarkPositions
+      read FMarkPositions write SetMarkPositions default lmpOutside;
+    property XErrorBars: TChartErrorBar index 0 read GetErrorBars
+      write SetErrorBars stored IsErrorBarsStored;
+    property YErrorBars: TChartErrorBar index 1 read GetErrorBars
+      write SetErrorBars stored IsErrorBarsStored;
     property OnCustomDrawPointer: TSeriesPointerCustomDrawEvent
       read FOnCustomDrawPointer write FOnCustomDrawPointer;
     property OnGetPointerStyle: TSeriesPointerStyleEvent
@@ -315,11 +353,7 @@ type
     procedure MovePoint(var AIndex: Integer; const ANewPos: TDoublePoint); override;
     procedure MovePointEx(var AIndex: Integer; AXIndex, AYIndex: Integer;
       const ANewPos: TDoublePoint); override;
-    property MarkPositions: TLinearMarkPositions
-      read FMarkPositions write SetMarkPositions default lmpOutside;
     property ToolTargets default [nptPoint, nptYList];
-    property UseReticule: Boolean
-      read FUseReticule write SetUseReticule default false;
     property ExtentPointIndexFirst: Integer read FLoBound;
     property ExtentPointIndexLast: Integer read FUpBound;
   end;
@@ -330,7 +364,8 @@ type
 implementation
 
 uses
-  Math, PropEdits, StrUtils, TAGeometry, TAMath, Types;
+  Math, PropEdits, StrUtils, LResources, Types, GraphUtil,
+  TAChartStrConsts, TAGeometry, TAMath;
 
 function CreateLazIntfImage(
   out ARawImage: TRawImage; const ASize: TPoint): TLazIntfImage;
@@ -356,6 +391,7 @@ begin
     with TCustomChartSeries(ASource) do begin
       Self.FAxisIndexX := FAxisIndexX;
       Self.FAxisIndexY := FAxisIndexY;
+      Self.FDepthBrightnessDelta := FDepthBrightnessDelta;
       Self.Legend := FLegend;
       Self.FTitle := FTitle;
       Self.FToolTargets := FToolTargets;
@@ -438,10 +474,22 @@ begin
     Result := FChart.LeftAxis;
 end;
 
+function TCustomChartSeries.GetDepthColor(AColor: Integer;
+  Opposite: Boolean = false): Integer;
+var
+  h, l, s: Byte;
+begin
+  ColorToHLS(AColor, h, l, s);
+  if Opposite then
+    Result := HLSToColor(h, EnsureRange(Integer(l) - FDepthBrightnessDelta, 0, 255), s)
+  else
+    Result := HLSToColor(h, EnsureRange(Integer(l) + FDepthBrightnessDelta, 0, 255), s);
+end;
+
 function TCustomChartSeries.GetGraphBounds: TDoubleRect;
 begin
   Result := EmptyExtent;
-  GetBounds(Result);
+  if Active then GetBounds(Result);
   with Result do begin
     UpdateBoundsByAxisRange(FChart.AxisList, AxisIndexX, a.X, b.X);
     UpdateBoundsByAxisRange(FChart.AxisList, AxisIndexY, a.Y, b.Y);
@@ -535,10 +583,18 @@ begin
 end;
 
 function TCustomChartSeries.IsRotated: Boolean;
+var
+  x_normal, y_normal: Boolean;
+  x_axis: TChartAxis = nil;
+  y_axis: TChartAxis = nil;
 begin
-  Result :=
-    (AxisIndexX >= 0) and FChart.AxisList[AxisIndexX].IsVertical and
-    (AxisIndexY >= 0) and not FChart.AxisList[AxisIndexY].IsVertical;
+  if InRange(AxisIndexX, 0, FChart.AxisList.Count-1) then
+    x_axis := FChart.AxisList[AxisIndexX];
+  if InRange(AxisIndexY, 0, FChart.AxisList.Count-1) then
+    y_axis := FChart.AxisList[AxisIndexY];
+  x_normal := (x_axis = nil) or (not x_axis.IsVertical);
+  y_normal := (y_axis = nil) or y_axis.IsVertical;
+  Result := (not x_normal) and (not y_normal);
 end;
 
 function TCustomChartSeries.LegendTextSingle: String;
@@ -561,7 +617,7 @@ procedure TCustomChartSeries.ReadState(Reader: TReader);
 begin
   inherited ReadState(Reader);
   if Reader.Parent is TChart then
-    (Reader.Parent as TChart).AddSeries(Self);
+    TChart(Reader.Parent).AddSeries(Self);
 end;
 
 procedure TCustomChartSeries.SetActive(AValue: Boolean);
@@ -589,6 +645,13 @@ procedure TCustomChartSeries.SetDepth(AValue: TChartDistance);
 begin
   if FDepth = AValue then exit;
   FDepth := AValue;
+  UpdateParentChart;
+end;
+
+procedure TCustomChartSeries.SetDepthBrightnessDelta(AValue: Integer);
+begin
+  if FDepthBrightnessDelta = AValue then exit;
+  FDepthBrightnessDelta := AValue;
   UpdateParentChart;
 end;
 
@@ -729,7 +792,7 @@ begin
       Self.Source := FSource;
       Self.Styles := FStyles;
     end;
-  inherited Assign(Source);
+  inherited Assign(ASource);
 end;
 
 procedure TChartSeries.BeforeDraw;
@@ -741,6 +804,19 @@ end;
 procedure TChartSeries.BeginUpdate;
 begin
   ListSource.BeginUpdate;
+end;
+
+procedure TChartSeries.CheckSource(ASource: TCustomChartSource);
+var
+  nx, ny: Cardinal;
+begin
+  if ASource = nil then
+    exit;
+  GetXYCountNeeded(nx, ny);
+  if ASource.XCount < nx then
+    raise EXCountError.CreateFmt(rsSourceCountError, [ClassName, nx, 'x']);
+  if ASource.YCount < ny then
+    raise EYCountError.CreateFmt(rsSourceCountError, [ClassName, ny, 'y']);
 end;
 
 procedure TChartSeries.Clear;
@@ -761,11 +837,14 @@ end;
 constructor TChartSeries.Create(AOwner: TComponent);
 const
   BUILTIN_SOURCE_NAME = 'Builtin';
+var
+  nx, ny: Cardinal;
 begin
   inherited Create(AOwner);
 
   FListener := TListener.Create(@FSource,  @SourceChanged);
-  FBuiltinSource := TListChartSource.Create(Self);
+  GetXYCountNeeded(nx, ny);
+  FBuiltinSource := TBuiltinListChartSource.Create(Self, nx, ny);
   FBuiltinSource.Name := BUILTIN_SOURCE_NAME;
   FBuiltinSource.Broadcaster.Subscribe(FListener);
   FMarks := TChartMarks.Create(FChart);
@@ -811,7 +890,7 @@ procedure TChartSeries.GetBounds(var ABounds: TDoubleRect);
 var
   i: Integer;
 begin
-  if not Active or (Count = 0) then exit;
+  if IsEmpty or (not Active) then exit;
   with Extent do
     for i := Low(coords) to High(coords) do
       if not IsInfinite(coords[i]) then
@@ -841,12 +920,18 @@ end;
 
 function TChartSeries.GetGraphPointX(AIndex: Integer): Double;
 begin
-  Result := AxisToGraphX(Source[AIndex]^.X);
+  if Source.XCount = 0 then
+    Result := AxisToGraphX(AIndex)
+  else
+    Result := AxisToGraphX(Source[AIndex]^.X);
 end;
 
 function TChartSeries.GetGraphPointX(AIndex, AXIndex: Integer): Double;
 begin
-  Result := AxisToGraphX(Source[AIndex]^.GetX(AXIndex));
+  if Source.XCount = 0 then
+    Result := AxisToGraphX(AIndex)
+  else
+    Result := AxisToGraphX(Source[AIndex]^.GetX(AXIndex));
 end;
 
 function TChartSeries.GetGraphPointY(AIndex: Integer): Double;
@@ -907,6 +992,12 @@ begin
     Result := 0;
 end;
 
+class procedure TChartSeries.GetXYCountNeeded(out AXCount, AYCount: Cardinal);
+begin
+  AXCount := 0;
+  AYCount := 1;
+end;
+
 function TChartSeries.GetXMin: Double;
 begin
   Result := Extent.a.X;
@@ -919,15 +1010,18 @@ end;
 
 function TChartSeries.GetXValue(AIndex: Integer): Double;
 begin
-  Result := Source[AIndex]^.X;
+  if Source.XCount > 0 then
+    Result := Source[AIndex]^.X
+  else
+    Result := AIndex;
 end;
 
 function TChartSeries.GetXValues(AIndex, AXIndex: Integer): Double;
 begin
-  if AXIndex = 0 then
-    Result := Source[AIndex]^.X
+  if AXIndex > 0 then
+    Result := Source[AIndex]^.XList[AXIndex - 1]
   else
-    Result := Source[AIndex]^.XList[AXIndex - 1];
+    Result := Source[AIndex]^.X;
 end;
 
 function TChartSeries.GetYImgValue(AIndex: Integer): Integer;
@@ -986,8 +1080,8 @@ end;
 function TChartSeries.ListSource: TListChartSource;
 begin
   if not (Source is TListChartSource) then
-    raise EEditableSourceRequired.Create('Editable chart source required');
-  Result := Source as TListChartSource;
+    raise EEditableSourceRequired.Create(rsSourceNotEditable);
+  Result := TListChartSource(Source);
 end;
 
 procedure TChartSeries.SetColor(AIndex: Integer; AColor: TColor);
@@ -1010,7 +1104,11 @@ end;
 
 procedure TChartSeries.SetSource(AValue: TCustomChartSource);
 begin
-  if FSource = AValue then exit;
+  if AValue = FBuiltinSource then
+    AValue := nil;
+  if FSource = AValue then
+    exit;
+  CheckSource(AValue);
   if FListener.IsListening then
     Source.Broadcaster.Unsubscribe(FListener);
   FSource := AValue;
@@ -1062,6 +1160,13 @@ end;
 
 procedure TChartSeries.SourceChanged(ASender: TObject);
 begin
+  if (ASender <> FBuiltinSource) and (ASender is TCustomChartSource) then
+    try
+      CheckSource(TCustomChartSource(ASender));
+    except
+      Source := nil; // revert to built-in source
+      raise;
+    end;
   StyleChanged(ASender);
 end;
 
@@ -1075,10 +1180,15 @@ end;
 { TBasicPointSeries }
 
 procedure TBasicPointSeries.AfterAdd;
+var
+  i: Integer;
 begin
   inherited AfterAdd;
   if Pointer <> nil then
     Pointer.SetOwner(ParentChart);
+  for i := 0 to 1 do
+    if FErrorBars[i] <> nil then
+      FErrorBars[i].SetOwner(ParentChart);
 end;
 
 procedure TBasicPointSeries.AfterDrawPointer(
@@ -1096,7 +1206,8 @@ begin
       if Self.FPointer <> nil then
         Self.FPointer.Assign(Pointer);
       Self.Stacked := Stacked;
-      Self.FUseReticule := UseReticule;
+      Self.FSupportsZeroLevel := FSupportsZeroLevel;
+      Self.FMarkPositionCentered := FMarkPositionCentered;
     end;
   inherited Assign(ASource);
 end;
@@ -1104,17 +1215,102 @@ end;
 constructor TBasicPointSeries.Create(AOwner: TComponent);
 begin
   inherited;
+  FErrorBars[0] := TChartErrorBar.Create(FChart);
+  FErrorBars[1] := TChartErrorBar.Create(FChart);
   FOptimizeX := true;
+  FLoBound := 0;
+  FUpBound := Count - 1;
   ToolTargets := [nptPoint, nptYList];
 end;
 
 destructor TBasicPointSeries.Destroy;
 begin
+  FreeAndNil(FErrorBars[0]);
+  FreeAndNil(FErrorBars[1]);
   FreeAndNil(FPointer);
   inherited;
 end;
 
-procedure TBasicPointSeries.DrawLabels(ADrawer: IChartDrawer);
+procedure TBasicPointSeries.DrawErrorBars(ADrawer: IChartDrawer);
+
+  procedure EndBar(p: TPoint; w: Integer; IsHorBar: Boolean);
+  begin
+    if IsHorBar then
+      ADrawer.Line(Point(p.x, p.y-w), Point(p.x, p.y+w))
+    else
+      ADrawer.Line(Point(p.x-w, p.y), Point(p.x+w, p.y));
+  end;
+
+  procedure DrawErrorBar(p: TDoublePoint; vp, vn: Double; w: Integer;
+    IsXError: Boolean);
+  var
+    p1, p2: TDoublePoint;
+    imgPt1, imgPt2: TPoint;
+    isHorBar: Boolean;
+  begin
+    isHorBar := (IsXError and not IsRotated) or (IsRotated and not IsXError);
+
+    if IsHorBar then begin
+      p1 := DoublePoint(vp, p.Y);
+      p2 := DoublePoint(vn, p.Y);
+    end else begin
+      p1 := DoublePoint(p.X, vp);
+      p2 := DoublePoint(p.X, vn);
+    end;
+    imgPt1 := ParentChart.GraphToImage(p1);
+    imgPt2 := ParentChart.GraphToImage(p2);
+    ADrawer.Line(imgPt1, imgPt2);
+
+    EndBar(imgPt1, w, isHorBar);
+    EndBar(imgPt2, w, isHorBar);
+  end;
+
+  procedure InternalDrawErrorBars(IsXError: Boolean);
+  var
+    i: Integer;
+    p: TDoublePoint;
+    vp, vn: Double;
+    w, w0: Integer;
+    errbar: TChartErrorBar;
+  begin
+    if Assigned(Pointer) then
+      w0 := IfThen(IsXError, Pointer.VertSize, Pointer.HorizSize)
+    else
+      w0 := DEF_ERR_ENDLENGTH;
+    errbar := TChartErrorBar(IfThen(IsXError, XErrorBars, YErrorBars));
+    w := ADrawer.Scale(IfThen(errBar.Width = -1, w0, errBar.Width));
+
+    for i := FLoBound to FUpBound do begin
+      p := FGraphPoints[i - FLoBound];
+      if not ParentChart.IsPointInViewPort(p) then continue;
+      if IsXError then begin
+        if Source.GetXErrorBarLimits(i, vp, vn) then
+          DrawErrorBar(p, AxisToGraphX(vp), AxisToGraphX(vn), w, true);
+      end else begin
+        if Source.GetYErrorBarLimits(i, vp, vn) then
+          DrawErrorBar(p, AxisTographY(vp), AxisToGraphY(vn), w, false);
+      end;
+    end;
+  end;
+
+begin
+  // Draw x error bars
+  if Assigned(XErrorBars) and XErrorBars.Visible and Source.HasXErrorBars then
+  begin
+    ADrawer.Pen := XErrorBars.Pen;
+    InternalDrawErrorBars(true);
+  end;
+
+  // Draw y error bars
+  if Assigned(YErrorBars) and YErrorBars.Visible and Source.HasYErrorBars then
+  begin
+    ADrawer.Pen := YErrorBars.Pen;
+    InternalDrawErrorBars(false);
+  end;
+end;
+
+procedure TBasicPointSeries.DrawLabels(ADrawer: IChartDrawer; AYIndex: Integer = -1);
+// Using AYIndex is workaround for issue #35077
 var
   prevLabelPoly: TPointArray;
 
@@ -1136,12 +1332,15 @@ var
   end;
 
 var
-  y: Double;
-  g, gl: TDoublePoint;
+  y, ysum: Double;
+  g: TDoublePoint;
   i, si: Integer;
-  ld: TLabelDirection;
   style: TChartStyle;
   lfont: TFont;
+  curr, prev: Double;
+  ext: TDoubleRect;
+  yIsNaN: Boolean;
+  centerLvl: Double;
 begin
   if not Marks.IsMarkLabelsVisible then exit;
 
@@ -1149,41 +1348,76 @@ begin
   try
     lfont.Assign(Marks.LabelFont);
     ParentChart.DisableRedrawing;
+    ext := Extent;
+    centerLvl := AxisToGraphY((ext.a.y + ext.b.y) * 0.5);
+    UpdateLabelDirectionReferenceLevel(0, 0, centerLvl);
 
-    for i := 0 to Count - 1 do begin
-      if IsNan(Source[i]^.Point) then continue;
-      g := GetLabelDataPoint(i);
-      ld := GetLabelDirection(i);
+    for i := FLoBound to FUpBound do begin
+      if SkipMissingValues(i) then
+        continue;
+      prev := IfThen(FSupportsZeroLevel, GetZeroLevel, 0.0);
       for si := 0 to Source.YCount - 1 do begin
-        if Styles <> nil then begin
-          style := Styles.StyleByIndex(si);
-          if style.UseFont then
-            Marks.LabelFont.Assign(style.Font)
-          else
-            Marks.LabelFont.Assign(lfont);
-        end;
-        if si = 0 then
-          y := Source[i]^.y - GetZeroLevel
-        else begin
-          y := Source[i]^.YList[si-1];
+        g := GetLabelDataPoint(i, si);
+        if FStacked then begin
+          if si = 0 then begin
+            y := Source[i]^.Y;
+            yIsNaN := IsNaN(y);
+            ysum := IfThen(yIsNaN, prev, y);
+          end else begin
+            y := Source[i]^.YList[si-1];
+            yIsNaN := IsNaN(y);
+            if yIsNaN then y := 0.0;
+            if Stacked then begin
+              ysum += y;
+              y := ysum;
+            end;
+          end;
           if IsRotated then
-            g.X += AxisToGraphY(y)
+            g.X := AxisToGraphY(y)
+            // Axis-to-graph transformation is independent of axis rotation ->
+            // Using AxisToGraph_Y_ is correct!
           else
-            g.Y += AxisToGraphY(y);
-        end;
-        gl := g;
-        if FMarkPositions = lmpInsideCenter then begin
+            g.Y := AxisToGraphY(y);
+        end else
+          yIsNaN := IsNaN(g.y);
+
+        curr := TDoublePointBoolArr(g)[not IsRotated];
+        if FMarkPositionCentered then begin
           if IsRotated then
-            gl.X -= AxisToGraphX(y)/2
+            g := DoublePoint((curr + prev) * 0.5, g.y)
           else
-            gl.Y -= AxisToGraphY(y)/2;
+            g := DoublePoint(g.x, (curr + prev) * 0.5);
         end;
+        if Stacked then
+          prev := curr;
+
+        // Draw only the requested y index
+        if (AYIndex >= 0) then begin
+          if si < AYIndex then
+            Continue
+          else if si > AYIndex then
+            break;
+        end;
+
         with ParentChart do
           if
-            (Marks.YIndex = MARKS_YINDEX_ALL) or (Marks.YIndex = si) and
-            IsPointInViewPort(gl)
-          then
-            DrawLabel(FormattedMark(i, '', si), GraphToImage(gl), ld);
+            ((Marks.YIndex = MARKS_YINDEX_ALL) or (Marks.YIndex = si)) and
+            IsPointInViewPort(g) and (not yIsNaN)
+          then begin
+            if Styles <> nil then begin
+              style := Styles.StyleByIndex(si);
+              if style.UseFont then
+                Marks.LabelFont.Assign(style.Font)
+              else
+                Marks.LabelFont.Assign(lfont);
+            end;
+            UpdateLabelDirectionReferenceLevel(i, si, centerLvl);
+            DrawLabel(
+              FormattedMark(i, '', si),
+              GraphToImage(g),
+              GetLabelDirection(IfThen(IsRotated, g.X, g.Y), centerLvl)
+            );
+          end;
       end;
     end;
 
@@ -1198,13 +1432,14 @@ end;
   If ChartStyles are attached to the series then the pointer brush is determined
   by the style with the specified index. }
 procedure TBasicPointSeries.DrawPointers(ADrawer: IChartDrawer;
-  AStyleIndex: Integer = 0);
+  AStyleIndex: Integer = 0; UseDataColors: Boolean = false);
 var
   i: Integer;
   p: TDoublePoint;
   ai: TPoint;
   ps, saved_ps: TSeriesPointerStyle;
   brushAlreadySet: boolean;
+  c: TColor;
 begin
   Assert(Pointer <> nil, 'Series pointer');
   if (not Pointer.Visible) or (Length(FGraphPoints) = 0) then exit;
@@ -1222,12 +1457,11 @@ begin
         Pointer.SetOwner(nil);   // avoid recursion
         Pointer.Style := ps;
       end;
-      brushAlreadySet := (Styles <> nil) and
-        (AStyleIndex < Styles.Styles.Count) and
-        Styles.Styles[AStyleIndex].UseBrush;
+      brushAlreadySet := (Styles <> nil) and Styles.StyleByIndex(AStyleIndex).UseBrush;
       if brushAlreadySet then
         Styles.Apply(ADrawer, AStyleIndex);
-      Pointer.Draw(ADrawer, ai, Source[i]^.Color, brushAlreadySet);
+      if UseDataColors then c := Source[i]^.Color else c := clTAColor;
+      Pointer.Draw(ADrawer, ai, c, brushAlreadySet);
       AfterDrawPointer(ADrawer, i, ai);
       if Assigned(FOnGetPointerStyle) then begin
         Pointer.Style := saved_ps;
@@ -1266,25 +1500,49 @@ begin
   end;
 end;
 
-function TBasicPointSeries.GetLabelDataPoint(AIndex: Integer): TDoublePoint;
+function TBasicPointSeries.GetErrorBars(AIndex: Integer): TChartErrorBar;
 begin
-  Result := GetGraphPoint(AIndex);
+  Result := FErrorBars[AIndex];
 end;
 
-function TBasicPointSeries.GetLabelDirection(AIndex: Integer): TLabelDirection;
+function TBasicPointSeries.GetLabelDataPoint(AIndex, AYIndex: Integer): TDoublePoint;
+begin
+  Result := GetGraphPoint(AIndex, 0, AYIndex);
+end;
+
+function TBasicPointSeries.GetLabelDirection(AValue: Double;
+  const ACenterLevel: Double): TLabelDirection;
 const
   DIR: array [Boolean, Boolean] of TLabelDirection =
     ((ldTop, ldBottom), (ldRight, ldLeft));
 var
   isNeg: Boolean;
+  ref: Double;
 begin
   case MarkPositions of
-    lmpOutside: isNeg := Source[AIndex]^.Y < GetZeroLevel;
     lmpPositive: isNeg := false;
     lmpNegative: isNeg := true;
-    lmpInside: isNeg := Source[AIndex]^.Y >= GetZeroLevel;
-    lmpInsideCenter: isNeg := Source[AIndex]^.Y < GetZeroLevel;
+    lmpOutside,
+    lmpInside :
+      begin
+        ref := IfThen(FSupportsZeroLevel, AxisToGraphY(GetZeroLevel), ACenterLevel);
+        if AValue < ref then
+          isNeg := true
+        else
+        if AValue > ref then
+          isNeg := false
+        else
+        if not FSupportsZeroLevel then
+          isNeg := false
+        else
+          isNeg := AValue < ACenterLevel;
+        if MarkPositions = lmpInside then
+          isNeg := not isNeg;
+      end;
   end;
+  if Assigned(GetAxisY) then
+    if (IsRotated and ParentChart.IsRightToLeft) xor GetAxisY.Inverted then
+      isNeg := not isNeg;
   Result := DIR[IsRotated, isNeg];
 end;
 
@@ -1340,6 +1598,9 @@ begin
   AResults.FIndex := -1;
   AResults.FXIndex := 0;
   AResults.FYIndex := 0;
+  if IsEmpty then exit(false);
+  if not RequestValidChartScaling then exit(false);
+
   if FOptimizeX and AParams.FOptimizeX then
     Source.FindBounds(
       GetGrabBound(-AParams.FRadius),
@@ -1423,16 +1684,42 @@ var
   wl, wr: Double;
   i: Integer;
 begin
-  i := AIndex - 1;
-  wl := Abs(AX - NearestXNumber(i, -1));
-  i := AIndex + 1;
-  wr := Abs(AX - NearestXNumber(i, +1));
-  Result := NumberOr(SafeMin(wl, wr), 1.0);
+  if Source.XCount > 0 then begin
+    i := AIndex - 1;
+    wl := Abs(AX - NearestXNumber(i, -1));
+    i := AIndex + 1;
+    wr := Abs(AX - NearestXNumber(i, +1));
+    Result := NumberOr(SafeMin(wl, wr), 1.0);
+  end else
+    Result := 1.0;
 end;
 
 function TBasicPointSeries.GetZeroLevel: Double;
 begin
   Result := 0.0;
+end;
+
+{ Returns true if the data point at the given index has at least one missing
+  y value (NaN) }
+function TBasicPointSeries.HasMissingYValue(AIndex: Integer;
+  AMaxYIndex: Integer = MaxInt): Boolean;
+var
+  j: Integer;
+begin
+  Result := IsNaN(Source[AIndex]^.Y);
+  if not Result then
+    for j := 0 to Min(AMaxYIndex, Source.YCount)-2 do
+      if IsNaN(Source[AIndex]^.YList[j]) then
+        exit(true);
+end;
+
+function TBasicPointSeries.IsErrorBarsStored(AIndex: Integer): Boolean;
+begin
+  with FErrorBars[AIndex] do
+    Result := Visible or (Width <> -1) or (Pen.Color <> clBlack) or
+      (not Pen.Cosmetic) or (Pen.EndCap <> pecRound) or
+      (Pen.JoinStyle <> pjsRound) or (Pen.Mode <> pmCopy) or
+      (Pen.Style <> psSolid) or (Pen.Width <> 1);
 end;
 
 procedure TBasicPointSeries.MovePoint(
@@ -1502,14 +1789,33 @@ begin
   FindExtentInterval(AExtent, AFilterByExtent);
 
   SetLength(FGraphPoints, Max(FUpBound - FLoBound + 1, 0));
-  if (AxisIndexX < 0) and (AxisIndexY < 0) then
+  if (AxisIndexX < 0) and (AxisIndexY < 0) then begin
     // Optimization: bypass transformations in the default case.
-    for i := FLoBound to FUpBound do
-      with Source[i]^ do
-        FGraphPoints[i - FLoBound] := DoublePoint(X, Y)
-  else
+    if Source.XCount > 0 then
+      for i := FLoBound to FUpBound do
+        with Source[i]^ do
+          FGraphPoints[i - FLoBound] := DoublePoint(X, Y)
+    else
+      for i := FLoBound to FUpBound do
+        with Source[i]^ do
+          FGraphPoints[i - FLoBound] := DoublePoint(i, Y);
+  end else
     for i := FLoBound to FUpBound do
       FGraphPoints[i - FLoBound] := GetGraphPoint(i);
+end;
+
+procedure TBasicPointSeries.SetErrorBars(AIndex: Integer;
+  AValue: TChartErrorBar);
+begin
+  FErrorBars[AIndex] := AValue;
+  UpdateParentChart;
+end;
+
+procedure TBasicPointSeries.SetMarkPositionCentered(AValue: Boolean);
+begin
+  if FMarkPositionCentered = AValue then exit;
+  FMarkPositionCentered := AValue;
+  UpdateParentChart;
 end;
 
 procedure TBasicPointSeries.SetMarkPositions(AValue: TLinearMarkPositions);
@@ -1532,11 +1838,20 @@ begin
   UpdateParentChart;
 end;
 
-procedure TBasicPointSeries.SetUseReticule(AValue: Boolean);
+procedure TBasicPointSeries.SetStackedNaN(AValue: TStackedNaN);
 begin
-  if FUseReticule = AValue then exit;
-  FUseReticule := AValue;
+  if FStackedNaN = AValue then exit;
+  FStackedNaN := AValue;
   UpdateParentChart;
+end;
+
+{ Returns true when the data point at the specified index contains missing
+  values in a way such that the point cannot be drawn. }
+function TBasicPointSeries.SkipMissingValues(AIndex: Integer): Boolean;
+begin
+  Result := IsNan(Source[AIndex]^.X);
+  if not Result then
+    Result := FStacked and (FStackedNaN = snDoNotDraw) and HasMissingYValue(AIndex);
 end;
 
 function TBasicPointSeries.ToolTargetDistance(const AParams: TNearestPointParams;
@@ -1546,38 +1861,73 @@ var
 begin
   Unused(APointIdx);
   Unused(AXIdx, AYIdx);
-  pt := ParentChart.GraphToImage(AGraphPt);
-  Result := AParams.FDistFunc(AParams.FPoint, pt);
+  if IsNaN(AGraphPt) then
+    exit(MaxInt)
+  else begin
+    pt := ParentChart.GraphToImage(AGraphPt);
+    Result := AParams.FDistFunc(AParams.FPoint, pt);
+  end;
 end;
 
+// AIndex refers to the index into YList here.
+// The ordinary Y value has Index = -1.
 procedure TBasicPointSeries.UpdateGraphPoints(AIndex, ALo, AUp: Integer;
   ACumulative: Boolean);
 var
   i, j: Integer;
   y: Double;
 begin
-  if IsRotated then
-    for i := ALo to AUp do
-    begin
-      if ACumulative then begin
-        y := Source[i]^.Y;
-        for j := 0 to AIndex do
-          y += Source[i]^.YList[j];
-        FGraphPoints[i - ALo].X := AxisToGraphY(y);
-      end else
-        FGraphPoints[i - Alo].X := AxisToGraphY(Source[i]^.YList[AIndex]);
-    end
-  else
-    for i := ALo to AUp do
-    begin
-      if ACumulative then begin
-        y := Source[i]^.Y;
-        for j := 0 to AIndex do
-          y += Source[i]^.YList[j];
-        FGraphPoints[i - ALo].Y := AxisToGraphY(y);
-      end else
-        FGraphPoints[i - Alo].Y := AxisToGraphY(Source[i]^.YList[AIndex]);
-    end;
+  if IsRotated then begin
+    if ACumulative then begin
+      if FStacked and (FStackedNaN = snReplaceByZero) then
+        for i := ALo to AUp do
+        begin
+          y := NumberOr(Source[i]^.Y, IfThen(FSupportsZeroLevel, GetZeroLevel, 0.0));
+          for j := 0 to AIndex do
+            y += NumberOr(Source[i]^.YList[j], 0.0);
+          FGraphPoints[i - ALo].X := AxisToGraphY(y)
+        end
+      else
+        for i := ALo to AUp do
+        begin
+          y := Source[i]^.Y;
+          for j := 0 to AIndex do
+            y += Source[i]^.YList[j];
+          FGraphPoints[i - ALo].X := AxisToGraphY(y);
+        end;
+    end else
+    if AIndex = -1 then
+      for i := ALo to AUp do
+        FGraphPoints[i - ALo].X := AxisToGraphY(Source[i]^.Y)
+    else
+      for i := ALo to AUp do
+        FGraphPoints[i - ALo].X := AxisToGraphY(Source[i]^.YList[AIndex]);
+  end
+  else begin
+    if ACumulative then begin
+      if FStacked and (FStackedNaN = snReplaceByZero) then
+        for i := ALo to AUp do
+        begin
+          y := NumberOr(Source[i]^.Y, IfThen(FSupportsZeroLevel, GetZeroLevel, 0.0));
+          for j := 0 to AIndex do
+            y += NumberOr(Source[i]^.YList[j], 0.0);
+          FGraphPoints[i - ALo].Y := AxisToGraphY(y);
+        end
+      else
+        for i := ALo to AUp do begin
+          y := Source[i]^.Y;
+          for j := 0 to AIndex do
+            y += Source[i]^.YList[j];
+          FGraphPoints[i - ALo].Y := AxisToGraphY(y);
+        end;
+    end else
+    if AIndex = -1 then
+      for i := ALo to AUp do
+        FGraphPoints[i - ALo].Y := AxisToGraphY(Source[i]^.Y)
+    else
+      for i := ALo to AUp do
+        FGraphPoints[i - ALo].Y := AxisToGraphY(Source[i]^.YList[AIndex]);
+  end;
 end;
 
 procedure TBasicPointSeries.UpdateGraphPoints(AIndex: Integer;
@@ -1586,53 +1936,83 @@ begin
   UpdateGraphPoints(AIndex, FLoBound, FUpBound, ACumulative);
 end;
 
+procedure TBasicPointSeries.SourceChanged(ASender: TObject);
+begin
+  FLoBound := 0;
+  FUpBound := Count - 1;
+  inherited;
+end;
+
 procedure TBasicPointSeries.UpdateMargins(
   ADrawer: IChartDrawer; var AMargins: TRect);
 var
-  i, dist: Integer;
+  i, dist, j: Integer;
   labelText: String;
   dir: TLabelDirection;
   m: array [TLabelDirection] of Integer absolute AMargins;
-  zero: Double;
   gp: TDoublePoint;
-  valueIsPositive: Boolean;
+  scMarksDistance: Integer;
+  center: Double;
+  ysum: Double;
 begin
   if not Marks.IsMarkLabelsVisible or not Marks.AutoMargins then exit;
-  if MarkPositions = lmpInsideCenter then exit;
+  if IsEmpty then exit;
 
-  zero := GetZeroLevel;
-  for i := 0 to Count - 1 do begin
-    gp := GetGraphPoint(i);
-    if not ParentChart.IsPointInViewPort(gp) then continue;
-    labelText := FormattedMark(i);
-    if labelText = '' then continue;
+  {FLoBound and FUpBound fields may be outdated here (if axis' range has been
+   changed after the last series' painting). FLoBound and FUpBound will be fully
+   updated later, in a PrepareGraphPoints() call. But we need them now. If data
+   source is sorted by X in the ascending order, obtaining FLoBound and FUpBound
+   is very fast (binary search) - so we call FindExtentInterval() with True as
+   the second parameter. Otherwise, obtaining FLoBound and FUpBound requires
+   enumerating all the data points to see, if they are in the current chart's
+   viewport. But this is exactly what we are going to do in the loop below, so
+   obtaining true FLoBound and FUpBound values makes no sense in this case - so
+   we call FindExtentInterval() with False as the second parameter, thus setting
+   FLoBound to 0 and FUpBound to Count-1}
+  FindExtentInterval(ParentChart.CurrentExtent, Source.IsSortedByXAsc);
 
-    valueIsPositive := TDoublePointBoolArr(gp)[not IsRotated] > zero;
-    dir := GetLabelDirection(i);
+  with Extent do
+    center := AxisToGraphY((a.y + b.y) * 0.5);
+  UpdateLabelDirectionReferenceLevel(0, 0, center);
+  scMarksDistance := ADrawer.Scale(Marks.Distance);
+  for i := FLoBound to FUpBound do begin
+    j := 0;
+    gp := GetLabelDataPoint(i, 0);
+    while true do begin
+      if not ParentChart.IsPointInViewPort(gp) then break;
+      labelText := FormattedMark(i, '', j);
+      if labelText = '' then break;
 
-    with Marks.MeasureLabel(ADrawer, labelText) do
-      dist := IfThen(dir in [ldLeft, ldRight], cx, cy);
-    if Marks.DistanceToCenter then
-      dist := dist div 2;
-
-    if valueIsPositive then begin
+      UpdateLabelDirectionReferenceLevel(i, j, center);
+      dir := GetLabelDirection(TDoublePointBoolArr(gp)[not IsRotated], center);
+      with Marks.MeasureLabel(ADrawer, labelText) do
+        dist := IfThen(dir in [ldLeft, ldRight], cx, cy);
       if Marks.DistanceToCenter then
-        case dir of
-          ldBottom: dir := ldTop;
-          ldLeft: dir := ldRight;
-        end;
-      if dir in [ldTop, ldRight] then
-        m[dir] := Max(m[dir], dist + Marks.Distance);
-    end else begin
-      if Marks.DistanceToCenter then
-        case dir of
-          ldTop: dir := ldBottom;
-          ldRight: dir := ldLeft;
-        end;
-      if dir in [ldBottom, ldLeft] then
-        m[dir] := Max(m[dir], dist + Marks.Distance);
+        dist := dist div 2;
+
+      m[dir] := Max(m[dir], dist + scMarksDistance);
+
+      if (Source.YCount > 1) and (j = 0) then begin
+        if FStacked then begin
+          ysum := 0;
+          for j := 0 to Source.YCount-1 do
+            ysum += NumberOr(Source.Item[i]^.GetY(j), 0.0);
+          TDoublePointBoolArr(gp)[not IsRotated] := AxisToGraphY(ysum);
+        end else
+          gp := GetLabelDataPoint(i, Source.YCount-1);
+        j := Source.YCount-1;
+      end else
+        break;
     end;
   end;
+end;
+
+{ Can be overridden for a data-point dependent reference level, such as in
+  TBubbleSeries. AIndex refers to chart source. }
+procedure TBasicPointSeries.UpdateLabelDirectionReferenceLevel(AIndex, AYIndex: Integer;
+  var ALevel: Double);
+begin
+  Unused(AIndex, AYIndex, ALevel);
 end;
 
 procedure TBasicPointSeries.UpdateMinXRange;
@@ -1640,7 +2020,7 @@ var
   x, prevX: Double;
   i: Integer;
 begin
-  if Count < 2 then begin
+  if (Count < 2) or (Source.XCount = 0) then begin
     FMinXRange := 1.0;
     exit;
   end;
@@ -1655,10 +2035,10 @@ begin
 end;
 
 procedure SkipObsoleteProperties;
+const
+  LEGEND_NOTE = 'Obsolete, use TCustomChartSeries.ShowInLegend instead';
 begin
-  RegisterPropertyEditor(
-    TypeInfo(Boolean), TCustomChartSeries,
-    'ShowInLegend', THiddenPropertyEditor);
+  RegisterPropertyToSkip(TCustomChartSeries, 'ShowInLegend', LEGEND_NOTE, '');
 end;
 
 initialization

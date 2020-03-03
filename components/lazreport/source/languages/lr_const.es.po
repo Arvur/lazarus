@@ -250,6 +250,7 @@ msgid "0"
 msgstr "0"
 
 #: lr_const.sclassobjectnotfound
+#, object-pascal-format
 msgid "Class Object \"%s\" not found"
 msgstr "No se encontró la clase de objeto \"%s\""
 
@@ -476,6 +477,10 @@ msgstr "FORMATTEXT(<Máscara>, <Cadena>)/Aplica la <Máscara> a la <Cadena> dada
 #: lr_const.sdescriptionfrac
 msgid "FRAC(<Value>)/Returns the fractional part of floating point <Value>."
 msgstr "FRAC(<Value>)/Devuelve la parte fraccionaria de punto flotante <Value>."
+
+#: lr_const.sdescriptionif
+msgid "IF(<expression>, <Value1>, <Value2>)/Returns <Value1>, if <expression> is true; otherwise returns <Value2>."
+msgstr ""
 
 #: lr_const.sdescriptioninc
 msgid "INC(<Value>)/Increment <Value>."
@@ -736,6 +741,7 @@ msgid "Version"
 msgstr "Versión"
 
 #: lr_const.sduplicatedobjectname
+#, object-pascal-format
 msgid "An object named \"%s\" already exists"
 msgstr "Ya existe un objeto llamado \"%s\""
 
@@ -1713,6 +1719,7 @@ msgid "Invalid report format"
 msgstr "Formato de reporte no válido"
 
 #: lr_const.sinvalidvariablename
+#, object-pascal-format
 msgid "\"%s\" is not a valid variable name."
 msgstr "\"%s\" no es un nombre de variable válido."
 
@@ -1770,6 +1777,7 @@ msgid "Object inspector"
 msgstr "Inspector de objetos"
 
 #: lr_const.sobjectnotfound
+#, object-pascal-format
 msgid "Object \"%s\" not found"
 msgstr "Objeto \"%s\" no se encontró"
 
@@ -2512,10 +2520,12 @@ msgid "Report file"
 msgstr "Archivo de reporte"
 
 #: lr_const.sreportcorruptoldknowversion
+#, object-pascal-format
 msgid "This report is corrupt, it probably needs \"LRE_OLDV%d_FRF_READ\"=true"
 msgstr ""
 
 #: lr_const.sreportcorruptunknownversion
+#, object-pascal-format
 msgid "This report is corrupt, frVersion=%d"
 msgstr ""
 

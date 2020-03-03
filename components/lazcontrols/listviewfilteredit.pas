@@ -53,7 +53,7 @@ type
     fOriginalData: TListViewDataList;
     // Data sorted for viewing.
     fFilteredData: TListViewDataList;
-    function MatchesFilter(aData: TListViewDataItem; const FilterLC: string): Boolean;
+    function MatchesFilter(aData: TListViewDataItem): Boolean;
     procedure SetFilteredListview(const AValue: TCustomListView);
   protected
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
@@ -68,7 +68,7 @@ type
     function ReturnKeyHandled: Boolean; override;
     procedure SortAndFilter; override;
     procedure ApplyFilterCore; override;
-    function GetDefaultGlyph: TBitmap; override;
+    function GetDefaultGlyphName: string; override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -81,9 +81,6 @@ type
     property FilteredListview: TCustomListView read fFilteredListview write SetFilteredListview;
     property ByAllFields: Boolean read fByAllFields write fByAllFields default False;
   end;
-
-var
-  ListFilterGlyph: TBitmap;
 
 implementation
 
@@ -118,9 +115,9 @@ begin
   inherited Destroy;
 end;
 
-function TListViewFilterEdit.GetDefaultGlyph: TBitmap;
+function TListViewFilterEdit.GetDefaultGlyphName: string;
 begin
-  Result := ListFilterGlyph;
+  Result := 'btnfiltercancel';
 end;
 
 function TListViewFilterEdit.GetLastSelectedIndex: Integer;
@@ -177,8 +174,7 @@ begin
   end;
 end;
 
-function TListViewFilterEdit.MatchesFilter(aData: TListViewDataItem;
-  const FilterLC: string): Boolean;
+function TListViewFilterEdit.MatchesFilter(aData: TListViewDataItem): Boolean;
 var
   i, EndInd: Integer;
 begin
@@ -187,7 +183,7 @@ begin
   else
     EndInd := 0;
   for i := 0 to EndInd do begin
-    if DoFilterItem(aData.StringArray[i], FilterLC, aData.Data) then
+    if DoFilterItem(aData.StringArray[i], aData.Data) then
       Exit(True);
   end;
   Result := False;
@@ -210,13 +206,11 @@ procedure TListViewFilterEdit.SortAndFilter;
 var
   Origi: Integer;
   Data: TListViewDataItem;
-  FilterLC: string;
 begin
   fFilteredData.Clear;
-  FilterLC := UTF8LowerCase(Filter);
   for Origi:=0 to fOriginalData.Count-1 do begin
     Data:=fOriginalData[Origi];
-    if MatchesFilter(Data, FilterLC) then
+    if MatchesFilter(Data) then
       fFilteredData.Add(Data);
   end;
 end;

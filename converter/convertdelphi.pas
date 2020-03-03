@@ -39,14 +39,14 @@ uses
   // CodeTools
   CodeToolManager, DefineTemplates, CodeCache, LinkScanner, FileProcs,
   // LazUtils
-  LConvEncoding, FileUtil, LazFileUtils, LazUTF8, LazUTF8Classes, AvgLvlTree,
+  LConvEncoding, FileUtil, LazFileUtils, LazUTF8, LazUTF8Classes, LazStringUtils,
+  AvgLvlTree,
   // IDEIntf
-  ComponentReg, IDEDialogs,
-  LazIDEIntf, PackageIntf, ProjectIntf, IDEExternToolIntf, IDEOptionsIntf,
+  ComponentReg, IDEDialogs, LazIDEIntf, PackageIntf, ProjectIntf,
+  IDEExternToolIntf, IDEOptEditorIntf,
   // IDE
-  IDEProcs, DialogProcs, CompilerOptions,
-  ProjPackCommon, Project, ProjectDefs, PackageDefs, PackageSystem, PackageEditor,
-  BasePkgManager, LazarusIDEStrConsts, ProjectDescriptors,
+  IDEProcs, DialogProcs, CompilerOptions, ProjPackCommon, Project, ProjectDescriptors,
+  PackageDefs, PackageSystem, PackageEditor, BasePkgManager, LazarusIDEStrConsts,
   // Converter
   ConverterTypes, ConvertSettings, ConvCodeTool, MissingUnits, MissingPropertiesDlg,
   UsedUnits;
@@ -1104,7 +1104,7 @@ begin
     DebugLn('');
     DebugLn('TConvertDelphiProjPack.ConvertAllFormFiles: '+lisConvDelphiRepairingFormFiles);
   end;
-  Screen.Cursor:=crHourGlass;
+  Screen.BeginWaitCursor;
   try
     for i:=0 to ConverterList.Count-1 do begin
       Converter:=TDelphiUnit(ConverterList[i]); // Converter created in cycle1.
@@ -1117,7 +1117,7 @@ begin
       if Result<>mrOK then exit;
     end;
   finally
-    Screen.Cursor:=crDefault;
+    Screen.EndWaitCursor;
   end;
   Result:=mrOK;
 end;
@@ -1601,7 +1601,7 @@ var
   p: LongInt;
   ui: TUnitInfo;
 begin
-  Screen.Cursor:=crHourGlass;
+  Screen.BeginWaitCursor;
   FoundUnits:=nil;
   MisUnits:=nil;
   NormalUnits:=nil;
@@ -1649,7 +1649,7 @@ begin
     FoundUnits.Free;
     MisUnits.Free;
     NormalUnits.Free;
-    Screen.Cursor:=crDefault;
+    Screen.EndWaitCursor;
   end;
   Result:=mrOK;
 end;

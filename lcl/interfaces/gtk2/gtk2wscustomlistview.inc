@@ -814,7 +814,11 @@ begin
     Exit;
   GtkColumn := gtk_tree_view_get_column(PGtkTreeView(Widgets^.MainView), AIndex);
   if GtkColumn <> nil then
+  begin
     Result := gtk_tree_view_column_get_width(GtkColumn);
+    if Result = 0 then
+      Result := gtk_tree_view_column_get_fixed_width(GtkColumn);
+  end;
 end;
 
 class procedure TGtk2WSCustomListView.ColumnInsert(const ALV: TCustomListView;
@@ -987,7 +991,7 @@ begin
 
   GtkColumn := gtk_tree_view_get_column(PGtkTreeView(Widgets^.MainView), AIndex);
   if GtkColumn <> nil then
-    gtk_tree_view_column_set_title(GtkColumn, PChar(ACaption));
+    gtk_tree_view_column_set_title(GtkColumn, PChar(EscapeUnderscores(ACaption)));
 end;
 
 class procedure TGtk2WSCustomListView.ColumnSetImage(const ALV: TCustomListView;
@@ -1048,7 +1052,10 @@ begin
     Exit;
   GtkColumn := gtk_tree_view_get_column(PGtkTreeView(Widgets^.MainView), AIndex);
   if GtkColumn <> nil then
+  begin
+    GtkColumn^.width := 0;
     gtk_tree_view_column_set_fixed_width(GtkColumn, AWidth + Ord(AWidth<1));
+  end;
 end;
 
 class procedure TGtk2WSCustomListView.ColumnSetVisible(const ALV: TCustomListView;
@@ -1072,6 +1079,36 @@ begin
       g_object_set_data(G_OBJECT(GtkColumn), PChar('Visible'), gpointer(ptrint(0)));
     if TLVHack(ALV).ViewStyle = vsReport then begin
       gtk_tree_view_column_set_visible(GtkColumn, AVisible);
+    end;
+  end;
+end;
+
+class procedure TGtk2WSCustomListView.ColumnSetSortIndicator(
+  const ALV: TCustomListView; const AIndex: Integer;
+  const AColumn: TListColumn; const ASortIndicator: TSortIndicator);
+const
+  GtkOrder : array [ TSortIndicator] of TGtkSortType = (0, GTK_SORT_ASCENDING, GTK_SORT_DESCENDING);
+var
+  Widgets: PTVWidgets;
+  GtkColumn: PGtkTreeViewColumn;
+begin
+  if not WSCheckHandleAllocated(ALV, 'ColumnSetCaption')
+  then Exit;
+
+  GetCommonTreeViewWidgets({%H-}PGtkWidget(ALV.Handle), Widgets);
+
+  if not GTK_IS_TREE_VIEW(Widgets^.MainView) then
+    Exit;
+
+  GtkColumn := gtk_tree_view_get_column(PGtkTreeView(Widgets^.MainView), AIndex);
+  if GtkColumn <> nil then
+  begin
+    if ASortIndicator = siNone then
+      gtk_tree_view_column_set_sort_indicator(GtkColumn, false)
+    else
+    begin
+      gtk_tree_view_column_set_sort_indicator(GtkColumn, true);
+      gtk_tree_view_column_set_sort_order(GtkColumn, GtkOrder[ASortIndicator]);
     end;
   end;
 end;
@@ -1411,8 +1448,9 @@ var
   ItemRect: TGdkRectangle;
   BitImage: TBitmap;
   pixbuf: PGDKPixBuf;
-  i: Integer;
-  ImgList: TImageList;
+  i, ImgListWidth: Integer;
+  ImgList: TCustomImageList;
+  ImgListRes: TCustomImageListResolution;
 
 begin
   if not WSCheckHandleAllocated(ALV, 'ItemSetImage')
@@ -1433,50 +1471,50 @@ begin
     gtk_tree_path_free(Path);
     if ItemRect.height <> 0 then // item is visible
     begin
-      ImgList := TImageList.Create(nil);
-      try
-        if (TListView(ALV).ViewStyle in [vsSmallIcon, vsReport, vsList]) and
-          (TListView(ALV).SmallImages <> nil) then
-          ImgList.Assign(TListView(ALV).SmallImages)
-        else
-        if (TListView(ALV).ViewStyle = vsIcon) and
-          (TListView(ALV).LargeImages <> nil) then
-            ImgList.Assign(TListView(ALV).LargeImages);
+      if (TListView(ALV).ViewStyle in [vsSmallIcon, vsReport, vsList]) then
+      begin
+        ImgList := TListView(ALV).SmallImages;
+        ImgListWidth := TListView(ALV).SmallImagesWidth;
+      end
+      else
+      if (TListView(ALV).ViewStyle = vsIcon) then
+      begin
+        ImgList := TListView(ALV).LargeImages;
+        ImgListWidth := TListView(ALV).LargeImagesWidth;
+      end;
 
-        if (ImgList.Count > 0) and (AImageIndex >= 0) then
+      if Assigned(ImgList) and (ImgList.Count > 0) and (AImageIndex >= 0) then
+      begin
+        ImgListRes := ImgList.ResolutionForPPI[ImgListWidth, ALV.Font.PixelsPerInch, ALV.GetCanvasScaleFactor].Resolution;
+        if (ImgList.Count <> Widgets^.Images.Count) then
         begin
-          if (ImgList.Count <> Widgets^.Images.Count) then
-          begin
-            if (TListView(ALV).ViewStyle in [vsSmallIcon, vsReport, vsList]) then
-              SetImageList(ALV, lvilSmall, TListView(ALV).SmallImages)
-            else
-              SetImageList(ALV, lvilLarge, TListView(ALV).LargeImages);
-            exit;
-          end;
+          if (TListView(ALV).ViewStyle in [vsSmallIcon, vsReport, vsList]) then
+            SetImageList(ALV, lvilSmall, ImgListRes)
+          else
+            SetImageList(ALV, lvilLarge, ImgListRes);
+          exit;
+        end;
 
-          if (Widgets^.Images <> nil) then
-          begin
-            for i := 0 to Widgets^.Images.Count-1 do
-              if i = AImageIndex then
-                gdk_pixbuf_unref(PGdkPixBuf(Widgets^.Images.Items[i]));
+        if (Widgets^.Images <> nil) then
+        begin
+          for i := 0 to Widgets^.Images.Count-1 do
+            if i = AImageIndex then
+              gdk_pixbuf_unref(PGdkPixBuf(Widgets^.Images.Items[i]));
 
-            pixbuf := nil;
-            BitImage := TBitmap.Create;
-            try
-              ImgList.GetBitmap(AImageIndex, BitImage);
-              Gtk2_PixBufFromBitmap(BitImage,pixbuf);
-              Widgets^.Images.Items[AImageIndex] := pixbuf;
-              if GTK_IS_TREE_VIEW(MainView) then
-                gtk_tree_view_column_queue_resize(gtk_tree_view_get_column(PGtkTreeView(MainView), ASubIndex));
-            finally
-              BitImage.Free;
-            end;
+          pixbuf := nil;
+          BitImage := TBitmap.Create;
+          try
+            ImgListRes.GetBitmap(AImageIndex, BitImage);
+            Gtk2_PixBufFromBitmap(BitImage,pixbuf);
+            Widgets^.Images.Items[AImageIndex] := pixbuf;
+            if GTK_IS_TREE_VIEW(MainView) then
+              gtk_tree_view_column_queue_resize(gtk_tree_view_get_column(PGtkTreeView(MainView), ASubIndex));
+          finally
+            BitImage.Free;
           end;
         end;
-        gtk_widget_queue_draw(MainView);
-      finally
-        ImgList.Free;
       end;
+      gtk_widget_queue_draw(MainView);
     end;
   end;
 end;
@@ -2125,7 +2163,7 @@ begin
   if not WSCheckHandleAllocated(AWinControl, 'SetColor') then
     Exit;
   AWidget := {%H-}PGtkWidget(AWinControl.Handle);
-  AWidget := GetWidgetInfo(AWidget, True)^.CoreWidget;
+  AWidget := GetOrCreateWidgetInfo(AWidget)^.CoreWidget;
   Gtk2WidgetSet.SetWidgetColor(AWidget,
     AWinControl.Font.Color,
     AWinControl.Color,
@@ -2147,7 +2185,7 @@ begin
   if not WSCheckHandleAllocated(AWinControl, 'SetFont') then
     Exit;
   Widget := {%H-}PGtkWidget(AWinControl.Handle);
-  Widget := GetWidgetInfo(Widget, True)^.CoreWidget;
+  Widget := GetOrCreateWidgetInfo(Widget)^.CoreWidget;
   Gtk2WidgetSet.SetWidgetFont(Widget, AFont);
   Gtk2WidgetSet.SetWidgetColor(Widget, AFont.Color, clNone,
                               [GTK_STATE_NORMAL,GTK_STATE_ACTIVE,
@@ -2163,7 +2201,7 @@ begin
 end;
 
 class procedure TGtk2WSCustomListView.SetImageList(const ALV: TCustomListView;
-  const AList: TListViewImageList; const AValue: TCustomImageList);
+  const AList: TListViewImageList; const AValue: TCustomImageListResolution);
 var
   Widgets: PTVWidgets;
   BitImage: TBitmap;

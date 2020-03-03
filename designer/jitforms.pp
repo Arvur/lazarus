@@ -50,13 +50,14 @@ uses
   // LCL
   Forms, Controls, Dialogs, LResources, LCLMemManager, LCLProc,
   //LazUtils
-  AvgLvlTree,
+  AvgLvlTree, LazLoggerBase,
   // CodeTools
   BasicCodeTools,
   // IdeIntf
   PackageDependencyIntf, PropEditUtils, PropEdits, UnitResources, IDEDialogs,
   // IDE
-  IDEProcs, PackageDefs;
+  {$IFDEF VerboseJITForms}DesignerProcs,{$ENDIF}
+  PackageDefs, Project, EnvironmentOpts;
 
 type
   //----------------------------------------------------------------------------
@@ -493,7 +494,8 @@ procedure TComponentWithOverrideValidateRename.ValidateRename(
 var
   Designer: TIDesigner;
 begin
-  //debugln(['TComponentWithOverrideValidateRename.ValidateRename ',DbgSName(Self),' ',DbgSName(AComponent),' CurName=',CurName,' NewName=',NewName]);
+  //debugln(['TComponentWithOverrideValidateRename.ValidateRename ',DbgSName(Self),
+  //         ' ',DbgSName(AComponent),' CurName=',CurName,' NewName=',NewName]);
   inherited ValidateRename(AComponent, CurName, NewName);
   Designer:=FindRootDesigner(Self);
   if Designer <> nil then
@@ -696,10 +698,11 @@ begin
   Result := SizeOf(TTypeKind)
            + 1 + length(AClassName)  // packed shortstring: length byte + chars
            + CalculateTypeDataSize(PropInfoCount);
+  {$push}
   {$warnings off}
   if SizeOf(TTypeKind)<>1 then
     raise Exception.Create('CalculateTypeInfoSize SizeOf(TTypeInfo^.Kind)<>1');
-  {$warnings on}
+  {$pop}
 end;
 
 function GetTypeDataPropCountAddr(TypeData: PTypeData): PWord;
@@ -757,10 +760,10 @@ procedure TJITComponentList.DestroyJITComponent(JITComponent:TComponent);
 var a:integer;
 begin
   if JITComponent=nil then
-    RaiseException('TJITComponentList.DestroyJITForm JITComponent=nil');
+    RaiseGDBException('TJITComponentList.DestroyJITForm JITComponent=nil');
   a:=IndexOf(JITComponent);
   if a<0 then
-    RaiseException('TJITComponentList.DestroyJITForm JITComponent.ClassName='+
+    RaiseGDBException('TJITComponentList.DestroyJITForm JITComponent.ClassName='+
       JITComponent.ClassName);
   if a>=0 then DestroyJITComponent(a);
 end;
@@ -862,14 +865,14 @@ function TJITComponentList.AddJITComponentFromStream(BinStream: TStream;
     {$IFDEF VerboseJITForms}
     debugln('[TJITComponentList.AddJITComponentFromStream] InitReading ...');
     {$ENDIF}
-
     FCurReadStreamClass:=StreamClass;
     DestroyDriver:=false;
     InitReading;
     Reader:=nil;
     CreateReader(AStream,UnitResourcefileFormat,Reader,DestroyDriver);
     {$IFDEF VerboseJITForms}
-    DebugLn(['TJITComponentList.AddJITComponentFromStream.ReadStream Reading: FCurReadJITComponent=',DbgSName(FCurReadJITComponent),' StreamClass=',DbgSName(StreamClass)]);
+    DebugLn(['TJITComponentList.AddJITComponentFromStream.ReadStream: FCurReadJITComponent=',
+             DbgSName(FCurReadJITComponent), ', StreamClass=',DbgSName(StreamClass)]);
     {$ENDIF}
     try
       Reader.ReadRootComponent(FCurReadJITComponent);
@@ -894,6 +897,9 @@ function TJITComponentList.AddJITComponentFromStream(BinStream: TStream;
     Abort: boolean;
   begin
     if not Assigned(OnFindAncestors) then exit(true);
+    {$IFDEF VerboseJITForms}
+    DebugLn(['[TJITComponentList.AddJITComponentFromStream.ReadAncestorStreams] ',AncestorClass.ClassName]);
+    {$ENDIF}
     Ancestors:=nil;
     AncestorStreams:=nil;
     try
@@ -1036,6 +1042,7 @@ function TJITComponentList.DoCreateJITComponent(
   AncestorClass: TClass; Visible, DisableAutoSize: boolean):integer;
 var
   Instance: TComponent;
+  InstAsCtrl: TControl absolute Instance;
   ok: boolean;
   Action: TModalResult;
   OldSetCaption: boolean;
@@ -1045,49 +1052,55 @@ begin
   FCurReadClass:=nil;
   FCurReadStreamClass:=nil;
   FCurReadJITComponent:=nil;
-  
   try
     ok:=false;
     // create new class and an instance
-    //debugln('[TJITForms.DoCreateJITComponent] Creating new JIT class '''+NewClassName+''' ...');
-    Pointer(FCurReadClass):=CreateNewJITClass(AncestorClass,NewClassName,
-                                              NewUnitName);
-    //debugln('[TJITForms.DoCreateJITComponent] Creating an instance of JIT class "'+NewClassName+'" = class('+AncestorClass.ClassName+') ...');
+    {$IFDEF VerboseJITForms}
+    DebugLn('[TJITForms.DoCreateJITComponent] Creating new JIT class "'+NewClassName+'" ...');
+    {$ENDIF}
+    FCurReadClass:=CreateNewJITClass(AncestorClass,NewClassName,NewUnitName);
+    {$IFDEF VerboseJITForms}
+    DebugLn('[TJITForms.DoCreateJITComponent] Creating an instance of JIT class "',
+            FCurReadClass.ClassName,'" = class(',AncestorClass.ClassName,') ...');
+    {$ENDIF}
     Instance:=TComponent(FCurReadClass.NewInstance);
     if DisableAutoSize and (Instance is TControl) then
-      TControl(Instance).DisableAutoSizing{$IFDEF DebugDisableAutoSizing}('TAnchorDockMaster Delayed'){$ENDIF};
-    //debugln('[TJITForms.DoCreateJITComponent] Initializing new instance ... ',DbgS(Instance));
-    TComponent(FCurReadJITComponent):=Instance;
+      InstAsCtrl.DisableAutoSizing{$IFDEF DebugDisableAutoSizing}('TAnchorDockMaster Delayed'){$ENDIF};
+    {$IFDEF VerboseJITForms}
+    DebugLn('[TJITForms.DoCreateJITComponent] Initializing new instance "',Instance.Name,'" ',
+            DbgS(Instance),' (',Instance.ClassName,')');
+    {$ENDIF}
+    FCurReadJITComponent:=Instance;
     try
       // set into design mode
       SetComponentDesignMode(Instance, True);
       // set csDesignInstance: it is a root design component
       SetComponentDesignInstanceMode(Instance, True);
       if (not Visible) and (Instance is TControl) then
-        TControl(Instance).ControlStyle:=
-                            TControl(Instance).ControlStyle+[csNoDesignVisible];
+        InstAsCtrl.ControlStyle:=InstAsCtrl.ControlStyle+[csNoDesignVisible];
       // event
       if Assigned(OnBeforeCreate) then
         OnBeforeCreate(Self,Instance);
+      {$IFDEF VerboseJITForms}
+      DebugLn('[TJITForms.DoCreateJITComponent] Finishing component creation.');
+      {$ENDIF}
       // finish 'create' component
       Instance.Create(nil);
       if NewComponentName<>'' then begin
         // set Name, without changing Caption
-        OldSetCaption:=(Instance is TControl)
-                       and (csSetCaption in TControl(Instance).ControlStyle);
+        OldSetCaption:=(Instance is TControl) and (csSetCaption in InstAsCtrl.ControlStyle);
         if OldSetCaption then
-          TControl(Instance).ControlStyle:=TControl(Instance).ControlStyle-[csSetCaption];
+          InstAsCtrl.ControlStyle:=InstAsCtrl.ControlStyle-[csSetCaption];
         Instance.Name:=NewComponentName;
         if OldSetCaption then
-          TControl(Instance).ControlStyle:=TControl(Instance).ControlStyle+[csSetCaption];
+          InstAsCtrl.ControlStyle:=InstAsCtrl.ControlStyle+[csSetCaption];
       end;
       // set class name
       DoRenameClass(FCurReadClass,NewClassName);
       ok:=true;
-    //debugln('[TJITForms.DoCreateJITComponent] Initialization was successful! FormName="',NewFormName,'"');
     finally
       if not ok then begin
-        TComponent(FCurReadJITComponent):=nil;
+        FCurReadJITComponent:=nil;
         DebugLn('[TJITForms.DoCreateJITComponent] Error while creating instance: NewComponentName="',NewComponentName,'" NewClassName="',NewClassName,'" NewUnitName="',NewUnitName,'"');
       end;
     end;
@@ -1123,6 +1136,7 @@ var
   AncestorStreams: TFPList;
   i, j: Integer;
   OldStreamClass: TClass;
+  DsgnComp, DsgnOwner: TCustomDesignControl;
 begin
   fCurReadChild:=Component;
   fCurReadChildClass:=ComponentClass;
@@ -1182,6 +1196,19 @@ begin
               SetComponentAncestorMode(Component.Components[j],true);
           // next
           Ancestor:=TComponent(Ancestors[i]);
+        end;
+        // scale to Owner's DesignTimePPI to get correct designed sizes - issue #36370
+        if (Project1.Scaled or EnvironmentOptions.ForceDPIScalingInDesignTime)
+        and Assigned(Component) and (Component is TCustomDesignControl) and (NewOwner is TCustomDesignControl) then
+        begin
+          DsgnComp := TCustomDesignControl(Component);
+          DsgnOwner := TCustomDesignControl(NewOwner);
+          if DsgnComp.Scaled and DsgnOwner.Scaled
+          and (DsgnComp.DesignTimePPI<>DsgnOwner.PixelsPerInch) then
+          begin
+            DsgnComp.AutoAdjustLayout(lapAutoAdjustForDPI, DsgnComp.PixelsPerInch, DsgnOwner.DesignTimePPI, 0, 0);
+            DsgnComp.DesignTimePPI := DsgnOwner.DesignTimePPI;
+          end;
         end;
       end;
     finally
@@ -1315,7 +1342,7 @@ var
   Action: TModalResult;
 begin
   if IndexOf(JITOwnerComponent)<0 then
-    RaiseException('TJITComponentList.AddJITChildComponentFromStream');
+    RaiseGDBException('TJITComponentList.AddJITChildComponentFromStream');
   {$IFDEF VerboseJITForms}
   debugln('[TJITComponentList.AddJITChildComponentFromStream] A');
   {$ENDIF}
@@ -1744,8 +1771,7 @@ begin
   end;
 end;
 
-procedure TJITComponentList.DoRenameClass(JITClass:TClass;
-  const NewName:ShortString);
+procedure TJITComponentList.DoRenameClass(JITClass:TClass; const NewName:ShortString);
 begin
   {$IFDEF VerboseJITForms}
   debugln('[TJITComponentList.DoRenameClass] OldName='''+JITClass.ClassName
@@ -1763,7 +1789,7 @@ var
 begin
   TypeInfo:=PTypeInfo(JITClass.ClassInfo);
   if TypeInfo=nil then
-    RaiseException('TJITComponentList.DoRenameUnitNameOfClass');
+    RaiseGDBException('TJITComponentList.DoRenameUnitNameOfClass');
   TypeData:=GetTypeData(TypeInfo);
   //DebugLn(['TJITComponentList.DoRenameUnitNameOfClass Old=',TypeData^.UnitName,' New=',NewUnitName]);
   OldPropCount:=GetTypeDataPropCountAddr(TypeData)^;

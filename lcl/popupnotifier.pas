@@ -60,6 +60,8 @@ type
     btnX: TNotifierXButton;
     procedure HideForm(Sender: TObject);
     procedure HandleResize(Sender: TObject);
+  protected
+    procedure CreateHandle; override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -82,6 +84,10 @@ type
     procedure SetVisible(const Value: Boolean);
     procedure SetOnClose(const Value: TCloseEvent);
     function  GetOnClose:TCloseEvent;
+    function  GetTextFont: TFont;
+    procedure SetTextFont(const Value: TFont);
+    function GetTitleFont: TFont;
+    procedure SetTitleFont(const Value: TFont);
   public
     vNotifierForm: TNotifierForm;
     constructor Create(AOwner: TComponent); override;
@@ -93,9 +99,11 @@ type
     property Color: TColor  read GetColor write SetColor;
     property Icon: TPicture read GetIcon write SetIcon;
     property Text: string read GetText write SetText;
+    property TextFont: TFont read GetTextFont write SetTextFont;
     property Title: string read GetTitle write SetTitle;
+    property TitleFont: TFont read GetTitleFont write SetTitleFont;
     property Visible: Boolean read GetVisible write SetVisible;
-    property OnClose: TCloseEvent  read GetOnClose write SetOnClose;
+    property OnClose: TCloseEvent read GetOnClose write SetOnClose;
   end;
 
 const
@@ -158,6 +166,8 @@ begin
 end;
 
 procedure TNotifierXButton.Paint;
+var
+  L: Integer;
 begin
   Canvas.Pen.Color := cl3DDKShadow;
   Canvas.Pen.Width := 1;
@@ -167,19 +177,23 @@ begin
 
   if FState = nbsUp then
     Canvas.Brush.Color := clBtnFace
-  else
-    Canvas.Brush.Color := clHotLight;
+  else begin
+    Canvas.Brush.Color := clHighlight;
+    Canvas.Pen.Color := clHighlightText;
+  end;
 
-  Canvas.RoundRect(0, 0, Width, Height, 4, 4);
+  L := Scale96ToForm(4);
+  Canvas.RoundRect(0, 0, Width, Height, L, L);
 
   Canvas.Pen.EndCap:=pecSquare;
   Canvas.Pen.Width := 2;
 
-  Canvas.MoveTo(7, 7);
-  Canvas.LineTo(Width - 7, Height - 7);
+  L := Scale96ToForm(7);
+  Canvas.MoveTo(L, L);
+  Canvas.LineTo(Width - L, Height - L);
 
-  Canvas.MoveTo(Width - 7, 7);
-  Canvas.LineTo(7, Height - 7);
+  Canvas.MoveTo(Width - L, L);
+  Canvas.LineTo(L, Height - L);
 
   inherited Paint;
 end;
@@ -192,18 +206,21 @@ end;
 *  Creates the notifier form
 *******************************************************************}
 constructor TNotifierForm.Create(AOwner: TComponent);
+var
+  spc: Integer;
 begin
   inherited Create(AOwner);
 
   BorderStyle := bsNone;
 
-  Width := INT_NOTIFIER_FORM_WIDTH;
-  Height := INT_NOTIFIER_FORM_HEIGHT;
+  Width := Scale96ToForm(INT_NOTIFIER_FORM_WIDTH);
+  Height := Scale96ToForm(INT_NOTIFIER_FORM_HEIGHT);
 
   // Check for small screens. An extra spacing is necessary
   // in the Windows Mobile 5 emulator
-  if Screen.Width - INT_NOTIFIER_SCREEN_SPACING < Width then
-    Width := Screen.Width - INT_NOTIFIER_SCREEN_SPACING;
+  spc := Scale96ToForm(INT_NOTIFIER_SCREEN_SPACING);
+  if Screen.Width - spc < Width then
+    Width := Screen.Width - spc;
 
   ImgIcon := TPicture.Create;
 
@@ -211,8 +228,12 @@ begin
   lblTitle.Parent := Self;
   lblTitle.AutoSize := False;
   lblTitle.Transparent := True;
-  lblTitle.Font.Style := [FsBold];
+  lblTitle.Font.Name := 'default';
+  lblTitle.Font.Size := 0;
+  lblTitle.Font.Color := clDefault;
+  lblTitle.Font.Style := [fsBold];
   lblTitle.Caption := 'Caption';
+  lblTitle.Wordwrap := true;
   lblTitle.ParentColor := True;
   lblTitle.OnClick := HideForm;
 
@@ -220,6 +241,9 @@ begin
   lblText.Parent := Self;
   lblText.AutoSize := False;
   lblText.Transparent := True;
+  lblText.Font.Name := 'default';
+  lblText.Font.Size := 0;
+  lblText.Font.Color := clDefault;
   lblText.Caption := 'Text';
   lblText.WordWrap := True;
   lblText.ParentColor := True;
@@ -232,7 +256,7 @@ begin
 
   HandleResize(Self);
 
-  Color := $DCFFFF; // Doesn't work on Gtk
+  Color := clInfoBk;
 
   // Connects the methods to events
   OnClick := HideForm;
@@ -254,6 +278,15 @@ begin
   inherited Destroy;
 end;
 
+procedure TNotifierForm.CreateHandle;
+begin
+  inherited;
+  if lblText.Font.Color = clDefault then
+    lblText.Font.Color := clInfoText;
+  if lblTitle.Font.Color = clDefault then
+    lblTitle.Font.Color := clInfoText;
+end;
+
 procedure TNotifierForm.Paint;
 begin
   Canvas.Brush.Style := bsSolid;
@@ -270,10 +303,11 @@ end;
 *  Utilized for events that hide the form, such as clicking on it
 *******************************************************************}
 procedure TNotifierForm.HideForm(Sender: TObject);
-Var NoValue :TCloseAction;
+Var
+  NoValue :TCloseAction;
 begin
-if Assigned(OnClose) then
-   OnClose(Self,NoValue);
+  if Assigned(OnClose) then
+    OnClose(Self, NoValue);
   Hide;
 end;
 
@@ -285,34 +319,40 @@ end;
 procedure TNotifierForm.HandleResize(Sender: TObject);
 var
   IconAdjust: Integer;
+  spc: Integer;
+  btnsize: Integer;
 begin
+  spc := Scale96ToForm(INT_NOTIFIER_SPACING);
+  btnsize := Scale96ToForm(INT_NOTIFIER_BUTTON_SIZE);
+
   if (ImgIcon.Bitmap <> nil) then
-    IconAdjust := INT_NOTIFIER_SPACING + imgIcon.Bitmap.Width
+    IconAdjust := spc + imgIcon.Bitmap.Width
   else
     IconAdjust := 0;
 
+  if (BtnX <> nil) then
+  begin
+    BtnX.Left := Width - (btnSize + Scale96ToForm(5));
+    BtnX.Top := spc;
+    BtnX.Width := btnSize;
+    BtnX.Height := btnSize;
+  end;
+
   if (lblTitle <> nil) then
   begin
-    lblTitle.Left := IconAdjust + INT_NOTIFIER_SPACING;
-    lblTitle.Top := INT_NOTIFIER_SPACING;
-    lblTitle.Width := Width - (lblTitle.Left + INT_NOTIFIER_SPACING);
-    lblTitle.Height := 20;
+    lblTitle.Left := IconAdjust + spc;
+    lblTitle.Top := spc;
+    lblTitle.AutoSize := false;
+    lblTitle.Constraints.MaxWidth := Width - (lblTitle.Left + spc + btnsize + spc);
+    lblTitle.AutoSize := true;
   end;
 
   if (lblText <> nil) then
   begin
-    lblText.Left := IconAdjust + 20;
-    lblText.Top := LblTitle.Top + LblTitle.Height + INT_NOTIFIER_SPACING;
-    lblText.Width := Width - (lblText.Left + INT_NOTIFIER_SPACING);
-    lblText.Height := Height - (lblText.Top + INT_NOTIFIER_SPACING);
-  end;
-
-  if (BtnX <> nil) then
-  begin
-    BtnX.Left := Width - (INT_NOTIFIER_BUTTON_SIZE + 5);
-    BtnX.Top := INT_NOTIFIER_SPACING;
-    BtnX.Width := INT_NOTIFIER_BUTTON_SIZE;
-    BtnX.Height := INT_NOTIFIER_BUTTON_SIZE;
+    lblText.Left := IconAdjust + Scale96ToForm(20);
+    lblText.Top := LblTitle.Top + LblTitle.Height + spc;
+    lblText.Width := Width - (lblText.Left + spc);
+    lblText.Height := Height - (lblText.Top + spc);
   end;
 end;
 
@@ -381,6 +421,26 @@ end;
 procedure TPopupNotifier.SetColor(const Value: TColor);
 begin
   vNotifierForm.Color := Value;
+end;
+
+function TPopupNotifier.GetTextFont: TFont;
+begin
+  Result := vNotifierForm.lblText.Font;
+end;
+
+procedure TPopupNotifier.SetTextFont(const Value: TFont);
+begin
+  vNotifierForm.lblText.Font.Assign(Value);
+end;
+
+function TPopupNotifier.GetTitleFont: TFont;
+begin
+  Result := vNotifierForm.lblTitle.Font;
+end;
+
+procedure TPopupNotifier.SetTitleFont(const Value: TFont);
+begin
+  vNotifierForm.lblTitle.Font.Assign(Value);
 end;
 
 {*******************************************************************

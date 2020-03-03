@@ -23,6 +23,7 @@ const
 
 type
   TChartAxisBrush = TClearBrush;
+  TChartBasicAxis = class;
 
   TChartAxisFramePen = class(TChartPen)
   published
@@ -53,8 +54,6 @@ type
   published
     property Caption: String read FCaption write SetCaption;
     property Distance default DEF_TITLE_DISTANCE;
-    // Use LabelFont instead.
-    property Font: TFont read GetFont write SetFont stored false; deprecated;
     property Frame;
     property LabelBrush;
     property PositionOnMarks: Boolean
@@ -73,6 +72,8 @@ type
   TChartAxisMargins = array [TChartAxisAlignment] of Integer;
   TChartAxisMarkToTextEvent =
     procedure (var AText: String; AMark: Double) of object;
+  TChartGetAxisMarkTextEvent =
+    procedure (Sender: TObject; var AText: String; AMark: Double) of object;
 
   {$IFNDEF fpdoc} // Workaround for issue #18549.
   TBasicChartAxisMarks =
@@ -276,7 +277,7 @@ type
 implementation
 
 uses
-  Math, SysUtils,
+  Math, SysUtils, LResources,
   TAGeometry, TAMath;
 
 { TChartMinorAxisMarks }
@@ -688,6 +689,7 @@ procedure TChartBasicAxis.Assign(ASource: TPersistent);
 begin
   if ASource is TChartBasicAxis then
     with TChartBasicAxis(ASource) do begin
+      Self.FArrow.Assign(Arrow);
       Self.FGrid.Assign(Grid);
       Self.FMarks.Assign(Marks);
       Self.FTickColor := TickColor;
@@ -788,5 +790,15 @@ begin
   Marks.Stripes.Apply(ADrawer, AIndex);
   AIndex += 1;
 end;
+
+procedure SkipObsoleteProperties;
+const
+  FONT_NOTE = 'Obsolete, use ChartTitle.LabelFont instead';
+begin
+  RegisterPropertyToSkip(TChartAxisTitle, 'Font', FONT_NOTE, '');
+end;
+
+initialization
+  SkipObsoleteProperties;
 
 end.

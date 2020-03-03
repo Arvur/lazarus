@@ -41,9 +41,9 @@ unit FpDbgDwarfDataClasses;
 interface
 
 uses
-  Classes, Types, SysUtils, FpDbgUtil, FpDbgInfo, FpDbgDwarfConst, Maps, Math, FpDbgLoader,
-  FpImgReaderBase, FpdMemoryTools, FpErrorMessages, LazLoggerBase, // LazLoggerDummy,
-  LazClasses, LazFileUtils, LazUTF8, contnrs, DbgIntfBaseTypes;
+  Classes, Types, SysUtils, FpDbgUtil, FpDbgInfo, FpDbgDwarfConst, Maps, Math,
+  FpDbgLoader, FpImgReaderBase, FpdMemoryTools, FpErrorMessages,
+  LazLoggerBase, LazClasses, LazFileUtils, LazUTF8, contnrs, DbgIntfBaseTypes;
 
 type
   TDwarfSection = (dsAbbrev, dsARanges, dsFrame,  dsInfo, dsLine, dsLoc, dsMacinfo, dsPubNames, dsPubTypes, dsRanges, dsStr);
@@ -268,6 +268,13 @@ type
   end;
 
   { TDwarfInformationEntry }
+  TDwarfInformationEntry = class;
+
+  TDwarfAttribData = record
+    Idx: Integer;
+    InfoPointer: pointer;
+    InformationEntry: TDwarfInformationEntry;
+  end;
 
   TDwarfInformationEntry = class(TRefCountedObject)
   private
@@ -280,6 +287,7 @@ type
     FAbstractOrigin: TDwarfInformationEntry;
     FFlags: set of (dieAbbrevValid, dieAbbrevDataValid, dieAbstractOriginValid);
 
+    function GetAttribForm(AnIdx: Integer): Cardinal;
     procedure PrepareAbbrev; inline;
     function  PrepareAbbrevData: Boolean; inline;
     function  PrepareAbstractOrigin: Boolean; inline; // Onli call, if abbrev is valid AND dafHasAbstractOrigin set
@@ -291,14 +299,18 @@ type
     function GetAbbrevTag: Cardinal; inline;
     function GetScopeIndex: Integer;
     procedure SetScopeIndex(AValue: Integer);
+
+    function DoReadReference(InfoIdx: Integer; InfoData: pointer;
+      out AValue: Pointer; out ACompUnit: TDwarfCompilationUnit): Boolean;
   public
     constructor Create(ACompUnit: TDwarfCompilationUnit; AnInformationEntry: Pointer);
     constructor Create(ACompUnit: TDwarfCompilationUnit; AScope: TDwarfScopeInfo);
     destructor Destroy; override;
     property CompUnit: TDwarfCompilationUnit read FCompUnit;
 
-    function AttribIdx(AnAttrib: Cardinal; out AInfoPointer: pointer): Integer; inline;
+    function GetAttribData(AnAttrib: Cardinal; out AnAttribData: TDwarfAttribData): Boolean;
     function HasAttrib(AnAttrib: Cardinal): Boolean; inline;
+    property AttribForm[AnIdx: Integer]: Cardinal read GetAttribForm;
 
     function GoNamedChild(AName: String): Boolean;
     // find in enum too // TODO: control search with a flags param, if needed
@@ -312,14 +324,24 @@ type
 
     property AbbrevTag: Cardinal read GetAbbrevTag;
 
-    function ReadValue(AnAttrib: Cardinal; out AValue: Integer): Boolean;
-    function ReadValue(AnAttrib: Cardinal; out AValue: Int64): Boolean;
-    function ReadValue(AnAttrib: Cardinal; out AValue: Cardinal): Boolean;
-    function ReadValue(AnAttrib: Cardinal; out AValue: QWord): Boolean;
-    function ReadValue(AnAttrib: Cardinal; out AValue: PChar): Boolean;
-    function ReadValue(AnAttrib: Cardinal; out AValue: String): Boolean;
-    function ReadValue(AnAttrib: Cardinal; out AValue: TByteDynArray): Boolean;
-    function ReadReference(AnAttrib: Cardinal; out AValue: Pointer; out ACompUnit: TDwarfCompilationUnit): Boolean;
+    function ReadValue(const AnAttribData: TDwarfAttribData; out AValue: Integer): Boolean; inline;
+    function ReadValue(const AnAttribData: TDwarfAttribData; out AValue: Int64): Boolean; inline;
+    function ReadValue(const AnAttribData: TDwarfAttribData; out AValue: Cardinal): Boolean; inline;
+    function ReadValue(const AnAttribData: TDwarfAttribData; out AValue: QWord): Boolean; inline;
+    function ReadValue(const AnAttribData: TDwarfAttribData; out AValue: PChar): Boolean; inline;
+    function ReadValue(const AnAttribData: TDwarfAttribData; out AValue: String): Boolean; inline;
+    function ReadValue(const AnAttribData: TDwarfAttribData; out AValue: TByteDynArray; AnFormString: Boolean = False): Boolean; inline;
+    function ReadAddressValue(const AnAttribData: TDwarfAttribData; out AValue: TDBGPtr): Boolean; inline;
+    function ReadReference(const AnAttribData: TDwarfAttribData; out AValue: Pointer; out ACompUnit: TDwarfCompilationUnit): Boolean; inline;
+
+    function ReadValue(AnAttrib: Cardinal; out AValue: Integer): Boolean; inline;
+    function ReadValue(AnAttrib: Cardinal; out AValue: Int64): Boolean; inline;
+    function ReadValue(AnAttrib: Cardinal; out AValue: Cardinal): Boolean; inline;
+    function ReadValue(AnAttrib: Cardinal; out AValue: QWord): Boolean; inline;
+    function ReadValue(AnAttrib: Cardinal; out AValue: PChar): Boolean; inline;
+    function ReadValue(AnAttrib: Cardinal; out AValue: String): Boolean; inline;
+    function ReadValue(AnAttrib: Cardinal; out AValue: TByteDynArray; AnFormString: Boolean = False): Boolean; inline;
+    function ReadReference(AnAttrib: Cardinal; out AValue: Pointer; out ACompUnit: TDwarfCompilationUnit): Boolean; inline;
 
     function  ReadName(out AName: String): Boolean; inline;
     function  ReadName(out AName: PChar): Boolean; inline;
@@ -395,13 +417,17 @@ type
 
   TDWarfLineMap = object
   private
-    NextAFterHighestLine: Cardinal;
-    AddressList: array of QWord;
-    //Count: Integer;
+    // FLineIndexList[ line div 256 ]
+    FLineIndexList: Array of record
+      LineOffsets: Array of Byte;
+      Addresses: Array of TDBGPtr;
+    end;
   public
     procedure Init;
-    procedure SetAddressForLine(ALine: Cardinal; AnAddress: QWord); inline;
-    function  GetAddressForLine(ALine: Cardinal): QWord; inline;
+    procedure SetAddressForLine(ALine: Cardinal; AnAddress: TDBGPtr); inline;
+    function  GetAddressesForLine(ALine: Cardinal; var AResultList: TDBGPtrArray;
+      NoData: Boolean = False): Boolean; inline;
+      // NoData: only return True/False, but nothing in AResultList
     procedure Compress;
   end;
   PDWarfLineMap = ^TDWarfLineMap;
@@ -410,7 +436,7 @@ type
 {%region Base classes for handling Symbols in unit FPDbgDwarf}
   { TDbgDwarfSymbolBase }
 
-  TDbgDwarfSymbolBase = class(TDbgSymbolForwarder)
+  TDbgDwarfSymbolBase = class(TFpSymbolForwarder)
   private
     FCU: TDwarfCompilationUnit;
     FInformationEntry: TDwarfInformationEntry;
@@ -422,36 +448,52 @@ type
                        AKind: TDbgSymbolKind; AAddress: TFpDbgMemLocation);
     destructor Destroy; override;
 
+    function CreateContext(AThreadId, AStackFrame: Integer; ADwarfInfo: TFpDwarfInfo): TFpDbgInfoContext; virtual;
+
     property CompilationUnit: TDwarfCompilationUnit read FCU;
     property InformationEntry: TDwarfInformationEntry read FInformationEntry;
   end;
   TDbgDwarfSymbolBaseClass = class of TDbgDwarfSymbolBase;
 
-  { TFpDwarfSymbolClassMap
+  { TFpSymbolDwarfClassMap
     Provides Symbol and VAlue evaluation classes depending on the compiler
   }
 
-  TFpDwarfSymbolClassMap = class
+  PFpDwarfSymbolClassMap = ^TFpSymbolDwarfClassMap;
+
+  TFpSymbolDwarfClassMap = class
+  private
+    NextExistingClassMap: TFpSymbolDwarfClassMap;
+  protected
+    function CanHandleCompUnit(ACU: TDwarfCompilationUnit; AHelperData: Pointer): Boolean; virtual;
+    class function GetExistingClassMap: PFpDwarfSymbolClassMap; virtual; abstract; // Each class must have its own storage
+    class function DoGetInstanceForCompUnit(ACU: TDwarfCompilationUnit; AHelperData: Pointer): TFpSymbolDwarfClassMap;
   public
-    class function HandleCompUnit(ACU: TDwarfCompilationUnit): Boolean; virtual; abstract;
-    class function GetDwarfSymbolClass(ATag: Cardinal): TDbgDwarfSymbolBaseClass; virtual; abstract;
-    class function CreateContext(AThreadId, AStackFrame: Integer; AnAddress: TDbgPtr; ASymbol: TFpDbgSymbol;
+    class function GetInstanceForCompUnit(ACU: TDwarfCompilationUnit): TFpSymbolDwarfClassMap; virtual;
+    class procedure FreeAllInstances;
+    class function ClassCanHandleCompUnit(ACU: TDwarfCompilationUnit): Boolean; virtual; abstract;
+  public
+    constructor Create(ACU: TDwarfCompilationUnit; AHelperData: Pointer); virtual;
+    function GetDwarfSymbolClass(ATag: Cardinal): TDbgDwarfSymbolBaseClass; virtual; abstract;
+    function CreateContext(AThreadId, AStackFrame: Integer; AnAddress: TDbgPtr; ASymbol: TFpSymbol;
                                  ADwarf: TFpDwarfInfo): TFpDbgInfoContext; virtual; abstract;
-    class function CreateProcSymbol(ACompilationUnit: TDwarfCompilationUnit;
+    function CreateProcSymbol(ACompilationUnit: TDwarfCompilationUnit;
                                     AInfo: PDwarfAddressInfo; AAddress: TDbgPtr): TDbgDwarfSymbolBase; virtual; abstract;
   end;
-  TFpDwarfSymbolClassMapClass = class of TFpDwarfSymbolClassMap;
+  TFpSymbolDwarfClassMapClass = class of TFpSymbolDwarfClassMap;
 
-  { TFpDwarfSymbolClassMapList }
+  { TFpSymbolDwarfClassMapList }
 
-  TFpDwarfSymbolClassMapList = class
+  TFpSymbolDwarfClassMapList = class
   private
-    FDefaultMap: TFpDwarfSymbolClassMapClass;
-    FMapList: array of TFpDwarfSymbolClassMapClass;
+    FDefaultMap: TFpSymbolDwarfClassMapClass;
+    FMapList: array of TFpSymbolDwarfClassMapClass;
   public
-    function FindMapForCompUnit(ACU: TDwarfCompilationUnit): TFpDwarfSymbolClassMapClass;
-    procedure AddMap(AMap: TFpDwarfSymbolClassMapClass);
-    procedure SetDefaultMap(AMap: TFpDwarfSymbolClassMapClass);
+    destructor Destroy; override;
+    function FindMapForCompUnit(ACU: TDwarfCompilationUnit): TFpSymbolDwarfClassMap;
+    procedure FreeAllInstances;
+    procedure AddMap(AMap: TFpSymbolDwarfClassMapClass);
+    procedure SetDefaultMap(AMap: TFpSymbolDwarfClassMapClass);
   end;
 {%endregion Base classes for handling Symbols in unit FPDbgDwarf}
 
@@ -476,7 +518,7 @@ type
   private
     FOwner: TFpDwarfInfo;
     FDebugFile: PDwarfDebugFile;
-    FDwarfSymbolClassMap: TFpDwarfSymbolClassMapClass;
+    FDwarfSymbolClassMap: TFpSymbolDwarfClassMap;
     FValid: Boolean; // set if the compilationunit has compile unit tag.
   
     // --- Header ---
@@ -496,6 +538,7 @@ type
 
     FAbbrevList: TDwarfAbbrevList;
 
+    {$IFDEF DwarfTestAccess} public {$ENDIF}
     FLineInfo: record
       Header: Pointer;
       DataStart: Pointer;
@@ -514,10 +557,11 @@ type
       StateMachine: TDwarfLineInfoStateMachine;
       StateMachines: TFPObjectList; // list of state machines to be freed
     end;
-    
+    {$IFDEF DwarfTestAccess} private {$ENDIF}
+
     FLineNumberMap: TStringList;
 
-    FAddressMap: TMap;
+    FAddressMap: TMap; // Holds a key for each DW_TAG_subprogram / TFpSymbolDwarfDataProc, stores TDwarfAddressInfo
     FAddressMapBuild: Boolean;
     
     FMinPC: QWord;  // the min and max PC value found in this unit.
@@ -529,7 +573,8 @@ type
     procedure BuildAddressMap;
     function GetAddressMap: TMap;
     function GetUnitName: String;
-    function  ReadAddressAtPointer(var AData: Pointer; AIncPointer: Boolean = False): TFpDbgMemLocation;
+    function  ReadTargetAddressFromDwarfSection(var AData: Pointer; AIncPointer: Boolean = False): TFpDbgMemLocation;
+    function  ReadDwarfSectionOffsetOrLenFromDwarfSection(var AData: Pointer; AIncPointer: Boolean = False): TFpDbgMemLocation;
   protected
     function LocateEntry(ATag: Cardinal; out AResultScope: TDwarfScopeInfo): Boolean;
     function InitLocateAttributeList(AEntry: Pointer; var AList: TAttribPointerList): Boolean;
@@ -543,8 +588,8 @@ type
     function ReadValue(AAttribute: Pointer; AForm: Cardinal; out AValue: Cardinal): Boolean;
     function ReadValue(AAttribute: Pointer; AForm: Cardinal; out AValue: QWord): Boolean;
     function ReadValue(AAttribute: Pointer; AForm: Cardinal; out AValue: String): Boolean;
-    function ReadValue(AAttribute: Pointer; AForm: Cardinal; out AValue: PChar): Boolean;
-    function ReadValue(AAttribute: Pointer; AForm: Cardinal; out AValue: TByteDynArray): Boolean;
+    function ReadValue(AAttribute: Pointer; AForm: Cardinal; out AValue: PChar): Boolean; // Same as: out AValue: String
+    function ReadValue(AAttribute: Pointer; AForm: Cardinal; out AValue: TByteDynArray; AnFormString: Boolean = False): Boolean;
     // Read a value that contains an address. The address is evaluated using MapAddressToNewValue
     function ReadAddressValue(AAttribute: Pointer; AForm: Cardinal; out AValue: QWord): Boolean;
 
@@ -554,7 +599,7 @@ type
     procedure ScanAllEntries; inline;
     function GetDefinition(AAbbrevPtr: Pointer; out ADefinition: TDwarfAbbrev): Boolean; inline;
     function GetLineAddressMap(const AFileName: String): PDWarfLineMap;
-    function GetLineAddress(const AFileName: String; ALine: Cardinal): TDbgPtr;
+    function GetLineAddresses(const AFileName: String; ALine: Cardinal; var AResultList: TDBGPtrArray): boolean;
     procedure BuildLineInfo(AAddressInfo: PDwarfAddressInfo; ADoAll: Boolean);
     function FullFileName(const AFileName:string): String;
     // On Darwin it could be that the debug-information is not included into the executable by the linker.
@@ -570,11 +615,19 @@ type
     property Version: Word read FVersion;
     //property AbbrevOffset: QWord read FAbbrevOffset;
     property AddressSize: Byte read FAddressSize;  // the address size of the target in bytes
+    (* IsDwarf64, From the spec:
+     In the 64-bit DWARF format, all values that
+ *** "represent lengths of DWARF sections and offsets relative to the beginning of DWARF sections" ***
+     are represented using 64-bits.
+
+     A special convention applies to the initial length field of certain DWARF sections, as well as the CIE and FDE structures,
+     so that the 32-bit and 64-bit DWARF formats can coexist and be distinguished within a single linked object.
+    *)
     property IsDwarf64: Boolean read FIsDwarf64; // Set if the dwarf info in this unit is 64bit
     property Owner: TFpDwarfInfo read FOwner;
     property DebugFile: PDwarfDebugFile read FDebugFile;
 
-    property DwarfSymbolClassMap: TFpDwarfSymbolClassMapClass read FDwarfSymbolClassMap;
+    property DwarfSymbolClassMap: TFpSymbolDwarfClassMap read FDwarfSymbolClassMap;
     property FirstScope: TDwarfScopeInfo read FScope;
 
     // public for FpDbgDwarfVerbosePrinter
@@ -591,21 +644,23 @@ type
   private
     FCompilationUnits: TList;
     FImageBase: QWord;
+    FImage64Bit: Boolean;
     FMemManager: TFpDbgMemManager;
     FFiles: array of TDwarfDebugFile;
     function GetCompilationUnit(AIndex: Integer): TDwarfCompilationUnit;
   protected
     function GetCompilationUnitClass: TDwarfCompilationUnitClass; virtual;
     function FindCompilationUnitByOffs(AOffs: QWord): TDwarfCompilationUnit;
-    function FindProcSymbol(AAddress: TDbgPtr): TDbgDwarfSymbolBase;
   public
     constructor Create(ALoaderList: TDbgImageLoaderList); override;
     destructor Destroy; override;
     function FindContext(AThreadId, AStackFrame: Integer; AAddress: TDbgPtr = 0): TFpDbgInfoContext; override;
     function FindContext(AAddress: TDbgPtr): TFpDbgInfoContext; override;
-    function FindSymbol(AAddress: TDbgPtr): TFpDbgSymbol; override;
-    //function FindSymbol(const AName: String): TDbgSymbol; override;
-    function GetLineAddress(const AFileName: String; ALine: Cardinal): TDbgPtr; override;
+    function ContextFromProc(AThreadId, AStackFrame: Integer; AProcSym: TFpSymbol): TFpDbgInfoContext; override;
+    function FindDwarfProcSymbol(AAddress: TDbgPtr): TDbgDwarfSymbolBase; inline;
+    function FindProcSymbol(AAddress: TDbgPtr): TFpSymbol; override; overload;
+    //function FindSymbol(const AName: String): TDbgSymbol; override; overload;
+    function GetLineAddresses(const AFileName: String; ALine: Cardinal; var AResultList: TDBGPtrArray): Boolean; override;
     function GetLineAddressMap(const AFileName: String): PDWarfLineMap;
     function LoadCompilationUnits: Integer;
     function PointerFromRVA(ARVA: QWord): Pointer;
@@ -614,40 +669,34 @@ type
     property MemManager: TFpDbgMemManager read FMemManager write FMemManager;
 
     property ImageBase: QWord read FImageBase;
+    property Image64Bit: Boolean read FImage64Bit;
   end;
+
+  TDwarfLocationExpression = class;
 
   { TDwarfLocationStack }
 
-  TDwarfLocationStackEntryKind = (
-    lseRegister,      // value copied from register (data is in register)
-    lseValue,         // unsigned number, or address at which value can be found
-    lsePart,          // partial data in next stack entry
-    lseError
-  );
-
-  TDwarfLocationStackEntry = record
-    Value: TFpDbgMemLocation; // Address of data, unless lseRegister (in vhich case this holds the data (copy of register)
-    Kind:  TDwarfLocationStackEntryKind;
-  end;
-
   TDwarfLocationStack = object
   private
-    FList: array of TDwarfLocationStackEntry;
+    FList: array of TFpDbgMemLocation; //TDwarfLocationStackEntry;
     FCount: Integer;
+    FError: TFpErrorCode;
     procedure IncCapacity;
   public
     procedure Clear;
-    function  Count: Integer;
-    function  Pop: TDwarfLocationStackEntry;
-    function  Peek: TDwarfLocationStackEntry;
-    function  PeekKind: TDwarfLocationStackEntryKind;
-    function  Peek(AIndex: Integer): TDwarfLocationStackEntry;
-    procedure Push(const AEntry: TDwarfLocationStackEntry);
-    procedure Push(AValue: TFpDbgMemLocation; AKind: TDwarfLocationStackEntryKind);
-    procedure Push(AValue: TDbgPtr; AKind: TDwarfLocationStackEntryKind); // mlfTargetMem
-    procedure Modify(AIndex: Integer; const AEntry: TDwarfLocationStackEntry);
-    procedure Modify(AIndex: Integer; AValue: TFpDbgMemLocation; AKind: TDwarfLocationStackEntryKind);
-    procedure Modify(AIndex: Integer; AValue: TDbgPtr; AKind: TDwarfLocationStackEntryKind); // mlfTargetMem
+    function  Count: Integer; inline;
+    function  Pop: TFpDbgMemLocation;
+    function  PopForDeref: TFpDbgMemLocation;
+    procedure Push(const AEntry: TFpDbgMemLocation);
+    procedure PushCopy(AFromIndex: Integer);
+    procedure PushConst(const AVal: TDBGPtr);
+    procedure PushTargetMem(const AVal: TDBGPtr);
+    function  Peek: PFpDbgMemLocation;
+    function  PeekForDeref: PFpDbgMemLocation;
+    function  PeekKind: TFpDbgMemLocationType; // Can be called on empty stack
+    function  Peek(AIndex: Integer): PFpDbgMemLocation;
+    procedure Modify(AIndex: Integer; const AEntry: TFpDbgMemLocation);
+    procedure Copy(AFromIndex, AIndex: Integer);
   end;
 
   { TDwarfLocationExpression }
@@ -668,10 +717,10 @@ type
   //TODO: caller keeps data, and determines livetime of data
     constructor Create(AExpressionData: Pointer; AMaxCount: Integer; ACU: TDwarfCompilationUnit;
       AMemManager: TFpDbgMemManager; AContext: TFpDbgAddressContext);
+    procedure SetLastError(ALastError: TFpError);
     procedure Evaluate;
-    function  ResultKind: TDwarfLocationStackEntryKind;
-    function  ResultData: TDbgPtr;
-    procedure Push(AValue: TFpDbgMemLocation; AKind: TDwarfLocationStackEntryKind);
+    function ResultData: TFpDbgMemLocation;
+    procedure Push(AValue: TFpDbgMemLocation);
     property  FrameBase: TDbgPtr read FFrameBase write FFrameBase;
     property  OnFrameBaseNeeded: TNotifyEvent read FOnFrameBaseNeeded write FOnFrameBaseNeeded;
     property LastError: TFpError read FLastError;
@@ -689,9 +738,9 @@ function Dbgs(AScope: TDwarfScopeInfo; ACompUnit: TDwarfCompilationUnit): String
 function Dbgs(AInfoEntry: TDwarfInformationEntry; ACompUnit: TDwarfCompilationUnit): String; overload;
 function DbgsDump(AScope: TDwarfScopeInfo; ACompUnit: TDwarfCompilationUnit): String; overload;
 
-function GetDwarfSymbolClassMapList: TFpDwarfSymbolClassMapList; inline;
+function GetDwarfSymbolClassMapList: TFpSymbolDwarfClassMapList; inline;
 
-property DwarfSymbolClassMapList: TFpDwarfSymbolClassMapList read GetDwarfSymbolClassMapList;
+property DwarfSymbolClassMapList: TFpSymbolDwarfClassMapList read GetDwarfSymbolClassMapList;
 
 implementation
 
@@ -701,12 +750,12 @@ var
   FPDBG_DWARF_VERBOSE_LOAD: PLazLoggerLogGroup;
 
 var
-  TheDwarfSymbolClassMapList: TFpDwarfSymbolClassMapList;
+  TheDwarfSymbolClassMapList: TFpSymbolDwarfClassMapList;
 
 const
   SCOPE_ALLOC_BLOCK_SIZE = 4096; // Increase scopelist in steps of
 
-function GetDwarfSymbolClassMapList: TFpDwarfSymbolClassMapList;
+function GetDwarfSymbolClassMapList: TFpSymbolDwarfClassMapList;
 begin
   Result := TheDwarfSymbolClassMapList;
 end;
@@ -794,7 +843,7 @@ begin
   until Stop or (n > 128);
 
   // sign extend when msbit = 1
-  if (p[-1] and $40) <> 0
+  if ((p[-1] and $40) <> 0) and (n < 64) // only supports 64 bit
   then Result := Result or (Int64(-1) shl n);
 end;
 
@@ -866,6 +915,54 @@ begin
     end;
   end;
 
+end;
+
+{ TFpSymbolDwarfClassMap }
+
+class function TFpSymbolDwarfClassMap.GetInstanceForCompUnit(
+  ACU: TDwarfCompilationUnit): TFpSymbolDwarfClassMap;
+begin
+  Result := DoGetInstanceForCompUnit(ACU, nil);
+end;
+
+class procedure TFpSymbolDwarfClassMap.FreeAllInstances;
+var
+  pm, next: TFpSymbolDwarfClassMap;
+begin
+  pm := GetExistingClassMap^;
+  while pm <> nil do begin
+    next := pm.NextExistingClassMap;
+    pm.Destroy;
+    pm := next;
+  end;
+  GetExistingClassMap^ := nil;
+end;
+
+constructor TFpSymbolDwarfClassMap.Create(ACU: TDwarfCompilationUnit;
+  AHelperData: Pointer);
+begin
+  inherited Create;
+end;
+
+function TFpSymbolDwarfClassMap.CanHandleCompUnit(ACU: TDwarfCompilationUnit;
+  AHelperData: Pointer): Boolean;
+begin
+  Result := True;
+end;
+
+class function TFpSymbolDwarfClassMap.DoGetInstanceForCompUnit(
+  ACU: TDwarfCompilationUnit; AHelperData: Pointer): TFpSymbolDwarfClassMap;
+var
+  pm: PFpDwarfSymbolClassMap;
+begin
+  pm := GetExistingClassMap;
+  while pm^ <> nil do begin
+    if pm^.CanHandleCompUnit(ACU, AHelperData) then
+      exit(pm^);
+    pm := @pm^.NextExistingClassMap;
+  end;
+  Result := Self.Create(ACU, AHelperData);
+  pm^ := Result;
 end;
 
 { TLEB128PreFixTree }
@@ -1056,8 +1153,8 @@ var
     else
     begin // append to existing
       GapAvail := FTableListGaps[ATableListIndex].EndTable;
-      assert(AEntry^.EndIndex + AEntry^.LeadHigh - AEntry^.LeadLow + 1 + GapAvail <= FEndTableNextFreeIndex);
-      AtEnd := AEntry^.EndIndex + AEntry^.EndHigh - AEntry^.EndLow + 1 + GapAvail = FEndTableNextFreeIndex;
+      assert(Int64(AEntry^.EndIndex) + Int64(AEntry^.LeadHigh) - Int64(AEntry^.LeadLow) + 1 + GapAvail <= FEndTableNextFreeIndex);
+      AtEnd := Int64(AEntry^.EndIndex) + Int64(AEntry^.EndHigh) - Int64(AEntry^.EndLow) + 1 + GapAvail = FEndTableNextFreeIndex;
       ANeeded := ALeadByte - AEntry^.EndHigh;
 
       if ANeeded <= GapAvail then begin
@@ -1650,6 +1747,7 @@ end;
 procedure TDwarfLocationStack.Clear;
 begin
   FCount := 0;
+  FError := fpErrNoError;
 end;
 
 function TDwarfLocationStack.Count: Integer;
@@ -1657,44 +1755,23 @@ begin
   Result := FCount;
 end;
 
-function TDwarfLocationStack.Pop: TDwarfLocationStackEntry;
+function TDwarfLocationStack.Pop: TFpDbgMemLocation;
 begin
-  if FCount = 0 then begin
-    Result.Kind := lseError;
-    exit;
-  end;
+  Assert(0 < FCount);
+  dec(FCount);
+  Result := FList[FCount];
+  if Result.MType = mlfConstantDeref then
+    FError := fpErrLocationParser;
+end;
+
+function TDwarfLocationStack.PopForDeref: TFpDbgMemLocation;
+begin
+  Assert(0 < FCount);
   dec(FCount);
   Result := FList[FCount];
 end;
 
-function TDwarfLocationStack.Peek: TDwarfLocationStackEntry;
-begin
-  if FCount = 0 then begin
-    Result.Kind := lseError;
-    exit;
-  end;
-  Result := FList[FCount-1];
-end;
-
-function TDwarfLocationStack.PeekKind: TDwarfLocationStackEntryKind;
-begin
-  if FCount = 0 then begin
-    Result := lseError;
-    exit;
-  end;
-  Result := FList[FCount-1].Kind;
-end;
-
-function TDwarfLocationStack.Peek(AIndex: Integer): TDwarfLocationStackEntry;
-begin
-  if AIndex >= FCount then begin
-    Result.Kind := lseError;
-    exit;
-  end;
-  Result := FList[FCount-1-AIndex];
-end;
-
-procedure TDwarfLocationStack.Push(const AEntry: TDwarfLocationStackEntry);
+procedure TDwarfLocationStack.Push(const AEntry: TFpDbgMemLocation);
 begin
   if Length(FList) <= FCount then
     IncCapacity;
@@ -1702,47 +1779,81 @@ begin
   inc(FCount);
 end;
 
-procedure TDwarfLocationStack.Push(AValue: TFpDbgMemLocation;
-  AKind: TDwarfLocationStackEntryKind);
+procedure TDwarfLocationStack.PushCopy(AFromIndex: Integer);
 begin
+  Assert(AFromIndex < FCount);
   if Length(FList) <= FCount then
     IncCapacity;
-  FList[FCount].Value := AValue;
-  FList[FCount].Kind  := AKind;
+  FList[FCount] := FList[FCount-1-AFromIndex];
   inc(FCount);
 end;
 
-procedure TDwarfLocationStack.Push(AValue: TDbgPtr; AKind: TDwarfLocationStackEntryKind);
+procedure TDwarfLocationStack.PushConst(const AVal: TDBGPtr);
 begin
-  Push(TargetLoc(AValue), AKind);
+  if Length(FList) <= FCount then
+    IncCapacity;
+  FList[FCount] := Default(TFpDbgMemLocation);
+  with FList[FCount] do begin
+    Address := AVal;
+    MType := mlfConstant;
+  end;
+  inc(FCount);
 end;
 
-procedure TDwarfLocationStack.Modify(AIndex: Integer; const AEntry: TDwarfLocationStackEntry);
+procedure TDwarfLocationStack.PushTargetMem(const AVal: TDBGPtr);
+begin
+  if Length(FList) <= FCount then
+    IncCapacity;
+  FList[FCount] := Default(TFpDbgMemLocation);
+  with FList[FCount] do begin
+    Address := AVal;
+    MType := mlfTargetMem;
+  end;
+  inc(FCount);
+end;
+
+function TDwarfLocationStack.Peek: PFpDbgMemLocation;
+begin
+  Assert(0 < FCount);
+  Result := @FList[FCount-1];
+  if Result^.MType = mlfConstantDeref then
+    FError := fpErrLocationParser;
+end;
+
+function TDwarfLocationStack.PeekForDeref: PFpDbgMemLocation;
+begin
+  Assert(0 < FCount);
+  Result := @FList[FCount-1];
+end;
+
+function TDwarfLocationStack.PeekKind: TFpDbgMemLocationType;
+begin
+  if FCount = 0 then
+    Result := mlfInvalid
+  else
+    Result := FList[FCount-1].MType;
+end;
+
+function TDwarfLocationStack.Peek(AIndex: Integer): PFpDbgMemLocation;
 begin
   Assert(AIndex < FCount);
-  if AIndex >= FCount then
-    exit;
+  Result := @FList[FCount-1-AIndex];
+  if Result^.MType = mlfConstantDeref then
+    FError := fpErrLocationParser;
+end;
+
+procedure TDwarfLocationStack.Modify(AIndex: Integer;
+  const AEntry: TFpDbgMemLocation);
+begin
+  Assert(AIndex < FCount);
   FList[FCount-1-AIndex] := AEntry;
 end;
 
-procedure TDwarfLocationStack.Modify(AIndex: Integer; AValue: TFpDbgMemLocation;
-  AKind: TDwarfLocationStackEntryKind);
+procedure TDwarfLocationStack.Copy(AFromIndex, AIndex: Integer);
 begin
   Assert(AIndex < FCount);
-  if AIndex >= FCount then
-    exit;
-  FList[FCount-1-AIndex].Value := AValue;
-  FList[FCount-1-AIndex].Kind  := AKind;
-end;
-
-procedure TDwarfLocationStack.Modify(AIndex: Integer; AValue: TDbgPtr;
-  AKind: TDwarfLocationStackEntryKind);
-begin
-  Assert(AIndex < FCount);
-  if AIndex >= FCount then
-    exit;
-  FList[FCount-1-AIndex].Value := TargetLoc(AValue);
-  FList[FCount-1-AIndex].Kind  := AKind;
+  Assert(AFromIndex < FCount);
+  FList[FCount-1-AIndex] := FList[FCount-1-AFromIndex];
 end;
 
 { TDwarfLocationExpression }
@@ -1758,6 +1869,12 @@ begin
   FContext := AContext;
 end;
 
+procedure TDwarfLocationExpression.SetLastError(ALastError: TFpError);
+begin
+  assert(Not IsError(FLastError), 'TDwarfLocationExpression.SetLastError: Not IsError(FLastError)');
+  FLastError := ALastError;
+end;
+
 procedure TDwarfLocationExpression.Evaluate;
 var
   CurInstr, CurData: PByte;
@@ -1765,7 +1882,7 @@ var
 
   procedure SetError(AnInternalErrorCode: TFpErrorCode = fpErrNoError);
   begin
-    FStack.Push(InvalidLoc, lseError); // Mark as failed
+    FStack.Push(InvalidLoc); // Mark as failed
     if IsError(FMemManager.LastError)
     then FLastError := CreateError(fpErrLocationParserMemRead, FMemManager.LastError, [])
     else FLastError := CreateError(fpErrLocationParser, []);
@@ -1777,14 +1894,14 @@ var
              ' Extra: ', ErrorHandler.ErrorAsString(AnInternalErrorCode, []) ]);
   end;
 
-  function AssertAddressOnStack: Boolean;
+  function AssertAddressOnStack: Boolean; inline;
   begin
-    Result := FStack.PeekKind in [lseValue, lseRegister]; // todo: allow register?
+    Result := (FStack.PeekKind in [mlfTargetMem, mlfSelfMem, mlfConstantDeref]);
     if not Result then
       SetError(fpErrLocationParserNoAddressOnStack);
   end;
 
-  function AssertMinCount(ACnt: Integer): Boolean;
+  function AssertMinCount(ACnt: Integer): Boolean; inline;
   begin
     Result := FStack.Count >= ACnt;
     if not Result then
@@ -1795,7 +1912,7 @@ var
   begin
     //TODO: zero fill / sign extend
     if (ASize > SizeOf(AValue)) or (ASize > AddrSize) then exit(False);
-    Result := FMemManager.ReadAddress(AnAddress, ASize, AValue, FContext);
+    Result := FMemManager.ReadAddress(AnAddress, SizeVal(ASize), AValue, FContext);
     if not Result then
       SetError;
   end;
@@ -1804,7 +1921,7 @@ var
   begin
     //TODO: zero fill / sign extend
     if (ASize > SizeOf(AValue)) or (ASize > AddrSize) then exit(False);
-    AValue := FMemManager.ReadAddressEx(AnAddress, AnAddrSpace, ASize, FContext);
+    AValue := FMemManager.ReadAddressEx(AnAddress, AnAddrSpace, SizeVal(ASize), FContext);
     Result := IsValidLoc(AValue);
     if not Result then
       SetError;
@@ -1839,8 +1956,14 @@ var
   NewValue: TDbgPtr;
   i: TDbgPtr;
   x : integer;
-  Entry, Entry2: TDwarfLocationStackEntry;
+  Entry: TFpDbgMemLocation;
+  EntryP: PFpDbgMemLocation;
 begin
+  (* Returns the address of the value.
+     - Except for DW_OP_regN and DW_OP_piece, which return the value itself. (Not sure about DW_OP_constN)
+     - Some tags override that, e.g.: DW_AT_upper_bound will allways interpret the result as a value.
+  *)
+
   AddrSize := FCU.FAddressSize;
   FMemManager.ClearLastError;
   FLastError := NoError;
@@ -1850,59 +1973,65 @@ begin
     inc(CurData);
     case CurInstr^ of
       DW_OP_nop: ;
-      DW_OP_addr:  FStack.Push(FCU.ReadAddressAtPointer(CurData, True), lseValue);
+      DW_OP_addr:  begin
+          FStack.Push(FCU.ReadTargetAddressFromDwarfSection(CurData, True)); // always mlfTargetMem;
+        end;
       DW_OP_deref: begin
           if not AssertAddressOnStack then exit;
-          if not ReadAddressFromMemory(FStack.Pop.Value, AddrSize, NewLoc) then exit;
-          FStack.Push(NewLoc, lseValue);
+          EntryP := FStack.PeekForDeref;
+          if not ReadAddressFromMemory(EntryP^, AddrSize, NewLoc) then exit;
+          EntryP^ := NewLoc; // mlfTargetMem;
         end;
       DW_OP_xderef: begin
           if not AssertAddressOnStack  then exit;
-          Loc := FStack.Pop.Value;
+          Loc := FStack.Pop;
           if not AssertAddressOnStack then exit;
+          EntryP := FStack.Peek;
 // TODO check address is valid
-          if not ReadAddressFromMemoryEx(Loc, FStack.Pop.Value.Address, AddrSize, NewLoc) then exit;
-          FStack.Push(NewLoc, lseValue);
+          if not ReadAddressFromMemoryEx(Loc, EntryP^.Address, AddrSize, NewLoc) then exit;
+          EntryP^ := NewLoc; // mlfTargetMem;
         end;
       DW_OP_deref_size: begin
           if not AssertAddressOnStack then exit;
-          if not ReadAddressFromMemory(FStack.Pop.Value, ReadUnsignedFromExpression(CurData, 1), NewLoc) then exit;
-          FStack.Push(NewLoc, lseValue);
+          EntryP := FStack.PeekForDeref;
+          if not ReadAddressFromMemory(EntryP^, ReadUnsignedFromExpression(CurData, 1), NewLoc) then exit;
+          EntryP^ := NewLoc; // mlfTargetMem;
         end;
       DW_OP_xderef_size: begin
           if not AssertAddressOnStack  then exit;
-          Loc := FStack.Pop.Value;
+          Loc := FStack.Pop;
           if not AssertAddressOnStack then exit;
+          EntryP := FStack.Peek;
 // TODO check address is valid
-          if not ReadAddressFromMemoryEx(Loc, FStack.Pop.Value.Address, ReadUnsignedFromExpression(CurData, 1), NewLoc) then exit;
-          FStack.Push(NewLoc, lseValue);
+          if not ReadAddressFromMemoryEx(Loc, EntryP^.Address, ReadUnsignedFromExpression(CurData, 1), NewLoc) then exit;
+          EntryP^ := NewLoc; // mlfTargetMem;
         end;
 
-      DW_OP_const1u: FStack.Push(ReadUnsignedFromExpression(CurData, 1), lseValue);
-      DW_OP_const2u: FStack.Push(ReadUnsignedFromExpression(CurData, 2), lseValue);
-      DW_OP_const4u: FStack.Push(ReadUnsignedFromExpression(CurData, 4), lseValue);
-      DW_OP_const8u: FStack.Push(ReadUnsignedFromExpression(CurData, 8), lseValue);
-      DW_OP_constu:  FStack.Push(ReadUnsignedFromExpression(CurData, 0), lseValue);
-      DW_OP_const1s: FStack.Push(ReadSignedFromExpression(CurData, 1), lseValue);
-      DW_OP_const2s: FStack.Push(ReadSignedFromExpression(CurData, 2), lseValue);
-      DW_OP_const4s: FStack.Push(ReadSignedFromExpression(CurData, 4), lseValue);
-      DW_OP_const8s: FStack.Push(ReadSignedFromExpression(CurData, 8), lseValue);
-      DW_OP_consts:  FStack.Push(ReadSignedFromExpression(CurData, 0), lseValue);
-      DW_OP_lit0..DW_OP_lit31: FStack.Push(CurInstr^-DW_OP_lit0, lseValue);
+      DW_OP_const1u: FStack.PushConst(ReadUnsignedFromExpression(CurData, 1));
+      DW_OP_const2u: FStack.PushConst(ReadUnsignedFromExpression(CurData, 2));
+      DW_OP_const4u: FStack.PushConst(ReadUnsignedFromExpression(CurData, 4));
+      DW_OP_const8u: FStack.PushConst(ReadUnsignedFromExpression(CurData, 8));
+      DW_OP_constu:  FStack.PushConst(ReadUnsignedFromExpression(CurData, 0));
+      DW_OP_const1s: FStack.PushConst(ReadSignedFromExpression(CurData, 1));
+      DW_OP_const2s: FStack.PushConst(ReadSignedFromExpression(CurData, 2));
+      DW_OP_const4s: FStack.PushConst(ReadSignedFromExpression(CurData, 4));
+      DW_OP_const8s: FStack.PushConst(ReadSignedFromExpression(CurData, 8));
+      DW_OP_consts:  FStack.PushConst(ReadSignedFromExpression(CurData, 0));
+      DW_OP_lit0..DW_OP_lit31: FStack.PushConst(CurInstr^-DW_OP_lit0);
 
       DW_OP_reg0..DW_OP_reg31: begin
           if not FMemManager.ReadRegister(CurInstr^-DW_OP_reg0, NewValue, FContext) then begin
             SetError;
             exit;
           end;
-          FStack.Push(NewValue, lseRegister);
+          FStack.PushConst(NewValue);
         end;
       DW_OP_regx: begin
           if not FMemManager.ReadRegister(ULEB128toOrdinal(CurData), NewValue, FContext) then begin
             SetError;
             exit;
           end;
-          FStack.Push(NewValue, lseRegister);
+          FStack.PushConst(NewValue);
         end;
 
       DW_OP_breg0..DW_OP_breg31: begin
@@ -1911,7 +2040,7 @@ begin
             exit;
           end;
           {$PUSH}{$R-}{$Q-}
-          FStack.Push(NewValue+SLEB128toOrdinal(CurData), lseValue);
+          FStack.PushTargetMem(NewValue+SLEB128toOrdinal(CurData));
           {$POP}
         end;
       DW_OP_bregx: begin
@@ -1920,24 +2049,25 @@ begin
             exit;
           end;
           {$PUSH}{$R-}{$Q-}
-          FStack.Push(NewValue+SLEB128toOrdinal(CurData), lseValue);
+          FStack.PushTargetMem(NewValue+SLEB128toOrdinal(CurData));
           {$POP}
         end;
 
       DW_OP_fbreg: begin
           if (FFrameBase = 0) and (FOnFrameBaseNeeded <> nil) then FOnFrameBaseNeeded(Self);
           if FFrameBase = 0 then begin
-            SetError;
+            if not IsError(FLastError) then
+              SetError;
             exit;
           end;
           {$PUSH}{$R-}{$Q-}
-          FStack.Push(FFrameBase+SLEB128toOrdinal(CurData), lseValue);
+          FStack.PushTargetMem(FFrameBase+SLEB128toOrdinal(CurData));
           {$POP}
         end;
 
       DW_OP_dup: begin
           if not AssertMinCount(1) then exit;
-          FStack.Push(FStack.Peek);
+          FStack.PushCopy(0);
         end;
       DW_OP_drop: begin
           if not AssertMinCount(1) then exit;
@@ -1945,127 +2075,151 @@ begin
         end;
       DW_OP_over: begin
           if not AssertMinCount(2) then exit;
-          FStack.Push(FStack.Peek(1));
+          FStack.PushCopy(1);
         end;
       DW_OP_pick: begin
           i := ReadUnsignedFromExpression(CurData, 1);
           if not AssertMinCount(i) then exit;
-          FStack.Push(FStack.Peek(i));
+          FStack.PushCopy(i);
         end;
       DW_OP_swap: begin
           if not AssertMinCount(2) then exit;
-          Entry := FStack.Peek(0);
-          FStack.Modify(0, FStack.Peek(1));
+          Entry := FStack.Peek^;
+          FStack.Copy(1, 0);
           FStack.Modify(1, Entry);
         end;
       DW_OP_rot: begin
           if not AssertMinCount(3) then exit;
-          Entry := FStack.Peek(0);
-          FStack.Modify(0, FStack.Peek(1));
-          FStack.Modify(1, FStack.Peek(2));
+          Entry := FStack.Peek^;
+          FStack.Copy(1, 0);
+          FStack.Copy(2, 1);
           FStack.Modify(2, Entry);
         end;
 
       DW_OP_abs: begin
           if not AssertMinCount(1) then exit;
-          Entry := FStack.Peek(0);
-          FStack.Modify(0, abs(int64(Entry.Value.Address)), Entry.Kind); // treat as signed
+          EntryP := FStack.Peek;
+          EntryP^.Address := abs(int64(EntryP^.Address));
         end;
       DW_OP_neg: begin
           if not AssertMinCount(1) then exit;
-          Entry := FStack.Peek(0);
-          FStack.Modify(0, TDbgPtr(-(int64(Entry.Value.Address))), Entry.Kind); // treat as signed
+          EntryP := FStack.Peek;
+          EntryP^.Address := TDbgPtr(-int64(EntryP^.Address));
         end;
       DW_OP_plus: begin
           if not AssertMinCount(2) then exit;
           Entry  := FStack.Pop;
-          Entry2 := FStack.Peek(0);
+          EntryP := FStack.Peek;
           {$PUSH}{$R-}{$Q-}
           //TODO: 32 bit overflow?
-          FStack.Modify(0, Entry.Value.Address+Entry2.Value.Address, lseValue); // adding signed values works via overflow
+          EntryP^.Address := Entry.Address+EntryP^.Address;
           {$POP}
+          (* TargetMem may be a constant after deref. So if SelfMem is involved, keep it. *)
+          if (EntryP^.MType <> mlfSelfMem) and (Entry.MType in [mlfTargetMem, mlfSelfMem]) then
+            EntryP^.MType := Entry.MType;
         end;
       DW_OP_plus_uconst: begin
           if not AssertMinCount(1) then exit;
-          Entry := FStack.Peek(0);
+          EntryP := FStack.Peek;
           {$PUSH}{$R-}{$Q-}
-          FStack.Modify(0, Entry.Value.Address+ULEB128toOrdinal(CurData), lseValue);
+          EntryP^.Address := EntryP^.Address + ULEB128toOrdinal(CurData);
           {$POP}
         end;
       DW_OP_minus: begin
           if not AssertMinCount(2) then exit;
           Entry  := FStack.Pop;
-          Entry2 := FStack.Peek(0);
+          EntryP := FStack.Peek;
           {$PUSH}{$R-}{$Q-}
-          FStack.Modify(0, Entry2.Value.Address-Entry.Value.Address, lseValue); // adding signed values works via overflow
+          //TODO: 32 bit overflow?
+          EntryP^.Address := EntryP^.Address - Entry.Address;
           {$POP}
+          (* TargetMem may be a constant after deref. So if SelfMem is involved, keep it. *)
+          if (EntryP^.MType <> mlfSelfMem) and (Entry.MType in [mlfTargetMem, mlfSelfMem]) then
+            EntryP^.MType := Entry.MType;
         end;
       DW_OP_mul: begin
           if not AssertMinCount(2) then exit;
           Entry  := FStack.Pop;
-          Entry2 := FStack.Peek(0);
+          EntryP := FStack.Peek;
           //{$PUSH}{$R-}{$Q-}
-          FStack.Modify(0, TDbgPtr(int64(Entry2.Value.Address)*int64(Entry.Value.Address)), lseValue);
+          EntryP^.Address := TDbgPtr(int64(EntryP^.Address) * int64(Entry.Address));
           //{$POP}
+          if (EntryP^.MType <> mlfSelfMem) and (Entry.MType in [mlfTargetMem, mlfSelfMem]) then
+            EntryP^.MType := Entry.MType;
         end;
       DW_OP_div: begin
           if not AssertMinCount(2) then exit;
           Entry  := FStack.Pop;
-          Entry2 := FStack.Peek(0);
+          EntryP := FStack.Peek;
           //{$PUSH}{$R-}{$Q-}
-          FStack.Modify(0, TDbgPtr(int64(Entry2.Value.Address) div int64(Entry.Value.Address)), lseValue);
+          EntryP^.Address := TDbgPtr(int64(EntryP^.Address) div int64(Entry.Address));
           //{$POP}
+          if (EntryP^.MType <> mlfSelfMem) and (Entry.MType in [mlfTargetMem, mlfSelfMem]) then
+            EntryP^.MType := Entry.MType;
         end;
       DW_OP_mod: begin
           if not AssertMinCount(2) then exit;
           Entry  := FStack.Pop;
-          Entry2 := FStack.Peek(0);
+          EntryP := FStack.Peek;
           //{$PUSH}{$R-}{$Q-}
-          FStack.Modify(0, TDbgPtr(int64(Entry2.Value.Address) mod int64(Entry.Value.Address)), lseValue);
+          EntryP^.Address := TDbgPtr(int64(EntryP^.Address) mod int64(Entry.Address));
           //{$POP}
+          if (EntryP^.MType <> mlfSelfMem) and (Entry.MType in [mlfTargetMem, mlfSelfMem]) then
+            EntryP^.MType := Entry.MType;
         end;
 
       DW_OP_and: begin
           if not AssertMinCount(2) then exit;
           Entry  := FStack.Pop;
-          Entry2 := FStack.Peek(0);
-          FStack.Modify(0, Entry2.Value.Address and Entry.Value.Address, lseValue);
+          EntryP := FStack.Peek;
+          EntryP^.Address := EntryP^.Address and Entry.Address;
+          if (EntryP^.MType <> mlfSelfMem) and (Entry.MType in [mlfTargetMem, mlfSelfMem]) then
+            EntryP^.MType := Entry.MType;
         end;
       DW_OP_not: begin
           if not AssertMinCount(1) then exit;
-          Entry := FStack.Peek(0);
-          FStack.Modify(0, not Entry2.Value.Address and Entry.Value.Address, Entry.Kind);
+          EntryP := FStack.Peek;
+          EntryP^.Address := not EntryP^.Address;
         end;
       DW_OP_or: begin
           if not AssertMinCount(2) then exit;
           Entry  := FStack.Pop;
-          Entry2 := FStack.Peek(0);
-          FStack.Modify(0, Entry2.Value.Address or Entry.Value.Address, lseValue);
+          EntryP := FStack.Peek;
+          EntryP^.Address := EntryP^.Address or Entry.Address;
+          if (EntryP^.MType <> mlfSelfMem) and (Entry.MType in [mlfTargetMem, mlfSelfMem]) then
+            EntryP^.MType := Entry.MType;
         end;
       DW_OP_xor: begin
           if not AssertMinCount(2) then exit;
           Entry  := FStack.Pop;
-          Entry2 := FStack.Peek(0);
-          FStack.Modify(0, Entry2.Value.Address xor Entry.Value.Address, lseValue);
+          EntryP := FStack.Peek;
+          EntryP^.Address := EntryP^.Address xor Entry.Address;
+          if (EntryP^.MType <> mlfSelfMem) and (Entry.MType in [mlfTargetMem, mlfSelfMem]) then
+            EntryP^.MType := Entry.MType;
         end;
       DW_OP_shl: begin
           if not AssertMinCount(2) then exit;
           Entry  := FStack.Pop;
-          Entry2 := FStack.Peek(0);
-          FStack.Modify(0, Entry2.Value.Address shl Entry.Value.Address, lseValue);
+          EntryP := FStack.Peek;
+          EntryP^.Address := EntryP^.Address shl Entry.Address;
+          if (EntryP^.MType <> mlfSelfMem) and (Entry.MType in [mlfTargetMem, mlfSelfMem]) then
+            EntryP^.MType := Entry.MType;
         end;
       DW_OP_shr: begin
           if not AssertMinCount(2) then exit;
           Entry  := FStack.Pop;
-          Entry2 := FStack.Peek(0);
-          FStack.Modify(0, Entry2.Value.Address shr Entry.Value.Address, lseValue);
+          EntryP := FStack.Peek;
+          EntryP^.Address := EntryP^.Address shr Entry.Address;
+          if (EntryP^.MType <> mlfSelfMem) and (Entry.MType in [mlfTargetMem, mlfSelfMem]) then
+            EntryP^.MType := Entry.MType;
         end;
       DW_OP_shra: begin
           if not AssertMinCount(2) then exit;
           Entry  := FStack.Pop;
-          Entry2 := FStack.Peek(0);
-          if Entry.Value.Address > 0 then
-            FStack.Modify(0, Entry2.Value.Address div (1 shl (Entry.Value.Address - 1)), lseValue);
+          EntryP := FStack.Peek;
+          EntryP^.Address := TDBGPtr( int64(EntryP^.Address) div int64(1 shl (Entry.Address - 1)) );
+          if (EntryP^.MType <> mlfSelfMem) and (Entry.MType in [mlfTargetMem, mlfSelfMem]) then
+            EntryP^.MType := Entry.MType;
         end;
 
       DW_OP_skip: begin
@@ -2074,64 +2228,75 @@ begin
         end;
       DW_OP_bra: begin
           if not AssertMinCount(1) then exit;
-          Entry  := FStack.Pop;
+          Entry  := FStack.PopForDeref;
           x := ReadSignedFromExpression(CurData, 2);
-          if Entry.Value.Address <> 0 then
+          // mlfConstantDeref => The virtual address pointing to this constant is not nil
+          if (Entry.Address <> 0) or (Entry.MType = mlfConstantDeref) then
             CurData := CurData + x;
         end;
 
       DW_OP_eq: begin
           if not AssertMinCount(2) then exit;
           Entry  := FStack.Pop;
-          Entry2 := FStack.Peek(0);
-          if Entry.Value.Address = Entry2.Value.Address
-          then FStack.Modify(0, 1, lseValue)
-          else FStack.Modify(0, 0, lseValue);
+          EntryP := FStack.Peek;
+          if Entry.Address = EntryP^.Address
+          then EntryP^.Address := 1
+          else EntryP^.Address := 0;
+          EntryP^.MType := mlfConstant;
         end;
       DW_OP_ge: begin
           if not AssertMinCount(2) then exit;
           Entry  := FStack.Pop;
-          Entry2 := FStack.Peek(0);
-          if int64(Entry.Value.Address) >= int64(Entry2.Value.Address)
-          then FStack.Modify(0, 1, lseValue)
-          else FStack.Modify(0, 0, lseValue);
+          EntryP := FStack.Peek;
+          if int64(Entry.Address) >= int64(EntryP^.Address)
+          then EntryP^.Address := 1
+          else EntryP^.Address := 0;
+          EntryP^.MType := mlfConstant;
         end;
       DW_OP_gt: begin
           if not AssertMinCount(2) then exit;
           Entry  := FStack.Pop;
-          Entry2 := FStack.Peek(0);
-          if int64(Entry.Value.Address) > int64(Entry2.Value.Address)
-          then FStack.Modify(0, 1, lseValue)
-          else FStack.Modify(0, 0, lseValue);
+          EntryP := FStack.Peek;
+          if int64(Entry.Address) > int64(EntryP^.Address)
+          then EntryP^.Address := 1
+          else EntryP^.Address := 0;
+          EntryP^.MType := mlfConstant;
         end;
       DW_OP_le: begin
           if not AssertMinCount(2) then exit;
           Entry  := FStack.Pop;
-          Entry2 := FStack.Peek(0);
-          if int64(Entry.Value.Address) <= int64(Entry2.Value.Address)
-          then FStack.Modify(0, 1, lseValue)
-          else FStack.Modify(0, 0, lseValue);
+          EntryP := FStack.Peek;
+          if int64(Entry.Address) <= int64(EntryP^.Address)
+          then EntryP^.Address := 1
+          else EntryP^.Address := 0;
+          EntryP^.MType := mlfConstant;
         end;
       DW_OP_lt: begin
           if not AssertMinCount(2) then exit;
           Entry  := FStack.Pop;
-          Entry2 := FStack.Peek(0);
-          if int64(Entry.Value.Address) < int64(Entry2.Value.Address)
-          then FStack.Modify(0, 1, lseValue)
-          else FStack.Modify(0, 0, lseValue);
+          EntryP := FStack.Peek;
+          if int64(Entry.Address) < int64(EntryP^.Address)
+          then EntryP^.Address := 1
+          else EntryP^.Address := 0;
+          EntryP^.MType := mlfConstant;
         end;
       DW_OP_ne: begin
           if not AssertMinCount(2) then exit;
           Entry  := FStack.Pop;
-          Entry2 := FStack.Peek(0);
-          if Entry.Value.Address <> Entry2.Value.Address
-          then FStack.Modify(0, 1, lseValue)
-          else FStack.Modify(0, 0, lseValue);
+          EntryP := FStack.Peek;
+          if Entry.Address <> EntryP^.Address
+          then EntryP^.Address := 1
+          else EntryP^.Address := 0;
+          EntryP^.MType := mlfConstant;
         end;
 
       DW_OP_piece: begin
           if not AssertMinCount(1) then exit; // no piece avail
-          FStack.Push(0, lsePart);
+          x := ReadUnsignedFromExpression(CurData, 0);
+          Entry :=  FStack.Pop;
+// TODO: assemble data // Not implemented
+// If entry is an address (not a register) then it points to the value
+          SetError(fpErrLocationParser);
           exit;
         end;
 
@@ -2141,7 +2306,7 @@ begin
           SetError;
           exit;
         end;
-        Push(FCurrentObjectAddress, lseValue);
+        Push(FCurrentObjectAddress);
       end;
 (*
   // --- DWARF3 ---
@@ -2159,29 +2324,36 @@ begin
           exit;
         end;
     end;
+
+    if FStack.FError <> fpErrNoError then begin
+      SetError(FStack.FError);
+      exit;
+    end;
+  end;
+
+  if (FLastError = nil) and (FStack.FError = fpErrNoError) then begin
+    if not AssertMinCount(1) then exit; // no value for result
+    //TODO: If a caller expects it, it could accept mlfConstantDeref as result (but it would still need to deref it)
+    FStack.Peek(); // check that the result value is valid
+    if FStack.FError <> fpErrNoError then
+      SetError(FStack.FError);
   end;
 end;
 
-function TDwarfLocationExpression.ResultKind: TDwarfLocationStackEntryKind;
+function TDwarfLocationExpression.ResultData: TFpDbgMemLocation;
 begin
+  if (FLastError <> nil) or (FStack.FError <> fpErrNoError) or (FStack.Count = 0) then
+    exit(InvalidLoc);
+
   if FStack.Count > 0 then
-    Result := FStack.PeekKind
+    Result := FStack.Peek^
   else
-    Result := lseError;
+    Result := InvalidLoc;
 end;
 
-function TDwarfLocationExpression.ResultData: TDbgPtr;
+procedure TDwarfLocationExpression.Push(AValue: TFpDbgMemLocation);
 begin
-  if FStack.Count > 0 then
-    Result := FStack.Peek.Value.Address
-  else
-    Result := 0;
-end;
-
-procedure TDwarfLocationExpression.Push(AValue: TFpDbgMemLocation;
-  AKind: TDwarfLocationStackEntryKind);
-begin
-  FStack.Push(AValue, AKind);
+  FStack.Push(AValue);
 end;
 
 { TDwarfInformationEntry }
@@ -2201,6 +2373,11 @@ begin
     exit;
   FInformationData := FCompUnit.FAbbrevList.FindLe128bFromPointer(FInformationEntry, FAbbrev);
   Include(FFlags, dieAbbrevValid);
+end;
+
+function TDwarfInformationEntry.GetAttribForm(AnIdx: Integer): Cardinal;
+begin
+  Result := FAbbrevData[AnIdx].Form;
 end;
 
 function TDwarfInformationEntry.PrepareAbbrevData: Boolean;
@@ -2314,23 +2491,6 @@ begin
   Result := FScope.IsValid;
   if Result then exit;
   Result := SearchScope;
-end;
-
-function TDwarfInformationEntry.AttribIdx(AnAttrib: Cardinal; out
-  AInfoPointer: pointer): Integer;
-var
-  i: Integer;
-  AddrSize: Byte;
-begin
-  if not PrepareAbbrevData then exit(-1);
-  AInfoPointer := FInformationData;
-  AddrSize := FCompUnit.FAddressSize;
-  for i := 0 to FAbbrev^.count - 1 do begin
-    if FAbbrevData[i].Attribute = AnAttrib then
-      exit(i);
-    SkipEntryDataForForm(AInfoPointer, FAbbrevData[i].Form, AddrSize, FCompUnit.IsDwarf64, FCompUnit.Version);
-  end;
-  Result := -1;
 end;
 
 function TDwarfInformationEntry.HasAttrib(AnAttrib: Cardinal): Boolean;
@@ -2485,6 +2645,41 @@ begin
   inherited Destroy;
 end;
 
+function TDwarfInformationEntry.GetAttribData(AnAttrib: Cardinal; out
+  AnAttribData: TDwarfAttribData): Boolean;
+var
+  i: Integer;
+  p: PDwarfAbbrevEntry;
+  AddrSize: Byte;
+  InfoPointer: Pointer;
+  IsDwarf64: Boolean;
+  Version: Word;
+begin
+  Result := False;
+  if not PrepareAbbrevData then
+    exit;
+
+  AddrSize    := FCompUnit.FAddressSize;
+  IsDwarf64   := FCompUnit.IsDwarf64;
+  Version     := FCompUnit.Version;
+  InfoPointer := FInformationData;
+  p := FAbbrevData;
+  for i := 0 to FAbbrev^.count - 1 do begin
+    if p^.Attribute = AnAttrib then begin
+      AnAttribData.Idx := i;
+      AnAttribData.InfoPointer := InfoPointer;
+      AnAttribData.InformationEntry := Self;
+      Result := True;
+      exit;
+    end;
+    SkipEntryDataForForm(InfoPointer, p^.Form, AddrSize, IsDwarf64, Version);
+    inc(p);
+  end;
+
+  if (dafHasAbstractOrigin in FAbbrev^.flags) and PrepareAbstractOrigin then
+    Result := FAbstractOrigin.GetAttribData(AnAttrib, AnAttribData);
+end;
+
 function TDwarfInformationEntry.FindNamedChild(AName: String): TDwarfInformationEntry;
 begin
   Result := nil;
@@ -2542,117 +2737,100 @@ begin
     Result := TDwarfInformationEntry.Create(FCompUnit, FInformationEntry);
 end;
 
-function TDwarfInformationEntry.ReadValue(AnAttrib: Cardinal; out AValue: Integer): Boolean;
-var
-  AData: pointer;
-  i: Integer;
+function TDwarfInformationEntry.ReadValue(const AnAttribData: TDwarfAttribData;
+  out AValue: Integer): Boolean;
 begin
-  i := AttribIdx(AnAttrib, AData);
-  if i < 0 then begin
-    if (dafHasAbstractOrigin in FAbbrev^.flags) and PrepareAbstractOrigin
-    then Result := FAbstractOrigin.ReadValue(AnAttrib, AValue)
-    else Result := False;
-  end
-  else
-    Result := FCompUnit.ReadValue(AData, FAbbrevData[i].Form, AValue);
+  Result := AnAttribData.InformationEntry.FCompUnit.ReadValue(
+    AnAttribData.InfoPointer,
+    AnAttribData.InformationEntry.FAbbrevData[AnAttribData.Idx].Form,
+    AValue
+  );
 end;
 
-function TDwarfInformationEntry.ReadValue(AnAttrib: Cardinal; out AValue: Int64): Boolean;
-var
-  AData: pointer;
-  i: Integer;
+function TDwarfInformationEntry.ReadValue(const AnAttribData: TDwarfAttribData;
+  out AValue: Int64): Boolean;
 begin
-  i := AttribIdx(AnAttrib, AData);
-  if i < 0 then begin
-    if (dafHasAbstractOrigin in FAbbrev^.flags) and PrepareAbstractOrigin
-    then Result := FAbstractOrigin.ReadValue(AnAttrib, AValue)
-    else Result := False;
-  end
-  else
-    Result := FCompUnit.ReadValue(AData, FAbbrevData[i].Form, AValue);
+  Result := AnAttribData.InformationEntry.FCompUnit.ReadValue(
+    AnAttribData.InfoPointer,
+    AnAttribData.InformationEntry.FAbbrevData[AnAttribData.Idx].Form,
+    AValue
+  );
 end;
 
-function TDwarfInformationEntry.ReadValue(AnAttrib: Cardinal; out AValue: Cardinal): Boolean;
-var
-  AData: pointer;
-  i: Integer;
+function TDwarfInformationEntry.ReadValue(const AnAttribData: TDwarfAttribData;
+  out AValue: Cardinal): Boolean;
 begin
-  i := AttribIdx(AnAttrib, AData);
-  if i < 0 then begin
-    if (dafHasAbstractOrigin in FAbbrev^.flags) and PrepareAbstractOrigin
-    then Result := FAbstractOrigin.ReadValue(AnAttrib, AValue)
-    else Result := False;
-  end
-  else
-    Result := FCompUnit.ReadValue(AData, FAbbrevData[i].Form, AValue);
+  Result := AnAttribData.InformationEntry.FCompUnit.ReadValue(
+    AnAttribData.InfoPointer,
+    AnAttribData.InformationEntry.FAbbrevData[AnAttribData.Idx].Form,
+    AValue
+  );
 end;
 
-function TDwarfInformationEntry.ReadValue(AnAttrib: Cardinal; out AValue: QWord): Boolean;
-var
-  AData: pointer;
-  i: Integer;
+function TDwarfInformationEntry.ReadValue(const AnAttribData: TDwarfAttribData;
+  out AValue: QWord): Boolean;
 begin
-  i := AttribIdx(AnAttrib, AData);
-  if i < 0 then begin
-    if (dafHasAbstractOrigin in FAbbrev^.flags) and PrepareAbstractOrigin
-    then Result := FAbstractOrigin.ReadValue(AnAttrib, AValue)
-    else Result := False;
-  end
-  else
-    Result := FCompUnit.ReadValue(AData, FAbbrevData[i].Form, AValue);
+  Result := AnAttribData.InformationEntry.FCompUnit.ReadValue(
+    AnAttribData.InfoPointer,
+    AnAttribData.InformationEntry.FAbbrevData[AnAttribData.Idx].Form,
+    AValue
+  );
 end;
 
-function TDwarfInformationEntry.ReadValue(AnAttrib: Cardinal; out AValue: PChar): Boolean;
-var
-  AData: pointer;
-  i: Integer;
+function TDwarfInformationEntry.ReadValue(const AnAttribData: TDwarfAttribData;
+  out AValue: PChar): Boolean;
 begin
-  i := AttribIdx(AnAttrib, AData);
-  if i < 0 then begin
-    if (dafHasAbstractOrigin in FAbbrev^.flags) and PrepareAbstractOrigin
-    then Result := FAbstractOrigin.ReadValue(AnAttrib, AValue)
-    else Result := False;
-  end
-  else
-    Result := FCompUnit.ReadValue(AData, FAbbrevData[i].Form, AValue);
+  Result := AnAttribData.InformationEntry.FCompUnit.ReadValue(
+    AnAttribData.InfoPointer,
+    AnAttribData.InformationEntry.FAbbrevData[AnAttribData.Idx].Form,
+    AValue
+  );
 end;
 
-function TDwarfInformationEntry.ReadValue(AnAttrib: Cardinal; out AValue: String): Boolean;
-var
-  AData: pointer;
-  i: Integer;
+function TDwarfInformationEntry.ReadValue(const AnAttribData: TDwarfAttribData;
+  out AValue: String): Boolean;
 begin
-  i := AttribIdx(AnAttrib, AData);
-  if i < 0 then begin
-    if (dafHasAbstractOrigin in FAbbrev^.flags) and PrepareAbstractOrigin
-    then Result := FAbstractOrigin.ReadValue(AnAttrib, AValue)
-    else Result := False;
-  end
-  else
-    Result := FCompUnit.ReadValue(AData, FAbbrevData[i].Form, AValue);
+  Result := AnAttribData.InformationEntry.FCompUnit.ReadValue(
+    AnAttribData.InfoPointer,
+    AnAttribData.InformationEntry.FAbbrevData[AnAttribData.Idx].Form,
+    AValue
+  );
 end;
 
-function TDwarfInformationEntry.ReadValue(AnAttrib: Cardinal; out
-  AValue: TByteDynArray): Boolean;
-var
-  AData: pointer;
-  i: Integer;
+function TDwarfInformationEntry.ReadValue(const AnAttribData: TDwarfAttribData;
+  out AValue: TByteDynArray; AnFormString: Boolean): Boolean;
 begin
-  i := AttribIdx(AnAttrib, AData);
-  if i < 0 then begin
-    if (dafHasAbstractOrigin in FAbbrev^.flags) and PrepareAbstractOrigin
-    then Result := FAbstractOrigin.ReadValue(AnAttrib, AValue)
-    else Result := False;
-  end
-  else
-    Result := FCompUnit.ReadValue(AData, FAbbrevData[i].Form, AValue);
+  Result := AnAttribData.InformationEntry.FCompUnit.ReadValue(
+    AnAttribData.InfoPointer,
+    AnAttribData.InformationEntry.FAbbrevData[AnAttribData.Idx].Form,
+    AValue, AnFormString
+  );
 end;
 
-function TDwarfInformationEntry.ReadReference(AnAttrib: Cardinal; out AValue: Pointer; out
+function TDwarfInformationEntry.ReadAddressValue(
+  const AnAttribData: TDwarfAttribData; out AValue: TDBGPtr): Boolean;
+begin
+  Result := AnAttribData.InformationEntry.FCompUnit.ReadAddressValue(
+    AnAttribData.InfoPointer,
+    AnAttribData.InformationEntry.FAbbrevData[AnAttribData.Idx].Form,
+    AValue
+  );
+end;
+
+function TDwarfInformationEntry.ReadReference(
+  const AnAttribData: TDwarfAttribData; out AValue: Pointer; out
+  ACompUnit: TDwarfCompilationUnit): Boolean;
+begin
+  Result := AnAttribData.InformationEntry.DoReadReference(
+    AnAttribData.Idx, AnAttribData.InfoPointer,
+    AValue, ACompUnit
+  );
+end;
+
+function TDwarfInformationEntry.DoReadReference(
+  InfoIdx: Integer; InfoData: pointer; out AValue: Pointer; out
   ACompUnit: TDwarfCompilationUnit): Boolean;
 var
-  InfoData: pointer;
-  i: Integer;
   Form: Cardinal;
   Offs: QWord;
 begin
@@ -2663,13 +2841,10 @@ begin
          this field will always be an offset from start of the debug_info section
   }
   Result := False;
-  i := AttribIdx(AnAttrib, InfoData);
-  if i < 0 then begin
-    if (dafHasAbstractOrigin in FAbbrev^.flags) and PrepareAbstractOrigin
-    then Result := FAbstractOrigin.ReadReference(AnAttrib, AValue, ACompUnit);
+  if InfoIdx < 0 then
     exit;
-  end;
-  Form := FAbbrevData[i].Form;
+
+  Form := FAbbrevData[InfoIdx].Form;
   if (Form = DW_FORM_ref1) or (Form = DW_FORM_ref2) or (Form = DW_FORM_ref4) or
      (Form = DW_FORM_ref8) or (Form = DW_FORM_ref_udata)
   then begin
@@ -2695,24 +2870,99 @@ begin
     else
       ACompUnit := FCompUnit.FOwner.FindCompilationUnitByOffs(Offs);
     Result := ACompUnit <> nil;
-    if not Result then DebugLn(FPDBG_DWARF_WARNINGS, ['Comp unit not found DW_FORM_ref_addr']);
+    DebugLn(FPDBG_DWARF_WARNINGS and (not Result), ['Comp unit not found DW_FORM_ref_addr']);
   end
   else begin
-    DebugLn(FPDBG_DWARF_VERBOSE, ['FORM for DW_AT_type not expected ', DwarfAttributeFormToString(Form)]);
+    DebugLn(FPDBG_DWARF_VERBOSE, ['FORM for ReadReference not expected ', DwarfAttributeFormToString(Form)]);
   end;
+end;
+
+function TDwarfInformationEntry.ReadValue(AnAttrib: Cardinal; out AValue: Integer): Boolean;
+var
+  AttrData: TDwarfAttribData;
+begin
+  Result := GetAttribData(AnAttrib, AttrData);
+  if Result then
+    Result := ReadValue(AttrData, AValue);
+end;
+
+function TDwarfInformationEntry.ReadValue(AnAttrib: Cardinal; out AValue: Int64): Boolean;
+var
+  AttrData: TDwarfAttribData;
+begin
+  Result := GetAttribData(AnAttrib, AttrData);
+  if Result then
+    Result := ReadValue(AttrData, AValue);
+end;
+
+function TDwarfInformationEntry.ReadValue(AnAttrib: Cardinal; out AValue: Cardinal): Boolean;
+var
+  AttrData: TDwarfAttribData;
+begin
+  Result := GetAttribData(AnAttrib, AttrData);
+  if Result then
+    Result := ReadValue(AttrData, AValue);
+end;
+
+function TDwarfInformationEntry.ReadValue(AnAttrib: Cardinal; out AValue: QWord): Boolean;
+var
+  AttrData: TDwarfAttribData;
+begin
+  Result := GetAttribData(AnAttrib, AttrData);
+  if Result then
+    Result := ReadValue(AttrData, AValue);
+end;
+
+function TDwarfInformationEntry.ReadValue(AnAttrib: Cardinal; out AValue: PChar): Boolean;
+var
+  AttrData: TDwarfAttribData;
+begin
+  Result := GetAttribData(AnAttrib, AttrData);
+  if Result then
+    Result := ReadValue(AttrData, AValue);
+end;
+
+function TDwarfInformationEntry.ReadValue(AnAttrib: Cardinal; out AValue: String): Boolean;
+var
+  AttrData: TDwarfAttribData;
+begin
+  Result := GetAttribData(AnAttrib, AttrData);
+  if Result then
+    Result := ReadValue(AttrData, AValue);
+end;
+
+function TDwarfInformationEntry.ReadValue(AnAttrib: Cardinal; out
+  AValue: TByteDynArray; AnFormString: Boolean): Boolean;
+var
+  AttrData: TDwarfAttribData;
+begin
+  Result := GetAttribData(AnAttrib, AttrData);
+  if Result then
+    Result := ReadValue(AttrData, AValue, AnFormString);
+end;
+
+function TDwarfInformationEntry.ReadReference(AnAttrib: Cardinal; out AValue: Pointer; out
+  ACompUnit: TDwarfCompilationUnit): Boolean;
+var
+  AttrData: TDwarfAttribData;
+begin
+  Result := GetAttribData(AnAttrib, AttrData);
+  if Result then
+    Result := AttrData.InformationEntry.DoReadReference(
+      AttrData.Idx, AttrData.InfoPointer,
+      AValue, ACompUnit
+    );
 end;
 
 function TDwarfInformationEntry.ReadName(out AName: String): Boolean;
 var
-  i: Integer;
-  AData: pointer;
+  AttrData: TDwarfAttribData;
 begin
   PrepareAbbrev;
   if dafHasName in FAbbrev^.flags then begin
-    //Result := ReadValue(DW_AT_name, AName);
-    i := AttribIdx(DW_AT_name, AData);
-    assert(i >= 0, 'TDwarfInformationEntry.ReadName');
-    Result := FCompUnit.ReadValue(AData, FAbbrevData[i].Form, AName);
+    Result := GetAttribData(DW_AT_name, AttrData);
+    assert(Result and (AttrData.InformationEntry = Self), 'TDwarfInformationEntry.ReadName');
+    Result := ReadValue(AttrData, AName);
   end
   else
   if (dafHasAbstractOrigin in FAbbrev^.flags) and PrepareAbstractOrigin then
@@ -2723,15 +2973,13 @@ end;
 
 function TDwarfInformationEntry.ReadName(out AName: PChar): Boolean;
 var
-  AData: pointer;
-  i: Integer;
+  AttrData: TDwarfAttribData;
 begin
   PrepareAbbrev;
   if dafHasName in FAbbrev^.flags then begin
-    //Result := ReadValue(DW_AT_name, AName);
-    i := AttribIdx(DW_AT_name, AData);
-    assert(i >= 0, 'TDwarfInformationEntry.ReadName');
-    Result := FCompUnit.ReadValue(AData, FAbbrevData[i].Form, AName);
+    Result := GetAttribData(DW_AT_name, AttrData);
+    assert(Result and (AttrData.InformationEntry = Self), 'TDwarfInformationEntry.ReadName');
+    Result := ReadValue(AttrData, AName);
   end
   else
   if (dafHasAbstractOrigin in FAbbrev^.flags) and PrepareAbstractOrigin then
@@ -2742,15 +2990,13 @@ end;
 
 function TDwarfInformationEntry.ReadStartScope(out AStartScope: TDbgPtr): Boolean;
 var
-  AData: pointer;
-  i: Integer;
+  AttrData: TDwarfAttribData;
 begin
   PrepareAbbrev;
   if dafHasStartScope in FAbbrev^.flags then begin
-    //Result := ReadValue(DW_AT_start_scope, AStartScope)
-    i := AttribIdx(DW_AT_start_scope, AData);
-    assert(i >= 0, 'TDwarfInformationEntry.ReadStartScope');
-    Result := FCompUnit.ReadValue(AData, FAbbrevData[i].Form, AStartScope);
+    Result := GetAttribData(DW_AT_start_scope, AttrData);
+    assert(Result and (AttrData.InformationEntry = Self), 'TDwarfInformationEntry.ReadName');
+    Result := ReadValue(AttrData, AStartScope);
   end
   else
   if (dafHasAbstractOrigin in FAbbrev^.flags) and PrepareAbstractOrigin then
@@ -2780,37 +3026,138 @@ end;
 
 procedure TDWarfLineMap.Init;
 begin
-  NextAFterHighestLine := 0;
-  //Count := 0;
 end;
 
-procedure TDWarfLineMap.SetAddressForLine(ALine: Cardinal; AnAddress: QWord);
+procedure TDWarfLineMap.SetAddressForLine(ALine: Cardinal; AnAddress: TDBGPtr);
 var
-  i: Integer;
+  SectLen, SectCnt, i, j, o, o2: Integer;
+  idx, offset: TDBGPtr;
+  LineOffsets: Array of Byte;
+  Addresses: Array of TDBGPtr;
 begin
-  i := Length(AddressList);
-  if i <= ALine then
-    SetLength(AddressList, ALine + 2000);
+  idx := ALine div 256;
+  offset := ALine mod 256;
+  i := Length(FLineIndexList);
+  if idx >= i then
+    SetLength(FLineIndexList, idx+4);
 
-  if AddressList[ALine] = 0 then begin
-    AddressList[ALine] := AnAddress;
-    //inc(Count);
+  LineOffsets := FLineIndexList[idx].LineOffsets;
+  Addresses := FLineIndexList[idx].Addresses;
+
+  if Addresses = nil then begin
+    SectLen := 192;
+    SectCnt := 0;
+    SetLength(FLineIndexList[idx].Addresses, 193);
+    SetLength(FLineIndexList[idx].LineOffsets, 192);
+    LineOffsets := FLineIndexList[idx].LineOffsets;
+    Addresses := FLineIndexList[idx].Addresses;
+  end
+  else begin
+    SectLen := Length(LineOffsets);
+    SectCnt := Integer(Addresses[SectLen]);
+    if SectCnt >= SectLen then begin
+      SectLen := SectCnt + 64;
+      SetLength(FLineIndexList[idx].Addresses, SectLen+1);
+      SetLength(FLineIndexList[idx].LineOffsets, SectLen);
+      LineOffsets := FLineIndexList[idx].LineOffsets;
+      Addresses := FLineIndexList[idx].Addresses;
+    end;
   end;
-  if ALine > NextAFterHighestLine then
-    NextAFterHighestLine := ALine+1;
+
+
+  i := 0;
+  o := 0;
+  while (i < SectCnt) do begin
+    o2 := o + LineOffsets[i];
+    if o2 > offset then break;
+    o := o2;
+    inc(i);
+  end;
+
+  j := SectCnt;
+  while j > i do begin
+    LineOffsets[j] := LineOffsets[j-1];
+    Addresses[j]   := Addresses[j-1];
+    dec(j);
+  end;
+
+  offset := offset - o;
+  LineOffsets[i] := offset;
+  Addresses[i]   := AnAddress;
+
+  if i < SectCnt then begin
+    assert(LineOffsets[i+1] >= offset, 'TDWarfLineMap.SetAddressForLine LineOffsets[i+1] > offset');
+    LineOffsets[i+1] := LineOffsets[i+1] - offset;
+  end;
+
+  Addresses[SectLen] := SectCnt + 1;
 end;
 
-function TDWarfLineMap.GetAddressForLine(ALine: Cardinal): QWord;
+function TDWarfLineMap.GetAddressesForLine(ALine: Cardinal;
+  var AResultList: TDBGPtrArray; NoData: Boolean): Boolean;
+var
+  idx, offset: TDBGPtr;
+  LineOffsets: Array of Byte;
+  Addresses: Array of TDBGPtr;
+  o: Byte;
+  i, j, k, l: Integer;
 begin
-  Result := 0;
-  if ALine < Length(AddressList) then
-    Result := AddressList[ALine];
+  Result := False;
+  idx := ALine div 256;
+  offset := ALine mod 256;
+  if idx >= Length(FLineIndexList) then
+    exit;
+
+  LineOffsets := FLineIndexList[idx].LineOffsets;
+  Addresses := FLineIndexList[idx].Addresses;
+  if Addresses = nil then
+    exit;
+
+  l := Length(LineOffsets);
+  i := 0;
+  while (i < l) do begin
+    o := LineOffsets[i];
+    if o > offset then exit;
+    offset := offset - o;
+    if offset = 0 then break;
+    inc(i);
+  end;
+
+  If (offset > 0) then
+    exit;
+
+  if NoData then begin
+    Result := True;
+    exit;
+  end;
+
+  j := i + 1;
+  while (j < l) and (LineOffsets[j] = 0) do inc(j);
+
+  k := Length(AResultList);
+  SetLength(AResultList, k + (j-i));
+  while i < j do begin
+    AResultList[k] := Addresses[i];
+    inc(i);
+    inc(k);
+  end;
+
+  Result := True;
 end;
 
 procedure TDWarfLineMap.Compress;
+var
+  i, j: Integer;
 begin
-  SetLength(AddressList, NextAFterHighestLine);
-//DebugLn(['#### ',NextAFterHighestLine, ' / ',Count]);
+  for i := 0 to high(FLineIndexList) do begin
+    j := Length(FLineIndexList[i].LineOffsets);
+    if j <> 0 then begin
+      j := FLineIndexList[i].Addresses[j];
+      SetLength(FLineIndexList[i].Addresses, j+1);
+      FLineIndexList[i].Addresses[j] := j;
+      SetLength(FLineIndexList[i].LineOffsets, j);
+    end;
+  end;
 end;
 
 { TFpDwarfInfo }
@@ -2822,6 +3169,7 @@ var
   i: Integer;
 begin
   inherited Create(ALoaderList);
+  FImage64Bit := ALoaderList.Image64Bit;
   FCompilationUnits := TList.Create;
   FImageBase := ALoaderList.ImageBase;
 
@@ -2838,6 +3186,7 @@ begin
       FFiles[i].Sections[Section].Size := p^.Size;
       FFiles[i].Sections[Section].VirtualAddress := p^.VirtualAddress;
     end;
+    ALoaderList[i].CloseFileLoader;
   end;
 end;
 
@@ -2857,12 +3206,11 @@ var
   Proc: TDbgDwarfSymbolBase;
 begin
   Result := nil;
-  Proc := FindProcSymbol(AAddress);
+  Proc := FindDwarfProcSymbol(AAddress);  // TFpSymbolDwarfDataProc
   if Proc = nil then
     exit;
 
-  Result := Proc.CompilationUnit.DwarfSymbolClassMap.CreateContext
-    (AThreadId, AStackFrame, AAddress, Proc, Self);
+  Result := Proc.CreateContext(AThreadId, AStackFrame, Self);
   Proc.ReleaseReference;
 end;
 
@@ -2871,9 +3219,15 @@ begin
   result := FindContext(1, 0, AAddress);
 end;
 
-function TFpDwarfInfo.FindSymbol(AAddress: TDbgPtr): TFpDbgSymbol;
+function TFpDwarfInfo.ContextFromProc(AThreadId, AStackFrame: Integer;
+  AProcSym: TFpSymbol): TFpDbgInfoContext;
 begin
-  Result := FindProcSymbol(AAddress);
+  if not (AProcSym is TDbgDwarfSymbolBase) then begin
+    Result := inherited ContextFromProc(AThreadId, AStackFrame, AProcSym);
+    exit;
+  end;
+
+  Result := TDbgDwarfSymbolBase(AProcSym).CreateContext(AThreadId, AStackFrame, Self);
 end;
 
 function TFpDwarfInfo.GetCompilationUnit(AIndex: Integer): TDwarfCompilationUnit;
@@ -2908,7 +3262,13 @@ begin
     Result := nil;
 end;
 
-function TFpDwarfInfo.FindProcSymbol(AAddress: TDbgPtr): TDbgDwarfSymbolBase;
+function TFpDwarfInfo.FindDwarfProcSymbol(AAddress: TDbgPtr
+  ): TDbgDwarfSymbolBase;
+begin
+  Result := TDbgDwarfSymbolBase(FindProcSymbol(AAddress));
+end;
+
+function TFpDwarfInfo.FindProcSymbol(AAddress: TDbgPtr): TFpSymbol;
 var
   n: Integer;
   CU: TDwarfCompilationUnit;
@@ -2929,34 +3289,19 @@ begin
 
     Iter := TMapIterator.Create(CU.FAddressMap);
     try
-      if Iter.EOM
-      then begin
-        if MinMaxSet
-        then Exit //  minmaxset and no procs defined ???
-        else Continue;
-      end;
-
       if not Iter.Locate(AAddress)
       then begin
         if not Iter.BOM
         then Iter.Previous;
 
         if Iter.BOM
-        then begin
-          if MinMaxSet
-          then Exit //  minmaxset and no proc @ minpc ???
-          else Continue;
-        end;
+        then Continue;
       end;
 
       // iter is at the closest defined address before AAddress
       Info := Iter.DataPtr;
       if AAddress > Info^.EndPC
-      then begin
-        if MinMaxSet
-        then Exit //  minmaxset and no proc @ maxpc ???
-        else Continue;
-      end;
+      then Continue;
 
       // TDbgDwarfProcSymbol
       Result := Cu.DwarfSymbolClassMap.CreateProcSymbol(CU, Iter.DataPtr, AAddress);
@@ -2968,18 +3313,18 @@ begin
   end;
 end;
 
-function TFpDwarfInfo.GetLineAddress(const AFileName: String; ALine: Cardinal): TDbgPtr;
+function TFpDwarfInfo.GetLineAddresses(const AFileName: String;
+  ALine: Cardinal; var AResultList: TDBGPtrArray): Boolean;
 var
   n: Integer;
   CU: TDwarfCompilationUnit;
 begin
+  Result := False;
   for n := 0 to FCompilationUnits.Count - 1 do
   begin
     CU := TDwarfCompilationUnit(FCompilationUnits[n]);
-    Result := CU.GetLineAddress(AFileName, ALine);
-    if Result <> 0 then Exit;
+    Result := CU.GetLineAddresses(AFileName, ALine, AResultList) or Result;
   end;
-  Result := 0;
 end;
 
 function TFpDwarfInfo.GetLineAddressMap(const AFileName: String): PDWarfLineMap;
@@ -3096,6 +3441,12 @@ begin
   inherited Destroy;
 end;
 
+function TDbgDwarfSymbolBase.CreateContext(AThreadId, AStackFrame: Integer;
+  ADwarfInfo: TFpDwarfInfo): TFpDbgInfoContext;
+begin
+  Result := nil;
+end;
+
 { TDwarfLineInfoStateMachine }
 
 function TDwarfLineInfoStateMachine.Clone: TDwarfLineInfoStateMachine;
@@ -3198,6 +3549,7 @@ begin
             DW_LNE_end_sequence: begin
               FEndSequence := True;
               Result := True;
+              Inc(pbyte(FLineInfoPtr), instrlen);
               Exit;
             end;
             DW_LNE_set_address: begin
@@ -3272,21 +3624,42 @@ begin
   else FFileName := Format('Unknown fileindex(%u)', [AIndex]);
 end;
 
-{ TFpDwarfSymbolClassMapList }
+{ TFpSymbolDwarfClassMapList }
 
-function TFpDwarfSymbolClassMapList.FindMapForCompUnit(ACU: TDwarfCompilationUnit): TFpDwarfSymbolClassMapClass;
+destructor TFpSymbolDwarfClassMapList.Destroy;
+begin
+  FreeAllInstances;
+  inherited Destroy;
+end;
+
+function TFpSymbolDwarfClassMapList.FindMapForCompUnit(ACU: TDwarfCompilationUnit): TFpSymbolDwarfClassMap;
+var
+  i: Integer;
+  ResClass: TFpSymbolDwarfClassMapClass;
+begin
+  ResClass := FDefaultMap;
+  for i := 0 to length(FMapList) - 1 do
+    if FMapList[i].ClassCanHandleCompUnit(ACU) then begin
+      ResClass := FMapList[i];
+      break;
+    end;
+  Result := ResClass.GetInstanceForCompUnit(ACU);
+end;
+
+procedure TFpSymbolDwarfClassMapList.FreeAllInstances;
 var
   i: Integer;
 begin
-  for i := 0 to length(FMapList) - 1 do
-    if FMapList[i].HandleCompUnit(ACU) then begin
-      Result := FMapList[i];
-      exit;
-    end;
-  Result := FDefaultMap;
+  for i := 0 to length(FMapList) - 1 do begin
+    if FMapList[i] = FDefaultMap then
+      FDefaultMap := nil; // Should not happen, default map should not be added to list
+    FMapList[i].FreeAllInstances;
+  end;
+  if FDefaultMap <> nil then
+    FDefaultMap.FreeAllInstances;
 end;
 
-procedure TFpDwarfSymbolClassMapList.AddMap(AMap: TFpDwarfSymbolClassMapClass);
+procedure TFpSymbolDwarfClassMapList.AddMap(AMap: TFpSymbolDwarfClassMapClass);
 var
   l: Integer;
 begin
@@ -3295,7 +3668,7 @@ begin
   FMapList[l] := AMap;
 end;
 
-procedure TFpDwarfSymbolClassMapList.SetDefaultMap(AMap: TFpDwarfSymbolClassMapClass);
+procedure TFpSymbolDwarfClassMapList.SetDefaultMap(AMap: TFpSymbolDwarfClassMapClass);
 begin
   FDefaultMap := AMap;
 end;
@@ -3345,7 +3718,10 @@ begin
     end;
 
     addr := FLineInfo.StateMachine.Address;
-    LineMap^.SetAddressForLine(Line, addr);
+    if (not FLineInfo.StateMachine.EndSequence) and (FLineInfo.StateMachine.IsStmt)
+    and (Line > 0)
+    then
+      LineMap^.SetAddressForLine(Line, addr);
 
     if (Info = nil) or
        (addr < Info^.StartPC) or
@@ -3383,7 +3759,7 @@ begin
   Result := FAddressMap;
 end;
 
-function TDwarfCompilationUnit.FullFileName(const AFileName: String): String;
+function TDwarfCompilationUnit.FullFileName(const AFileName: string): String;
 begin
   Result := AFileName;
   if FCompDir = '' then exit;
@@ -3501,7 +3877,6 @@ constructor TDwarfCompilationUnit.Create(AOwner: TFpDwarfInfo; ADebugFile: PDwar
     then begin
       if FVersion < 3 then
         DebugLn(FPDBG_DWARF_WARNINGS, ['Unexpected 64 bit signature found for DWARF version 2']); // or version 1...
-      FLineInfo.Addr64 := True;
       UnitLength := LNP64^.UnitLength;
       FLineInfo.DataEnd := Pointer(@LNP64^.Version) + UnitLength;
       Version := LNP64^.Version;
@@ -3509,10 +3884,6 @@ constructor TDwarfCompilationUnit.Create(AOwner: TFpDwarfInfo; ADebugFile: PDwar
       Info := @LNP64^.Info;
     end
     else begin
-      if (FVersion < 3) and (FAddressSize = 8) then
-        FLineInfo.Addr64 := True
-      else
-        FLineInfo.Addr64 := False;
       UnitLength := LNP32^.UnitLength;
       FLineInfo.DataEnd := Pointer(@LNP32^.Version) + UnitLength;
       Version := LNP32^.Version;
@@ -3520,6 +3891,7 @@ constructor TDwarfCompilationUnit.Create(AOwner: TFpDwarfInfo; ADebugFile: PDwar
       Info := @LNP32^.Info;
     end;
     if Version=0 then ;
+    FLineInfo.Addr64 := FAddressSize = 8;
     FLineInfo.DataStart := PByte(Info) + HeaderLength;
 
     FLineInfo.MinimumInstructionLength := Info^.MinimumInstructionLength;
@@ -3732,14 +4104,15 @@ begin
   Result := PDWarfLineMap(FLineNumberMap.Objects[idx]);
 end;
 
-function TDwarfCompilationUnit.GetLineAddress(const AFileName: String; ALine: Cardinal): TDbgPtr;
+function TDwarfCompilationUnit.GetLineAddresses(const AFileName: String;
+  ALine: Cardinal; var AResultList: TDBGPtrArray): boolean;
 var
   Map: PDWarfLineMap;
 begin
-  Result := 0;
+  Result := False;
   Map := GetLineAddressMap(AFileName);
   if Map = nil then exit;
-  Result := Map^.GetAddressForLine(ALine);
+  Result := Map^.GetAddressesForLine(ALine, AResultList);
 end;
 
 function TDwarfCompilationUnit.InitLocateAttributeList(AEntry: Pointer;
@@ -3987,7 +4360,18 @@ begin
 
 end;
 
-function TDwarfCompilationUnit.ReadAddressAtPointer(var AData: Pointer;
+function TDwarfCompilationUnit.ReadTargetAddressFromDwarfSection(var AData: Pointer;
+  AIncPointer: Boolean): TFpDbgMemLocation;
+begin
+  // do not need mem reader, address is in dwarf. Should be in correct format
+  if (FAddressSize = 8) then
+    Result := TargetLoc(PQWord(AData)^)
+  else
+    Result := TargetLoc(PLongWord(AData)^);
+  if AIncPointer then inc(AData, FAddressSize);
+end;
+
+function TDwarfCompilationUnit.ReadDwarfSectionOffsetOrLenFromDwarfSection(var AData: Pointer;
   AIncPointer: Boolean): TFpDbgMemLocation;
 begin
   // do not need mem reader, address is in dwarf. Should be in correct format
@@ -4025,9 +4409,10 @@ function TDwarfCompilationUnit.ReadValue(AAttribute: Pointer; AForm: Cardinal; o
 begin
   Result := True;
   case AForm of
-    DW_FORM_addr,
+    DW_FORM_addr:
+      AValue := LocToAddrOrNil(ReadTargetAddressFromDwarfSection(AAttribute));
     DW_FORM_ref_addr : begin
-      AValue := LocToAddrOrNil(ReadAddressAtPointer(AAttribute));
+      AValue := LocToAddrOrNil(ReadDwarfSectionOffsetOrLenFromDwarfSection(AAttribute));
     end;
     DW_FORM_flag,
     DW_FORM_ref1,
@@ -4062,9 +4447,10 @@ function TDwarfCompilationUnit.ReadValue(AAttribute: Pointer; AForm: Cardinal; o
 begin
   Result := True;
   case AForm of
-    DW_FORM_addr,
+    DW_FORM_addr:
+      AValue := LocToAddrOrNil(ReadTargetAddressFromDwarfSection(AAttribute));
     DW_FORM_ref_addr : begin
-      AValue := LocToAddrOrNil(ReadAddressAtPointer(AAttribute));
+      AValue := LocToAddrOrNil(ReadDwarfSectionOffsetOrLenFromDwarfSection(AAttribute));
     end;
     DW_FORM_flag,
     DW_FORM_ref1,
@@ -4099,9 +4485,10 @@ function TDwarfCompilationUnit.ReadValue(AAttribute: Pointer; AForm: Cardinal; o
 begin
   Result := True;
   case AForm of
-    DW_FORM_addr,
+    DW_FORM_addr:
+      AValue := LocToAddrOrNil(ReadTargetAddressFromDwarfSection(AAttribute));
     DW_FORM_ref_addr : begin
-      AValue := LocToAddrOrNil(ReadAddressAtPointer(AAttribute));
+      AValue := LocToAddrOrNil(ReadDwarfSectionOffsetOrLenFromDwarfSection(AAttribute));
     end;
     DW_FORM_flag,
     DW_FORM_ref1,
@@ -4140,7 +4527,10 @@ begin
       AValue := PChar(AAttribute);
     end;
     DW_FORM_strp:   begin
-      AValue := pchar(PtrUInt(FDebugFile^.Sections[dsStr].RawData)+PDWord(AAttribute)^);
+      if IsDwarf64 then
+        AValue := pchar(PtrUInt(FDebugFile^.Sections[dsStr].RawData)+PQWord(AAttribute)^)
+      else
+        AValue := pchar(PtrUInt(FDebugFile^.Sections[dsStr].RawData)+PDWord(AAttribute)^);
     end;
   else
     Result := False;
@@ -4151,9 +4541,10 @@ function TDwarfCompilationUnit.ReadValue(AAttribute: Pointer; AForm: Cardinal; o
 begin
   Result := True;
   case AForm of
-    DW_FORM_addr,
+    DW_FORM_addr:
+      AValue := LocToAddrOrNil(ReadTargetAddressFromDwarfSection(AAttribute));
     DW_FORM_ref_addr : begin
-      AValue := LocToAddrOrNil(ReadAddressAtPointer(AAttribute));
+      AValue := LocToAddrOrNil(ReadDwarfSectionOffsetOrLenFromDwarfSection(AAttribute));
     end;
     DW_FORM_flag,
     DW_FORM_ref1,
@@ -4192,16 +4583,21 @@ begin
       AValue := PChar(AAttribute);
     end;
     DW_FORM_strp:   begin
-      AValue := PChar(PtrUInt(FDebugFile^.Sections[dsStr].RawData)+PDWord(AAttribute)^);
+      if IsDwarf64 then
+        AValue := pchar(PtrUInt(FDebugFile^.Sections[dsStr].RawData)+PQWord(AAttribute)^)
+      else
+        AValue := pchar(PtrUInt(FDebugFile^.Sections[dsStr].RawData)+PDWord(AAttribute)^);
     end;
   else
     Result := False;
   end;
 end;
 
-function TDwarfCompilationUnit.ReadValue(AAttribute: Pointer; AForm: Cardinal; out AValue: TByteDynArray): Boolean;
+function TDwarfCompilationUnit.ReadValue(AAttribute: Pointer; AForm: Cardinal;
+  out AValue: TByteDynArray; AnFormString: Boolean): Boolean;
 var
   Size: Cardinal;
+  mx, i: Pointer;
 begin
   Result := True;
   case AForm of
@@ -4220,6 +4616,26 @@ begin
       Size := PLongWord(AAttribute)^;
       Inc(AAttribute, 4);
     end;
+    DW_FORM_strp, DW_FORM_string: begin
+      Result := AnFormString;
+      Size := 0;
+      if Result then begin
+        mx := FDebugFile^.Sections[dsInfo].RawData +FDebugFile^.Sections[dsInfo].Size;
+        if AForm = DW_FORM_strp then begin
+          AAttribute := FDebugFile^.Sections[dsStr].RawData+PDWord(AAttribute)^;
+          mx := FDebugFile^.Sections[dsStr].RawData +FDebugFile^.Sections[dsStr].Size;
+        end;
+        i := AAttribute;
+        while (PByte(i)^ <> 0) and (i < mx) do Inc(i);
+        if i = mx then begin
+          DebugLn(FPDBG_DWARF_ERRORS, 'String exceeds section');
+          Result := False;
+        end
+        else begin
+          Size := i + 1 - AAttribute; // include #0
+        end;
+      end;
+    end;
   else
     Result := False;
     Size := 0;
@@ -4237,7 +4653,7 @@ begin
 end;
 
 initialization
-  TheDwarfSymbolClassMapList := TFpDwarfSymbolClassMapList.Create;
+  TheDwarfSymbolClassMapList := TFpSymbolDwarfClassMapList.Create;
 
   FPDBG_DWARF_ERRORS        := DebugLogger.FindOrRegisterLogGroup('FPDBG_DWARF_ERRORS' {$IFDEF FPDBG_DWARF_ERRORS} , True {$ENDIF} );
   FPDBG_DWARF_WARNINGS      := DebugLogger.FindOrRegisterLogGroup('FPDBG_DWARF_WARNINGS' {$IFDEF FPDBG_DWARF_WARNINGS} , True {$ENDIF} );

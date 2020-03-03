@@ -87,7 +87,7 @@ type
     function AllwaysFalse: boolean;
     property Count: integer read FCount;
     function GetItem(Index: integer): TBaseKeyWordFunctionListItem;
-    function IndexOf(const AKeyWord: shortstring): integer;
+    function IndexOf(const AKeyWord: shortstring; UseSort: boolean): integer;
     function CalcMemSize: PtrUInt;
     property HasOnlyIdentifiers: boolean read FHasOnlyIdentifiers;
     property Name: string read FName write FName;
@@ -123,6 +123,7 @@ type
 var
   IsKeyWordMethodSpecifier,
   IsKeyWordProcedureSpecifier,
+  IsKeyWordProcedureAnonymousSpecifier,
   IsKeyWordProcedureTypeSpecifier,
   IsKeyWordProcedureBracketSpecifier,
   IsKeyWordCallingConvention,
@@ -398,7 +399,7 @@ var
   i: Integer;
 begin
   for i:=0 to List.FCount-1 do begin
-    if IndexOf(List.FItems[i].KeyWord)<0 then begin
+    if IndexOf(List.FItems[i].KeyWord,false)<0 then begin
       AddExtended(List.FItems[i].KeyWord,List.FItems[i].DoIt,
                   List.FItems[i].DoDataFunction);
     end;
@@ -431,6 +432,7 @@ begin
   for i:=0 to FCount-1 do begin
     h:=KeyWordToHashIndex(FItems[i].KeyWord);
     if h>=0 then inc(FBucketStart[h]);
+    FItems[i].IsLast:=false;
   end;
   // change hash-count-index to bucket-end-index
   h:=0;
@@ -489,7 +491,7 @@ begin
   DbgOut('  BucketStart array:');
   for i:=0 to FMaxHashIndex do begin
     if FBucketStart[i]>=0 then
-    DbgOut(' '+dbgs(i)+'->'+dbgs(FBucketStart[i]));
+      DbgOut(' '+dbgs(i)+'->'+dbgs(FBucketStart[i]));
   end;
   DebugLn('');
 end;
@@ -510,13 +512,31 @@ begin
   Result:=FItems[Index];
 end;
 
-function TBaseKeyWordFunctionList.IndexOf(const AKeyWord: shortstring): integer;
+function TBaseKeyWordFunctionList.IndexOf(const AKeyWord: shortstring;
+  UseSort: boolean): integer;
+var
+  i: Integer;
 begin
-  if not Sorted then Sort;
+  if UseSort then begin
+    if not Sorted then Sort;
 
-  Result:=FCount-1;
-  while (Result>=0) and (CompareText(FItems[Result].KeyWord,AKeyWord)<>0) do
-    dec(Result);
+    i:=KeyWordToHashIndex(AKeyWord);
+    if i>=0 then begin
+      i:=FBucketStart[i];
+      if i>=0 then begin
+        repeat
+          if CompareText(FItems[i].KeyWord,AKeyWord)=0 then
+            exit(i);
+          if FItems[i].IsLast then break;
+          inc(i);
+        until false;
+      end;
+    end;
+  end else begin
+    for i:=0 to FCount-1 do
+      if CompareText(FItems[i].KeyWord,AKeyWord)=0 then exit(i);
+  end;
+  Result:=-1;
 end;
 
 { TKeyWordFunctionList }
@@ -878,6 +898,7 @@ begin
     Add('FINAL'        ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('ENUMERATOR'   ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('VARARGS'      ,{$ifdef FPC}@{$endif}AllwaysTrue);
+    Add('VECTORCALL'   ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('EXTERNAL'     ,{$ifdef FPC}@{$endif}AllwaysTrue); //jvm
   end;
 
@@ -918,6 +939,7 @@ begin
     Add('SYSCALL'      ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('UNIMPLEMENTED',{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('VARARGS'      ,{$ifdef FPC}@{$endif}AllwaysTrue); // kylix
+    Add('VECTORCALL'   ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('WEAKEXTERNAL' ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('['            ,{$ifdef FPC}@{$endif}AllwaysTrue);
   end;
@@ -940,9 +962,29 @@ begin
     Add('SAFECALL'     ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('UNIMPLEMENTED',{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('VARARGS'      ,{$ifdef FPC}@{$endif}AllwaysTrue);
+    Add('VECTORCALL'   ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('EXPERIMENTAL' ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('LIBRARY'      ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('IS'           ,{$ifdef FPC}@{$endif}AllwaysTrue);
+  end;
+
+  IsKeyWordProcedureAnonymousSpecifier:=TKeyWordFunctionList.Create('IsKeyWordProcedureAnonymousSpecifier');
+  KeyWordLists.Add(IsKeyWordProcedureAnonymousSpecifier);
+  with IsKeyWordProcedureAnonymousSpecifier do begin
+    Add('ASSEMBLER'    ,{$ifdef FPC}@{$endif}AllwaysTrue);
+    Add('CDECL'        ,{$ifdef FPC}@{$endif}AllwaysTrue);
+    Add('EXTDECL'      ,{$ifdef FPC}@{$endif}AllwaysTrue); // used often for macros
+    Add('FAR'          ,{$ifdef FPC}@{$endif}AllwaysTrue);
+    ADD('MWPASCAL'     ,{$ifdef FPC}@{$endif}AllwaysTrue);
+    Add('NEAR'         ,{$ifdef FPC}@{$endif}AllwaysTrue);
+    Add('NOSTACKFRAME' ,{$ifdef FPC}@{$endif}AllwaysTrue);
+    Add('PASCAL'       ,{$ifdef FPC}@{$endif}AllwaysTrue);
+    Add('POPSTACK'     ,{$ifdef FPC}@{$endif}AllwaysTrue);
+    Add('REGISTER'     ,{$ifdef FPC}@{$endif}AllwaysTrue);
+    Add('SAFECALL'     ,{$ifdef FPC}@{$endif}AllwaysTrue);
+    Add('STDCALL'      ,{$ifdef FPC}@{$endif}AllwaysTrue);
+    Add('VARARGS'      ,{$ifdef FPC}@{$endif}AllwaysTrue);
+    Add('VECTORCALL'   ,{$ifdef FPC}@{$endif}AllwaysTrue);
   end;
 
   IsKeyWordCallingConvention:=TKeyWordFunctionList.Create('IsKeyWordCallingConvention');
@@ -954,6 +996,7 @@ begin
     Add('EXTDECL'      ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('MWPASCAL'     ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('POPSTACK'     ,{$ifdef FPC}@{$endif}AllwaysTrue);
+    Add('VECTORCALL'   ,{$ifdef FPC}@{$endif}AllwaysTrue);
     // Note: 'inline' and 'is nested' are not a calling specifiers
   end;
 
@@ -1244,6 +1287,7 @@ begin
     Add('EXCLUDE'     ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('EXIT'        ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('FINALIZE'    ,{$ifdef FPC}@{$endif}AllwaysTrue);
+    Add('GET_FRAME'   ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('HI'          ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('HIGH'        ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('INC'         ,{$ifdef FPC}@{$endif}AllwaysTrue);
@@ -1267,6 +1311,7 @@ begin
     Add('TYPEOF'      ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('WRITE'       ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('WRITELN'     ,{$ifdef FPC}@{$endif}AllwaysTrue);
+    Add('WRITESTR'    ,{$ifdef FPC}@{$endif}AllwaysTrue);
   end;
   
   WordIsTermOperator:=TKeyWordFunctionList.Create('WordIsTermOperator');
@@ -1677,30 +1722,26 @@ begin
   WordIsPredefinedFPCIdentifier:=TKeyWordFunctionList.Create('WordIsPredefinedFPCIdentifier');
   KeyWordLists.Add(WordIsPredefinedFPCIdentifier);
   with WordIsPredefinedFPCIdentifier do begin
+    // types
     Add('ANSISTRING' ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('BOOLEAN'    ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('BYTE'       ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('BYTEBOOL'   ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('CHAR'       ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('COMP'       ,{$ifdef FPC}@{$endif}AllwaysTrue);
-    Add('COPY'       ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('CURRENCY'   ,{$ifdef FPC}@{$endif}AllwaysTrue);
-    Add('DEFAULT'    ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('DOUBLE'     ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('EXIT'       ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('EXTENDED'   ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('FALSE'      ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('FILE'       ,{$ifdef FPC}@{$endif}AllwaysTrue);
-    Add('GET_FRAME'  ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('INT64'      ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('LENGTH'     ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('LONGBOOL'   ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('LONGINT'    ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('LONGWORD'   ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('NIL'        ,{$ifdef FPC}@{$endif}AllwaysTrue);
-    Add('ORD'        ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('POINTER'    ,{$ifdef FPC}@{$endif}AllwaysTrue);
-    Add('PRED'       ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('QWORD'      ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('QWORDBOOL'  ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('REAL'       ,{$ifdef FPC}@{$endif}AllwaysTrue);
@@ -1711,7 +1752,6 @@ begin
     Add('STRING'     ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('TEXT'       ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('TRUE'       ,{$ifdef FPC}@{$endif}AllwaysTrue);
-    Add('TYPEINFO'   ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('UNICODESTRING',{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('VARIANT'    ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('WIDECHAR'   ,{$ifdef FPC}@{$endif}AllwaysTrue);
@@ -1719,9 +1759,9 @@ begin
     Add('WORD'       ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('WORDBOOL'   ,{$ifdef FPC}@{$endif}AllwaysTrue);
   end;
-  // functions
+  // add functions
   WordIsPredefinedFPCIdentifier.Add(IsWordBuiltInFunc);
-  
+
   WordIsPredefinedDelphiIdentifier:=TKeyWordFunctionList.Create('WordIsPredefinedDelphiIdentifier');
   KeyWordLists.Add(WordIsPredefinedDelphiIdentifier);
   with WordIsPredefinedDelphiIdentifier do begin
@@ -1788,6 +1828,7 @@ begin
     Add('CHAR'       ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('CONTINUE'   ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('COPY'       ,{$ifdef FPC}@{$endif}AllwaysTrue);
+    Add('DEFAULT'    ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('DOUBLE'     ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('EXIT'       ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('FALSE'      ,{$ifdef FPC}@{$endif}AllwaysTrue);
@@ -1810,6 +1851,7 @@ begin
     Add('SUCC'       ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('TRUE'       ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('TYPEINFO'   ,{$ifdef FPC}@{$endif}AllwaysTrue);
+    Add('UNICODESTRING',{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('WORD'       ,{$ifdef FPC}@{$endif}AllwaysTrue);
     Add('WORDBOOL'   ,{$ifdef FPC}@{$endif}AllwaysTrue);
   end;

@@ -28,6 +28,7 @@ uses
 
 const
   lrMaxBandsInReport       = 256; //temp fix. in future need remove this limit
+  lrSnapDistance: Integer  = 10;
 
 const
 // object flags
@@ -70,6 +71,7 @@ const
   fmtBoolean               = 4;
   
 type
+  TfrSetOfTyp = set of byte;
   TfrDrawMode = (drAll, drCalcHeight, drAfterCalcHeight, drPart);
   TfrBandType = (btReportTitle, btReportSummary,
                  btPageHeader, btPageFooter,
@@ -304,8 +306,8 @@ type
     procedure BeginDraw(ACanvas: TCanvas);
     procedure GetBlob(b: TfrTField); virtual;
     procedure OnHook(View: TfrView); virtual;
-    procedure BeforeChange;
-    procedure AfterChange;
+    procedure BeforeChange; virtual;
+    procedure AfterChange; virtual;
     procedure ResetLastValue; virtual;
     function GetFrames: TfrFrameBorders; virtual;
     procedure ModifyFlag(aFlag: Word; aValue:Boolean);
@@ -352,6 +354,7 @@ type
     procedure SetBounds(aLeft, aTop, aWidth, aHeight: Integer);
 
     function PointInView(aX,aY : Integer) : Boolean; virtual;
+    function FindAlignSide(const vert:boolean; const value: Integer; out found: Integer): boolean; virtual;
     procedure Invalidate;
 
     property Canvas : TCanvas read fCanvas write fCanvas;
@@ -1676,9 +1679,17 @@ begin
   WriteStr(Result, typ);
 end;
 
+function DbgDset(ds: TfrDataset): string;
+begin
+  if ds=nil then
+    result := 'nil'
+  else
+    result := dbgsName(ds);
+end;
+
 function BandInfo(Band: TfrBand): string;
 begin
-  result := format('"%s":%s typ=%s',[Band.Name, dbgsname(band), BandTyp2str(Band.typ)]);
+  result := format('"%s":%s typ=%s ds=%s',[Band.Name, dbgsname(band), BandTyp2str(Band.typ), dbgDset(Band.DataSet)]);
 end;
 
 function ViewInfo(View: TfrView): string;
@@ -3273,6 +3284,29 @@ begin
   Result:=((aX>Rc.Left) and (aX<Rc.Right) and (aY>Rc.Top) and (aY<Rc.Bottom));
 end;
 
+function TfrView.FindAlignSide(const vert: boolean; const value: Integer;
+  out found: Integer): boolean;
+begin
+  result := false;
+  if vert then
+  begin
+    found := y;
+    if abs(value-found)<=lrSnapDistance then exit(true);
+    found := y+dy;
+    if abs(value-found)<=lrSnapDistance then exit(true);
+    found := y+dy div 2;
+    if abs(value-found)<=lrSnapDistance then exit(true);
+  end else
+  begin
+    found := x;
+    if abs(value-found)<=lrSnapDistance then exit(true);
+    found := x+dx;
+    if abs(value-found)<=lrSnapDistance then exit(true);
+    found := x+dx div 2;
+    if abs(value-found)<=lrSnapDistance then exit(true);
+  end;
+end;
+
 procedure TfrView.Invalidate;
 begin
   if Assigned(Canvas) and (fUpdate=0) then
@@ -3696,6 +3730,8 @@ begin
 end;
 
 procedure TfrCustomMemoView.AssignFont(aCanvas: TCanvas);
+var
+  fs: Integer;
 begin
   {$IFDEF DebugLR}
   DebugLnEnter('AssignFont (%s) INIT: Self.Font.Size=%d aCanvas.Font.Size=%d',
@@ -3707,7 +3743,13 @@ begin
     aCanvas.Font.Name := 'default';
   //Font := Self.Font;
   if not IsPrinting and (ScaleY<>0) then
-    ACanvas.Font.Height := -Round(Self.Font.Size * 96 / 72 * ScaleY);
+  begin
+    if Self.Font.Size = 0 then
+      fs := Round((-GetFontData(Self.Font.Handle).Height * 72 / Self.Font.PixelsPerInch))
+    else
+      fs := Self.Font.Size;
+    ACanvas.Font.Height := -Round(fs * Self.Font.PixelsPerInch / 72 * ScaleY);
+  end;
   {$IFDEF DebugLR}
   DebugLnExit('AssignFont (%s) DONE: Self.Font.Size=%d aCanvas.Font.Size=%d',
     [self.Font.Name,Self.Font.Size,ACanvas.Font.Size]);
@@ -3980,7 +4022,11 @@ var
 begin
   WCanvas := TempBmp.Canvas;
   WCanvas.Font.Assign(Font);
-  WCanvas.Font.Height := -Round(Font.Size * 96 / 72);
+  if WCanvas.Font.Size = 0 then
+    size := Round((-GetFontData(WCanvas.Font.Handle).Height * 72 / WCanvas.Font.PixelsPerInch))
+  else
+    size := WCanvas.Font.Size;
+  WCanvas.Font.Height := -Round(size * WCanvas.Font.PixelsPerInch / 72);
   {$IFDEF DebugLR}
   DebugLnEnter('TfrMemoView.WrapMemo INI Font.PPI=%d Font.Size=%d Canvas.Font.PPI=%d WCanvas.Font.Size=%d',
     [Font.PixelsPerInch, Font.Size,Canvas.Font.PixelsPerInch,WCanvas.Font.Size]);
@@ -4128,7 +4174,11 @@ var
     // calc our reference at 100% and then scale it
     // NOTE: this should not be r((Self.Font.Size*96/72 + LineSpacing)*ScaleY)
     //       as our base at 100% is rounded.
-    thf := Round(Self.Font.Size*96/72 + LineSpacing)* ScaleY;
+    if Self.Font.Size = 0 then
+      i := Round((-GetFontData(Self.Font.Handle).Height * 72 / Self.Font.PixelsPerInch))
+    else
+      i := Self.Font.Size;
+    thf := Round(i*96/72 + LineSpacing)* ScaleY;
     // Corrects font height, that's the total line height minus the scaled linespacing
     Canvas.Font.Height := -Round(thf - LineSpc);
     {$IFDEF DebugLR}
@@ -4160,7 +4210,7 @@ var
       Ts: TTextStyle;
     begin
       SetLength(str, Length(str) - 2);
-      if str[Length(str)] = #1 then
+      if (str<>'') and (str[Length(str)] = #1) then
         SetLength(str, Length(str) - 1);
       cury := 0;
 
@@ -4203,7 +4253,11 @@ var
           x:=x+dx-VHeight;
       end;
       curx := x + InternalGapX;
-      th := -Canvas.Font.Height + Round(LineSpacing * ScaleY);
+      if Canvas.Font.Height = 0 then
+        i := GetFontData(Canvas.Font.Reference.Handle).Height
+      else
+        i := Canvas.Font.Height;
+      th := -i + Round(LineSpacing * ScaleY);
       CurStrNo := 0;
       for i := 0 to Memo1.Count - 1 do
         OutLine(Memo1[i]);
@@ -4284,7 +4338,11 @@ begin
   {$ENDIF}
   CalcRect := Rect(0, 0, dx, dy);
   Canvas.Font.Assign(Font);
-  Canvas.Font.Height := -Round(Font.Size * 96 / 72);
+  if Font.Size = 0 then
+    n := Round((-GetFontData(Font.Handle).Height * 72 / Font.PixelsPerInch))
+  else
+    n := Font.Size;
+  Canvas.Font.Height := -Round(n * 96 / 72);
   {$IFDEF DebugLR}
   DebugLn('Canvas.Font.PPI=%d Canvas.Font.Size=%d',[Canvas.Font.PixelsPerInch,Canvas.Font.Size]);
   {$ENDIF}
@@ -4315,7 +4373,7 @@ begin
   BeginDraw(aCanvas);
   {$IFDEF DebugLR}
     DebugLn('');
-    DebuglnEnter('TfrMemoView.Draw: Name=%s Printing=%s Canvas.Font.PPI=%d',
+    DebuglnEnter('TfrMemoView.Draw: INIT Name=%s Printing=%s Canvas.Font.PPI=%d',
       [Name,dbgs(IsPrinting),Canvas.Font.PixelsPerInch]);
   NewDx := 0;
   {$ENDIF}
@@ -4533,7 +4591,7 @@ begin
     WrapMemo;
     Result := VHeight;
     {$IFDEF DebugLR}
-    DebugLn('Memo1.Count<>0: VHeight=%d',[VHeight]);
+    DebugLn('Memo1.Count!=0: VHeight=%d',[VHeight]);
     {$ENDIF}
   end;
   Font.Assign(OldFont);
@@ -4737,23 +4795,8 @@ begin
 end;
 
 procedure TfrCustomMemoView.GetBlob(b: TfrTField);
-var
-  M: TMemoryStream;
 begin
-  // todo: TBLobField.AssignTo is not implemented yet
-  //       even if I supply a patch for 2.0.4 it will
-  //       not be integrated because it's in RC1 now
-  //       (I guess)
-  //
-  //Memo1.Assign(b);
-  M := TMemoryStream.Create;
-  try
-    TBlobField(B).SaveToStream(M);
-    M.Position := 0;
-    Memo1.LoadFromStream(M);
-  finally
-    M.Free;
-  end;
+  Memo1.Text := TBlobField(b).AsString;
 end;
 
 procedure TfrCustomMemoView.FontChange(sender: TObject);
@@ -7462,10 +7505,8 @@ begin
     on E:exception do
     begin
       {$ifdef DbgPrinter}
-      Debugln(['Exception: selecting custom paper ']);
+      Debugln('Exception: %s', [E.Message]);
       {$endif}
-      Prn.SetPrinterInfo($100, AWidth, AHeight, AOr);
-      Prn.FillPrnInfo(PrnInfo);
     end;
   end;
   pgSize := Prn.PaperSize;
@@ -7639,6 +7680,9 @@ var
   BArr: Array[0..lrMaxBandsInReport - 1] of TfrBand;
   s: String;
 begin
+  {$IFDEF DebugLR}
+  DebugLnEnter('TfrPage.TossObjects INIT ', []);
+  {$ENDIF}
   for i := 0 to Objects.Count - 1 do
   begin
     bt :=TfrView(Objects[i]);
@@ -7697,6 +7741,9 @@ begin
            t.x := t.x - Bnd.x;
            t.Parent := Bnd;
            Bnd.Objects.Add(t);
+           {$IFDEF DebugLR}
+           DebugLn('A - Placed %s over %s',[ViewInfo(t), BandInfo(Bnd)]);
+           {$ENDIF}
          end;
       end;
     end;
@@ -7760,6 +7807,9 @@ begin
               t.y := t.y - Bnd.y;
               t.Selected := False;
               Bnd.Objects.Add(t);
+              {$IFDEF DebugLR}
+              DebugLn('B - Placed %s over %s',[ViewInfo(t), BandInfo(Bnd)]);
+              {$ENDIF}
             end;
         end;
         for j := 0 to RTObjects.Count - 1 do // placing ColumnXXX objects over band
@@ -7772,6 +7822,9 @@ begin
               t.y := t.y - Bnd.y;
               t.Selected := False;
               Bnd.Objects.Add(t);
+              {$IFDEF DebugLR}
+              DebugLn('C - Placed %s over %s',[ViewInfo(t), BandInfo(Bnd)]);
+              {$ENDIF}
             end;
         end;
         for j := 0 to RTObjects.Count - 1 do // placing subreports over band
@@ -7785,6 +7838,9 @@ begin
               t.y := t.y - Bnd.y;
               t.Selected := False;
               Bnd.Objects.Add(t);
+              {$IFDEF DebugLR}
+              DebugLn('D - Placed %s over %s',[ViewInfo(t), BandInfo(Bnd)]);
+              {$ENDIF}
             end;
         end;
       end;
@@ -7820,6 +7876,9 @@ begin
       t.Parent := Bands[btNone];
       Bands[btNone].y := 0;
       Bands[btNone].Objects.Add(t);
+      {$IFDEF DebugLR}
+      DebugLn('E - Placed %s over %s',[ViewInfo(t), BandInfo(Bands[btNone])]);
+      {$ENDIF}
     end;
   end;
 
@@ -7917,6 +7976,9 @@ begin
 
   if ColCount = 0 then ColCount := 1;
   ColWidth := (RightMargin - LeftMargin - (ColCount-1)*ColGap) div ColCount;
+  {$IFDEF DebugLR}
+  DebugLnExit('TfrPage.TossObjects DONE ', []);
+  {$ENDIF}
 end;
 
 procedure TfrPage.PrepareObjects;
@@ -8125,7 +8187,7 @@ begin
     end;
   PageNo := MasterReport.EMFPages.Count;
   {$IFDEF DebugLR}
-  DebugLn('TFrPage.DrawPageFootersPage FIN PageNo=%d XAdjust=%d CurColumn=%d',
+  DebugLn('TFrPage.DrawPageFootersPage END PageNo=%d XAdjust=%d CurColumn=%d',
     [PageNo, XAdjust, CurColumn]);
   {$ENDIF}
 end;
@@ -8301,6 +8363,9 @@ var
     if b <> nil then
     begin
       Inc(BndStackTop);
+      {$IFDEF DebugLR}
+      DebugLn('AddToStack b=%s',[BandInfo(b)]);
+      {$ENDIF}
       BndStack[BndStackTop] := b;
     end;
   end;
@@ -8369,7 +8434,7 @@ var
     i: Integer;
   begin
     {$IFDEF DebugLR}
-    DebugLnEnter('ShowStack INI');
+    DebugLnEnter('ShowStack INI BndStackTop=%d',[BndStackTop]);
     {$ENDIF}
     for i := 1 to BndStackTop do
       if BandExists(BndStack[i]) then
@@ -10103,7 +10168,7 @@ begin
           begin
             Result := TimeToStr(v);
             if Result='' then
-              Result := FormatDateTime('hh:nn:ss', v);
+              Result := FormatDateTime('hh:nn:ss', v, [fdoInterval]);
           end
           else
             Result := v;
@@ -10129,14 +10194,14 @@ begin
           Result := ''  // date is null
         else
         if f2 = 4 then
-          Result := SysToUTF8(FormatDateTime(AFormatStr, v))
+          Result := SysToUTF8(FormatDateTime(AFormatStr, v, [fdoInterval]))
         else
-          Result := FormatDateTime(frDateFormats[f2], v);
+          Result := FormatDateTime(frDateFormats[f2], v, [fdoInterval]);
       fmtTime:
          if f2 = 4 then
-           Result := FormatDateTime(AFormatStr, v)
+           Result := FormatDateTime(AFormatStr, v, [fdoInterval])
          else
-           Result := FormatDateTime(frTimeFormats[f2], v);
+           Result := FormatDateTime(frTimeFormats[f2], v, [fdoInterval]);
       fmtBoolean :
          begin
            if f2 = 4 then
@@ -10986,7 +11051,7 @@ begin
   if DoublePass then
   begin
     {$IFDEF DebugLR}
-    DebugLnEnter('DoPrepareReport FirstPass Begin');
+    DebugLnEnter('DoPrepareReport FirstPass INIT');
     {$ENDIF}
 
     DisableDrawing := True;
@@ -11005,14 +11070,13 @@ begin
         OnBeforeModal := @BuildBeforeModal;
         Show_Modal(Self);
       end;
-      
-      {$IFDEF DebugLR}
-      DebugLnExit('DoPrepareReport FirstPass End');
-      {$ENDIF}
     end
     else BuildBeforeModal(nil);
     {$IFDEF DebugLR}
-    DebugLnExit('DoPrepareReport DONE');
+    DebugLnExit('DoPrepareReport FirstPass DONE');
+    {$ENDIF}
+    {$IFDEF DebugLR}
+    DebugLnExit('DoPrepareReport EXIT: FirstPass');
     {$ENDIF}
     Exit;
   end;
@@ -11020,7 +11084,7 @@ begin
   if not Assigned(FOnProgress) and FShowProgress then
   begin
     {$IFDEF DebugLR}
-    DebugLnEnter('DoPrepareReport SecondPass begin');
+    DebugLnEnter('DoPrepareReport SecondPass INIT');
     {$ENDIF}
 
     with frProgressForm do
@@ -11065,7 +11129,7 @@ begin
       end;
       
       {$IFDEF DebugLR}
-      DebugLnExit('DoPrepareReport SecondPass End');
+      DebugLnExit('DoPrepareReport SecondPass DONE');
       {$ENDIF}
     end;
   end
@@ -12480,6 +12544,7 @@ begin
   Add('SHOWBAND', true);
   Add('INC', true);
   Add('DEC', true);
+  Add('IF', true);
 end;
 
 procedure TfrStdFunctionLibrary.UpdateDescriptions;
@@ -12510,6 +12575,7 @@ begin
 
   AddFunctionDesc('INPUT', SOtherCategory, SDescriptionINPUT);
   AddFunctionDesc('MESSAGEBOX', SOtherCategory, SDescriptionMESSAGEBOX);
+  AddFunctionDesc('IF', SOtherCategory, SDescriptionIF);
 
   AddFunctionDesc('MAXNUM', SMathCategory, SDescriptionMAXNUM);
   AddFunctionDesc('MINNUM', SMathCategory, SDescriptionMINNUM);
@@ -12547,7 +12613,7 @@ var
   {$ENDIF}
 begin
   {$IFDEF DebugLR}
-  DebugLnEnter('TfrStdFunctionLibrary.DoFunction FNo=%d (%s) p1=%s p2=%s p3=%s val=%s',[FNo,FNoStr,p1,p2,p3,val]);
+  DebugLnEnter('TfrStdFunctionLibrary.DoFunction INIT FNo=%d (%s) p1=%s p2=%s p3=%s val=%s',[FNo,FNoStr,p1,p2,p3,val]);
   {$ENDIF}
   dk := dkNone;
   val := '0';
@@ -12555,8 +12621,8 @@ begin
     0: dk := dkAvg;                                           //Add('AVG');               {0}
     1: dk := dkCount;                                         //Add('COUNT');             {1}
     2: val := DayOf(frParser.Calc(p1));                       //Add('DAYOF');             {2}
-    3: val := FormatDateTime(frParser.Calc(p1), frParser.Calc(p2)); //Add('FORMATDATETIME');    {3}
-    4: val := FormatFloat(frParser.Calc(p1), frParser.Calc(p2)); //Add('FORMATFLOAT');       {4}
+    3: val := FormatDateTime(frParser.Calc(p1), frParser.Calc(p2), [fdoInterval]); //Add('FORMATDATETIME');    {3}
+    4: val := FormatFloat(frParser.Calc(p1), lrVarToFloatDef(frParser.Calc(p2))); //Add('FORMATFLOAT');       {4}
     5: val := FormatMaskText(frParser.Calc(p1) + ';0; ', frParser.Calc(p2));  //Add('FORMATTEXT');        {5}
     6:begin                                                   //Add('INPUT');             {6}
         s1 := InputBox('', frParser.Calc(p1), frParser.Calc(p2));

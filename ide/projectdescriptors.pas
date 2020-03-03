@@ -15,8 +15,7 @@ uses
   // IdeIntf
   CompOptsIntf, ProjectIntf, LazIDEIntf,
   // IDE
-  frmCustomApplicationOptions, IDEProcs, LazarusIDEStrConsts,
-  Project, ProjectDefs, W32Manifest;
+  frmCustomApplicationOptions, LazarusIDEStrConsts, Project, W32Manifest;
 
 type
 
@@ -143,9 +142,9 @@ begin
     +'{$mode objfpc}{$H+}'+LineEnding
     +LineEnding
     +'uses'+LineEnding
-    +'  {$IFDEF UNIX}{$IFDEF UseCThreads}'+LineEnding
+    +'  {$IFDEF UNIX}'+LineEnding
     +'  cthreads,'+LineEnding
-    +'  {$ENDIF}{$ENDIF}'+LineEnding
+    +'  {$ENDIF}'+LineEnding
     +'  Interfaces, // this includes the LCL widgetset'+LineEnding
     +'  Forms'+LineEnding
     +'  { you can add units after this };'+LineEnding
@@ -261,9 +260,9 @@ begin
     +'{$mode objfpc}{$H+}'+LineEnding
     +LineEnding
     +'uses'+LineEnding
-    +'  {$IFDEF UNIX}{$IFDEF UseCThreads}'+LineEnding
+    +'  {$IFDEF UNIX}'+LineEnding
     +'  cthreads,'+LineEnding
-    +'  {$ENDIF}{$ENDIF}'+LineEnding
+    +'  {$ENDIF}'+LineEnding
     +'  Classes'+LineEnding
     +'  { you can add units after this };'+LineEnding
     +LineEnding
@@ -419,9 +418,9 @@ begin
   NewSource.Add('{$mode objfpc}{$H+}');
   NewSource.Add('');
   NewSource.Add('uses');
-  NewSource.Add('  {$IFDEF UNIX}{$IFDEF UseCThreads}');
+  NewSource.Add('  {$IFDEF UNIX}');
   NewSource.Add('  cthreads,');
-  NewSource.Add('  {$ENDIF}{$ENDIF}');
+  NewSource.Add('  {$ENDIF}');
   NewSource.Add('  Classes, SysUtils, CustApp');
   NewSource.Add('  { you can add units after this };');
   NewSource.Add('');

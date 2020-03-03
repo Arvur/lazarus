@@ -1,47 +1,48 @@
-# Olexandr Pylypchuk <pilipchukap@rambler.ru>, 2017.
+# Olexandr Pylypchuk <pilipchukap@rambler.ru>, 2017, 2018.
 msgid ""
 msgstr ""
 "Project-Id-Version: \n"
 "POT-Creation-Date: \n"
-"PO-Revision-Date: 2017-08-29 14:49+0300\n"
-"Last-Translator: Olexandr Pylypchuk <pilipchukap@rambler.ru>\n"
-"Language-Team: Ukrainian <kde-i18n-doc@kde.org>\n"
+"PO-Revision-Date: 2018-12-05 19:11+0200\n"
+"Last-Translator: Olexandr Pylypchuk <lxlalexlxl@ukr.net>\n"
+"Language-Team: Ukrainian <trans-uk@lists.fedoraproject.org>\n"
 "Language: uk\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
-"X-Generator: Lokalize 1.5\n"
+"X-Generator: Lokalize 2.0\n"
 
 #: anchordockstr.adrsafreesideofasplittermustnotbeanchorednodetypeancho
+#, object-pascal-format
 msgid "A free side of a splitter must not be anchored: Node=\"%s\" Type=%s Anchors[%s]=\"%s\""
 msgstr "Вільна сторона роздільника не повинна бути заякорена: Вузол=\"%s\" Тип=%s Якорі[%s]=\"%s\""
 
-#: anchordockstr.adrsallfiles
-msgid "All files"
-msgstr "Всі файли"
+#: anchordockstr.adrsallowdocksitestobeminimized
+msgid "Allow dock sites to be minimized"
+msgstr "Дозволити згортання областей стикування"
 
 #: anchordockstr.adrsamountofpixelthemousehastodragbeforedragstarts
 msgid "Amount of pixel the mouse has to drag before drag starts"
 msgstr "К-сть пікселів, на яку мишка повинна переміститись перед початком перетягування"
 
-#: anchordockstr.adrsanchordockinglayout
-msgid "Anchor Docking Layout"
-msgstr "Схема стикування якорів"
-
 #: anchordockstr.adrsanchorisnotsplitternodeanchors
+#, object-pascal-format
 msgid "Anchor is not splitter: Node=\"%s\" Anchors[%s]=\"%s\""
 msgstr "Якір не є роздільником: Вузол=\"%s\" Якорі[%s]=\"%s\""
 
 #: anchordockstr.adrsanchornotfoundnodeanchors
+#, object-pascal-format
 msgid "Anchor not found: Node=\"%s\" Anchors[%s]=\"%s\""
 msgstr "Якір не знайдено: Вузол=\"%s\" Якорі[%s]=\"%s\""
 
 #: anchordockstr.adrsanchortowrongsideofsplitternodeanchors
+#, object-pascal-format
 msgid "Anchor to wrong side of splitter: Node=\"%s\" Anchors[%s]=\"%s\""
 msgstr "Якір до неправильної сторони роздільника: Вузол=\"%s\" Якорі[%s]=\"%s\""
 
 #: anchordockstr.adrsapagemustnotbeanchorednodeparentparenttypeanchors
+#, object-pascal-format
 msgid "A page must not be anchored: Node=\"%s\" Parent=%s ParentType=%s Anchors[%s]=\"%s\""
 msgstr "Сторінка не повинна бути заякорена: Вузол=\"%s\" Предок=%s ТипПредка=%s Якорі[%s]=\"%s\""
 
@@ -62,8 +63,9 @@ msgid "control is already a docksite"
 msgstr "об'єкт вже є областю стикування"
 
 #: anchordockstr.adrscustomdocksitecanhaveonlyonesite
+#, object-pascal-format
 msgid "Custom dock site \"%s\" can have only one site."
-msgstr "Користув. область стикування \"%s\" може мати лише одну область."
+msgstr "Власна область стикування \"%s\" може мати лише одну область."
 
 #: anchordockstr.adrsdockinganchordocking
 msgid "Docking / Anchordocking"
@@ -74,6 +76,7 @@ msgid "Docking options"
 msgstr "Параметри стикування"
 
 #: anchordockstr.adrsdraganddockc
+#, object-pascal-format
 msgid "Use the mouse to drag and dock window \"%s\""
 msgstr "Викор. мишку для перетягування і стикування вікна \"%s\""
 
@@ -98,20 +101,9 @@ msgid "Enlarge"
 msgstr "Збільшити"
 
 #: anchordockstr.adrsenlargeside
+#, object-pascal-format
 msgid "Enlarge %s side"
 msgstr "Збільшити %s сторону"
-
-#: anchordockstr.adrserror
-msgid "Error"
-msgstr "Помилка"
-
-#: anchordockstr.adrserrorloadingwindowlayoutfromfile
-msgid "Error loading window layout from file \"%s\"%s%s"
-msgstr "Помилка завантаження віконної схеми з файлу \"%s\"%s%s"
-
-#: anchordockstr.adrserrorwritingwindowlayouttofile
-msgid "Error writing window layout to file \"%s\"%s%s"
-msgstr "Помилка запису віконної схеми у файл \"%s\"%s%s"
 
 #: anchordockstr.adrsfilledheaders
 msgid "Fill headers"
@@ -158,20 +150,12 @@ msgid "Highlight focused"
 msgstr "Підсвітити фокус"
 
 #: anchordockstr.adrshighlightfocusedhint
-msgid "Highlight focused docked controls"
-msgstr "Підсвітити стиковані елементи у фокусі"
+msgid "Highlight header of focused docked control"
+msgstr "Підсвітити заголовок стикованого елемента у фокусі"
 
 #: anchordockstr.adrsleft
 msgid "left"
 msgstr "лівий"
-
-#: anchordockstr.adrsloadwindowlayoutfromfile
-msgid "Load window layout from file ..."
-msgstr "Завантажити віконну схему з файлу ..."
-
-#: anchordockstr.adrsloadwindowlayoutfromfilexml
-msgid "Load window layout from file (*.xml)"
-msgstr "Завантажити віконну схему з файлу (*.xml)"
 
 #: anchordockstr.adrslocked
 msgid "Locked"
@@ -180,6 +164,10 @@ msgstr "Заблоковано"
 #: anchordockstr.adrsmerge
 msgid "Merge"
 msgstr "Злиття"
+
+#: anchordockstr.adrsminimize
+msgid "Minimize"
+msgstr "Згорнути"
 
 #: anchordockstr.adrsmissingcontrolname
 msgid "missing control name"
@@ -218,40 +206,28 @@ msgid "No captions for floating sites"
 msgstr "Не показувати назви плаваючих областей"
 
 #: anchordockstr.adrsnochildrenallowedfornodetype
+#, object-pascal-format
 msgid "No children allowed for Node=\"%s\" Type=%s"
 msgstr "Не дозволено мати нащадків для вузла=\"%s\" Тип=%s"
 
 #: anchordockstr.adrsnotsupportedhasparent
+#, object-pascal-format
 msgid "Not supported: %s has parent %s"
 msgstr "Не підтримується: %s має предка %s"
 
 #: anchordockstr.adrsquit
+#, object-pascal-format
 msgid "Quit %s"
 msgstr "Вийти з %s"
 
 #: anchordockstr.adrsrequestedbutcreated
+#, object-pascal-format
 msgid "%s requested, but %s created"
 msgstr "Дано запит на %s, але створено %s"
-
-#: anchordockstr.adrsrestoredefaultlayout
-msgid "Restore default layout"
-msgstr "Відновити стандартну схему"
 
 #: anchordockstr.adrsright
 msgid "right"
 msgstr "правий"
-
-#: anchordockstr.adrssavewindowlayoutasdefault
-msgid "Save window layout as default"
-msgstr "Зберегти схему вікон як типову"
-
-#: anchordockstr.adrssavewindowlayouttofile
-msgid "Save window layout to file ..."
-msgstr "Зберегти схему вікон у файл ..."
-
-#: anchordockstr.adrssavewindowlayouttofilexml
-msgid "Save window layout to file (*.xml)"
-msgstr "Зберегти схему вікон у файл (*.xml)"
 
 #: anchordockstr.adrsscaleonresize
 msgid "Scale on resize"
@@ -286,6 +262,7 @@ msgid "Tab position"
 msgstr "Позиція вкладки"
 
 #: anchordockstr.adrsthereisanotherdockmasterinstalledonlyonedockingpac
+#, object-pascal-format
 msgid "There is another dock master installed. Only one docking package can be installed at a time. Please uninstall the other dock master %s and restart the IDE"
 msgstr "Менеджер стикування вже встановлено. Одночасно може бути встановлено лише один пакет стикування. Видаліть інший менеджер стикування %s і перезапустіть ІСР"
 
@@ -294,6 +271,7 @@ msgid "top"
 msgstr "верхній"
 
 #: anchordockstr.adrstouseanchordockingyoumustfirstuninstall
+#, object-pascal-format
 msgid "To use anchordocking you must first uninstall %s"
 msgstr "Щоб використовувати якірне стикування, спочатку видаліть %s"
 

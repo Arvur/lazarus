@@ -453,7 +453,7 @@ begin
                 Size := Pos(#0, BufferString);
                 if Size > 0 then
                   SetLength(BufferString, Size - 1);
-                BufferString := AnsiToUtf8(BufferString);
+                BufferString := WinCPToUTF8(BufferString);
               end;
               Stream.Write(BufferString[1], Length(BufferString));
             end;
@@ -615,7 +615,7 @@ function TWin32WidgetSet.ClipboardGetOwnerShip(ClipboardType: TClipboardType;
             end
             else
             begin
-              BufferString := Utf8ToAnsi(BufferString);
+              BufferString := UTF8ToWinCP(BufferString);
               if BufferString<>'' then  // original string may contain invalid UTF8
                 BufferStream.Write(BufferString[1], Length(BufferString));
             end;
@@ -849,16 +849,16 @@ begin
   FontName := LogFont.lfFaceName;
 
   TempLogFont := LogFont;
-  if SameText(FontName, DefFontData.Name) then
+  if IsFontNameDefault(FontName) then
   begin
     TempLogFontW.lfFaceName := UTF8ToUTF16(FMetrics.lfMessageFont.lfFaceName); // FMetrics must be UTF16
-    if TempLogFont.lfHeight = 0 then
-      TempLogFont.lfHeight := FMetrics.lfMessageFont.lfHeight;
   end
   else
   begin
     TempLogFontW.lfFaceName := UTF8ToUTF16(FontName);
   end;
+  if TempLogFont.lfHeight = 0 then
+    TempLogFont.lfHeight := FMetrics.lfMessageFont.lfHeight;
   Result := Windows.CreateFontIndirectW(@TempLogFontW);
 end;
 
@@ -1212,17 +1212,91 @@ begin
 end;
 
 {------------------------------------------------------------------------------
-  Method:  EnableWindow
-  Params: HWnd    - handle to window
-          BEnable -  whether to enable the window
-  Returns: If the window was previously disabled
+  Method:  EnableWindow                       Response to bug #0033923
+  Params:  HWnd    - handle to window
+           BEnable -  whether to enable the window
+  Returns: If the window was previously disabled.
 
   Enables or disables mouse and keyboard input to the specified window or
-  control.
+  control and updates the graphical appearance of the control
+
+ ------------------------------------------------------------------------------
+  Note June 2018: ~bk
+  In normal lazarus behavior, Enable is called by
+    1° - TWinControl.InitializeWnd (wcfInitializing in TWinControl.FWinControlFlags)
+    2° - When property TWinControl.Enabled changes : TWinControl.CMENABLEDCHANGED
+
+  To satisfy W10 new behaviour, if the aHWND parameter effectively changes the
+  Enabled state of its window, except if it is a TCusomForm descendant,
+  all its direct children will be asked to update their UI state if needed and
+  recusively propagate down the Controls children tree.
  ------------------------------------------------------------------------------}
 function TWin32WidgetSet.EnableWindow(HWnd: HWND; BEnable: Boolean): Boolean;
+
+  procedure EnableChildren(AWinControl: TWinControl; Enable: Boolean);
+  var
+    i: Integer;
+    ChildControl: TControl;
+    ChildWinControl: TWinControl absolute ChildControl;
+    RequestedEnable: Boolean;
+    EnabledOld: Boolean;
+    EnabledNew: Boolean;
+  begin
+    for i := 0 to AWinControl.ControlCount - 1 do begin
+      ChildControl := AWinControl.Controls[i];
+      if ChildControl is TWinControl then begin
+        if not ChildWinControl.HandleAllocated then Continue;
+        RequestedEnable := ChildWinControl.Enabled and Enable;
+        EnabledOld := IsWindowEnabled(ChildWinControl.Handle);
+        Windows.EnableWindow(ChildWinControl.Handle, RequestedEnable);
+        EnabledNew := IsWindowEnabled(ChildWinControl.Handle);
+        if (EnabledOld = EnabledNew) or (ChildWinControl.ControlCount < 1)
+        or (EnabledNew <> RequestedEnable)
+        then
+          Continue;
+        EnableChildren(ChildWinControl, RequestedEnable);
+      end
+      else
+        ChildControl.Invalidate;
+    end;
+  end;
+
+  function GetParentEnabled(AWinControl: TWinControl): Boolean;
+  var
+    ParentHandle: HWND;
+    ParentControl: TWinControl;
+  begin
+    ParentControl := AWinControl.Parent;
+    Result := not Assigned(ParentControl) or ParentControl.InheritsFrom(TCustomForm);
+    if not Result then begin
+      ParentHandle := GetParent(HWND);
+      Result := ParentHandle = 0;
+      if not Result then
+        Result := IsWindowEnabled(ParentHandle);
+    end;
+  end;
+
+var
+  lWinControl: TWinControl;
+  IsForm: Boolean;
+  RequestedEnable: Boolean;
 begin
-  Result := Boolean(Windows.EnableWindow(HWnd, BEnable));
+  lWinControl := GetWin32WindowInfo(HWnd)^.WinControl;
+  if not Assigned(lWinControl) then
+    Exit;
+  IsForm := lWinControl.InheritsFrom(TCustomForm);
+  if IsForm then
+    RequestedEnable := BEnable
+  else
+    RequestedEnable := BEnable and GetParentEnabled(lWinControl);
+
+  Result := Boolean(Windows.EnableWindow(HWnd, RequestedEnable));
+  if (wcfInitializing in TWinControlAccess(lWinControl).FWinControlFlags) or IsForm then
+    Exit;
+  // Result contains WS_DISABLED style. True means disabled
+  if (Result <> RequestedEnable) or (lWinControl.ControlCount < 1) then
+    Exit;
+  EnableChildren(lWinControl, RequestedEnable);
 end;
 
 {------------------------------------------------------------------------------
@@ -1304,8 +1378,13 @@ begin
   Rec.LParam := LParam;
   Rec.CallBack := CallBack;
   LFW.lfFaceName := UTF8ToUTF16(FontName);
+  {$if fpc_fullversion < 30101}
   Result := LongInt(Windows.EnumFontFamiliesExW(DC,
     LFW, windows.FontEnumExProc(@EnumExProcRedirW), Windows.LParam(@Rec), Flags));
+  {$else}
+  Result := LongInt(Windows.EnumFontFamiliesExW(DC,
+     LFW, windows.FontEnumExProcW(@EnumExProcRedirW), Windows.LParam(@Rec), Flags));
+  {$ifend}
 end;
 
 {------------------------------------------------------------------------------
@@ -1358,6 +1437,62 @@ begin
     DebugLn('TWin32WidgetSet.ExtCreatePen returns 0. Reason = ' + GetLastErrorText(Windows.GetLastError));
 end;
 
+function IsCharSurrogateHigh(ch: WideChar): Boolean; inline;
+begin
+  Result := (ch>=#$D800) and (ch<=#$DBFF);
+end;
+
+function IsCharSurrogateLow(ch: WideChar): Boolean; inline;
+begin
+  Result := (ch>=#$DC00) and (ch<=#$DFFF);
+end;
+
+function SFindFirstCharSurrogate(const S: WideString): Integer; inline;
+var
+  i: Integer;
+begin
+  for i := 1 to Length(S) do
+    if IsCharSurrogateHigh(S[i]) then Exit(i);
+  Result := 0;
+end;
+
+type
+  _TIntArray = array of LongInt;
+
+procedure SConvertDxArrayFromUTF8ToWide(const S: WideString;
+  Dx: PInteger; DxCount: integer; var Res: _TIntArray; nFirstIndex: Integer);
+var
+  iSrc, iDest: Integer;
+begin
+  SetLength(Res, Length(S));
+
+  if nFirstIndex > DxCount then
+    nFirstIndex := DxCount;
+
+  for iDest := 0 to Length(S)-1 do
+    if iDest < nFirstIndex-1 then
+      Res[iDest] := (Dx+iDest)^
+    else
+      Res[iDest] := 0;
+
+  iSrc := nFirstIndex-1;
+  for iDest := nFirstIndex-1 to Length(S)-1 do
+  begin
+    if iSrc>=DxCount then Break;
+    if IsCharSurrogateLow(S[iDest+1]) then
+    begin
+      // 2nd char of surrogate pair: skip it, ie set size=0
+      Res[iDest] := 0;
+    end
+    else
+    begin
+      // normal char or 1st char of surrogate pair: use its size
+      Res[iDest] := (Dx+iSrc)^;
+      Inc(iSrc);
+    end;
+  end;
+end;
+
 {------------------------------------------------------------------------------
   Method:  ExtTextOut
   Params:  DC      - handle to device context
@@ -1377,18 +1512,32 @@ function TWin32WidgetSet.ExtTextOut(DC: HDC; X, Y: Integer; Options: LongInt;
 var
   s: AnsiString;
   w: WideString;
+  DxWide: _TIntArray;
+  nIndex: Integer;
 begin
   // use temp buffer, if count is set, there might be no null terminator
   if count = -1 then
-   s := str
+    s := Str
   else
   begin
     SetLength(s, count);
     move(str^, PChar(s)^, count);
   end;
-  // the length of utf8 vs Wide/Ansi the strings differ, so recalc.
-  // TODO: use the real number of chars (and not the lenght)
+
   W := UTF8ToUTF16(S);
+
+  // support surrogate chars in WideString
+  if Dx<>nil then
+  begin
+    nIndex := SFindFirstCharSurrogate(W);
+    if nIndex > 0 then
+    begin
+      SConvertDxArrayFromUTF8ToWide(W, Dx, Count, DxWide, nIndex);
+      Result := Windows.ExtTextOutW(DC, X, Y, Options, LPRECT(Rect), PWideChar(W), Length(W), @DxWide[0]);
+      Exit;
+    end;
+  end;
+
   Result := Windows.ExtTextOutW(DC, X, Y, Options, LPRECT(Rect), PWideChar(W), Length(W), Dx);
 end;
 
@@ -2308,9 +2457,15 @@ begin
       Result := Boolean(Windows.GetWindowRect(Handle, @R));
       SetWidthHeightFromRect(R);
     end;
-  end
-  else
-    SetWidthHeightFromRect(WP.rcNormalPosition);
+  end else
+  begin
+    // rcNormalPosition is not valid for MDI children se we use GetWindowRect instead
+    if (GetWindowLong(Handle, GWL_EXSTYLE) and WS_EX_MDICHILD) <> 0 then begin
+      Windows.GetWindowRect(Handle, R);
+      SetWidthHeightFromRect(R);
+    end else
+      SetWidthHeightFromRect(WP.rcNormalPosition);
+  end;
 
   WindowInfo := GetWin32WindowInfo(Handle);
 
@@ -3136,7 +3291,12 @@ end;
  ------------------------------------------------------------------------------}
 function TWin32WidgetSet.SetForegroundWindow(HWnd: HWND): boolean;
 begin
-  Result := Windows.SetForegroundWindow(HWnd);
+  // MDI children need to use WM_MDIACTIVATE to bring themselves into the foreground
+  if (GetWindowLong(HWnd, GWL_EXSTYLE) and WS_EX_MDICHILD) <> 0 then begin
+    SendMessage(GetParent(HWnd), WM_MDIACTIVATE, HWnd, 0);
+    Result := True;
+  end else
+    Result := Windows.SetForegroundWindow(HWnd);
 end;
 
 function TWin32WidgetSet.SetMenu(AWindowHandle: HWND; AMenuHandle: HMENU): Boolean;
@@ -3226,7 +3386,9 @@ begin
   ScrollInfo.cbSize:=sizeof(ScrollInfo);
   if (ScrollInfo.fMask and SIF_Range > 0) then
     ScrollInfo.nMax := Max(ScrollInfo.nMin, ScrollInfo.nMax - 1);
-  Result := Windows.SetScrollInfo(Handle, SBStyle, @ScrollInfo, BRedraw);
+  { ~bk passing BRedraw True/False might change the windows visual enabled state
+        that would not be reflected in TScollBar.Enabled property }
+  Result := Windows.SetScrollInfo(Handle, SBStyle, @ScrollInfo, BRedraw and WidgetSet.IsWindowEnabled(Handle));
 end;
 
 {------------------------------------------------------------------------------

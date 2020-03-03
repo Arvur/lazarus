@@ -5,8 +5,9 @@ unit sparta_BasicFakeCustom;
 interface
 
 uses
-  Classes, SysUtils, Controls, Forms, sparta_InterfacesMDI, LCLIntf,
-  LCLType, sparta_FormBackgroundForMDI;
+  Classes, SysUtils,
+  LCLType, LCLIntf, Controls, Forms,
+  sparta_InterfacesMDI, sparta_FormBackgroundForMDI;
 
 type
 
@@ -19,17 +20,14 @@ type
     FHackTop: Integer;
     FHackWidth: Integer;
     FHackHeight: Integer;
-
-  private
     FOnChangeHackedBounds: TNotifyEvent;
-
-    procedure SetOnChangeHackedBounds(const AValue: TNotifyEvent);
-    function GetOnChangeHackedBounds: TNotifyEvent;
-    function PositionDelta: TPoint;
   protected
     FForm: TCustomForm;
     FUpdate: boolean;
-  protected
+    procedure SetOnChangeHackedBounds(const AValue: TNotifyEvent);
+    function GetOnChangeHackedBounds: TNotifyEvent;
+    function PositionDelta: TPoint;
+
     function GetRealBounds(AIndex: Integer): Integer; virtual;
     procedure SetRealBounds(AIndex: Integer; AValue: Integer); virtual;
     function GetPublishedBounds(AIndex: Integer): Integer; virtual;
@@ -56,7 +54,7 @@ type
 
     function GetForm: TCustomForm; virtual;
     function GetUpdate: Boolean; virtual;
-  protected
+
     procedure DoChangeHackedBounds; virtual;
 
     function GetLogicalClientRect(ALogicalClientRect: TRect): TRect; virtual;
@@ -207,7 +205,7 @@ procedure TFormImpl.SetRealBounds(AIndex: Integer; AValue: Integer);
     LFormRect := Rect(0, 0, 0, 0);;
     LCLIntf.GetClientRect(GetForm.Handle, LFormRect);
     LRealValue := GetRealBounds(AIndex);
-    {$IF FPC_FULLVERSION < 301010}
+    {$IF FPC_FULLVERSION < 30101}
     case AIndex of
       0: LValue := LFormRect.Left;
       1: LValue := LFormRect.Top;

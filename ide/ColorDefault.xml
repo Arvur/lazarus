@@ -8,7 +8,7 @@
       <Globals Version="6">
         <SchemeDefault>
           <ahaDefault Background="clWhite" Foreground="clBlack"/>
-          <ahaExecutionPoint Background="clGray" Foreground="clWhite"  ForePriority="500" BackPriority="500" FramePriority="500"/>
+          <ahaExecutionPoint Background="clMedGray" Foreground="clWhite"  ForePriority="500" BackPriority="500" FramePriority="500"/>
           <ahaEnabledBreakpoint Background="clRed" Foreground="clBlack" ForePriority="500" BackPriority="500" FramePriority="500"/>
           <ahaDisabledBreakpoint Background="clGreen" Foreground="clBlack" ForePriority="500" BackPriority="500" FramePriority="500"/>
           <ahaInvalidBreakpoint Background="clOlive" Foreground="clGreen" ForePriority="500" BackPriority="500" FramePriority="500"/>
@@ -43,6 +43,14 @@
           <ahaGutterSeparator Background="clWhite" Foreground="clGray"/>
           <ahaGutter Background="clBtnFace"/>
           <ahaRightMargin Foreground="clSilver"/>
+          <ahaOverviewGutter Foreground="13948116" Background="15263976" FrameColor="12632256"/>
+          <ahaIdentComplWindowHighlight Foreground="187"/>
+          <ahaOutlineLevel1Color Foreground="clRed"/>
+          <ahaOutlineLevel2Color Foreground="39159"/>
+          <ahaOutlineLevel3Color Foreground="2280512"/>
+          <ahaOutlineLevel4Color Foreground="13421568"/>
+          <ahaOutlineLevel5Color Foreground="16738346"/>
+          <ahaOutlineLevel6Color Foreground="13566148"/>
         </SchemeDefault>
       </Globals>
       <LangObjectPascal Version="6">
@@ -178,6 +186,16 @@
           <Symbol Foreground="clRed"/>
         </SchemeDefault>
       </LangSQL>
+      <LangCSS Version="6">
+        <SchemeDefault>
+          <Comment Foreground="clBlue" />
+          <Measurement_Unit Foreground="clNavy" Style="fsBold"/>
+          <Number Foreground="clNavy"/>
+          <Selector Style="fsBold"/>
+          <String Foreground="clPurple"/>
+          <Symbol Foreground="clRed"/>
+        </SchemeDefault>
+      </LangCSS>
       <LangJavascript Version="6">
         <SchemeDefault>
           <Comment Foreground="clBlue" Style="fsBold"/>

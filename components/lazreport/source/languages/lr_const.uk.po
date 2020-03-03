@@ -6,7 +6,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Last-Translator: Olexandr Pylypchuk <lxlalexlxl@ukr.net>\n"
-"PO-Revision-Date: 2018-01-01 16:21+0200\n"
+"PO-Revision-Date: 2018-04-25 18:31+0200\n"
 "Project-Id-Version: \n"
 "Language-Team: Ukrainian <trans-uk@lists.fedoraproject.org>\n"
 "Language: uk\n"
@@ -251,6 +251,7 @@ msgid "0"
 msgstr "0"
 
 #: lr_const.sclassobjectnotfound
+#, object-pascal-format
 msgid "Class Object \"%s\" not found"
 msgstr "Об'єкт \"%s\" класу не знайдено"
 
@@ -475,6 +476,10 @@ msgstr "FORMATTEXT(<Mask>, <String>)/Застосовує маску <Mask> до
 #: lr_const.sdescriptionfrac
 msgid "FRAC(<Value>)/Returns the fractional part of floating point <Value>."
 msgstr "FRAC(<Value>)/Повертає дробову частину дійсного значення <Value>."
+
+#: lr_const.sdescriptionif
+msgid "IF(<expression>, <Value1>, <Value2>)/Returns <Value1>, if <expression> is true; otherwise returns <Value2>."
+msgstr "IF(<вираз>, <Значення1>, <Значення2>)/Повертає <Значення1>, якщо <вираз> істинний; в іншому випадку повертає <Значення2>."
 
 #: lr_const.sdescriptioninc
 msgid "INC(<Value>)/Increment <Value>."
@@ -735,6 +740,7 @@ msgid "Version"
 msgstr "Версія"
 
 #: lr_const.sduplicatedobjectname
+#, object-pascal-format
 msgid "An object named \"%s\" already exists"
 msgstr "Об'єкт з іменем \"%s\" вже існує"
 
@@ -1712,6 +1718,7 @@ msgid "Invalid report format"
 msgstr "Неправильний формат звіту"
 
 #: lr_const.sinvalidvariablename
+#, object-pascal-format
 msgid "\"%s\" is not a valid variable name."
 msgstr "\"%s\" не є правильною назвою змінної."
 
@@ -1769,6 +1776,7 @@ msgid "Object inspector"
 msgstr "Інспектор об'єктів"
 
 #: lr_const.sobjectnotfound
+#, object-pascal-format
 msgid "Object \"%s\" not found"
 msgstr "Об'єкт \"%s\" не знайдено"
 
@@ -2511,10 +2519,12 @@ msgid "Report file"
 msgstr "Файл звіту"
 
 #: lr_const.sreportcorruptoldknowversion
+#, object-pascal-format
 msgid "This report is corrupt, it probably needs \"LRE_OLDV%d_FRF_READ\"=true"
 msgstr "Цей звіт пошкоджено, можливо він потребує \"LRE_OLDV%d_FRF_READ\"=true"
 
 #: lr_const.sreportcorruptunknownversion
+#, object-pascal-format
 msgid "This report is corrupt, frVersion=%d"
 msgstr "Цей звіт пошкоджено, frVersion=%d"
 

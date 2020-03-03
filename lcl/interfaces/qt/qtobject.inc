@@ -259,8 +259,16 @@ begin
 
   ScreenDC := GetDC(0);
   try
+    {$IFDEF DARWIN}
+    // this code is removed in r57679, and cocoa/carbon are fixed separatelly, so
+    // qt/qt5 wasn't good with standard mac ppi 72. Cocoa ws uses CocoaBasePPI const.
+    // issue #34625
+    ScreenInfo.PixelsPerInchX := 96;
+    ScreenInfo.PixelsPerInchY := 96;
+	  {$ELSE}
     ScreenInfo.PixelsPerInchX := GetDeviceCaps(ScreenDC, LOGPIXELSX);
     ScreenInfo.PixelsPerInchY := GetDeviceCaps(ScreenDC, LOGPIXELSY);
+	  {$ENDIF}
     ScreenInfo.ColorDepth := GetDeviceCaps(ScreenDC, BITSPIXEL);
   finally
     ReleaseDC(0, ScreenDC);
@@ -289,14 +297,22 @@ var
 {$ENDIF}
 begin
   {$IFDEF QtUseNativeEventLoop}
-  ATimer := QTimer_create(QCoreApplication_instance());
-  if (StyleName = 'gtk') or (StyleName = 'gtk+') then
-    QTimer_setInterval(ATimer, 1) {issue #31191}
-  else
-    QTimer_setInterval(ATimer, 0);
-  QTimer_start(ATimer);
-  FMainTimerID := QTimer_timerId(ATimer);
-  QApplication_exec();
+  if Application.Terminated then
+  begin
+    // application can be terminated in show event of mainform (before AppRun is called - see TApplication.Run. related to #34982)
+    if Assigned(ALoop) then
+      ALoop;
+  end else
+  begin
+    ATimer := QTimer_create(QCoreApplication_instance());
+    if (StyleName = 'gtk') or (StyleName = 'gtk+') then
+      QTimer_setInterval(ATimer, 1) {issue #31191}
+    else
+      QTimer_setInterval(ATimer, 0);
+    QTimer_start(ATimer);
+    FMainTimerID := QTimer_timerId(ATimer);
+    QApplication_exec();
+  end;
   {$ELSE}
   // use LCL loop
   if Assigned(ALoop) then
@@ -622,7 +638,7 @@ end;
 function TQtWidgetSet.EventFilter(Sender: QObjectH; Event: QEventH): Boolean; cdecl;
 var
   AObject: TQtObject;
-  W: TQtMainWindow;
+  W: TQtWidget;
   LCLEvent: QLCLMessageEventH;
   ASequence: QKeySequenceH;
   AKey: WideString;
@@ -809,8 +825,9 @@ begin
         // eat next appdeactivate & appactivate since we are changing form
         // flags !
         if (StayOnTopList <> nil) then
-          W := TQtMainWindow(HWNDFromWidgetH(QApplication_activeWindow()))
-        else
+        begin
+          W := TQtWidget(GetActiveWindow);
+        end else
           W := nil;
         Application.IntfAppActivate;
         QtRestoreStayOnTop;
@@ -1289,6 +1306,8 @@ begin
     lcReceivesLMClearCutCopyPasteReliably: Result := LCL_CAPABILITY_NO;
     lcRadialGradientBrush: Result := LCL_CAPABILITY_YES;
     lcTransparentWindow: Result := LCL_CAPABILITY_YES;
+    lcNativeTaskDialog: Result := {$ifdef MSWINDOWS} LCL_CAPABILITY_NO {$else} LCL_CAPABILITY_YES {$endif};
+    lcAllowChildControlsInNativeControls: Result := LCL_CAPABILITY_YES;
   else
     Result := inherited GetLCLCapability(ACapability);
   end;

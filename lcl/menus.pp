@@ -38,8 +38,12 @@ interface
 {$endif}
 
 uses
-  Classes, SysUtils, LCLStrConsts, LCLType, LCLProc, LCLIntf, InterfaceBase,
-  LResources, LMessages, ActnList, Graphics, ImgList, LCLClasses, Themes;
+  Types, Classes, SysUtils,
+  // LCL
+  LCLStrConsts, LCLType, LCLProc, LCLIntf, LCLClasses, LResources, LMessages,
+  ActnList, Graphics, ImgList, Themes,
+  // LazUtils
+  LazMethodList, LazLoggerBase;
 
 type
   TMenu = class;
@@ -113,10 +117,28 @@ type
   TMenuMeasureItemEvent = procedure(Sender: TObject; ACanvas: TCanvas;
     var AWidth, AHeight: Integer) of object;
 
+  TMergedMenuItems = class
+  private
+    fList: array[Boolean] of TList; // visible
+
+    function GetInvisibleCount: Integer;
+    function GetInvisibleItem(Index: Integer): TMenuItem;
+    function GetVisibleCount: Integer;
+    function GetVisibleItem(Index: Integer): TMenuItem;
+  public
+    constructor Create(const aParent: TMenuItem);
+    destructor Destroy; override;
+    class function DefaultSort(aItem1, aItem2, aParentItem: Pointer): Integer; static;
+    property VisibleCount: Integer read GetVisibleCount;
+    property VisibleItems[Index: Integer]: TMenuItem read GetVisibleItem;
+    property InvisibleCount: Integer read GetInvisibleCount;
+    property InvisibleItems[Index: Integer]: TMenuItem read GetInvisibleItem;
+  end;
+
   TMenuItem = class(TLCLComponent)
   private
     FActionLink: TMenuActionLink;
-    FCaption: string;
+    FCaption: TTranslateString;
     FBitmap: TBitmap;
     FGlyphShowMode: TGlyphShowMode;
     FHandle: HMenu;
@@ -131,8 +153,12 @@ type
     FOnDrawItem: TMenuDrawItemEvent;
     FOnMeasureItem: TMenuMeasureItemEvent;
     FParent: TMenuItem;
+    FMerged: TMenuItem;
+    FMergedWith: TMenuItem;
+    FMergedItems: TMergedMenuItems;
     FMenuItemHandlers: array[TMenuItemHandlerType] of TMethodList;
     FSubMenuImages: TCustomImageList;
+    FSubMenuImagesWidth: Integer;
     FShortCut: TShortCut;
     FShortCutKey2: TShortCut;
     FGroupIndex: Byte;
@@ -151,6 +177,8 @@ type
     function GetCount: Integer;
     function GetItem(Index: Integer): TMenuItem;
     function GetMenuIndex: Integer;
+    function GetMergedItems: TMergedMenuItems;
+    function GetMergedParent: TMenuItem;
     function GetParent: TMenuItem;
     function IsBitmapStored: boolean;
     function IsCaptionStored: boolean;
@@ -161,6 +189,7 @@ type
     function IsImageIndexStored: Boolean;
     function IsShortCutStored: boolean;
     function IsVisibleStored: boolean;
+    procedure MergeWith(const aMenu: TMenuItem);
     procedure SetAutoCheck(const AValue: boolean);
     procedure SetCaption(const AValue: TTranslateString);
     procedure SetChecked(AValue: Boolean);
@@ -169,10 +198,12 @@ type
     procedure SetBitmap(const AValue: TBitmap);
     procedure SetGlyphShowMode(const AValue: TGlyphShowMode);
     procedure SetMenuIndex(AValue: Integer);
+    procedure SetName(const Value: TComponentName); override;
     procedure SetRadioItem(const AValue: Boolean);
     procedure SetRightJustify(const AValue: boolean);
     procedure SetShowAlwaysCheckable(const AValue: boolean);
     procedure SetSubMenuImages(const AValue: TCustomImageList);
+    procedure SetSubMenuImagesWidth(const aSubMenuImagesWidth: Integer);
     procedure ShortcutChanged;
     procedure SubItemChanged(Sender: TObject; Source: TMenuItem; Rebuild: Boolean);
     procedure TurnSiblingsOff;
@@ -205,8 +236,6 @@ type
     procedure SetShortCut(const AValue : TShortCut);
     procedure SetShortCutKey2(const AValue : TShortCut);
     procedure SetVisible(AValue: Boolean);
-    procedure UpdateImage;
-    procedure UpdateImages;
     procedure UpdateWSIcon;
     procedure ImageListChange(Sender: TObject);
   protected
@@ -217,9 +246,11 @@ type
     destructor Destroy; override;
     function Find(const ACaption: string): TMenuItem;
     function GetEnumerator: TMenuItemEnumerator;
-    function GetImageList: TCustomImageList; virtual;
+    procedure GetImageList(out aImages: TCustomImageList; out aImagesWidth: Integer); virtual;
+    function GetImageList: TCustomImageList;
     function GetParentComponent: TComponent; override;
     function GetParentMenu: TMenu; virtual;
+    function GetMergedParentMenu: TMenu; virtual;
     function GetIsRightToLeft:Boolean; virtual;
     function HandleAllocated : Boolean;
     function HasIcon: boolean; virtual;
@@ -228,6 +259,7 @@ type
     procedure IntfDoSelect; virtual;
     function IndexOf(Item: TMenuItem): Integer;
     function IndexOfCaption(const ACaption: string): Integer; virtual;
+    procedure InvalidateMergedItems;
     function VisibleIndexOf(Item: TMenuItem): Integer;
     procedure Add(Item: TMenuItem);
     procedure Add(const AItems: array of TMenuItem);
@@ -238,12 +270,14 @@ type
     procedure Insert(Index: Integer; Item: TMenuItem);
     procedure RecreateHandle; virtual;
     procedure Remove(Item: TMenuItem);
+    procedure UpdateImage(forced: Boolean = false);
+    procedure UpdateImages(forced: Boolean = false);
     function IsCheckItem: boolean; virtual;
     function IsLine: Boolean;
     function IsInMenuBar: boolean; virtual;
     procedure Clear;
     function HasBitmap: boolean;
-    function GetIconSize: TPoint; virtual;
+    function GetIconSize(ADC: HDC): TPoint; virtual;
     // Event lists
     procedure RemoveAllHandlersOfObject(AnObject: TObject); override;
     procedure AddHandlerOnDestroy(const OnDestroyEvent: TNotifyEvent;
@@ -253,13 +287,17 @@ type
                          const AMethod: TMethod; AsFirst: boolean = false);
     procedure RemoveHandler(HandlerType: TMenuItemHandlerType;
                             const AMethod: TMethod);
+    property Merged: TMenuItem read FMerged;
+    property MergedWith: TMenuItem read FMergedWith;
   public
     property Count: Integer read GetCount;
     property Handle: HMenu read GetHandle write FHandle;
     property Items[Index: Integer]: TMenuItem read GetItem; default;
+    property MergedItems: TMergedMenuItems read GetMergedItems;
     property MenuIndex: Integer read GetMenuIndex write SetMenuIndex;
     property Menu: TMenu read FMenu;
     property Parent: TMenuItem read GetParent;
+    property MergedParent: TMenuItem read GetMergedParent;
     property Command: Word read FCommand;
     function MenuVisibleIndex: integer;
     procedure WriteDebugReport(const Prefix: string);
@@ -289,6 +327,7 @@ type
     property ShowAlwaysCheckable: boolean read FShowAlwaysCheckable
                                  write SetShowAlwaysCheckable default False;
     property SubMenuImages: TCustomImageList read FSubMenuImages write SetSubMenuImages;
+    property SubMenuImagesWidth: Integer read FSubMenuImagesWidth write SetSubMenuImagesWidth default 0;
     property Visible: Boolean read FVisible write SetVisible
                               stored IsVisibleStored default True;
     property OnClick: TNotifyEvent read FOnClick write FOnClick;
@@ -307,6 +346,7 @@ type
     FBiDiMode: TBiDiMode;
     FImageChangeLink: TChangeLink;
     FImages: TCustomImageList;
+    FImagesWidth: Integer;
     FItems: TMenuItem;
     FOnDrawItem: TMenuDrawItemEvent;
     FOnChange: TMenuChangeEvent;
@@ -322,6 +362,7 @@ type
     procedure ImageListChange(Sender: TObject);
     procedure SetBiDiMode(const AValue: TBiDiMode);
     procedure SetImages(const AValue: TCustomImageList);
+    procedure SetImagesWidth(const aImagesWidth: Integer);
     procedure SetParent(const AValue: TComponent);
     procedure SetParentBiDiMode(const AValue: Boolean);
   protected
@@ -333,6 +374,7 @@ type
     procedure GetChildren(Proc: TGetChildProc; Root: TComponent); override;
     procedure MenuChanged(Sender: TObject; Source: TMenuItem;
                           Rebuild: Boolean); virtual;
+    procedure AssignTo(Dest: TPersistent); override;
     procedure Notification(AComponent: TComponent;
       Operation: TOperation); override;
     procedure ParentBidiModeChanged;
@@ -364,6 +406,7 @@ type
     property ParentBidiMode:Boolean read FParentBidiMode write SetParentBidiMode default True;
     property Items: TMenuItem read FItems;
     property Images: TCustomImageList read FImages write SetImages;
+    property ImagesWidth: Integer read FImagesWidth write SetImagesWidth default 0;
     property OwnerDraw: Boolean read FOwnerDraw write FOwnerDraw default False;
     property OnDrawItem: TMenuDrawItemEvent read FOnDrawItem write FOnDrawItem;
     property OnMeasureItem: TMenuMeasureItemEvent read FOnMeasureItem write FOnMeasureItem;
@@ -383,6 +426,8 @@ type
     procedure MenuChanged(Sender: TObject; Source: TMenuItem; Rebuild: Boolean); override;
   public
     constructor Create(AOwner: TComponent); override;
+    procedure Merge(Menu: TMainMenu);
+    procedure Unmerge(Menu: TMainMenu);
     property Height: Integer read GetHeight;
     property WindowHandle: HWND read FWindowHandle write SetWindowHandle;
   published
@@ -468,6 +513,60 @@ implementation
 uses
   WSMenus,
   Forms {KeyDataToShiftState};
+
+{ Helpers for Assign() }
+
+procedure MenuItem_Copy(ASrc, ADest: TMenuItem);
+var
+  mi: TMenuItem;
+  i: integer;
+begin
+  ADest.Clear;
+  ADest.Action:= ASrc.Action;
+  ADest.AutoCheck:= ASrc.AutoCheck;
+  ADest.Caption:= ASrc.Caption;
+  ADest.Checked:= ASrc.Checked;
+  ADest.Default:= ASrc.Default;
+  ADest.Enabled:= ASrc.Enabled;
+  ADest.Bitmap:= ASrc.Bitmap;
+  ADest.GroupIndex:= ASrc.GroupIndex;
+  ADest.GlyphShowMode:= ASrc.GlyphShowMode;
+  ADest.HelpContext:= ASrc.HelpContext;
+  ADest.Hint:= ASrc.Hint;
+  ADest.ImageIndex:= ASrc.ImageIndex;
+  ADest.RadioItem:= ASrc.RadioItem;
+  ADest.RightJustify:= ASrc.RightJustify;
+  ADest.ShortCut:= ASrc.ShortCut;
+  ADest.ShortCutKey2:= ASrc.ShortCutKey2;
+  ADest.ShowAlwaysCheckable:= ASrc.ShowAlwaysCheckable;
+  ADest.SubMenuImages:= ASrc.SubMenuImages;
+  ADest.SubMenuImagesWidth:= ASrc.SubMenuImagesWidth;
+  ADest.Visible:= ASrc.Visible;
+  ADest.OnClick:= ASrc.OnClick;
+  ADest.OnDrawItem:= ASrc.OnDrawItem;
+  ADest.OnMeasureItem:= ASrc.OnMeasureItem;
+  ADest.Tag:= ASrc.Tag;
+
+  for i:= 0 to ASrc.Count-1 do
+  begin
+    mi:= TMenuItem.Create(ASrc.Owner);
+    MenuItem_Copy(ASrc.Items[i], mi);
+    ADest.Add(mi);
+  end;
+end;
+
+procedure Menu_Copy(ASrc, ADest: TMenu);
+begin
+  ADest.BidiMode:= ASrc.BidiMode;
+  ADest.ParentBidiMode:= ASrc.ParentBidiMode;
+  ADest.Images:= ASrc.Images;
+  ADest.ImagesWidth:= ASrc.ImagesWidth;
+  ADest.OwnerDraw:= ASrc.OwnerDraw;
+  ADest.OnDrawItem:= ASrc.OnDrawItem;
+  ADest.OnMeasureItem:= ASrc.OnMeasureItem;
+
+  MenuItem_Copy(ASrc.Items, ADest.Items);
+end;
 
 { Easy Menu building }
 
@@ -580,6 +679,114 @@ procedure Register;
 begin
   RegisterComponents('Standard',[TMainMenu,TPopupMenu]);
   RegisterNoIcon([TMenuItem]);
+end;
+
+{ TMergedMenuItems }
+
+constructor TMergedMenuItems.Create(const aParent: TMenuItem);
+  procedure SearchVis(const aGroupIndex: Integer; out outIndex: Integer; out outReplace: Boolean);
+  var
+    AItem: TMenuItem;
+    I: Integer;
+  begin
+    outReplace := False;
+    for I := 0 to VisibleCount-1 do
+    begin
+      AItem := VisibleItems[I];
+      if AItem.GroupIndex=aGroupIndex then
+      begin
+        outIndex := I;
+        outReplace := True;
+        Exit;
+      end else
+      if AItem.GroupIndex>aGroupIndex then
+      begin
+        outIndex := I;
+        Exit;
+      end;
+    end;
+    outIndex := -1;
+  end;
+var
+  B, AReplace: Boolean;
+  I, AItemIndex: Integer;
+  AItem: TMenuItem;
+begin
+  inherited Create;
+
+  for B := Low(fList) to High(fList) do
+    fList[B] := TList.Create;
+
+  for I := 0 to aParent.Count-1 do
+    fList[aParent.Items[I].Visible].Add(aParent.Items[I]);
+  if Assigned(aParent.FMerged) then
+  begin
+    for I := 0 to aParent.FMerged.Count-1 do
+    begin
+      AItem := aParent.FMerged.Items[I];
+      if AItem.Visible then
+      begin
+        SearchVis(AItem.GroupIndex, AItemIndex, AReplace);
+        if AItemIndex>=0 then
+        begin
+          if AReplace then
+          begin
+            fList[False].Add(VisibleItems[AItemIndex]); // copy to invisible list
+            fList[True].Items[AItemIndex] := AItem // replace
+          end else
+            fList[True].Insert(AItemIndex, AItem); // insert
+        end else
+          fList[True].Add(AItem); // add
+      end else
+        fList[False].Add(AItem); // add to invisible
+    end;
+  end;
+end;
+
+class function TMergedMenuItems.DefaultSort(aItem1, aItem2,
+  aParentItem: Pointer): Integer;
+var
+  Item1: TMenuItem absolute aItem1;
+  Item2: TMenuItem absolute aItem2;
+begin
+  Result := Item1.GroupIndex-Item2.GroupIndex;
+  if Result=0 then
+  begin
+    if Pointer(Item1.Parent)=aParentItem then
+      Result := 1
+    else
+      Result := -1;
+  end;
+end;
+
+destructor TMergedMenuItems.Destroy;
+var
+  B: Boolean;
+begin
+  for B := Low(fList) to High(fList) do
+    fList[B].Destroy;
+
+  inherited Destroy;
+end;
+
+function TMergedMenuItems.GetInvisibleCount: Integer;
+begin
+  Result := fList[False].Count;
+end;
+
+function TMergedMenuItems.GetInvisibleItem(Index: Integer): TMenuItem;
+begin
+  Result := TMenuItem(fList[False].Items[Index]);
+end;
+
+function TMergedMenuItems.GetVisibleCount: Integer;
+begin
+  Result := fList[True].Count;
+end;
+
+function TMergedMenuItems.GetVisibleItem(Index: Integer): TMenuItem;
+begin
+  Result := TMenuItem(fList[True].Items[Index]);
 end;
 
 {$I menu.inc}

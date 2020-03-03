@@ -28,9 +28,15 @@ unit editortoolbar_options;
 interface
 
 uses
-  Classes, SysUtils, ExtCtrls, Buttons, Controls, StdCtrls, DividerBevel,
-  LazarusIDEStrConsts, LCLProc, IDEOptionsIntf, EnvironmentOpts,
-  EditorToolbarStatic, ToolbarConfig;
+  Classes, SysUtils,
+  // LCL
+  LCLProc, ExtCtrls, Buttons, Controls, StdCtrls,
+  // LazControls
+  DividerBevel,
+  // IdeIntf
+  IDEOptionsIntf, IDEOptEditorIntf, IDEImagesIntf,
+  // IDE
+  LazarusIDEStrConsts, EnvironmentOpts, EditorToolbarStatic, ToolbarConfig;
 
 type
 
@@ -43,6 +49,7 @@ type
     cbPos: TComboBox;
     imButtons: TImageList;
     dbGeneralSettings: TDividerBevel;
+    lblNoAutoSaveActiveDesktop: TLabel;
     lblpos: TLabel;
     pnTopCenterLabel: TLabel;
     pnTop: TPanel;
@@ -99,12 +106,15 @@ begin
   for i := 0 to high(sLocalizedPosValues) do
     cbPos.Items[i] := sLocalizedPosValues[i]; // localized
   cbPos.Caption := cbPos.Items[cbPos.ItemIndex];
+  lblNoAutoSaveActiveDesktop.Caption := lisNoAutoSaveActiveDesktop;
 
   dbGeneralSettings.Caption := lisEditorToolbarSettings; // ToDo: Will be removed ...
   cbCoolBarVisible.Caption := lisEditorToolbarVisible;
   lblpos.Caption := lisPosition;
   bDefaultToolbar.Caption := lisCmpRestoreDefaults;
+  IDEImages.AssignImage(bDefaultToolbar, 'restore_defaults');
   bConfig.Caption := lisCoolbarConfigure;
+  IDEImages.AssignImage(bConfig, 'preferences');
 end;
 
 procedure TEditorToolbarOptionsFrame.ReadSettings(AOptions: TAbstractIDEOptions);
@@ -114,6 +124,7 @@ begin
   Opts := (AOptions as TEnvironmentOptions).Desktop.EditorToolBarOptions;
   cbCoolBarVisible.Checked := Opts.Visible;
   cbPos.ItemIndex := IndexFromEnglish(Opts.Position);
+  lblNoAutoSaveActiveDesktop.Visible := not EnvironmentOptions.AutoSaveActiveDesktop;
   // Disable controls when toolbar is hidden.
   cbPos.Enabled := Opts.Visible;
   bConfig.Enabled := Opts.Visible;

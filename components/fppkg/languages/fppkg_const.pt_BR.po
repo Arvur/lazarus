@@ -55,11 +55,20 @@ msgstr "Downloader"
 msgid "fpmake compiler config"
 msgstr "Configuração compilador \"fpmake\""
 
+#: fppkg_const.rsfppkgenvironmentoptions
+msgid "Fppkg"
+msgstr "Fppkg"
+
+#: fppkg_const.rsfppkgenvironmentoptionscaption
+msgid "Compilation"
+msgstr "Compilação"
+
 #: fppkg_const.rsfppkgoptions
 msgid "fppkg options"
 msgstr "Opções \"fppkg\""
 
 #: fppkg_const.rsfppkgsfailedresultds
+#, object-pascal-format
 msgid "Fppkg %s failed: Result %d%s%s"
 msgstr "Fppkg %s falhou: Resultado %d%s%s"
 
@@ -94,6 +103,10 @@ msgstr "Executável \"fppkg\" não encontrado"
 #: fppkg_const.rsoptions
 msgid "Options"
 msgstr "Opções"
+
+#: fppkg_const.rspackagefileoptionstitle
+msgid "FPMake"
+msgstr "FPMake"
 
 #: fppkg_const.rsremotemirrorsurl
 msgid "Remote mirrors URL"

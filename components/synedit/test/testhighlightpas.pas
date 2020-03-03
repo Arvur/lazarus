@@ -5,8 +5,9 @@ unit TestHighlightPas;
 interface
 
 uses
-  Classes, SysUtils, testregistry, TestBase, Forms, LCLProc, TestHighlightFoldBase,
-  SynEdit, SynEditTypes, SynHighlighterPas, SynEditHighlighterFoldBase;
+  Classes, SysUtils, testregistry, TestBase, Forms, LCLProc,
+  TestHighlightFoldBase, SynEdit, SynEditTypes, SynHighlighterPas,
+  SynEditHighlighterFoldBase, SynEditHighlighter;
 
 type
 
@@ -47,16 +48,17 @@ type
     function TestTextFoldInfo4(AIfCol: Integer): TStringArray;
     function TestTextFoldInfo5: TStringArray;
 
-    procedure CheckTokensForLine(Name: String; LineIdx: Integer; ExpTokens: Array of TtkTokenKind);
   published
     procedure TestFoldInfo;
     procedure TestExtendedKeywordsAndStrings;
     procedure TestContextForProcModifiers;
     procedure TestContextForProperties;
     procedure TestContextForProcedure;
+    procedure TestContextForInterface;
     procedure TestContextForDeprecated;
     procedure TestContextForClassModifier; // Sealed abstract
     procedure TestContextForClassHelper;
+    procedure TestContextForTypeHelper;
     procedure TestContextForClassFunction; // in class,object,record
     procedure TestContextForRecordHelper;
     procedure TestContextForStatic;
@@ -65,6 +67,21 @@ type
   end;
 
 implementation
+
+operator := (a: TtkTokenKind) : TExpTokenInfo;
+begin
+  result := default(TExpTokenInfo);
+  result.ExpKind := ord(a);
+  result.Flags := [etiKind];
+end;
+
+operator + (a: TtkTokenKind; b: TSynHighlighterAttributes) : TExpTokenInfo;
+begin
+  result := default(TExpTokenInfo);
+  result.ExpKind := ord(a);
+  result.ExpAttr := b;
+  result.Flags := [etiKind, etiAttr];
+end;
 
 { TTestBaseHighlighterPas }
 
@@ -284,24 +301,6 @@ begin
   Result[10] := '//';
   Result[11] := 'end.';
   Result[12] := '';
-end;
-
-procedure TTestHighlighterPas.CheckTokensForLine(Name: String; LineIdx: Integer;
-  ExpTokens: array of TtkTokenKind);
-var
-  c: Integer;
-begin
-  PasHighLighter.StartAtLineIndex(LineIdx);
-  c := 0;
-  while not PasHighLighter.GetEol do begin
-    //DebugLn([PasHighLighter.GetToken,' (',PasHighLighter.GetTokenID ,') at ', PasHighLighter.GetTokenPos]);
-    AssertEquals(Name + 'TokenId Line='+IntToStr(LineIdx)+' pos='+IntToStr(c),  ord(ExpTokens[c]), ord(PasHighLighter.GetTokenID));
-    PasHighLighter.Next;
-    inc(c);
-    if c >= length(ExpTokens) then
-      break;
-  end;
-  AssertEquals(Name+ 'TokenId Line='+IntToStr(LineIdx)+'  amount of tokens', length(ExpTokens), c );
 end;
 
 procedure TTestHighlighterPas.TestFoldInfo;
@@ -664,11 +663,23 @@ begin
 end;
 
 procedure TTestHighlighterPas.TestContextForProcedure;
+var
+  AtP, AtI, AtK: TSynHighlighterAttributes;
 begin
   ReCreateEdit;
+  AtP := PasHighLighter.ProcedureHeaderName;
+  AtI := PasHighLighter.IdentifierAttri;
+  AtK := PasHighLighter.KeywordAttribute;
+
   SetLines
     ([ 'Unit A;',
        'interface',
+       '',
+       'type',
+       '  IBar = interface',
+       '     procedure p1;',
+       '     procedure p2;',
+       '  end;',
        '',
        'var',
        '  Foo: Procedure of object;', // no folding // do not end var block
@@ -698,16 +709,73 @@ begin
        ''
     ]);
   EnableFolds([cfbtBeginEnd..cfbtNone]);
-  CheckFoldOpenCounts('', [ 1, 1, 0, 1 {var}, 0, 0, 1 {type}, 0, 0, 0, 0 {Proc}, 0,
+  CheckFoldOpenCounts('', [ 1, 1, 0,
+                            1 {type}, 1, 0, 0, 0, 0,
+                            1 {var}, 0, 0, 1 {type}, 0, 0, 0,
+                            0 {Proc}, 0,
                             1 {impl}, 0, 1 {var}, 0, 0, 1 {type}, 0, 0, 0,
                             1 {proc}, 1 {var}, 0, 0, 0, 0, 0
                      ]);
-  AssertEquals('Len var 1 ',   2, PasHighLighter.FoldLineLength(3, 0));
-  AssertEquals('Len type 1 ',  3, PasHighLighter.FoldLineLength(6, 0));
-  AssertEquals('Len var 2 ',   2, PasHighLighter.FoldLineLength(14, 0));
-  AssertEquals('Len type 2 ',  3, PasHighLighter.FoldLineLength(17, 0));
-  AssertEquals('Len var 3 ',   2, PasHighLighter.FoldLineLength(22, 0));
+  AssertEquals('Len var 1 ',   2, PasHighLighter.FoldLineLength(9, 0));
+  AssertEquals('Len type 1 ',  3, PasHighLighter.FoldLineLength(12, 0));
+  AssertEquals('Len var 2 ',   2, PasHighLighter.FoldLineLength(20, 0));
+  AssertEquals('Len type 2 ',  3, PasHighLighter.FoldLineLength(23, 0));
+  AssertEquals('Len var 3 ',   2, PasHighLighter.FoldLineLength(28, 0));
 
+
+  CheckTokensForLine('IBar.p1',   5, [ tkSpace, tkKey + AtK, tkSpace, tkIdentifier + AtP, tkSymbol ]);
+  CheckTokensForLine('IBar.p2',   6, [ tkSpace, tkKey + AtK, tkSpace, tkIdentifier + AtP, tkSymbol ]);
+  CheckTokensForLine('foo p of', 10, [ tkSpace, tkIdentifier, tkSymbol, tkSpace,
+    tkKey + AtK, tkSpace, tkKey + AtK {of}, tkSpace, tkKey, tkSymbol
+    ]);
+  CheckTokensForLine('TBar',     14, [ tkSpace, tkKey + AtK, tkSymbol, tkSymbol, tkSymbol,
+    tkSpace, tkIdentifier + AtI, tkSymbol
+    ]);
+
+
+end;
+
+procedure TTestHighlighterPas.TestContextForInterface;
+var
+  AtP, AtI, AtK: TSynHighlighterAttributes;
+begin
+  ReCreateEdit;
+  AtK := PasHighLighter.KeywordAttribute;
+
+  SetLines
+    ([ 'Unit A;',
+       'interface',
+       '',
+       'type',
+       '  IBar = interface',
+       '     procedure p1;',
+       '     procedure p2;',
+       '  end;',
+       '',
+       'var',
+       '  IBar2: interface', // not allowed "anonymous class"
+       '     procedure p1;',
+       '     procedure p2;',
+       '',
+       'implementation',
+       ''
+    ]);
+  EnableFolds([cfbtBeginEnd..cfbtNone]);
+  CheckFoldOpenCounts('', [ 1, 1, 0,
+                            1 {type}, 1, 0, 0, 0, 0,
+                            1 {var},  0, 0, 0, 0, 0
+                            // implementation
+                     ]);
+  AssertEquals('Len type ',  5, PasHighLighter.FoldLineLength(3, 0));
+  AssertEquals('Len intf ',  3, PasHighLighter.FoldLineLength(4, 0));
+  AssertEquals('Len var  ',  1, PasHighLighter.FoldLineLength(9, 0)); // ends at next procedure
+
+  CheckTokensForLine('unit "interface"',  1,
+    [ tkKey + AtK ]);
+  CheckTokensForLine('type "interface"',  4,
+    [ tkSpace, tkIdentifier, tkSpace, tkSymbol, tkSpace, tkKey + AtK ]);
+  CheckTokensForLine('var "interface"',  10,
+    [ tkSpace, tkIdentifier, tkSymbol, tkSpace, tkKey + AtK ]); // not allowed, still a keyword
 end;
 
 procedure TTestHighlighterPas.TestContextForDeprecated;
@@ -1015,6 +1083,62 @@ begin
     ]);
   CheckTokensForLine('procedure in class "',  4,
     [ tkKey, tkSpace, tkIdentifier,  tkSymbol, tkSpace, tkKey,  tkSymbol ]);
+
+end;
+
+procedure TTestHighlighterPas.TestContextForTypeHelper;
+  procedure DoChecks;
+  begin
+    CheckTokensForLine('not a helper',  2,
+      [ tkIdentifier, tkSpace, tkSymbol, tkSpace,
+        tkKey {type}, tkSpace, tkIdentifier {helper}, tkSpace, tkKey {for}, tkSpace, tkIdentifier, tkSymbol
+      ]);
+    AssertEquals('not a helper / no fold', 0, PasHighLighter.FoldOpenCount(2));
+
+    CheckTokensForLine('helper',  5,
+      [ tkIdentifier, tkSpace, tkSymbol, tkSpace,
+        tkKey {type}, tkSpace, tkKey {helper}, tkSpace, tkKey {for}, tkSpace, tkIdentifier
+      ]);
+    CheckTokensForLine('procedure in helper',  6,
+      [ tkKey, tkSpace, tkIdentifier,  tkSymbol, tkSpace, tkKey,  tkSymbol ]);
+    CheckTokensForLine('uniq type',  8,
+      [ tkIdentifier, tkSpace, tkSymbol, tkSpace,
+        tkKey {type}, tkSpace, tkIdentifier, tkSymbol
+      ]);
+    AssertEquals('uniq type / no fold', 0, PasHighLighter.FoldOpenCount(8));
+
+    CheckTokensForLine('not a helper, switched off',  11,
+      [ tkIdentifier, tkSpace, tkSymbol, tkSpace,
+        tkKey {type}, tkSpace, tkIdentifier {helper}, tkSpace, tkKey {for}, tkSpace, tkIdentifier, tkSymbol
+      ]);
+    AssertEquals('not a helper, switched off / no fold', 0, PasHighLighter.FoldOpenCount(11));
+  end;
+
+begin
+  ReCreateEdit;
+  SetLines
+    ([ 'Unit A; {$mode objfpc} interface',
+       'type',
+       'helper = type helper for helper;',
+       'type',
+       '{$modeswitch typehelpers}',
+       'helper = type helper for helper',
+         'procedure Foo; static;',
+        'end;',
+       'helper = type integer;',
+       'type',
+       '{$modeswitch typehelpers-}',
+       'helper = type helper for helper;',
+       '{$modeswitch typehelpers}',
+       ''
+    ]);
+
+  DoChecks;
+  SynEdit.TestTypeText(1, 2, ' ');
+  DoChecks; // modeswitch on rescan
+
+  PasHighLighter.FoldConfig[ord(cfbtClass)].Enabled := False;
+  DoChecks;
 
 end;
 
@@ -1761,10 +1885,10 @@ begin
                                   [sfaOpen, sfaOpenFold,sfaMarkup,sfaFold,sfaFoldFold, sfaMultiLine]);// try
       CheckNode( 2, [], 0,   8,   72, 77,   2, 1,   2, 1,
                                   cfbtIfDef, cfbtIfDef,  FOLDGROUP_IFDEF,
-                                  [sfaClose, sfaMarkup,sfaOneLineClose, sfaSingleLine]);                      // {$ELSE}
+                                  [sfaClose, sfaMarkup,sfaOneLineClose, sfaSingleLine, sfaCloseAndOpen]);                      // {$ELSE}
       CheckNode( 2, [], 0,   9,   72, 77,   1, 2,   1, 2,
                                   cfbtIfDef, cfbtIfDef,  FOLDGROUP_IFDEF,
-                                  [sfaMarkup,sfaOpen, sfaOpenFold,sfaFold,sfaFoldFold, sfaMultiLine]);          // {$ELSE}
+                                  [sfaMarkup,sfaOpen, sfaOpenFold,sfaFold,sfaFoldFold, sfaMultiLine, sfaCloseAndOpen]);          // {$ELSE}
       // Line 3:     //foo                                                      # pasminlvl=4 endlvl=4
       CheckNode( 3, [], 0,   0,   2, 4,   4, 5,   4, 5,
                                   cfbtSlashComment, cfbtSlashComment,  FOLDGROUP_PASCAL,

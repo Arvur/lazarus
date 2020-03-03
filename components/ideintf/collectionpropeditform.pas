@@ -32,7 +32,7 @@ type
     procedure actDelExecute(Sender: TObject);
     procedure actMoveUpDownExecute(Sender: TObject);
     procedure CollectionListBoxClick(Sender: TObject);
-    procedure FormClose(Sender: TObject; var CloseAction: TCloseAction);
+    procedure FormClose(Sender: TObject; var {%H-}CloseAction: TCloseAction);
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
   private
@@ -46,7 +46,6 @@ type
     procedure Modified;
   protected
     procedure UpdateCaption;
-    procedure UpdateButtons;
     procedure PersistentAdded({%H-}APersistent: TPersistent; {%H-}Select: boolean);
     procedure ComponentRenamed(AComponent: TComponent);
     procedure PersistentDeleting(APersistent: TPersistent);
@@ -54,6 +53,7 @@ type
   public
     procedure SetCollection(NewCollection: TCollection;
                     NewOwnerPersistent: TPersistent; const NewPropName: String);
+    procedure UpdateButtons;
   public
     property Collection: TCollection read FCollection;
     property OwnerComponent: TPersistent read FOwnerComponent;
@@ -234,8 +234,8 @@ var
   I: Integer;
 begin
   I := CollectionListBox.ItemIndex;
-  actAdd.Enabled := Collection <> nil;
-  actDel.Enabled := I > -1;
+  actAdd.Enabled := (Collection <> nil) and actAdd.Visible;
+  actDel.Enabled := (I > -1) and actDel.Visible;
   actMoveUp.Enabled := I > 0;
   actMoveDown.Enabled := (I >= 0) and (I < CollectionListBox.Items.Count - 1);
 end;

@@ -18,6 +18,7 @@ unit CocoaWSExtCtrls;
 
 {$mode delphi}
 {$modeswitch objectivec1}
+{$include cocoadefines.inc}
 
 interface
 
@@ -29,7 +30,8 @@ uses
   // widgetset
   WSExtCtrls, WSLCLClasses, WSControls, WSProc,
   // LCL Cocoa
-  CocoaPrivate, CocoaWSMenus, CocoaGDIObjects;
+  CocoaPrivate, CocoaWSMenus, CocoaWSCommon, CocoaGDIObjects, CocoaScrollers
+  ,Cocoa_Extra;
 
 type
 
@@ -60,9 +62,9 @@ type
   { TCocoaWSCustomSplitter }
 
   TCocoaWSCustomSplitter = class(TWSCustomSplitter)
-  private
-  protected
-  public
+  published
+    class function CreateHandle(const AWinControl: TWinControl;
+      const AParams: TCreateParams): TLCLIntfHandle; override;
   end;
 
   { TCocoaWSSplitter }
@@ -172,7 +174,7 @@ type
   { TCocoaWSCustomTrayIcon }
 
   TCocoaWSCustomTrayIcon = class(TWSCustomTrayIcon)
-  public
+  published
     class function Hide(const ATrayIcon: TCustomTrayIcon): Boolean; override;
     class function Show(const ATrayIcon: TCustomTrayIcon): Boolean; override;
     class procedure InternalUpdate(const ATrayIcon: TCustomTrayIcon); override;
@@ -183,6 +185,63 @@ type
 implementation
 
 {$include cocoatrayicon.inc}
+
+{ TCocoaWSCustomSplitter }
+
+type
+
+  { TCocoaSplitterOwnerControl }
+
+  // todo: this should be removed with theme drawing
+  TCocoaSplitterOwnerControl = objcclass(TCocoaCustomControl)
+    splitter: NSSplitView;
+    procedure drawRect(dirtyRect: NSRect); override;
+    procedure dealloc; override;
+  end;
+
+{ TCocoaSplitterOwnerControl }
+
+procedure TCocoaSplitterOwnerControl.drawRect(dirtyRect: NSRect);
+var
+  r : NSRect;
+begin
+  splitter.setVertical(frame.size.height>frame.size.width);
+  r:=frame;
+  r.origin.x:=0;
+  r.origin.y:=0;
+  splitter.drawDividerInRect(r);
+  inherited drawRect(dirtyRect);
+end;
+
+procedure TCocoaSplitterOwnerControl.dealloc;
+begin
+  splitter.release;
+  inherited dealloc;
+end;
+
+class function TCocoaWSCustomSplitter.CreateHandle(
+  const AWinControl: TWinControl; const AParams: TCreateParams): TLCLIntfHandle;
+var
+  ctrl : TCocoaSplitterOwnerControl;
+  sl   : TCocoaManualScrollView;
+  lcl  : TLCLCommonCallback;
+begin
+  ctrl := TCocoaSplitterOwnerControl(TCocoaSplitterOwnerControl.alloc.lclInitWithCreateParams(AParams));
+
+  ctrl.splitter:=NSSplitView.alloc.initWithFrame( ctrl.frame );
+  // The "pane" decoration doesn't always look good
+  //ctrl.splitter.setDividerStyle(NSSplitViewDividerStylePaneSplitter);
+
+  lcl := TLCLCommonCallback.Create(ctrl, AWinControl);
+  lcl.BlockCocoaUpDown := true;
+  ctrl.callback := lcl;
+
+  sl := EmbedInManualScrollView(ctrl);
+  sl.callback := ctrl.callback;
+  lcl.HandleFrame:=sl;
+
+  Result := TLCLIntfHandle(sl);
+end;
 
 end.
 

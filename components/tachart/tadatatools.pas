@@ -16,7 +16,7 @@ unit TADataTools;
 interface
 
 uses
-  Classes, TAChartUtils, TAGraph, TATools, TATextElements, TATypes;
+  Classes, TAChartUtils, TADrawUtils, TAGraph, TATools, TATextElements, TATypes;
 
 type
   TDataPointDistanceTool = class;
@@ -50,7 +50,7 @@ type
     TDataPointMode = (dpmFree, dpmSnap, dpmLock);
 
     TOptions = set of (
-      dpdoRotateLabel, dpdoLabelAbove, dpdoPermanent, dpdoFlipLabel);
+      dpdoRotateLabel, dpdoLabelAbove, dpdoPermanent, dpdoFlipLabel, dpdoClipping);
 
   strict private
     // Workaround for FPC 2.6 bug. Remove after migration to 2.8.
@@ -74,7 +74,7 @@ type
     procedure SetPointerStart(AValue: TDataPointDistanceToolPointer);
 
   strict protected
-    procedure DoDraw; override;
+    procedure DoDraw(ADrawer: IChartDrawer); override;
     function FindRef(
       APoint: TPoint; AMode: TDataPointMode; ADest: TDataPointTool.TPointRef;
       AOtherEndSeries: TBasicChartSeries): Boolean;
@@ -213,7 +213,7 @@ begin
   end;
 end;
 
-procedure TDataPointDistanceTool.DoDraw;
+procedure TDataPointDistanceTool.DoDraw(ADrawer: IChartDrawer);
 var
   a: Double;
 
@@ -221,7 +221,7 @@ var
   begin
     with APointer do
       if Visible then
-        DrawSize(FChart.Drawer, APos, Point(HorizSize, VertSize), clTAColor, a);
+        DrawSize(ADrawer, APos, Point(HorizSize, VertSize), clTAColor, a);
   end;
 
 var
@@ -230,6 +230,7 @@ var
   flip: Boolean;
 begin
   if not (IsActive or (FChart <> nil) and (dpdoPermanent in Options)) then exit;
+
   p1 := FChart.GraphToImage(PointStart.GraphPos);
   p2 := FChart.GraphToImage(PointEnd.GraphPos);
   case MeasureMode of
@@ -237,25 +238,35 @@ begin
     cdmOnlyY: p2.X := p1.X;
   end;
   if p1 = p2 then exit;
-  StartTransparency;
-  if LinePen.Visible then begin
-    FChart.Drawer.Pen := LinePen;
-    FChart.Drawer.Line(p1, p2);
+  StartTransparency(ADrawer);
+
+  if dpdoClipping in FOptions then
+    ADrawer.ClippingStart(FChart.ClipRect);
+  try
+    if LinePen.Visible then begin
+      ADrawer.Pen := LinePen;
+      ADrawer.Line(p1, p2);
+    end;
+    a := ArcTan2(p2.Y - p1.Y, p2.X - p1.X);
+    DrawPointer(PointerStart, p1);
+    DrawPointer(PointerEnd, p2);
+
+    if Marks.Visible then begin
+      flip := (dpdoFlipLabel in Options) and ((a > Pi /2) or (a < -Pi / 2));
+      Marks.SetAdditionalAngle(
+        IfThen(dpdoRotateLabel in Options, IfThen(flip, Pi - a, -a), 0));
+      p1 := (p1 + p2) div 2;
+      a += IfThen((dpdoLabelAbove in Options) xor flip, -Pi / 2, Pi / 2);
+      p2 := p1 + RotatePointX(Marks.Distance, a);
+      Marks.DrawLabel(ADrawer, p1, p2, GetDistanceText, dummy);
+    end;
+  finally
+    if dpdoClipping in FOptions then ADrawer.ClippingStop;
   end;
-  a := ArcTan2(p2.Y - p1.Y, p2.X - p1.X);
-  DrawPointer(PointerStart, p1);
-  DrawPointer(PointerEnd, p2);
-  if Marks.Visible then begin
-    flip := (dpdoFlipLabel in Options) and ((a > Pi /2) or (a < -Pi / 2));
-    Marks.SetAdditionalAngle(
-      IfThen(dpdoRotateLabel in Options, IfThen(flip, Pi - a, -a), 0));
-    p1 := (p1 + p2) div 2;
-    a += IfThen((dpdoLabelAbove in Options) xor flip, -Pi / 2, Pi / 2);
-    p2 := p1 + RotatePointX(Marks.Distance, a);
-    Marks.DrawLabel(FChart.Drawer, p1, p2, GetDistanceText, dummy);
-  end;
+
   inherited;
-  Chart.Drawer.SetTransparency(0);
+
+  ADrawer.SetTransparency(0);
 end;
 
 function TDataPointDistanceTool.FindRef(
@@ -311,7 +322,7 @@ procedure TDataPointDistanceTool.MouseDown(APoint: TPoint);
 begin
   if IsActive then exit;
   if dpdoPermanent in Options then
-    DoHide;
+    DoHide(GetCurrentDrawer);
   PointStart.FSeries := nil;
   if FindRef(APoint, DataPointModeStart, PointStart, nil) then
     Activate;
@@ -322,9 +333,11 @@ end;
 procedure TDataPointDistanceTool.MouseMove(APoint: TPoint);
 var
   newEnd: TPointRef;
+  id: IChartDrawer;
 begin
   if not IsActive then exit;
-  DoHide;
+  id := GetCurrentDrawer;
+  DoHide(id);
   newEnd := TPointRef.Create;
   try
     if FindRef(APoint, DataPointModeEnd, newEnd, PointStart.Series) then
@@ -332,10 +345,10 @@ begin
   finally
     FreeAndNil(newEnd);
   end;
-  if EffectiveDrawingMode = tdmXor then begin
-    FChart.Drawer.SetXor(true);
-    DoDraw;
-    FChart.Drawer.SetXor(false);
+  if (EffectiveDrawingMode = tdmXor) and Assigned(id) then begin
+    id.SetXor(true);
+    DoDraw(id);
+    id.SetXor(false);
   end;
   Handled;
 end;

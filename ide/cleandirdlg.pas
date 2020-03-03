@@ -30,10 +30,16 @@ unit CleanDirDlg;
 interface
 
 uses
-  Classes, SysUtils, RegExpr, Forms, Controls, Graphics, Dialogs, Buttons,
-  StdCtrls, FileUtil, Laz2_XMLCfg, LazFileUtils, LCLProc, ButtonPanel,
-  IDEWindowIntf, IDEHelpIntf, IDEDialogs, LazarusIDEStrConsts, LazConf,
-  IDEProcs, TransferMacros, InputHistory, ShowDeletingFilesDlg;
+  Classes, SysUtils, RegExpr,
+  // LCL
+  LCLProc, Forms, Controls, Graphics, Dialogs, StdCtrls, ButtonPanel,
+  // LazUtils
+  FileUtil, LazFileUtils, Laz2_XMLCfg, LazStringUtils,
+  // IdeIntf
+  IDEWindowIntf, IDEHelpIntf, IDEDialogs,
+  // IDE
+  IDEProcs, LazarusIDEStrConsts, LazConf, TransferMacros, InputHistory,
+  ShowDeletingFilesDlg, EnvironmentOpts;
 
 type
 
@@ -138,6 +144,9 @@ begin
   ButtonPanel.HelpButton.OnClick := @HelpButtonClick;
 
   IDEDialogLayoutList.ApplyLayout(Self);
+  DirCombobox.DropDownCount:=EnvironmentOptions.DropDownCount;
+  RemoveCombobox.DropDownCount:=EnvironmentOptions.DropDownCount;
+  KeepCombobox.DropDownCount:=EnvironmentOptions.DropDownCount;
 end;
 
 procedure TCleanDirectoryDialog.FormDestroy(Sender: TObject);

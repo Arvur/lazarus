@@ -26,7 +26,7 @@ type
   { TCairoPrinterCanvas }
 
   TCairoPrinterCanvas = class(TFilePrinterCanvas)
-  strict private
+  private
     cr: Pcairo_t;
   private
     FLazClipRect: TRect;
@@ -34,6 +34,7 @@ type
     {$ifdef pangocairo}
     fFontDesc: PPangoFontDescription;
     fFontDescStr: string;
+    fPageBegun: boolean;
     function StylesToStr(Styles: TFontStyles):string;
     procedure UpdatePangoLayout(Layout: PPangoLayout);
     {$endif}
@@ -81,6 +82,8 @@ type
     procedure CreateRegion; override;
     procedure RealizeAntialiasing; override;
     procedure DestroyHandle;
+
+    procedure SetPenMode;virtual;
   public
     SurfaceXDPI, SurfaceYDPI: Integer;
     constructor Create(APrinter : TPrinter); override;
@@ -89,6 +92,8 @@ type
     procedure BeginDoc; override;
     procedure EndDoc; override;
     procedure NewPage; override;
+    procedure BeginPage; override;
+    procedure EndPage; override;
     procedure FillRect(const ARect: TRect); override;
     procedure Rectangle(X1,Y1,X2,Y2: Integer); override;
     procedure Polyline(Points: PPoint; NumPts: Integer); override;
@@ -113,6 +118,7 @@ type
   public
     procedure MixedRoundRect(X1, Y1, X2, Y2: Integer; RX, RY: Integer; SquaredCorners: TSquaredCorners);
     procedure DrawSurface(const SourceRect, DestRect: TRect; surface: Pcairo_surface_t);
+    procedure UpdatePageSize; virtual;
 {  Not implemented
     procedure FloodFill(X, Y: Integer; FillColor: TColor; FillStyle: TFillStyle); override;
     procedure CopyRect(const Dest: TRect; SrcCanvas: TCanvas; const Source: TRect); override;
@@ -127,7 +133,6 @@ type
     fStream: TStream;
     procedure DestroyCairoHandle; override;
   public
-    procedure UpdatePageSize; virtual;
     property Stream: TStream read fStream write fStream;
   end;
 
@@ -151,6 +156,7 @@ type
 
   TCairoPngCanvas = class(TCairoFileCanvas)
   protected
+    procedure SetPenMode;override;
     function CreateCairoHandle: HDC; override;
     procedure DestroyCairoHandle; override;
   public
@@ -160,6 +166,10 @@ type
   { TCairoPsCanvas }
 
   TCairoPsCanvas = class(TCairoFileCanvas)
+  private
+    fHandle: Pcairo_t;
+    procedure GetPageProperties(out aWidth, aHeight: double; out orStr:string);
+    procedure UpdatePageTransform;
   protected
     function CreateCairoHandle: HDC; override;
   public
@@ -219,16 +229,8 @@ end;
 
 { TCairoPrinterCanvas }
 
-procedure TCairoPrinterCanvas.SetPenProperties;
-  procedure SetDash(d: array of double);
-  begin
-    cairo_set_dash(cr, @d, High(d)+1, 0);
-  end;
-var
-  cap: cairo_line_cap_t;
-   w: double;
+procedure TCairoPrinterCanvas.SetPenMode;
 begin
-  SetSourceColor(Pen.Color);
   case Pen.Mode of
     pmBlack: begin
       SetSourceColor(clBlack);
@@ -239,23 +241,24 @@ begin
       cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
     end;
     pmCopy: cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
-    pmXor: cairo_set_operator(cr, CAIRO_OPERATOR_XOR);
-    pmNotXor: cairo_set_operator(cr, CAIRO_OPERATOR_XOR);
-{    pmNop,
-    pmNot,
-    pmCopy,
-    pmNotCopy,
-    pmMergePenNot,
-    pmMaskPenNot,
-    pmMergeNotPen,
-    pmMaskNotPen,
-    pmMerge,
-    pmNotMerge,
-    pmMask,
-    pmNotMask,}
   else
     cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
   end;
+end;
+
+procedure TCairoPrinterCanvas.SetPenProperties;
+  procedure SetDash(d: array of double);
+  begin
+    cairo_set_dash(cr, @d, High(d)+1, 0);
+  end;
+var
+  cap: cairo_line_cap_t;
+   w: double;
+begin
+  SetSourceColor(Pen.Color);
+
+  SetPenMode;
+
   w := Pen.Width;
   if w = 0 then
     w := 0.5;
@@ -349,15 +352,13 @@ end;
 procedure TCairoPrinterCanvas.BeginDoc;
 begin
   inherited BeginDoc;
-  if assigned(printer) then
-    FLazClipRect:=printer.PaperSize.PaperRect.WorkRect;
+  BeginPage;
 end;
 
 procedure TCairoPrinterCanvas.EndDoc;
 begin
   inherited EndDoc;
-  cairo_show_page(cr);
-  FLazClipRect := Rect(0, 0, 0, 0);
+  EndPage;
   //if caller is printer, then at the end destroy cairo handles (flush output)
   //and establishes CreateCairoHandle call on the next print
   Handle := 0;
@@ -365,8 +366,29 @@ end;
 
 procedure TCairoPrinterCanvas.NewPage;
 begin
-  inherited NewPage;
-  cairo_show_page(cr);
+  EndPage;
+  BeginPage;
+end;
+
+procedure TCairoPrinterCanvas.BeginPage;
+begin
+  if assigned(printer) then
+  begin
+    FLazClipRect:=printer.PaperSize.PaperRect.WorkRect;
+    if HandleAllocated then
+      UpdatePageSize;
+  end;
+  fPageBegun := true;
+end;
+
+procedure TCairoPrinterCanvas.EndPage;
+begin
+  if fPageBegun then
+  begin
+    cairo_show_page(cr);
+    FLazClipRect := Rect(0, 0, 0, 0);
+    fPageBegun := false;
+  end;
 end;
 
 procedure TCairoPrinterCanvas.CreateBrush;
@@ -793,6 +815,10 @@ begin
   cairo_paint(cr);
   cairo_restore(cr);
   Changed;
+end;
+
+procedure TCairoPrinterCanvas.UpdatePageSize;
+begin
 end;
 
 procedure TCairoPrinterCanvas.Ellipse(X1, Y1, X2, Y2: Integer);
@@ -1470,10 +1496,6 @@ begin
   sf := nil;
 end;
 
-procedure TCairoFileCanvas.UpdatePageSize;
-begin
-end;
-
 { TCairoPdfCanvas }
 
 function TCairoPdfCanvas.CreateCairoHandle: HDC;
@@ -1493,28 +1515,60 @@ end;
 
 { TCairoPsCanvas }
 
+procedure TCairoPsCanvas.GetPageProperties(out aWidth, aHeight: double; out
+  orStr: string);
+begin
+  if Orientation in [poLandscape, poReverseLandscape] then begin
+    orStr := '%%PageOrientation: Landscape';
+    aWidth := PaperHeight*ScaleY; //switch H, W
+    aHeight := PaperWidth*ScaleX;
+  end else begin
+    orStr := '%%PageOrientation: Portait';
+    aWidth := PaperWidth*ScaleX;
+    aHeight := PaperHeight*ScaleY;
+  end;
+
+end;
+
+procedure TCairoPsCanvas.UpdatePageTransform;
+var
+  W, H: double;
+  Dummy: string;
+begin
+  GetPageProperties(W, H, Dummy);
+
+  cairo_identity_matrix(fHandle);
+
+  case Orientation of
+    poLandscape: begin
+      cairo_translate(fHandle, 0, H);
+      cairo_rotate(fHandle, -PI/2);
+    end;
+    poReverseLandscape: begin
+      cairo_translate(fHandle, W, 0);
+      cairo_rotate(fHandle, PI/2);
+    end;
+    poReversePortrait: begin
+      cairo_translate(fHandle, W, H);
+      cairo_rotate(fHandle, PI);
+    end;
+  end;
+
+end;
+
 function TCairoPsCanvas.CreateCairoHandle: HDC;
 var
   s: string;
   W, H: Double;
-  acr: Pcairo_t;
 begin
-  if Orientation in [poLandscape, poReverseLandscape] then begin
-    s := '%%PageOrientation: Landscape';
-    W := PaperHeight*ScaleY; //switch H, W
-    H := PaperWidth*ScaleX;
-  end else begin
-    s := '%%PageOrientation: Portait';
-    W := PaperWidth*ScaleX;
-    H := PaperHeight*ScaleY;
-  end;
+  GetPageProperties(W, H, s);
 
   //Sizes are in Points, 72DPI (1pt = 1/72")
   if fStream<>nil then
     sf := cairo_ps_surface_create_for_stream(@WriteToStream, fStream, W, H)
   else
     sf := cairo_ps_surface_create(PChar(FOutputFileName), W, H);
-  acr := cairo_create(sf);
+  fHandle := cairo_create(sf);
 
   cairo_ps_surface_dsc_begin_setup(sf);
   cairo_ps_surface_dsc_comment(sf, PChar(s));
@@ -1527,26 +1581,23 @@ begin
   end;
 
   //rotate and move
-  case Orientation of
-    poLandscape: begin
-      cairo_translate(acr, 0, H);
-      cairo_rotate(acr, -PI/2);
-    end;
-    poReverseLandscape: begin
-      cairo_translate(acr, W, 0);
-      cairo_rotate(acr, PI/2);
-    end;
-    poReversePortrait: begin
-      cairo_translate(acr, W, H);
-      cairo_rotate(acr, PI);
-    end;
-  end;
-  result := {%H-}HDC(acr);
+  UpdatePageTransform;
+
+  result := {%H-}HDC(fHandle);
 end;
 
 procedure TCairoPsCanvas.UpdatePageSize;
+var
+  W, H: Double;
+  S: string;
 begin
-  cairo_ps_surface_set_size(sf, PaperWidth*ScaleX, PaperHeight*ScaleY);
+  GetPageProperties(W, H, S);
+
+  cairo_ps_surface_dsc_begin_page_setup(sf);
+  cairo_ps_surface_dsc_comment(sf, PChar(s));
+  cairo_ps_surface_set_size(sf, W, H);
+
+  UpdatePageTransform;
 end;
 
 constructor TCairoPngCanvas.Create(APrinter: TPrinter);
@@ -1559,12 +1610,25 @@ end;
 function TCairoSvgCanvas.CreateCairoHandle: HDC;
 begin
   //Sizes are in Points, 72DPI (1pt = 1/72")
-  sf := cairo_svg_surface_create(PChar(FOutputFileName), PaperWidth*ScaleX, PaperHeight*ScaleY);
+  if fStream<>nil then
+    sf := cairo_svg_surface_create_for_stream(@WriteToStream, fStream, PaperWidth*ScaleX, PaperHeight*ScaleY)
+  else
+    sf := cairo_svg_surface_create(PChar(FOutputFileName), PaperWidth*ScaleX, PaperHeight*ScaleY);
   result := {%H-}HDC(cairo_create(sf));
 end;
 
 
 { TCairoPngCanvas }
+
+procedure TCairoPngCanvas.SetPenMode;
+begin
+  inherited SetPenMode;
+  { bitwise color operators make sense only for raster graphics }
+  case Pen.Mode of
+    pmXor: cairo_set_operator(cr, CAIRO_OPERATOR_XOR);
+    pmNotXor: cairo_set_operator(cr, CAIRO_OPERATOR_XOR);
+  end;
+end;
 
 function TCairoPngCanvas.CreateCairoHandle: HDC;
 var
@@ -1584,7 +1648,10 @@ end;
 
 procedure TCairoPngCanvas.DestroyCairoHandle;
 begin
-  cairo_surface_write_to_png(sf, PChar(FOutputFileName));
+  if Assigned(fStream) then
+    cairo_surface_write_to_png_stream(sf, @WriteToStream, fStream)
+  else
+    cairo_surface_write_to_png(sf, PChar(FOutputFileName));
   inherited DestroyCairoHandle;
 end;
 

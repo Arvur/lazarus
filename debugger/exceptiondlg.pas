@@ -28,7 +28,8 @@ unit ExceptionDlg;
 interface
 
 uses
-  Classes, Forms, Dialogs, StdCtrls, Buttons, IDEImagesIntf, LazarusIDEStrConsts;
+  Classes, math, Forms, Dialogs, StdCtrls, Buttons, IDEImagesIntf,
+  LazarusIDEStrConsts;
 
 type
   
@@ -77,8 +78,8 @@ begin
   btnContinue.Caption := lisMenuContinue;
   cbIgnoreExceptionType.Caption := lisIgnoreExceptionType;
 
-  TIDEImages.AssignImage(btnBreak.Glyph, 'menu_pause');
-  TIDEImages.AssignImage(btnContinue.Glyph, 'menu_run');
+  IDEImages.AssignImage(btnBreak, 'menu_pause');
+  IDEImages.AssignImage(btnContinue, 'menu_run');
 
   DefaultControl := btnBreak;
   CancelControl := btnContinue;
@@ -88,6 +89,8 @@ end;
 
 function TIDEExceptionDlg.Execute(AMessage: String; out IgnoreException: Boolean): TModalResult;
 begin
+  lblMessage.Constraints.MaxWidth := max(1, Screen.DesktopWidth-10);
+  lblMessage.Constraints.MaxHeight := max(1, Screen.DesktopHeight-100);
   lblMessage.Caption := AMessage;
   Result := ShowModal;
   IgnoreException := cbIgnoreExceptionType.Checked;

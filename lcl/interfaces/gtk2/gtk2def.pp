@@ -28,7 +28,7 @@ uses
   // RTL
   Classes, SysUtils, glib2, gdk2pixbuf, pango, gdk2, gtk2,
   // LazUtils
-  DynHashArray,
+  DynHashArray, LazLoggerBase,
   // LCL
   Gtk2Extra,
   LCLIntf, LCLProc, LCLType, LCLMemManager,
@@ -426,8 +426,6 @@ type
     property ROP2: Integer read GetRop2 write SetRop2;
   end;
 
-  TGtk2DeviceContext = TGtkDeviceContext deprecated;
-
   // memory system for TDeviceContext(s) ---------------------------------------------
 
   { TDeviceContextMemManager }
@@ -513,12 +511,15 @@ type
 const
   GDK_VOIDSYMBOL = $FFFFFF;
 
+  GDK_KEY_ISO_Level5_Shift = $FE11;
+  GDK_KEY_ISO_Level5_Latch = $FE12;
+  GDK_KEY_ISO_Level5_Lock = $FE13;
+
 // MWE:
 // Additional GDK_KEY_xxx definitions, not defined in GDK. Since GDK (on Linux)
 // simply passes the X vvalue I definde those extra here as GDKX_KEY_xxx
 // I don't know what the values are in win32 so I assume the same
 // Original source: /usr/X11R6/include/X11/XF86keysym.h
-
 
 // Keys found on some "Internet" keyboards.
 const

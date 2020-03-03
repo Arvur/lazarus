@@ -15,12 +15,12 @@ interface
 {$I LR_Vers.inc}
 
 uses
-  SysUtils, Classes, strutils, Graphics, Controls,
+  SysUtils, Classes, strutils, Variants, Graphics, Controls,
   LR_DBRel, Forms, StdCtrls, ClipBrd, Menus, db,
   {$IFDEF WIN32}
   Windows,
   {$ENDIF}
-  LCLType, LCLIntf, LConvEncoding, LazFileUtils, LazUTF8, LazLogger;
+  LCLType, LCLIntf, LConvEncoding, LazFileUtils, LazUTF8, LazLoggerBase;
 
 type
   TUTF8Item=packed record
@@ -70,18 +70,14 @@ function lrExpandVariables(const S:string):string;
 procedure lrNormalizeLocaleFloats(DisableLocale: boolean);
 function lrConfigFolderName(ACreatePath: boolean): string;
 function lrCanReadName(Stream: TStream): boolean;
+function lrVarToFloatDef(AValue:Variant; aDefault:Extended=0.0): Extended;
 
 procedure CanvasTextRectJustify(const Canvas:TCanvas;
   const ARect: TRect; X1, X2, Y: integer; const Text: string;
   Trimmed: boolean);
 
 // utf8 tools
-function UTF8Desc(S:string; var Desc: string): Integer; deprecated;
-function UTF8Char(S:string; index:Integer; Desc:string): TUTF8Char; deprecated;
-function UTF8Range(S:string; index,count:Integer; Desc:String):string; deprecated;
-function UTF8Index(index:integer; desc:string): Integer; deprecated;
 function UTF8CharIn(ch:TUTF8Char; const arrstr:array of string): boolean;
-function UTF8QuotedStr(s:string; Quote: TUTF8Char; desc:string=''): string; deprecated;
 function PosLast(SubChr:char; const Source:string):integer;
 function UTF8CountWords(const str:string; out WordCount,SpcCount,SpcSize:Integer): TArrUTF8Item;
 
@@ -591,6 +587,7 @@ begin
   end;
 end;
 
+{$PUSH}
 {$HINTS OFF}
 procedure frGetComponents(Owner: TComponent; ClassRef: TClass;
   List: TStrings; Skip: TComponent);
@@ -715,7 +712,7 @@ begin
     end;
   end;
 end;
-{$HINTS ON}  
+{$POP}
 
 function frGetWindowsVersion: String;
 {$IFDEF WIN32}
@@ -955,81 +952,12 @@ begin
   end;
 end;
 
-function UTF8Desc(S: string; var Desc: string): Integer;
-// create Desc as an array with Desc[i] is the size of the UTF-8 codepoint
-var
-  i,b: Integer;
+function lrVarToFloatDef(AValue: Variant; aDefault: Extended): Extended;
 begin
-  i := 1;
-  Result := 0;
-  SetLength(Desc, Length(S));
-  while i<=Length(s) do begin
-    b := UTF8CodepointStrictSize(@S[i]);
-    inc(i,b);
-    inc(Result);
-    Desc[Result] := Char(b);
-  end;
-  Setlength(Desc, Result);
-end;
-
-function UTF8Char(S: string; index: Integer; Desc: string): TUTF8Char;
-var
-  i,j: Integer;
-begin
-  Result := '';
-  if (index<1) or (index>Length(Desc)) then begin
-    //Result := #$EF#$BF#$BD  // replacement character
-    exit;
-  end;
-
-  i:=0; j:=1;
-  while i<Length(Desc) do begin
-    inc(i);
-    if i=index then begin
-      Move(S[j],Result[1],ord(Desc[i]));
-      Result[0]:=Desc[i];
-      break;
-    end;
-    inc(j, ord(Desc[i]));
-  end;
-
-end;
-
-function UTF8Range(S: string; index, count: Integer; Desc: String
-  ): string;
-var
-  c,i: Integer;
-begin
-  result := '';
-  c := 0;
-  i := index;
-  while (Count>0) and (i<=Length(Desc)) do begin
-    c := c + ord(Desc[i]);
-    inc(i);
-    Dec(Count);
-  end;
-  i := {%H-}UTF8Index(Index, Desc);
-  if i>0 then begin
-    SetLength(Result, c);
-    Move(S[i],Result[1],c);
-  end;
-end;
-
-// this assume index is in valid range
-function UTF8Index(index: integer; desc: string): Integer;
-var
-  i,c: integer;
-begin
-  result := 0;
-  c := 0;
-  for i:=1 to Length(Desc) do begin
-    inc(c);
-    if i=index then begin
-      result := c;
-      break;
-    end;
-    c := c + ord(Desc[i]) - 1;
-  end;
+  if not VarIsNumeric(AValue) then
+    result := ADefault
+  else
+    result := AValue;
 end;
 
 function UTF8CharIn(ch:TUTF8Char; const arrstr: array of string): boolean;
@@ -1043,32 +971,6 @@ begin
       break;
     end;
 end;
-
-// converted from FPC AnsiQuotedStr()
-function UTF8QuotedStr(s: string; Quote: TUTF8Char; desc:string=''): string;
-var
-    i, j, count: integer;
-begin
-  result := '' + Quote;
-  if desc='' then
-    count := {%H-}UTF8Desc(s, desc)
-  else
-    count := length(s);
-
-  i := 0;
-  j := 0;
-  while i < count do begin
-    i := i + 1;
-    if {%H-}UTF8Char(s,i,desc) = Quote then begin
-      result := result + {%H-}UTF8Range(S, 1 + j, i - j, desc) + Quote;
-      j := i;
-    end;
-  end;
-
-  if i <> j then
-    result := result + {%H-}UTF8Range(S, 1 + j, i - j, desc);
-  result := result + Quote;
-end ;
 
 function PosLast(SubChr: char; const Source: string): integer;
 var

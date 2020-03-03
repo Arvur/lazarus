@@ -21,6 +21,21 @@ interface
 uses
   Classes, SysUtils, forms, fpreport, frmfpreportdesignermain;
 
+Const
+  // Aliases for convenience
+  AllReportDesignOptions = frmfpreportdesignermain.AllReportDesignOptions;
+  rdoManageData      = frmfpreportdesignermain.rdoManageData;      // Allow user to manage report data
+  rdoManageVariables = frmfpreportdesignermain.rdoManageVariables; // Allow user to manage report variables
+  rdoAllowLoad       = frmfpreportdesignermain.rdoAllowLoad;       // Allow user to load new reports (open)
+  rdoAllowSave       = frmfpreportdesignermain.rdoAllowSave;       // Allow user to save reports (open)
+  rdoAllowProperties = frmfpreportdesignermain.rdoAllowProperties; // Allow user to save
+  rdoAllowPageAdd    = frmfpreportdesignermain.rdoAllowPageAdd;    // Allow user to add pages
+  rdoAllowNew        = frmfpreportdesignermain.rdoAllowNew;        // Allow user to start new report
+  rdoAllowPreview    = frmfpreportdesignermain.rdoAllowPreview;    // Allow user to ask report preview
+  rdoAllowBands      = frmfpreportdesignermain.rdoAllowBands;      // Allow user to add/remove bands
+  rdoAllowFileDrop   = frmfpreportdesignermain.rdoAllowFileDrop;   // Allow files to be dropped on designer
+
+
 type
   TFPReportDesignOption = frmfpreportdesignermain.TFPReportDesignOption;
   TFPReportDesignOptions = frmfpreportdesignermain.TFPReportDesignOptions;
@@ -36,8 +51,11 @@ type
     FOnShowDesigner: TNotifyEvent;
     FOptions: TFPReportDesignOptions;
     FReport: TFPCustomReport;
+    procedure DoDesignerClose(Sender: TObject; var CloseAction: TCloseAction);
     procedure DoSaveDesignJSON(Sender: TObject);
+    procedure EndDesigning;
     procedure SetReport(AValue: TFPCustomReport);
+    procedure StartDesigning;
   protected
     procedure ConfigDesigner(F: TFPReportDesignerForm); virtual;
     procedure AssignReportData; virtual;
@@ -62,7 +80,8 @@ type
 
 implementation
 
-uses fpjsonreport;
+uses
+  fpjsonreport;
 
 Resourcestring
   SErrNoReport = 'No report assigned.';
@@ -89,6 +108,14 @@ begin
   J:=report as TFPJSONReport;
   J.DesignTimeJSON.Clear;
   J.SavetoJSON(J.DesignTimeJSON);
+  (Sender as TFPReportDesignerForm).ResetModified;
+end;
+
+procedure TFPReportDesigner.DoDesignerClose(Sender: TObject; var CloseAction: TCloseAction);
+begin
+  EndDesigning;
+  If Assigned(OnCloseDesigner) then
+    OnCloseDesigner(Self);
 end;
 
 procedure TFPReportDesigner.ConfigDesigner(F : TFPReportDesignerForm);
@@ -131,15 +158,36 @@ begin
     end;
 end;
 
+procedure TFPReportDesigner.StartDesigning;
+
+Var
+  I : integer;
+
+begin
+  For I:=0 to Report.ReportData.Count-1 do
+    Report.ReportData[i].Data.StartDesigning;
+end;
+
+procedure TFPReportDesigner.EndDesigning;
+
+Var
+  I : integer;
+
+begin
+  For I:=0 to Report.ReportData.Count-1 do
+    Report.ReportData[i].Data.EndDesigning;
+end;
 
 procedure TFPReportDesigner.DoExecute;
 
 Var
   F : TFPReportDesignerForm;
+  isModal : Boolean;
 
 begin
   If not Assigned(FReport) then
     Raise EReportError.Create(SErrNoReport);
+  StartDesigning;
   F:=TFPReportDesignerForm.Create(Application);
   try
     if AutoAssignReportData then
@@ -147,16 +195,14 @@ begin
     ConfigDesigner(F);
     if Assigned(OnShowDesigner) then
       OnShowDesigner(F);
-    if not ModalWindow then
+    F.AddHandlerClose(@DoDesignerClose,False);
+    isModal:=ModalWindow;
+    if not isModal then
       F.Show
     else
-      begin
       F.ShowModal;
-      if Assigned(OnCloseDesigner) then
-        OnCloseDesigner(F);
-      end;
   finally
-    if ModalWindow then
+    if isModal then
       F.Free;
   end;
 end;

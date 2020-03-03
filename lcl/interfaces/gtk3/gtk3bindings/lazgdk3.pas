@@ -2885,8 +2885,8 @@ type
   PGdkAtom = ^TGdkAtom;
   TGdkAtom = object
     function name: Pgchar; cdecl; inline;
-    function intern(atom_name: Pgchar; only_if_exists: gboolean): TGdkAtom; cdecl; inline; static;
-    function intern_static_string(atom_name: Pgchar): TGdkAtom; cdecl; inline; static;
+    function intern(atom_name: Pgchar; only_if_exists: gboolean): PGdkAtom; cdecl; inline; static;
+    function intern_static_string(atom_name: Pgchar): PGdkAtom; cdecl; inline; static;
   end;
   TGdkDisplay = object(TGObject)
     function get_default: PGdkDisplay; cdecl; inline; static;
@@ -2946,6 +2946,7 @@ type
     function get_monitor_width_mm(monitor_num: gint): gint; cdecl; inline;
     procedure get_monitor_workarea(monitor_num: gint; dest: PGdkRectangle); cdecl; inline;
     function get_n_monitors: gint; cdecl; inline;
+    function get_monitor_scale_factor(monitor_num: gint): gint; cdecl; inline;
     function get_number: gint; cdecl; inline;
     function get_primary_monitor: gint; cdecl; inline;
     function get_resolution: gdouble; cdecl; inline;
@@ -3890,8 +3891,8 @@ type
 
 
 function gdk_app_launch_context_get_type: TGType; cdecl; external;
-function gdk_atom_intern(atom_name: Pgchar; only_if_exists: gboolean): TGdkAtom; cdecl; external;
-function gdk_atom_intern_static_string(atom_name: Pgchar): TGdkAtom; cdecl; external;
+function gdk_atom_intern(atom_name: Pgchar; only_if_exists: gboolean): PGdkAtom; cdecl; external;
+function gdk_atom_intern_static_string(atom_name: Pgchar): PGdkAtom; cdecl; external;
 function gdk_atom_name(atom: TGdkAtom): Pgchar; cdecl; external;
 function gdk_cairo_create(window: PGdkWindow): Pcairo_t; cdecl; external;
 function gdk_cairo_get_clip_rectangle(cr: Pcairo_t; rect: PGdkRectangle): gboolean; cdecl; external;
@@ -4083,6 +4084,7 @@ function gdk_screen_get_primary_monitor(screen: PGdkScreen): gint; cdecl; extern
 function gdk_screen_get_resolution(screen: PGdkScreen): gdouble; cdecl; external;
 function gdk_screen_get_rgba_visual(screen: PGdkScreen): PGdkVisual; cdecl; external;
 function gdk_screen_get_root_window(screen: PGdkScreen): PGdkWindow; cdecl; external;
+function gdk_screen_get_monitor_scale_factor(screen: PGdkScreen; monitor_num: gint): gint; cdecl; external;
 function gdk_screen_get_setting(screen: PGdkScreen; name: Pgchar; value: PGValue): gboolean; cdecl; external;
 function gdk_screen_get_system_visual(screen: PGdkScreen): PGdkVisual; cdecl; external;
 function gdk_screen_get_toplevel_windows(screen: PGdkScreen): PGList; cdecl; external;
@@ -4165,6 +4167,7 @@ function gdk_window_get_visible_region(window: PGdkWindow): Pcairo_region_t; cde
 function gdk_window_get_visual(window: PGdkWindow): PGdkVisual; cdecl; external;
 function gdk_window_get_width(window: PGdkWindow): gint; cdecl; external;
 function gdk_window_get_window_type(window: PGdkWindow): TGdkWindowType; cdecl; external;
+function gdk_window_get_scale_factor(window: PGdkWindow): gint; cdecl; external;
 function gdk_window_has_native(window: PGdkWindow): gboolean; cdecl; external;
 function gdk_window_is_destroyed(window: PGdkWindow): gboolean; cdecl; external;
 function gdk_window_is_input_only(window: PGdkWindow): gboolean; cdecl; external;
@@ -4499,12 +4502,12 @@ begin
   Result := LazGdk3.gdk_atom_name(self);
 end;
 
-function TGdkAtom.intern(atom_name: Pgchar; only_if_exists: gboolean): TGdkAtom; cdecl;
+function TGdkAtom.intern(atom_name: Pgchar; only_if_exists: gboolean): PGdkAtom; cdecl;
 begin
   Result := LazGdk3.gdk_atom_intern(atom_name, only_if_exists);
 end;
 
-function TGdkAtom.intern_static_string(atom_name: Pgchar): TGdkAtom; cdecl;
+function TGdkAtom.intern_static_string(atom_name: Pgchar): PGdkAtom; cdecl;
 begin
   Result := LazGdk3.gdk_atom_intern_static_string(atom_name);
 end;
@@ -4657,6 +4660,11 @@ end;
 function TGdkScreen.get_n_monitors: gint; cdecl;
 begin
   Result := LazGdk3.gdk_screen_get_n_monitors(@self);
+end;
+
+function TGdkScreen.get_monitor_scale_factor(monitor_num: gint): gint; cdecl;
+begin
+   Result := LazGdk3.gdk_screen_get_monitor_scale_factor(@self, monitor_num);
 end;
 
 function TGdkScreen.get_number: gint; cdecl;

@@ -40,8 +40,17 @@ uses
 {$IFDEF IDE_MEM_CHECK}
   MemCheck,
 {$ENDIF}
-  Classes, SysUtils, Forms, Project, SourceMarks, DbgIntfBaseTypes, DbgIntfDebuggerBase,
-  Debugger, ProjectDefs, IDEOptionsIntf, LazarusIDEStrConsts, Laz2_XMLCfg;
+  Classes, SysUtils,
+  // LCL
+  Forms,
+  // LazUtils
+  Laz2_XMLCfg,
+  // IdeIntf
+  IDEOptionsIntf, IDEOptEditorIntf,
+  // DebuggerIntf
+  DbgIntfBaseTypes, DbgIntfDebuggerBase, DbgIntfPseudoTerminal,
+  // IDE
+  Debugger, SourceMarks, Project, ProjectDefs, LazarusIDEStrConsts;
 
 type
   TDebugDialogType = (
@@ -122,6 +131,7 @@ type
     FManagerStates: TDebugManagerStates;
     function  GetState: TDBGState; virtual; abstract;
     function  GetCommands: TDBGCommands; virtual; abstract;
+    function GetPseudoTerminal: TPseudoTerminal; virtual; abstract;
     {$IFDEF DBG_WITH_DEBUGGER_DEBUG}
     function GetDebugger: TDebuggerIntf; virtual; abstract;
     {$ENDIF}
@@ -144,6 +154,7 @@ type
 
     procedure DoRestoreDebuggerMarks(AnUnitInfo: TUnitInfo); virtual; abstract;
 
+    function RequiredCompilerOpts(ATargetCPU, ATargetOS: String): TDebugCompilerRequirements; virtual; abstract;
     function InitDebugger(AFlags: TDbgInitFlags = []): Boolean; virtual; abstract;
     
     function DoPauseProject: TModalResult; virtual; abstract;
@@ -170,8 +181,7 @@ type
     procedure Detach; virtual; abstract;
     function FillProcessList(AList: TRunningProcessInfoList): boolean; virtual; abstract;
 
-    function Evaluate(const AExpression: String; var AResult: String;
-                      var ATypeInfo: TDBGType;
+    function Evaluate(const AExpression: String; ACallback: TDBGEvaluateResultCallback;
                       EvalFlags: TDBGEvaluateFlags = []): Boolean; virtual; abstract; // Evaluates the given expression, returns true if valid
     function Modify(const AExpression: String; const ANewValue: String): Boolean; virtual; abstract; // Modify the given expression, returns true if valid
 
@@ -186,10 +196,12 @@ type
                                 WarnIfNoDebugger: boolean): TModalResult; virtual; abstract;
     function DoCreateBreakPoint(const AFilename: string; ALine: integer;
                                 WarnIfNoDebugger: boolean;
-                                out ABrkPoint: TIDEBreakPoint): TModalResult; virtual; abstract;
+                                out ABrkPoint: TIDEBreakPoint;
+                                AnUpdating: Boolean = False): TModalResult; virtual; abstract;
     function DoCreateBreakPoint(const AnAddr: TDBGPtr;
                                 WarnIfNoDebugger: boolean;
-                                out ABrkPoint: TIDEBreakPoint): TModalResult; virtual; abstract;
+                                out ABrkPoint: TIDEBreakPoint;
+                                AnUpdating: Boolean = False): TModalResult; virtual; abstract;
     function DoDeleteBreakPoint(const AFilename: string; ALine: integer
                                 ): TModalResult; virtual; abstract;
     function DoDeleteBreakPointAtMark(const ASourceMark: TSourceMark
@@ -209,7 +221,6 @@ type
                               DoDisableAutoSizing: boolean = false); virtual; abstract;
   public
     property Commands: TDBGCommands read GetCommands;  // All current available commands of the debugger
-    property Debuggers[const AIndex: Integer]: TDebuggerClass read GetDebuggerClass;
     property Destroying: boolean read FDestroying;
     property State: TDBGState read GetState;           // The current state of the debugger
 
@@ -225,6 +236,7 @@ type
     property Watches: TIdeWatchesMonitor read FWatches;
     property Threads: TIdeThreadsMonitor read FThreads;
     property Snapshots: TSnapshotManager read FSnapshots;
+    property PseudoTerminal: TPseudoTerminal read GetPseudoTerminal; experimental; // 'may be replaced with a more general API';
     (* TODO: workaround for http://bugs.freepascal.org/view.php?id=21834   *)
     property DebuggerClass: TDebuggerClass read GetCurrentDebuggerClass;
     {$IFDEF DBG_WITH_DEBUGGER_DEBUG}

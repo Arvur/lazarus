@@ -40,6 +40,7 @@ type
     lbLicense: TLabel;
     mDescription: TMemo;
     mLicense: TMemo;
+    pnBuffer: TPanel;
     pnPackageName: TPanel;
     pnBase: TPanel;
     pnDescription: TPanel;
@@ -47,8 +48,9 @@ type
   private
   public
     procedure Init;
-    procedure CalcHeight(AMemo: TMemo; AText: String);
   end;
+
+  procedure CalcHeight(AMemo: TMemo; AText: String);
 
 implementation
 uses opkman_const, opkman_options;
@@ -74,12 +76,11 @@ begin
   end;
 end;
 
-procedure TfrShowHint.CalcHeight(AMemo: TMemo; AText: String);
+procedure CalcHeight(AMemo: TMemo; AText: String);
 var
   R: TRect;
   Increase: Integer;
   MH: Integer;
-  LH: Integer;
 begin
   R := Rect(0, 0, AMemo.Width, 0);
   TPanel(AMemo.Parent).Font.Assign(AMemo.Font);

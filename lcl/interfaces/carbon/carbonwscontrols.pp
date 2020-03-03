@@ -34,9 +34,9 @@ uses
 
 type
 
-  { TCarbonWSDragImageList }
+  { TCarbonWSDragImageListResolution }
 
-  TCarbonWSDragImageList = class(TWSDragImageList)
+  TCarbonWSDragImageListResolution = class(TWSDragImageListResolution)
   published
   end;
 
@@ -327,7 +327,7 @@ begin
 
   TCarbonWidget(AWinControl.Handle).SetCursor(ACursor);
 
-  if (Screen.Cursor <> crDefault) then Exit;
+  if (Screen.RealCursor <> crDefault) then Exit;
 
   TopWindow := TCarbonWidget(AWinControl.Handle).GetTopParentWindow;
   TopView := HIViewGetRoot(TopWindow);

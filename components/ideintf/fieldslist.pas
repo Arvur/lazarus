@@ -25,7 +25,7 @@
 
 }
 
-unit fieldslist;
+unit FieldsList;
 
 {$mode objfpc}{$H+}
 
@@ -36,7 +36,7 @@ uses
   // LCL
   Forms, Dialogs, Buttons, StdCtrls,
   // IdeIntf
-  ObjInspStrConsts, ComponentEditors, IDEWindowIntf;
+  ObjInspStrConsts, PropEdits, ComponentEditors, IDEWindowIntf;
 
 type
 
@@ -47,7 +47,7 @@ type
     BitBtnCancel: TBitBtn;
     ListBox1: TListBox;
     procedure BitBtnOkClick(Sender: TObject);
-    procedure FormClose(Sender: TObject; var CloseAction: TCloseAction);
+    procedure FormClose(Sender: TObject; var {%H-}CloseAction: TCloseAction);
     procedure FormCreate(Sender: TObject);
   private
     FDesigner: TComponentEditorDesigner;
@@ -93,20 +93,14 @@ var
     i : integer;
   begin
     Result := '';
-    // FieldName is an ansistring
     for i := 1 to Length(AName) do
       if AName[i] in ['0'..'9','a'..'z','A'..'Z','_'] then
         Result := Result + AName[i];
-    if (Length(Result) > 0) and (not (Result[1] in ['0'..'9'])) then
-        Exit;
-    if Assigned(FieldDef.FieldClass) then
-    begin
-      Result := FieldDef.FieldClass.ClassName + Result;
-      if Copy(Result, 1, 1) = 'T' then
-        Result := Copy(Result, 2, Length(Result) - 1);
-    end
-    else
-      Result := 'Field' + Result;
+    if (Result = '') or (Result[1] in ['0'..'9']) then
+      if Assigned(FieldDef.FieldClass) then  // Try with FieldDef
+        Result := ClassNameToComponentName(FieldDef.FieldClass.ClassName) + Result
+      else
+        Result := 'Field' + Result;
   end;
 
   function CreateFieldName(Owner: TComponent; const AName: string): string;

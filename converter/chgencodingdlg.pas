@@ -37,11 +37,11 @@ uses
   // CodeTools
   CodeCache, CodeToolManager, FileProcs,
   // LazUtils
-  LConvEncoding, LazFileUtils, LazFileCache, AvgLvlTree,
+  LConvEncoding, LazFileUtils, LazFileCache, LazStringUtils, AvgLvlTree,
   // IDEIntf
   IDEWindowIntf, SrcEditorIntf, IDEHelpIntf, IDEImagesIntf,
   // IDE
-  IDEProcs, PackageDefs, PackageSystem, Project, LazarusIDEStrConsts;
+  IDEProcs, PackageDefs, PackageSystem, Project, LazarusIDEStrConsts, EnvironmentOpts;
 
 type
 
@@ -116,9 +116,9 @@ begin
   CloseButton.Caption:=lisClose;
   ApplyButton.Caption:=lisConvert;
   HelpButton.Caption:=lisHelp;
-  TIDEImages.AssignImage(CloseButton.Glyph, 'btn_close');
-  TIDEImages.AssignImage(ApplyButton.Glyph, 'btn_ok');
-  TIDEImages.AssignImage(HelpButton.Glyph, 'btn_help');
+  IDEImages.AssignImage(CloseButton, 'btn_close');
+  IDEImages.AssignImage(ApplyButton, 'btn_ok');
+  IDEImages.AssignImage(HelpButton, 'btn_help');
 
   PreviewGroupBox.Caption:=dlgWRDPreview;
   PreviewListView.Column[0].Caption:=dlgEnvFiles;
@@ -165,6 +165,9 @@ begin
     OwnerComboBox.Text:='';
   FFiles:=TFilenameToStringTree.Create(FilenamesCaseSensitive);
   UpdatePreview;
+  OwnerComboBox.DropDownCount:=EnvironmentOptions.DropDownCount;
+  NewEncodingComboBox.DropDownCount:=EnvironmentOptions.DropDownCount;
+  FileFilterCombobox.DropDownCount:=EnvironmentOptions.DropDownCount;
 end;
 
 procedure TChgEncodingDialog.FormDestroy(Sender: TObject);
@@ -363,7 +366,7 @@ var
   HasFiles: Boolean;
   IsDone: Boolean;
 begin
-  Screen.Cursor:=crHourGlass;
+  Screen.BeginWaitCursor;
   try
     HasFiles:=GetFiles;
     PreviewListView.Items.Clear;
@@ -393,7 +396,7 @@ begin
       Format(lisNumberOfFilesToConvert, [IntToStr(PreviewListView.Items.Count)]);
     ApplyButton.Enabled:=True;
   finally
-    Screen.Cursor:=crDefault;
+    Screen.EndWaitCursor;
   end;
 end;
 

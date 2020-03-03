@@ -83,7 +83,6 @@ type
     ActNewStd: TAction;
     ActionListSelf: TActionList;
     ActNew: TAction;
-    ImageList1: TImageList;
     lblCategory: TLabel;
     lblName: TLabel;
     lstCategory: TListBox;
@@ -410,20 +409,12 @@ begin
 end;
 
 procedure TActionListEditor.FormCreate(Sender: TObject);
-var
-  ImageSize: Integer;
 begin
-  ImageSize := TIDEImages.ScaledSize;
-  ImageList1.Width := ImageSize;
-  ImageList1.Height := ImageSize;
-  TIDEImages.AddImageToImageList(ImageList1, 'laz_add'); //imageindex 0
-  TIDEImages.AddImageToImageList(ImageList1, 'laz_delete'); //imageindex 1
-  TIDEImages.AddImageToImageList(ImageList1, 'arrow_up'); //imadeindex 2
-  TIDEImages.AddImageToImageList(ImageList1, 'arrow_down'); //imageindex 3
-  btnAdd.ImageIndex := 0;
-  btnDelete.ImageIndex := 1;
-  btnUp.ImageIndex := 2;
-  btnDown.ImageIndex := 3;
+  ToolBar1.Images := IDEImages.Images_16;
+  btnAdd.ImageIndex := IDEImages.GetImageIndex('laz_add');
+  btnDelete.ImageIndex := IDEImages.GetImageIndex('laz_delete');
+  btnUp.ImageIndex := IDEImages.GetImageIndex('arrow_up');
+  btnDown.ImageIndex := IDEImages.GetImageIndex('arrow_down');
   IDEDialogLayoutList.ApplyLayout(Self);
 end;
 
@@ -477,11 +468,13 @@ begin
 end;
 
 procedure TActionListEditor.OnComponentRenamed(AComponent: TComponent);
+var
+  i: Integer;
 begin
-  if Assigned(FActionList)
-  and (AComponent is TAction) and (TAction(AComponent).ActionList = FActionList)
-  and Assigned(FActionList.ActionByName(AComponent.Name)) then
-    lstActionName.Items[lstActionName.ItemIndex] := AComponent.Name;
+  if not (AComponent is TContainedAction) then Exit;
+  i := lstActionName.Items.IndexOfObject(AComponent);
+  if i >= 0 then
+    lstActionName.Items[i] := AComponent.Name;
 end;
 
 procedure TActionListEditor.OnComponentSelection(

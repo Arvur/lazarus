@@ -1,12 +1,12 @@
 {
    File generated automatically by Lazarus Package Manager
 
-   fpmake.pp for LCLBase 1.7
+   fpmake.pp for LCLBase 2.1
 
-   This file was generated on 14-10-16
+   This file was generated on 31.12.2018
 }
 
-{$ifndef ALLPACKAGES}
+{$ifndef ALLPACKAGES} 
 {$mode objfpc}{$H+}
 program fpmake;
 
@@ -23,12 +23,13 @@ begin
   with Installer do
     begin
     P:=AddPackage('lclbase');
-    P.Version:='1.7';
+    P.Version:='2.1';
 
     P.Directory:=ADirectory;
 
     P.Flags.Add('LazarusDsgnPkg');
 
+    P.Dependencies.Add('chm');
     P.Dependencies.Add('lazutils');
     P.Options.Add('-MObjFPC');
     P.Options.Add('-Scghi');
@@ -62,7 +63,6 @@ begin
     t.Dependencies.AddUnit('forms');
     t.Dependencies.AddUnit('graphics');
     t.Dependencies.AddUnit('graphmath');
-    t.Dependencies.AddUnit('graphtype');
     t.Dependencies.AddUnit('graphutil');
     t.Dependencies.AddUnit('grids');
     t.Dependencies.AddUnit('helpintfs');
@@ -72,7 +72,6 @@ begin
     t.Dependencies.AddUnit('inipropstorage');
     t.Dependencies.AddUnit('interfacebase');
     t.Dependencies.AddUnit('intfgraphics');
-    t.Dependencies.AddUnit('jsonpropstorage');
     t.Dependencies.AddUnit('lazhelphtml');
     t.Dependencies.AddUnit('lazhelpintf');
     t.Dependencies.AddUnit('lclclasses');
@@ -158,6 +157,11 @@ begin
     t.Dependencies.AddUnit('groupededit');
     t.Dependencies.AddUnit('lcltaskdialog');
     t.Dependencies.AddUnit('wslazdeviceapis');
+    t.Dependencies.AddUnit('lclplatformdef');
+    t.Dependencies.AddUnit('industrialbase');
+    t.Dependencies.AddUnit('jsonpropstorage');
+    t.Dependencies.AddUnit('dblogdlg');
+    t.Dependencies.AddUnit('lclexceptionstacktrace');
 
     T:=P.Targets.AddUnit('checklst.pas');
     T:=P.Targets.AddUnit('clipbrd.pp');
@@ -177,7 +181,6 @@ begin
     T:=P.Targets.AddUnit('forms.pp');
     T:=P.Targets.AddUnit('graphics.pp');
     T:=P.Targets.AddUnit('graphmath.pp');
-    T:=P.Targets.AddUnit('graphtype.pp');
     T:=P.Targets.AddUnit('graphutil.pp');
     T:=P.Targets.AddUnit('grids.pas');
     T:=P.Targets.AddUnit('helpintfs.pas');
@@ -187,7 +190,6 @@ begin
     T:=P.Targets.AddUnit('inipropstorage.pas');
     T:=P.Targets.AddUnit('interfacebase.pp');
     T:=P.Targets.AddUnit('intfgraphics.pas');
-    T:=P.Targets.AddUnit('jsonpropstorage.pas');
     T:=P.Targets.AddUnit('lazhelphtml.pas');
     T:=P.Targets.AddUnit('lazhelpintf.pas');
     T:=P.Targets.AddUnit('lclclasses.pp');
@@ -273,18 +275,15 @@ begin
     T:=P.Targets.AddUnit('groupededit.pp');
     T:=P.Targets.AddUnit('lcltaskdialog.pas');
     T:=P.Targets.AddUnit('widgetset/wslazdeviceapis.pas');
+    T:=P.Targets.AddUnit('lclplatformdef.pas');
+    T:=P.Targets.AddUnit('industrialbase.pp');
+    T:=P.Targets.AddUnit('jsonpropstorage.pas');
+    P.Targets.AddImplicitUnit('forms/dblogdlg.pas');
+    T:=P.Targets.AddUnit('lclexceptionstacktrace.pas');
 
     // copy the compiled file, so the IDE knows how the package was compiled
     P.InstallFiles.Add('LCLBase.compiled',AllOSes,'$(unitinstalldir)');
 
-    // Added manually
-    P.InstallFiles.Add('cursors.res', '$(unitinstalldir)');
-    P.InstallFiles.Add('btn_icons.res', '$(unitinstalldir)');
-    P.InstallFiles.Add('dialog_icons.res', '$(unitinstalldir)');
-    P.InstallFiles.Add('lcl_grid_images.res', '$(unitinstalldir)');
-    P.InstallFiles.Add('lcl_dbgrid_images.res', '$(unitinstalldir)');
-    P.InstallFiles.Add('lcl_edbtnimg.res', '$(unitinstalldir)');
-    P.InstallFiles.Add('lcl_dock_images.res', '$(unitinstalldir)');
     end;
 end;
 

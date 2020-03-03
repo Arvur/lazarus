@@ -18,9 +18,6 @@ function TGtk3WidgetSet.CreateRubberBand(const ARect: TRect; const ABrush: HBrus
 var
   Widget: PGtkWidget absolute Result;
   dx, dy: integer;
-  Pixmap: PGdkPixbuf;
-  gc: PCairo_t;
-  AColor: TGdkColor;
 begin
   dx := ARect.Right - ARect.Left;
   dy := ARect.Bottom - ARect.Top;
@@ -29,51 +26,28 @@ begin
   if dy < 0 then
     dy := 0;
 
-  (*
   // rubber band is just a window without a title
-  Result := {%H-}HWND(gtk_window_new(GTK_WINDOW_POPUP));
+  Result := {%H-}HWND(gtk_window_new(GTK_WINDOW_TOPLEVEL));
   gtk_window_set_default_size({%H-}PGtkWindow(Result), dx, dy);
-  gtk_widget_set_uposition(Widget, ARect.Left, ARect.Top);
-  gtk_widget_set_app_paintable(Widget, True);
+
   gtk_widget_realize(Widget);
+
   gdk_window_set_decorations(Widget^.window, 0);
   gdk_window_set_functions(Widget^.window, GDK_FUNC_RESIZE or GDK_FUNC_CLOSE);
-  gtk_window_set_opacity({%H-}PGtkWindow(Result), 0.25);
-  if ABrush = 0 then
-    SetWidgetColor(Widget, clNone, clGradientActiveCaption, [GTK_STATE_NORMAL])
-  else
-  if {%H-}PGDIObject(ABrush)^.GDIBrushFill = GDK_SOLID then
-    SetWidgetColor(Widget, clNone, {%H-}PGDIObject(ABrush)^.GDIBrushColor.ColorRef, [GTK_STATE_NORMAL])
-  else
-  begin
-    Pixmap := gdk_pixmap_new(Widget^.window, dx, dy, -1);
-    gc := gdk_gc_new(Pixmap);
-    AColor := AllocGDKColor(clWhite);
-    gdk_gc_set_foreground(gc, @AColor);
-    gdk_gc_set_fill(gc, {%H-}PGDIObject(ABrush)^.GDIBrushFill);
-    case {%H-}PGDIObject(ABrush)^.GDIBrushFill of
-      GDK_TILED: gdk_gc_set_tile(gc, {%H-}PGDIObject(ABrush)^.GDIBrushPixMap);
-      GDK_STIPPLED: gdk_gc_set_stipple(gc, {%H-}PGDIObject(ABrush)^.GDIBrushPixMap);
-    end;
-    gdk_draw_rectangle(Pixmap, gc, -1, 0, 0, dx, dy);
-    gdk_gc_unref(gc);
-    gdk_window_set_back_pixmap(Widget^.window, Pixmap, False);
-    g_object_unref(Pixmap);
-  end;
+  gtk_widget_set_opacity(Widget, 0.25);
 
   gtk_widget_show(Widget);
-  *)
 end;
 
 procedure TGtk3WidgetSet.DestroyRubberBand(ARubberBand: HWND);
 begin
-  // TODO: gtk_widget_destroy({%H-}PGtkWidget(ARubberBand));
+  gtk_widget_destroy({%H-}PGtkWidget(ARubberBand));
 end;
 
 procedure TGtk3WidgetSet.DrawDefaultDockImage(AOldRect, ANewRect: TRect;
   AOperation: TDockImageOperation);
-const
-  LineWidth = 2;
+//const
+//  LineWidth = 2;
 var
   dx, dy: integer;
   (*
@@ -182,16 +156,6 @@ begin
 end;
 
 {------------------------------------------------------------------------------
-  function TGtk3WidgetSet.FontCanUTF8(Font: HFont): boolean;
-  
-  True if font recognizes Unicode UTF8 encoding.
- ------------------------------------------------------------------------------}
-function TGtk3WidgetSet.FontCanUTF8(Font: HFont): boolean;
-begin
-  Result := True; // IsValidGDIObject(Font);
-end;
-
-{------------------------------------------------------------------------------
   function TGtk3WidgetSet.FontIsMonoSpace(Font: HFont): boolean;
 
   True if font characters have all the same width.
@@ -250,13 +214,11 @@ begin
     1: ImageFormat := CAIRO_FORMAT_A1;
     2: ImageFormat := CAIRO_FORMAT_A8;
     else
-      if Desc.AlphaPrec=0 then
-         ImageFormat := CAIRO_FORMAT_RGB24
-      else
-         ImageFormat := CAIRO_FORMAT_ARGB32;
+       ImageFormat := CAIRO_FORMAT_ARGB32;
   end;
   ARowStride := GetBytesPerLine(Desc.Width, Desc.BitsPerPixel, rileDWordBoundary);
-  ABitmap := HBitmap(TGtk3Image.Create(NewData, Desc.Width, Desc.Height, ARowStride, ImageFormat, True));
+  ABitmap := HBitmap(TGtk3Image.Create(NewData, Desc.Width, Desc.Height, ARowStride, ImageFormat,
+                     not ASkipMask));  // Using ASkipMask for DataOwner param prevents a crash later.
   Result := ABitmap <> 0;
 
   if ASkipMask then Exit;
@@ -314,7 +276,7 @@ begin
   ADesc.LineOrder := riloTopToBottom;
   ADesc.LineEnd := rileDWordBoundary;
 
-  ADesc.Depth := CairoImageFormatToDepth[Image.getFormat];
+  ADesc.Depth := CairoImageFormatToDepth[Image.Format];
   ADesc.BitsPerPixel := ADesc.Depth;
   if ADesc.BitsPerPixel = 24 then
     ADesc.BitsPerPixel := 32;
@@ -706,8 +668,8 @@ var
   WorkImage, WorkMask: TGtk3Image;
   R: TRect;
   Width, Height: Integer;
-  InvertPixels: Boolean;
-  Px: Cardinal;
+  //InvertPixels: Boolean;
+  //Px: Cardinal;
 begin
   Result := false;
 
@@ -871,17 +833,13 @@ function TGtk3WidgetSet.RawImage_FromDevice(out ARawImage: TRawImage; ADC: HDC;
   const ARect: TRect): Boolean;
 var
   Desc: TRawImageDescription absolute ARawImage.Description;
-
-  //SrcWidth, SrcHeight: Integer;
-  WinID: Cardinal;
   DCSize: TSize;
   Pixmap: PGdkPixbuf;
-  Image: PGdkPixbuf;
   Context: TGtk3DeviceContext;
-  DCOrigin: TPoint;
-  R: TRect;
-  Drawable: Pcairo_t;
-  AWindow: PGdkWindow;
+  //DCOrigin: TPoint;
+  //R: TRect;
+  //Drawable: Pcairo_t;
+  //AWindow: PGdkWindow;
 
   procedure RawImage_FromImage(AImage: PGdkPixbuf);
   var
@@ -893,7 +851,6 @@ var
     Move(pixels^, ARawImage.Data^, ARawImage.DataSize);
     ARawImage.Mask := nil;
   end;
-
 
 begin
   Result := True;
@@ -1138,7 +1095,7 @@ var
   X: Integer;
   MainList,ChildList: PGList;
   Title: String;
-  ActiveWindow: HWND;
+  //ActiveWindow: HWND;
   BtnResult: LongInt;
   n: Integer;
 
@@ -1146,11 +1103,11 @@ var
       const AImageHint: Integer = -1);
   var
     NewButton: PGtkWidget;
-    BitmapHandle, MaskHandle: HBitmap;
+    //BitmapHandle, MaskHandle: HBitmap;
     // GDIObject: PGDIObject;
-    Pixbuf: PGdkPixbuf;
+    //Pixbuf: PGdkPixbuf;
     // Mask: PGdkBitmap;
-    Img: PGtkWidget;
+    //Img: PGtkWidget;
   begin
 
     NewButton := gtk_dialog_add_button(Dialog,
@@ -1342,8 +1299,6 @@ var
   X: Integer;
   MainList,ChildList: PGList;
   Title: String;
-  ActiveWindow: HWND;
-  QuotedMessage: Pgchar;
   n: Integer;
 
   procedure CreateButton(const ALabel : String; const AResponse: Integer);
@@ -1532,9 +1487,9 @@ end;
 
 function TGtk3WidgetSet.AddEventHandler(AHandle: THandle; AFlags: dword;
   AEventHandler: TWaitHandleEvent; AData: PtrInt): PEventHandler;
-var
-  giochannel: pgiochannel;
-  // lEventHandler: PWaitHandleEventHandler;
+//var
+  //giochannel: pgiochannel;
+  //lEventHandler: PWaitHandleEventHandler;
 begin
   Result := nil;
   (*

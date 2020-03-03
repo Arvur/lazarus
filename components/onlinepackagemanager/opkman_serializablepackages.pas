@@ -31,7 +31,7 @@ unit opkman_serializablepackages;
 interface
 
 uses
-  Classes, SysUtils, Variants, contnrs, dateutils, fpjson, jsonparser,
+  Classes, SysUtils, Variants, contnrs, dateutils, fpjson, jsonparser, md5,
   // LazUtils
   FileUtil, Laz2_XMLCfg, LazFileUtils,
   // IdeIntf
@@ -171,6 +171,7 @@ type
     FName: String;
     FDisplayName: String;
     FCategory: String;
+    FCommunityDescription: String;
     FRepositoryFileName: String;
     FRepositoryFileSize: Int64;
     FRepositoryFileHash: String;
@@ -213,6 +214,7 @@ type
     property Name: String read FName write FName;
     property DisplayName: String read FDisplayName write FDisplayName;
     property Category: String read FCategory write FCategory;
+    property CommunityDescription: string read FCommunityDescription write FCommunityDescription;
     property Checked: Boolean read FChecked write FChecked;
     property RepositoryFileName: String read FRepositoryFileName write FRepositoryFileName;
     property RepositoryFileSize: int64 read FRepositoryFileSize write FRepositoryFileSize;
@@ -235,6 +237,7 @@ type
     FLastError: String;
     FOnProcessJSON: TNotifyEvent;
     FOnUpdatePackageLinks: TNotifyEvent;
+    FUpdates: String;
     function GetCount: Integer;
     function GetDownloadCount: Integer;
     function GetExtractCount: Integer;
@@ -253,6 +256,8 @@ type
     function GetPackageVersion(const APath: String): String;
     function GetPackageDescription(const APath: String): String;
     function GetPackageLicense(const APath: String): String;
+    procedure LoadUpdateInfo;
+    procedure SaveUpdateInfo;
   public
     constructor Create;
     destructor Destroy; override;
@@ -588,10 +593,13 @@ end;
 constructor TSerializablePackages.Create;
 begin
   FMetaPackages := TCollection.Create(TMetaPackage);
+  FUpdates := Format(LocalRepositoryUpdatesFile, [MD5Print(MD5String(Options.RemoteRepository[Options.ActiveRepositoryIndex]))]);
 end;
 
 destructor TSerializablePackages.Destroy;
 begin
+  if Count > 0 then
+    SaveUpdateInfo;
   Clear;
   FMetaPackages.Free;
   inherited Destroy;
@@ -721,7 +729,7 @@ begin
   if Trim(JSON) = '' then
     Exit(False);
   Result := True;
-  Parser := TJSONParser.Create(JSON);
+  Parser := TJSONParser.Create(JSON){%H-};
   try
     Data := Parser.Parse;
     try
@@ -847,6 +855,7 @@ begin
     AMetaPackage.Name := PackageData.Get('Name');
     AMetaPackage.DisplayName := PackageData.Get('DisplayName');
     AMetaPackage.Category := PackageData.Get('Category');
+    AMetaPackage.CommunityDescription := PackageData.Get('CommunityDescription');
     AMetaPackage.RepositoryFileName := PackageData.Get('RepositoryFileName');
     AMetaPackage.RepositoryFileSize := PackageData.Get('RepositoryFileSize');
     AMetaPackage.RepositoryFileHash := PackageData.Get('RepositoryFileHash');
@@ -929,7 +938,7 @@ begin
   if Trim(JSON) = '' then
     Exit(False);
   Result := True;
-  Parser := TJSONParser.Create(JSON);
+  Parser := TJSONParser.Create(JSON){%H-};
   try
     Data := Parser.Parse;
     try
@@ -965,8 +974,11 @@ begin
     Parser.Free;
   end;
   if Result then
+  begin
+    LoadUpdateInfo;
     if Assigned(FOnUpdatePackageLinks) then
       FOnUpdatePackageLinks(Self);
+  end;
 end;
 
 function TSerializablePackages.LazarusPackagesToJSON(AMetaPackage: TMetaPackage;
@@ -1026,7 +1038,7 @@ function TSerializablePackages.IsPackageDownloaded(const AMetaPackage: TMetaPack
 var
   FileName: String;
 begin
-  FileName := Options.LocalRepositoryArchive + AMetaPackage.RepositoryFileName;
+  FileName := Options.LocalRepositoryArchiveExpanded + AMetaPackage.RepositoryFileName;
   Result := (FileExists(FileName)) and
 //            (MD5Print(MD5File(FileName)) = AMetaPackage.RepositoryFileHash) and
             (FileUtil.FileSize(FileName) = AMetaPackage.RepositoryFileSize);
@@ -1041,7 +1053,7 @@ begin
   for I := 0 to AMetaPackage.FLazarusPackages.Count - 1 do
   begin
     LazarusPkg := TLazarusPackage(AMetaPackage.FLazarusPackages.Items[I]);
-    LazarusPkg.FPackageAbsolutePath := Options.LocalRepositoryPackages + AMetaPackage.PackageBaseDir
+    LazarusPkg.FPackageAbsolutePath := Options.LocalRepositoryPackagesExpanded + AMetaPackage.PackageBaseDir
                                       + LazarusPkg.FPackageRelativePath + LazarusPkg.Name;
     if not FileExists(LazarusPkg.FPackageAbsolutePath) then
     begin
@@ -1112,36 +1124,124 @@ begin
   end;
 end;
 
+procedure TSerializablePackages.LoadUpdateInfo;
+var
+  PackageCount: Integer;
+  LazarusPkgCount: Integer;
+  I, J: Integer;
+  Path, SubPath: String;
+  PackageName: String;
+  LazarusPkgName: String;
+  MetaPkg: TMetaPackage;
+  LazarusPkg: TLazarusPackage;
+  HasUpdate: Boolean;
+  FXML: TXMLConfig;
+begin
+  if not FileExists(FUpdates) then
+    Exit;
+  FXML := TXMLConfig.Create(FUpdates);
+  try
+    PackageCount := FXML.GetValue('Count/Value', 0);
+    for I := 0 to PackageCount - 1 do
+    begin
+      Path := 'Package' + IntToStr(I) + '/';
+      PackageName := FXML.GetValue(Path + 'Name', '');
+      MetaPkg := FindMetaPackage(PackageName, fpbPackageName);
+      if MetaPkg <> nil then
+      begin
+        HasUpdate := False;
+        MetaPkg.DownloadZipURL := FXML.GetValue(Path + 'DownloadZipURL', '');
+        MetaPkg.DisableInOPM := FXML.GetValue(Path + 'DisableInOPM', False);
+        MetaPkg.Rating := FXML.GetValue(Path + 'Rating', 0);
+        LazarusPkgCount := FXML.GetValue(Path + 'Count', 0);
+        for J := 0 to LazarusPkgCount - 1 do
+        begin
+          SubPath := Path + 'PackageFile' +  IntToStr(J) + '/';
+          LazarusPkgName := FXML.GetValue(SubPath + 'Name', '');
+          LazarusPkg := MetaPkg.FindLazarusPackage(LazarusPkgName);
+          if LazarusPkg <> nil then
+          begin
+            LazarusPkg.UpdateVersion := FXML.GetValue(SubPath + 'UpdateVersion', '');
+            LazarusPkg.ForceNotify := FXML.GetValue(SubPath + 'ForceNotify', False);
+            LazarusPkg.InternalVersion := FXML.GetValue(SubPath + 'InternalVersion', 0);;
+            LazarusPkg.InternalVersionOld := FXML.GetValue(SubPath + 'InternalVersionOld', 0);
+            LazarusPkg.RefreshHasUpdate;
+            if not HasUpdate then
+              HasUpdate := (LazarusPkg.HasUpdate) and (LazarusPkg.InstalledFileVersion < LazarusPkg.UpdateVersion);
+          end;
+        end;
+        MetaPkg.HasUpdate := HasUpdate;
+      end;
+    end;
+  finally
+    FXML.Free;
+  end;
+end;
+
+procedure TSerializablePackages.SaveUpdateInfo;
+var
+  I, J: Integer;
+  Path, SubPath: String;
+  MetaPkg: TMetaPackage;
+  LazarusPkg: TLazarusPackage;
+  FXML: TXMLConfig;
+begin
+  FXML := TXMLConfig.CreateClean(FUpdates);
+  try
+    FXML.SetDeleteValue('Version/Value', OpkVersion, 0);
+    FXML.SetDeleteValue('Count/Value', Count, 0);
+    for I := 0 to Count - 1 do
+    begin
+      MetaPkg := Items[I];
+      Path := 'Package' + IntToStr(I) + '/';
+      FXML.SetDeleteValue(Path + 'Name', MetaPkg.Name, '');
+      FXML.SetDeleteValue(Path + 'DownloadZipURL', MetaPkg.DownloadZipURL, '');
+      FXML.SetDeleteValue(Path + 'DisableInOPM', MetaPkg.DisableInOPM, False);
+      FXML.SetDeleteValue(Path + 'Rating', MetaPkg.Rating, 0);
+      FXML.SetDeleteValue(Path + 'Count', Items[I].LazarusPackages.Count, 0);
+      for J := 0 to Items[I].LazarusPackages.Count - 1 do
+      begin
+        SubPath := Path + 'PackageFile' +  IntToStr(J) + '/';
+        LazarusPkg := TLazarusPackage(Items[I].LazarusPackages.Items[J]);
+        FXML.SetDeleteValue(SubPath + 'Name', LazarusPkg.Name, '');
+        FXML.SetDeleteValue(SubPath + 'UpdateVersion', LazarusPkg.UpdateVersion, '');
+        FXML.SetDeleteValue(SubPath + 'ForceNotify', LazarusPkg.ForceNotify, False);
+        FXML.SetDeleteValue(SubPath + 'InternalVersion', LazarusPkg.InternalVersion, 0);
+        FXML.SetDeleteValue(SubPath + 'InternalVersionOld', LazarusPkg.InternalVersionOld, 0);
+      end;
+    end;
+    FXML.Flush;
+  finally
+    FXML.Free;
+  end;
+end;
 
 function TSerializablePackages.IsPackageInstalled(const ALazarusPkg: TLazarusPackage;
   const APackageBaseDir: String): Boolean;
 
   function CheckIDEPackages: Boolean;
   var
-    PackageCnt: Integer;
-    I: Integer;
-    Package: TIDEPackage;
+    IDEPkg: TIDEPackage;
+    PkgExt: String;
+    PkgName: String;
   begin
     Result := False;
-    PackageCnt := PackageEditingInterface.GetPackageCount;
-    for I := 0 to PackageCnt - 1 do
+    PkgExt := ExtractFileExt(ALazarusPkg.Name);
+    PkgName := StringReplace(ALazarusPkg.Name, PkgExt, '', [rfIgnoreCase]);
+    IDEPkg := PackageEditingInterface.IsPackageInstalled(PkgName);
+    if IDEPkg <> nil then
     begin
-      Package := PackageEditingInterface.GetPackages(I);
-      if ExtractFileName(Package.FileName) = ALazarusPkg.Name then
-      begin
-        ALazarusPkg.InstalledFileName := Package.Filename;
-        ALazarusPkg.InstalledFileVersion := IntToStr(Package.Version.Major) + '.' +
-                                             IntToStr(Package.Version.Minor) + '.' +
-                                             IntToStr(Package.Version.Release) + '.' +
-                                             IntToStr(Package.Version.Build);
-        if FileExists(ALazarusPkg.InstalledFileName) then
-        begin
-          ALazarusPkg.InstalledFileDescription := GetPackageDescription(Package.Filename);
-          ALazarusPkg.InstalledFileLincese := GetPackageLicense(Package.Filename);
-        end;
-        Result := True;
-        Break;
-      end;
+      ALazarusPkg.InstalledFileName := IDEPkg.Filename;
+      ALazarusPkg.InstalledFileVersion := IntToStr(IDEPkg.Version.Major) + '.' +
+                                          IntToStr(IDEPkg.Version.Minor) + '.' +
+                                          IntToStr(IDEPkg.Version.Release) + '.' +
+                                          IntToStr(IDEPkg.Version.Build);
+     if FileExists(ALazarusPkg.InstalledFileName) then
+     begin
+       ALazarusPkg.InstalledFileDescription := GetPackageDescription(IDEPkg.Filename);
+       ALazarusPkg.InstalledFileLincese := GetPackageLicense(IDEPkg.Filename);
+     end;
+     Result := True;
     end;
   end;
 
@@ -1153,7 +1253,7 @@ begin
     lptRunTime, lptRunTimeOnly:
       begin
         FileName := StringReplace(ALazarusPkg.Name, '.lpk', '.opkman', [rfIgnoreCase]);
-        RepoPath := Options.LocalRepositoryPackages + APackageBaseDir + ALazarusPkg.PackageRelativePath;
+        RepoPath := Options.LocalRepositoryPackagesExpanded + APackageBaseDir + ALazarusPkg.PackageRelativePath;
         Result := (psExtracted in ALazarusPkg.PackageStates) and FileExists(RepoPath + FileName);
         if Result then
         begin
@@ -1210,6 +1310,7 @@ begin
     APackageData.Add('Name', AMetaPackage.Name);
     APackageData.Add('DisplayName', AMetaPackage.DisplayName);
     APackageData.Add('Category', AMetaPackage.Category);
+    APackageData.Add('CommunityDescription', AMetaPackage.CommunityDescription);
     APackageData.Add('RepositoryFileName', AMetaPackage.RepositoryFileName);
     APackageData.Add('RepositoryFileSize', AMetaPackage.RepositoryFileSize);
     APackageData.Add('RepositoryFileHash', AMetaPackage.RepositoryFileHash);
@@ -1402,7 +1503,7 @@ begin
              (LazarusPkg.PackageType in [lptRunTime, lptRunTimeOnly]) then
       begin
         FileName := StringReplace(LazarusPkg.Name, '.lpk', '.opkman', [rfIgnoreCase]);
-        FileCreate(Options.LocalRepositoryPackages + Items[I].PackageBaseDir + LazarusPkg.PackageRelativePath + FileName);
+        FileCreate(Options.LocalRepositoryPackagesExpanded + Items[I].PackageBaseDir + LazarusPkg.PackageRelativePath + FileName);
       end;
     end;
   end;
@@ -1436,7 +1537,7 @@ begin
       AlreadyCounted := False;
       if IsPackageDownloaded(Items[I]) then
       begin
-        if DeleteFile(Options.LocalRepositoryArchive + Items[I].RepositoryFileName) then
+        if DeleteFile(Options.LocalRepositoryArchiveExpanded + Items[I].RepositoryFileName) then
         begin
           Inc(Result);
           AlreadyCounted := True;
@@ -1444,9 +1545,9 @@ begin
       end;
       if IsPackageExtracted(Items[I]) then
       begin
-        if DirectoryExists(Options.LocalRepositoryPackages + Items[I].PackageBaseDir) then
+        if DirectoryExists(Options.LocalRepositoryPackagesExpanded + Items[I].PackageBaseDir) then
         begin
-          DeleteDirectory(Options.LocalRepositoryPackages + Items[I].PackageBaseDir, False);
+          DeleteDirectory(Options.LocalRepositoryPackagesExpanded + Items[I].PackageBaseDir, False);
           if not AlreadyCounted then
             Inc(Result);
         end;
@@ -1465,12 +1566,12 @@ begin
       paInstall:
         begin
           if IsPackageDownloaded(Items[I]) then
-            DeleteFile(Options.LocalRepositoryArchive + Items[I].RepositoryFileName)
+            DeleteFile(Options.LocalRepositoryArchiveExpanded + Items[I].RepositoryFileName)
         end;
       paUpdate:
         begin
-          if FileExists(Options.LocalRepositoryUpdate + Items[I].RepositoryFileName) then
-            DeleteFile(Options.LocalRepositoryUpdate + Items[I].RepositoryFileName)
+          if FileExists(Options.LocalRepositoryUpdateExpanded + Items[I].RepositoryFileName) then
+            DeleteFile(Options.LocalRepositoryUpdateExpanded + Items[I].RepositoryFileName)
         end;
     end;
   end;

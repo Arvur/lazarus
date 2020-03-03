@@ -51,6 +51,7 @@ type
     procedure UnsetSelectionByKey;
 
     procedure ReplaceSelText;
+    procedure MoveOnSetTextBeween; // Just a small subset....
 
     procedure CopyPaste;
 
@@ -73,6 +74,24 @@ begin
              Format('No Sel Avail (X/Y=(%d, %d) - (%d, %d))', [SynEdit.BlockBegin.X, SynEdit.BlockBegin.Y,
                                                                SynEdit.BlockEnd.X, SynEdit.BlockEnd.Y])
             );
+  if (y2 < y1) or ( (y2=y1) and (x2<x1) ) then begin
+    if (SynEdit.BlockBegin.X <> X2) or (SynEdit.BlockBegin.Y <> Y2) or
+       (SynEdit.BlockEnd.X <> X1) or (SynEdit.BlockEnd.Y <> Y1)
+    then
+      TestFail(Name, 'IsBlock',
+               Format('X/Y=(%d, %d) - (%d, %d)', [X1, Y1, X2, Y2]),
+               Format('X/Y=(%d, %d) - (%d, %d)', [SynEdit.BlockBegin.X, SynEdit.BlockBegin.Y,
+                                                  SynEdit.BlockEnd.X, SynEdit.BlockEnd.Y])
+              );
+    if not SynEdit.IsBackwardSel then
+      TestFail(Name, 'IsBlock (not backwards)',
+               Format('X/Y=(%d, %d) - (%d, %d)', [X1, Y1, X2, Y2]),
+               Format('X/Y=(%d, %d) - (%d, %d)', [SynEdit.BlockBegin.X, SynEdit.BlockBegin.Y,
+                                                  SynEdit.BlockEnd.X, SynEdit.BlockEnd.Y])
+              );
+    exit;
+  end;
+
   if (SynEdit.BlockBegin.X <> X1) or (SynEdit.BlockBegin.Y <> Y1) or
      (SynEdit.BlockEnd.X <> X2) or (SynEdit.BlockEnd.Y <> Y2)
   then
@@ -1518,6 +1537,223 @@ begin
   DoTests;
 
 
+end;
+
+procedure TTestSynSelection.MoveOnSetTextBeween;
+var
+  TheText: TStringArray;
+  TheInsert: String;
+
+  function GetTheText: TStringArray;
+  begin
+    SetLength(Result, 4);
+    Result[0] := ' ABC def';
+    Result[1] := 'XYZ 123';
+    Result[2] := '';
+    Result[3] := '';
+  end;
+
+  procedure DoTest(AName: String;
+    SelBX, SelBY,  SelEX, SelEY,  TextX, TextY,  ExpBx, ExpBy, ExpEx, ExpEy: Integer;
+    aFlags: TSynEditTextFlags = []; aCaretMode: TSynCaretAdjustMode = scamIgnore);
+  var
+    s: Boolean;
+    p: TPoint;
+  begin
+    PopPushBaseName(AName);
+    SetLines(TheText);
+    if Length(TheText) = 0 then SynEdit.Lines.Clear;
+
+    SetCaretAndSel(SelBx, SelBy, SelEx,SelEy);
+    s := SynEdit.SelAvail;
+    p := Point(Textx,TextY);
+    SynEdit.SetTextBetweenPoints(p, p, TheInsert, aFlags, aCaretMode);
+    debugln(['Caret ', dbgs(SynEdit.CaretXY), ' Sel ', dbgs(SynEdit.BlockBegin), ' ',dbgs(SynEdit.BlockEnd)]);
+
+    TestIsBlock('After Replace', ExpBx,ExpBy, ExpEx,ExpEy);
+
+    SynEdit.Undo;
+    if s
+    then TestIsBlock('After Undo', SelBx, SelBy, SelEx,SelEy)
+    else TestIsNoBlock('After Undo');
+
+    SynEdit.Redo;
+    TestIsBlock('After Redo', ExpBx,ExpBy, ExpEx,ExpEy);
+  end;
+
+  procedure DoTest(AName: String;
+    SelBX, SelBY,  SelEX, SelEY,
+    TextX, TextY,  TextX2, TextY2,
+    ExpBx, ExpBy, ExpEx, ExpEy: Integer;
+    aFlags: TSynEditTextFlags = []; aCaretMode: TSynCaretAdjustMode = scamIgnore);
+  var
+    s: Boolean;
+    p, p2: TPoint;
+  begin
+    PopPushBaseName(AName);
+    SetLines(TheText);
+    if Length(TheText) = 0 then SynEdit.Lines.Clear;
+
+    SetCaretAndSel(SelBx, SelBy, SelEx,SelEy);
+    s := SynEdit.SelAvail;
+    p := Point(Textx,TextY);
+    p2 := Point(Textx2,TextY2);
+    SynEdit.SetTextBetweenPoints(p, p2, TheInsert, aFlags, aCaretMode);
+    debugln(['Caret ', dbgs(SynEdit.CaretXY), ' Sel ', dbgs(SynEdit.BlockBegin), ' ',dbgs(SynEdit.BlockEnd)]);
+
+    TestIsBlock('After Replace', ExpBx,ExpBy, ExpEx,ExpEy);
+
+    SynEdit.Undo;
+    if s
+    then TestIsBlock('After Undo', SelBx, SelBy, SelEx,SelEy)
+    else TestIsNoBlock('After Undo');
+
+    SynEdit.Redo;
+    TestIsBlock('After Redo', ExpBx,ExpBy, ExpEx,ExpEy);
+  end;
+
+var
+  p: TPoint;
+begin
+  PushBaseName('');
+  TheText := GetTheText;
+  TheInsert := 'X';
+
+  DoTest('NO Flag - BlockBegin',   2,1, 4,1,   2,1,   -1,-1,-1,-1,  [], scamAdjust);
+  DoTest('NO Flag - BlockEnd',     2,1, 4,1,   4,1,   -1,-1,-1,-1,  [], scamAdjust);
+  DoTest('NO Flag - Empty',        2,1, 2,1,   2,1,   -1,-1,-1,-1,  [], scamAdjust);
+
+  DoTest('setSelect - BlockBegin', 2,1, 4,1,   2,1,   2,1, 3,1,   [setSelect], scamEnd);
+  DoTest('setSelect - BlockEnd',   2,1, 4,1,   4,1,   4,1, 5,1,   [setSelect], scamEnd);
+  DoTest('setSelect - Empty',      2,1, 2,1,   2,1,   2,1, 3,1,   [setSelect], scamEnd);
+
+  DoTest('setPersistentBlock - BlockBegin', 2,1, 4,1,   2,1,   3,1, 5,1,   [setPersistentBlock], scamAdjust);  // adjusted/moved block
+  DoTest('setPersistentBlock - BlockEnd',   2,1, 4,1,   4,1,   2,1, 5,1,   [setPersistentBlock], scamAdjust);  // extended block
+  DoTest('setPersistentBlock - Empty',      2,1, 2,1,   2,1,   -1,1,-1,1,   [setPersistentBlock], scamAdjust);  // adjusted/moved block
+
+  DoTest('setMoveBlock - BlockBegin',       2,1, 4,1,   2,1,   3,1, 5,1,   [setMoveBlock], scamAdjust);
+  DoTest('setMoveBlock - BlockBegin 1-EOL', 1,1, 9,1,   1,1,   2,1,10,1,   [setMoveBlock], scamAdjust); // start to end of line
+  DoTest('setMoveBlock - BlockBegin Line',  1,1, 1,2,   1,1,   2,1, 1,2,   [setMoveBlock], scamAdjust);  // full line with eol
+  DoTest('setMoveBlock - BlockBegin Line+', 1,1, 2,2,   1,1,   2,1, 2,2,   [setMoveBlock], scamAdjust);  // full line, and start of next
+  DoTest('setMoveBlock - BlockEnd',         2,1, 4,1,   4,1,   2,1, 4,1,   [setMoveBlock], scamAdjust); // so caret will not destroy selection
+  DoTest('setMoveBlock - BlockEnd 1-EOL',   1,1, 9,1,   9,1,   1,1, 9,1,   [setMoveBlock], scamAdjust);
+  DoTest('setMoveBlock - BlockEnd Line',    1,1, 1,2,   1,2,   1,1, 1,2,   [setMoveBlock], scamAdjust);  // full line with eol
+  DoTest('setMoveBlock - BlockEnd Line+',   1,1, 2,2,   2,2,   1,1, 2,2,   [setMoveBlock], scamAdjust);  // full line, and start of next
+  DoTest('setMoveBlock - Empty',      2,1, 2,1,   2,1,   -1,1,-1,1,   [setMoveBlock], scamAdjust);
+
+  DoTest('setExtendBlock - BlockBegin',       2,1, 4,1,   2,1,   2,1, 5,1,   [setExtendBlock], scamAdjust);
+  DoTest('setExtendBlock - BlockBegin 1-EOL', 1,1, 9,1,   1,1,   1,1,10,1,   [setExtendBlock], scamAdjust); // start to end of line
+  DoTest('setExtendBlock - BlockBegin Line',  1,1, 1,2,   1,1,   1,1, 1,2,   [setExtendBlock], scamAdjust);  // full line with eol
+  DoTest('setExtendBlock - BlockBegin Line+', 1,1, 2,2,   1,1,   1,1, 2,2,   [setExtendBlock], scamAdjust);  // full line, and start of next
+  DoTest('setExtendBlock - BlockEnd',         2,1, 4,1,   4,1,   2,1, 5,1,   [setExtendBlock], scamAdjust);
+  DoTest('setExtendBlock - BlockEnd 1-EOL',   1,1, 9,1,   9,1,   1,1,10,1,   [setExtendBlock], scamAdjust);
+  DoTest('setExtendBlock - BlockEnd Line',    1,1, 1,2,   1,2,   1,1, 2,2,   [setExtendBlock], scamAdjust);  // full line with eol
+  DoTest('setExtendBlock - BlockEnd Line+',   1,1, 2,2,   2,2,   1,1, 3,2,   [setExtendBlock], scamAdjust);  // full line, and start of next
+  DoTest('setExtendBlock - Empty',      2,1, 2,1,   2,1,   -1,1, -1,1,   [setExtendBlock], scamAdjust);
+
+  // Backward
+  PopPushBaseName('Backward');
+
+  DoTest('NO Flag - BlockBegin',   4,1, 2,1,   2,1,   -1,-1,-1,-1,  [], scamAdjust);
+  DoTest('NO Flag - BlockEnd',     4,1, 2,1,   4,1,   -1,-1,-1,-1,  [], scamAdjust);
+
+  DoTest('setSelect - BlockBegin', 4,1, 2,1,   2,1,   2,1, 3,1,   [setSelect], scamEnd);
+  DoTest('setSelect - BlockEnd',   4,1, 2,1,   4,1,   4,1, 5,1,   [setSelect], scamEnd);
+
+  DoTest('setPersistentBlock - BlockBegin', 4,1, 2,1,   2,1,   5,1, 3,1,   [setPersistentBlock], scamAdjust);  // adjusted/moved block
+  DoTest('setPersistentBlock - BlockEnd',   4,1, 2,1,   4,1,   5,1, 2,1,   [setPersistentBlock], scamAdjust);  // extended block
+
+  DoTest('setMoveBlock - BlockBegin',       4,1, 2,1,   2,1,   5,1, 3,1,   [setMoveBlock], scamAdjust);
+  DoTest('setMoveBlock - BlockBegin 1-EOL', 9,1, 1,1,   1,1,  10,1, 2,1,   [setMoveBlock], scamAdjust);
+  DoTest('setMoveBlock - BlockBegin Line',  1,2, 1,1,   1,1,   1,2, 2,1,   [setMoveBlock], scamAdjust);  // full line with eol
+  DoTest('setMoveBlock - BlockBegin Line+', 2,2, 1,1,   1,1,   2,2, 2,1,   [setMoveBlock], scamAdjust);  // full line, and start of next
+  DoTest('setMoveBlock - BlockEnd',         4,1, 2,1,   4,1,   2,1, 4,1,   [setMoveBlock], scamAdjust); // so caret will not destroy selection
+  DoTest('setMoveBlock - BlockEnd 1-EOL',   9,1, 1,1,   9,1,   9,1, 1,1,   [setMoveBlock], scamAdjust);
+  DoTest('setMoveBlock - BlockEnd Line',    1,2, 1,1,   1,2,   1,2, 1,1,   [setMoveBlock], scamAdjust);
+  DoTest('setMoveBlock - BlockEnd Line+',   2,2, 1,1,   2,2,   2,2, 1,1,   [setMoveBlock], scamAdjust);
+
+  DoTest('setExtendBlock - BlockBegin',       4,1, 2,1,   2,1,   5,1, 2,1,   [setExtendBlock], scamAdjust);
+  DoTest('setExtendBlock - BlockBegin 1-EOL', 9,1, 1,1,   1,1,  10,1, 1,1,   [setExtendBlock], scamAdjust); // start to end of line
+  DoTest('setExtendBlock - BlockBegin Line',  1,2, 1,1,   1,1,   1,2, 1,1,   [setExtendBlock], scamAdjust);  // full line with eol
+  DoTest('setExtendBlock - BlockBegin Line+', 2,2, 1,1,   1,1,   2,2, 1,1,   [setExtendBlock], scamAdjust);  // full line, and start of next
+  DoTest('setExtendBlock - BlockEnd',         4,1, 2,1,   4,1,   5,1, 2,1,   [setExtendBlock], scamAdjust);
+  DoTest('setExtendBlock - BlockEnd 1-EOL',   9,1, 1,1,   9,1,  10,1, 1,1,   [setExtendBlock], scamAdjust);
+  DoTest('setExtendBlock - BlockEnd Line',    1,2, 1,1,   1,2,   2,2, 1,1,   [setExtendBlock], scamAdjust);  // full line with eol
+  DoTest('setExtendBlock - BlockEnd Line+',   2,2, 1,1,   2,2,   3,2, 1,1,   [setExtendBlock], scamAdjust);  // full line, and start of next
+
+  TheInsert := LineEnding; // insert a new line
+  PopPushBaseName('CR');
+  DoTest('setMoveBlock - BlockBegin',       2,1, 4,1,   2,1,   1,2, 3,2,   [setMoveBlock], scamAdjust);
+  DoTest('setMoveBlock - BlockBegin 1-EOL', 1,1, 9,1,   1,1,   1,2, 9,2,   [setMoveBlock], scamAdjust); // start to end of line
+  DoTest('setMoveBlock - BlockBegin Line',  1,1, 1,2,   1,1,   1,2, 1,3,   [setMoveBlock], scamAdjust);  // full line with eol
+  DoTest('setMoveBlock - BlockBegin Line+', 1,1, 2,2,   1,1,   1,2, 2,3,   [setMoveBlock], scamAdjust);  // full line, and start of next
+  DoTest('setMoveBlock - BlockEnd',         2,1, 4,1,   4,1,   2,1, 4,1,   [setMoveBlock], scamAdjust); // so caret will not destroy selection
+  DoTest('setMoveBlock - BlockEnd 1-EOL',   1,1, 9,1,   9,1,   1,1, 9,1,   [setMoveBlock], scamAdjust);
+  DoTest('setMoveBlock - BlockEnd Line',    1,1, 1,2,   1,2,   1,1, 1,2,   [setMoveBlock], scamAdjust);  // full line with eol
+  DoTest('setMoveBlock - BlockEnd Line+',   1,1, 2,2,   2,2,   1,1, 2,2,   [setMoveBlock], scamAdjust);  // full line, and start of next
+  DoTest('setMoveBlock - Empty',      2,1, 2,1,   2,1,   -1,1,-1,1,   [setMoveBlock], scamAdjust);
+
+  DoTest('setExtendBlock - BlockBegin',       2,1, 4,1,   2,1,   2,1, 3,2,   [setExtendBlock], scamAdjust);
+  DoTest('setExtendBlock - BlockBegin 1-EOL', 1,1, 9,1,   1,1,   1,1, 9,2,   [setExtendBlock], scamAdjust); // start to end of line
+  DoTest('setExtendBlock - BlockBegin Line',  1,1, 1,2,   1,1,   1,1, 1,3,   [setExtendBlock], scamAdjust);  // full line with eol
+  DoTest('setExtendBlock - BlockBegin Line+', 1,1, 2,2,   1,1,   1,1, 2,3,   [setExtendBlock], scamAdjust);  // full line, and start of next
+  DoTest('setExtendBlock - BlockEnd',         2,1, 4,1,   4,1,   2,1, 1,2,   [setExtendBlock], scamAdjust);
+  DoTest('setExtendBlock - BlockEnd 1-EOL',   1,1, 9,1,   9,1,   1,1, 1,2,   [setExtendBlock], scamAdjust);
+  DoTest('setExtendBlock - BlockEnd Line',    1,1, 1,2,   1,2,   1,1, 1,3,   [setExtendBlock], scamAdjust);  // full line with eol
+  DoTest('setExtendBlock - BlockEnd Line+',   1,1, 2,2,   2,2,   1,1, 1,3,   [setExtendBlock], scamAdjust);  // full line, and start of next
+  DoTest('setExtendBlock - Empty',      2,1, 2,1,   2,1,   -1,1, -1,1,   [setExtendBlock], scamAdjust);
+
+  // Backward // new line
+  PopPushBaseName('CR Backward');
+  DoTest('setMoveBlock - BlockBegin',       4,1, 2,1,   2,1,   3,2, 1,2,   [setMoveBlock], scamAdjust);
+  DoTest('setMoveBlock - BlockBegin 1-EOL', 9,1, 1,1,   1,1,   9,2, 1,2,   [setMoveBlock], scamAdjust);
+  DoTest('setMoveBlock - BlockBegin Line',  1,2, 1,1,   1,1,   1,3, 1,2,   [setMoveBlock], scamAdjust);  // full line with eol
+  DoTest('setMoveBlock - BlockBegin Line+', 2,2, 1,1,   1,1,   2,3, 1,2,   [setMoveBlock], scamAdjust);  // full line, and start of next
+  DoTest('setMoveBlock - BlockEnd',         4,1, 2,1,   4,1,   4,1, 2,1,   [setMoveBlock], scamAdjust); // so caret will not destroy selection
+  DoTest('setMoveBlock - BlockEnd 1-EOL',   9,1, 1,1,   9,1,   9,1, 1,1,   [setMoveBlock], scamAdjust);
+  DoTest('setMoveBlock - BlockEnd Line',    1,2, 1,1,   1,2,   1,2, 1,1,   [setMoveBlock], scamAdjust);
+  DoTest('setMoveBlock - BlockEnd Line+',   2,2, 1,1,   2,2,   2,2, 1,1,   [setMoveBlock], scamAdjust);
+
+  DoTest('setExtendBlock - BlockBegin',       4,1, 2,1,   2,1,   3,2, 2,1,   [setExtendBlock], scamAdjust);
+  DoTest('setExtendBlock - BlockBegin 1-EOL', 9,1, 1,1,   1,1,   9,2, 1,1,   [setExtendBlock], scamAdjust); // start to end of line
+  DoTest('setExtendBlock - BlockBegin Line',  1,2, 1,1,   1,1,   1,3, 1,1,   [setExtendBlock], scamAdjust);  // full line with eol
+  DoTest('setExtendBlock - BlockBegin Line+', 2,2, 1,1,   1,1,   2,3, 1,1,   [setExtendBlock], scamAdjust);  // full line, and start of next
+  DoTest('setExtendBlock - BlockEnd',         4,1, 2,1,   4,1,   1,2, 2,1,   [setExtendBlock], scamAdjust);
+  DoTest('setExtendBlock - BlockEnd 1-EOL',   9,1, 1,1,   9,1,   1,2, 1,1,   [setExtendBlock], scamAdjust);
+  DoTest('setExtendBlock - BlockEnd Line',    1,2, 1,1,   1,2,   1,3, 1,1,   [setExtendBlock], scamAdjust);  // full line with eol
+  DoTest('setExtendBlock - BlockEnd Line+',   2,2, 1,1,   2,2,   1,3, 1,1,   [setExtendBlock], scamAdjust);  // full line, and start of next
+
+  TheInsert := LineEnding+'X'; // insert a new line + 'X'
+  PopPushBaseName('CR X');
+  DoTest('setMoveBlock - BlockBegin Line',  1,1, 1,2,   1,1,   2,2, 1,3,   [setMoveBlock], scamAdjust);  // full line with eol
+  DoTest('setMoveBlock - BlockEnd Line',    1,1, 1,2,   1,2,   1,1, 1,2,   [setMoveBlock], scamAdjust);  // full line with eol
+  DoTest('setExtendBlock - BlockBegin Line',  1,1, 1,2,   1,1,   1,1, 1,3,   [setExtendBlock], scamAdjust);  // full line with eol
+  DoTest('setExtendBlock - BlockEnd Line',    1,1, 1,2,   1,2,   1,1, 2,3,   [setExtendBlock], scamAdjust);  // full line with eol
+  PopPushBaseName('CR X Backward');
+  DoTest('setMoveBlock - BlockBegin Line',  1,2, 1,1,   1,1,   1,3, 2,2,   [setMoveBlock], scamAdjust);  // full line with eol
+  DoTest('setMoveBlock - BlockEnd Line',    1,2, 1,1,   1,2,   1,2, 1,1,   [setMoveBlock], scamAdjust);
+  DoTest('setExtendBlock - BlockBegin Line',  1,2, 1,1,   1,1,   1,3, 1,1,   [setExtendBlock], scamAdjust);  // full line with eol
+  DoTest('setExtendBlock - BlockEnd Line',    1,2, 1,1,   1,2,   2,3, 1,1,   [setExtendBlock], scamAdjust);  // full line with eol
+
+  TheInsert := ''; // delete
+  PopPushBaseName('delete');
+  DoTest('setMoveBlock - BlockBegin A',       2,1, 6,1,   2,1, 3,1,   2,1, 5,1,   [setMoveBlock], scamAdjust);
+  DoTest('setMoveBlock - BlockBegin B',       2,1, 6,1,   1,1, 2,1,   1,1, 5,1,   [setMoveBlock], scamAdjust);
+  DoTest('setMoveBlock - BlockEnd A',         2,1, 6,1,   5,1, 6,1,   2,1, 5,1,   [setMoveBlock], scamAdjust); // so caret will not destroy selection
+  DoTest('setMoveBlock - BlockEnd B',         2,1, 6,1,   6,1, 7,1,   2,1, 6,1,   [setMoveBlock], scamAdjust); // so caret will not destroy selection
+
+  DoTest('setExtendBlock - BlockBegin A',       2,1, 6,1,   2,1, 3,1,   2,1, 5,1,   [setExtendBlock], scamAdjust);
+  DoTest('setExtendBlock - BlockBegin B',       2,1, 6,1,   1,1, 2,1,   1,1, 5,1,   [setExtendBlock], scamAdjust);
+  DoTest('setExtendBlock - BlockEnd A',         2,1, 6,1,   5,1, 6,1,   2,1, 5,1,   [setExtendBlock], scamAdjust); // so caret will not destroy selection
+  DoTest('setExtendBlock - BlockEnd B',         2,1, 6,1,   6,1, 7,1,   2,1, 6,1,   [setExtendBlock], scamAdjust); // so caret will not destroy selection
+
+
+  TheText := nil; // empty text
+  TheInsert := 'X';
+  PopPushBaseName('syn clear');
+  DoTest('setMoveBlock - Empty',      1,1, 1,1,   1,1,   -1,1,-1,1,   [setMoveBlock], scamAdjust);
+
+  PopBaseName;
 end;
 
 procedure TTestSynSelection.CopyPaste;

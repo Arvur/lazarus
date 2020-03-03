@@ -36,13 +36,21 @@ unit SourceEditProcs;
 interface
 
 uses
-  Classes, SysUtils, RegExpr, LCLProc, LCLType, Graphics, Controls,
-  SynCompletion, BasicCodeTools, CodeTree,
-  CodeAtom, CodeCache, SourceChanger, CustomCodeTool, CodeToolManager,
-  PascalParserTool, KeywordFuncLists, FileProcs, IdentCompletionTool,
-  PascalReaderTool,
+  Classes, SysUtils, RegExpr,
+  // LCL
+  LCLType, Graphics, Controls,
+  // LazUtils
+  LazFileUtils, LazStringUtils,
+  // SynEdit
+  SynCompletion,
+  // CodeTools
+  BasicCodeTools, CodeTree, CodeAtom, CodeCache, SourceChanger, CustomCodeTool,
+  CodeToolManager, PascalParserTool, KeywordFuncLists, FileProcs,
+  IdentCompletionTool, PascalReaderTool,
+  // IdeIntf
   LazIDEIntf, IDEImagesIntf, TextTools, IDETextConverter,
-  DialogProcs, LazFileUtils, EditorOptions, CodeToolsOptions;
+  // IDE
+  DialogProcs, EditorOptions, CodeToolsOptions;
 
 type
 
@@ -82,6 +90,11 @@ type
     procedure BeautifyIdentifier(IdentList: TIdentifierList); override;
   end;
 
+  TCodeTemplateIdentifierListItem = class(TIdentifierListItem)
+  public
+    Comment: string;
+  end;
+
 procedure SetupTextConverters;
 procedure FreeTextConverters;
 
@@ -98,8 +111,11 @@ type
     );
 
   TPaintCompletionItemColors = record
-    FontColor: TColor;
-    SelectedFontColor: TColor;
+    BackgroundColor: TColor;
+    BackgroundSelectedColor: TColor;
+    TextColor: TColor;
+    TextSelectedColor: TColor;
+    TextHilightColor: TColor;
   end;
   PPaintCompletionItemColors = ^TPaintCompletionItemColors;
 
@@ -114,6 +130,14 @@ function GetIdentCompletionValue(aCompletion : TSynCompletion;
   AddChar: TUTF8Char;
   out ValueType: TIdentComplValue; out CursorToLeft: integer): string;
 function BreakLinesInText(const s: string; MaxLineLength: integer): string;
+
+const
+  ctnWord = ctnUser + 1;
+  ctnCodeTemplate = ctnUser + 2;
+  WordCompatibility = icompUnknown;
+  CodeTemplateCompatibility = icompUnknown;
+  CodeTemplateHistoryIndex = High(Integer);
+  CodeTemplateLevel = High(Integer);
 
 implementation
 
@@ -151,11 +175,12 @@ var
   BGGreen: Integer;
   BGBlue: Integer;
   TokenStart: Integer;
-  BackgroundColor: TColorRef;
-  ForegroundColor: TColorRef;
+  BackgroundColor: TColor;
+  ForegroundColor: TColor;
+  TextHilightColor: TColor;
   AllowFontColor: Boolean;
 
-  procedure SetFontColor(NewColor: TColor);
+  procedure SetFontColor(NewColor: TColor; Force: boolean = false);
   
     {procedure IncreaseDiff(var Value: integer; BaseValue: integer);
     begin
@@ -180,7 +205,7 @@ var
     GreenDiff: integer;
     BlueDiff: integer;
   begin
-    if not AllowFontColor then
+    if (not AllowFontColor) and (not Force) then
       Exit;
 
     NewColor := TColor(ColorToRGB(NewColor));
@@ -189,7 +214,11 @@ var
     FGBlue:=NewColor and $ff;
     RedDiff:=Abs(FGRed-BGRed);
     GreenDiff:=Abs(FGGreen-BGGreen);
-    BlueDiff:=Abs(FGBlue -BGBlue);
+    BlueDiff:=Abs(FGBlue-BGBlue);
+    {if ItemSelected then
+      writeln('SetFontColor ',RedDiff,'=',FGRed,'-',BGRed,' ',
+         GreenDiff,'=',FGGreen,'-',BGGreen,' ',
+         BlueDiff,'=',FGBlue,'-',BGBlue);}
     if RedDiff*RedDiff + GreenDiff*GreenDiff + BlueDiff*BlueDiff<30000 then
     begin
       NewColor:=InvertColor(NewColor);
@@ -199,6 +228,7 @@ var
       NewColor:=(FGRed shl 16) or (FGGreen shl 8) or FGBlue;}
     end;
     ACanvas.Font.Color:=NewColor;
+    //debugln(['SetFontColor ',NewColor,' ',ACanvas.Font.Color]);
   end;
   
   procedure WriteToken(var TokenStart, TokenEnd: integer);
@@ -209,8 +239,10 @@ var
       CurToken:=copy(AKey,TokenStart,TokenEnd-TokenStart);
       if MeasureOnly then
         Inc(Result.X, ACanvas.TextWidth(CurToken))
-      else
+      else begin
+        //debugln(['WriteToken ',CurToken,' ',ACanvas.Font.Color]);
         ACanvas.TextOut(x+1, y, CurToken);
+      end;
       x := x + ACanvas.TextWidth(CurToken);
       //debugln('Paint A Text="',CurToken,'" x=',dbgs(x),' y=',dbgs(y),' "',ACanvas.Font.Name,'" ',dbgs(ACanvas.Font.Height),' ',dbgs(ACanvas.TextWidth(CurToken)));
       TokenStart:=0;
@@ -223,12 +255,14 @@ var
     nTokenLen: integer;
     Attr: TSynHighlightElement;
     CurForeground: TColor;
+    LeftText: string;
   begin
     if MeasureOnly then begin
       Inc(Result.X,ACanvas.TextWidth(s));
       exit;
     end;
     if (Highlighter<>nil) and AllowFontColor then begin
+      LeftText := '';
       Highlighter.ResetRange;
       Highlighter.SetLine(s,0);
       while not Highlighter.GetEol do begin
@@ -241,8 +275,8 @@ var
           if CurForeground=clNone then
             CurForeground:=TColor(ForegroundColor);
           SetFontColor(CurForeground);
-          ACanvas.TextOut(x,y,s);
-          inc(x,ACanvas.TextWidth(s));
+          ACanvas.TextOut(x+1+ACanvas.TextWidth(LeftText),y,s);
+          LeftText += s;
         end;
         Highlighter.Next;
       end;
@@ -263,7 +297,7 @@ var
   IsReadOnly: boolean;
   UseImages: boolean;
   ImageIndex, ImageIndexCC: longint;
-  Prefix: String;
+  Token: String;
   PrefixPosition: Integer;
   HintModifiers: TPascalHintModifiers;
   HintModifier: TPascalHintModifier;
@@ -273,23 +307,32 @@ begin
   begin
     if ItemSelected then
     begin
-      ForegroundColor := Colors^.SelectedFontColor;
-      AllowFontColor := ForegroundColor=clNone;
-      if ForegroundColor=clNone then
-        ForegroundColor := Colors^.FontColor;
+      AllowFontColor := Colors^.TextSelectedColor=clNone;
+      if AllowFontColor then
+        ForegroundColor := ColorToRGB(Colors^.TextColor)
+      else
+        ForegroundColor := ColorToRGB(Colors^.TextSelectedColor);
+      BackgroundColor:=ColorToRGB(Colors^.BackgroundSelectedColor);
     end else
     begin
-      ForegroundColor := Colors^.FontColor;
+      ForegroundColor := ColorToRGB(Colors^.TextColor);
       AllowFontColor := True;
+      BackgroundColor:=ColorToRGB(Colors^.BackgroundColor);
     end;
+    TextHilightColor:=ColorToRGB(Colors^.TextHilightColor);
   end else
   begin
     ForegroundColor := clBlack;
     AllowFontColor := True;
+    BackgroundColor:=ColorToRGB(ACanvas.Brush.Color);
+    TextHilightColor := clWhite;
   end;
 
+  BGRed:=(BackgroundColor shr 16) and $ff;
+  BGGreen:=(BackgroundColor shr 8) and $ff;
+  BGBlue:=BackgroundColor and $ff;
   ForegroundColor := ColorToRGB(ForegroundColor);
-  ACanvas.Font.Color := ForegroundColor;
+  SetFontColor(ForegroundColor,true);
 
   Result.X := 0;
   Result.Y := ACanvas.TextHeight('W');
@@ -303,13 +346,9 @@ begin
     end;
     IdentItem.BeautifyIdentifier(CodeToolBoss.IdentifierList);
     ItemNode:=IdentItem.Node;
-    BackgroundColor:=ColorToRGB(ACanvas.Brush.Color);
-    BGRed:=(BackgroundColor shr 16) and $ff;
-    BGGreen:=(BackgroundColor shr 8) and $ff;
-    BGBlue:=BackgroundColor and $ff;
     ImageIndex:=-1;
     ImageIndexCC := -1;
-    UseImages := EditorOpts.UseImagesInCompletionBox;
+    UseImages := CodeToolsOpts.IdentComplShowIcons;
 
     // first write the type
     // var, procedure, property, function, type, const
@@ -461,6 +500,18 @@ begin
           end;
       end;
 
+    ctnWord:
+      begin
+        AColor:=clGray;
+        s:='text';
+      end;
+
+    ctnCodeTemplate:
+      begin
+        AColor:=clGray;
+        s:='template';
+      end;
+
     ctnNone:
       if not UseImages then
       begin
@@ -510,18 +561,28 @@ begin
       Inc(Result.X, 1+ACanvas.TextWidth(s))
     else begin
       //DebugLn(['PaintCompletionItem ',x,',',y,' ',s]);
-      ACanvas.TextOut(x+1,y,s);
       // highlighting the prefix
-      if (EditorOpts.HighlightCodeCompletionPrefix)
+      if (Colors<>nil) and (TextHilightColor<>clNone)
       and (aCompletion.CurrentString<>'') then
       begin
         PrefixPosition := Pos(LowerCase(aCompletion.CurrentString), LowerCase(s));
-        Prefix := Copy(s, PrefixPosition, Length(aCompletion.CurrentString));
         if PrefixPosition > 0 then
-          PrefixPosition := ACanvas.TextWidth(Copy(s, 1, PrefixPosition-1));
-        SetFontColor(RGBToColor(200, 13, 13));
-        ACanvas.TextOut(x+PrefixPosition+1,y,Prefix);
-      end;
+        begin
+          // paint before prefix
+          Token := Copy(s, 1, PrefixPosition-1);
+          ACanvas.TextOut(x+1,y,Token);
+          // paint highlight prefix
+          SetFontColor(TextHilightColor);
+          Token := Copy(s, PrefixPosition, Length(aCompletion.CurrentString));
+          ACanvas.TextOut(x+1+ACanvas.TextWidth(Copy(s, 1, PrefixPosition-1)),y,Token);
+          // paint after prefix
+          SetFontColor(ForegroundColor);
+          Token := Copy(s, PrefixPosition+Length(aCompletion.CurrentString), High(Integer));
+          ACanvas.TextOut(x+1+ACanvas.TextWidth(Copy(s, 1, PrefixPosition-1+Length(aCompletion.CurrentString))),y,Token);
+        end else
+          ACanvas.TextOut(x+1,y,s);
+      end else
+        ACanvas.TextOut(x+1,y,s);
       inc(x,ACanvas.TextWidth(s)+1);
       if x>MaxX then exit;
     end;
@@ -658,6 +719,11 @@ begin
             s := s + ':' + IdentItem.ResultType;
           s:=s+';'
         end;
+      ctnCodeTemplate:
+        begin
+          if IdentItem is TCodeTemplateIdentifierListItem then
+            s:=' - '+TCodeTemplateIdentifierListItem(IdentItem).Comment;
+        end;
       end;
     end;
     
@@ -668,6 +734,7 @@ begin
 
   end else begin
     // parse AKey for text and style
+    //debugln(['PaintCompletionItem WordCompletion:']);
     i := 1;
     TokenStart:=0;
     while i <= Length(AKey) do begin
@@ -676,9 +743,10 @@ begin
         begin
           WriteToken(TokenStart,i);
           // set color
-          ACanvas.Font.Color := (Ord(AKey[i + 3]) shl 8
-                        + Ord(AKey[i + 2])) shl 8
-                        + Ord(AKey[i + 1]);
+          ForegroundColor:=(Ord(AKey[i + 3]) shl 8
+                          + Ord(AKey[i + 2])) shl 8
+                          + Ord(AKey[i + 1]);
+          SetFontColor(ForegroundColor);
           inc(i, 4);
         end;
       #3:
@@ -702,6 +770,7 @@ begin
     end;
     WriteToken(TokenStart,i);
   end;
+  //debugln(['PaintCompletionItem END']);
 end;
 
 function GetIdentCompletionValue(aCompletion : TSynCompletion;

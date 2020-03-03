@@ -17,12 +17,10 @@ interface
 
 uses
   Classes, SysUtils, contnrs,
-  // LCL
-  LCLProc, Forms,
   // LazUtils
-  LazConfigStorage,
+  LazConfigStorage, LazMethodList, LazLoggerBase, UITypes,
   // IdeIntf
-  NewItemIntf, ProjPackIntf, PackageDependencyIntf;
+  NewItemIntf, ProjPackIntf, PackageDependencyIntf, IDEOptionsIntf;
   
 const
   PkgDescGroupName = 'Package';
@@ -51,14 +49,18 @@ const
 
 type
   TIDEPackage = class;
+  TAbstractPackageFileIDEOptions = class;
+  TAbstractPackageFileIDEOptionsClass = class of TAbstractPackageFileIDEOptions;
 
   { TLazPackageFile }
 
   TLazPackageFile = class(TIDEOwnedFile)
   private
+    FIDEOptionsList: TFPObjectList;
     FDisableI18NForLFM: boolean;
     FFileType: TPkgFileType;
     FRemoved: boolean;
+    FCustomOptions: TConfigStorage;
   protected
     function GetInUses: boolean; virtual; abstract;
     procedure SetInUses(AValue: boolean); virtual; abstract;
@@ -67,11 +69,15 @@ type
     procedure SetDisableI18NForLFM(AValue: boolean); virtual;
     procedure SetFileType(const AValue: TPkgFileType); virtual;
   public
+    constructor Create;
+    destructor Destroy; override;
+    function GetOptionsInstanceOf(OptionsClass: TAbstractPackageFileIDEOptionsClass): TAbstractPackageFileIDEOptions;
     property LazPackage: TIDEPackage read GetIDEPackage;
     property Removed: boolean read FRemoved write SetRemoved;
     property DisableI18NForLFM: boolean read FDisableI18NForLFM write SetDisableI18NForLFM;
     property FileType: TPkgFileType read FFileType write SetFileType;
     property InUses: boolean read GetInUses write SetInUses; // added to uses section of package
+    property CustomOptions: TConfigStorage read FCustomOptions;
   end;
 
   { PkgDependency flags }
@@ -106,14 +112,14 @@ type
   private
     FIDAsString: string;
     FIDAsWord: string;
-    function GetIDAsString: string;
-    function GetIDAsWord: string;
   protected
     FVersion: TPkgVersion;
     procedure SetName(const NewName: TComponentName); override;
     procedure UpdateIDAsString;
     procedure VersionChanged(Sender: TObject); virtual;
     function GetDirectory: string; override;
+    function GetIDAsString: string;
+    function GetIDAsWord: string;
   public
     procedure AssignOptions(Source: TPersistent); virtual;
     constructor Create; virtual; reintroduce;
@@ -150,6 +156,13 @@ type
     pitDynamic
     );
 
+// FPMake/Lazarus build mode
+  TBuildMethod = (
+    bmLazarus,
+    bmFPMake,
+    bmBoth
+    );
+
   { TIDEPackage }
 
   TIDEPackage = class(TLazPackageID)
@@ -159,6 +172,7 @@ type
     FChangeStamp: integer;
     FCustomOptions: TConfigStorage;
     FPackageType: TLazPackageType;
+    FBuildMethod: TBuildMethod;
     function GetDirectoryExpanded: string; virtual; abstract;
     function GetFileCount: integer; virtual; abstract;
     function GetPkgFiles(Index: integer): TLazPackageFile; virtual; abstract;
@@ -190,6 +204,7 @@ type
     property Modified: boolean read GetModified write SetModified;
     property RemovedFilesCount: integer read GetRemovedCount;
     property RemovedFiles[Index: integer]: TLazPackageFile read GetRemovedPkgFiles;
+    property BuildMethod: TBuildMethod read FBuildMethod write FBuildMethod;
   end;
 
 type
@@ -250,6 +265,13 @@ type
     );
   TPkgIntfRequiredFlags = set of TPkgIntfRequiredFlag;
 
+  TPkgIntfGatherUnitType = (
+    piguListed, // unit is in list of given Owner, i.e. in lpi, lpk file, this may contain platform specific units
+    piguUsed, // unit is used directly or indirectly by the start module and no currently open package/project is associated with it
+    piguAllUsed // as pigyUsed, except even units associated with another package/project are returned
+    );
+  TPkgIntfGatherUnitTypes = set of TPkgIntfGatherUnitType;
+
   { TPackageEditingInterface }
 
   TPackageEditingInterface = class(TComponent)
@@ -273,6 +295,7 @@ type
     function GetOwnersOfUnit(const UnitFilename: string): TFPList; virtual; abstract;
     procedure ExtendOwnerListWithUsedByOwners(OwnerList: TFPList); virtual; abstract;
     function GetSourceFilesOfOwners(OwnerList: TFPList): TStrings; virtual; abstract;
+    function GetUnitsOfOwners(OwnerList: TFPList; Flags: TPkgIntfGatherUnitTypes): TStrings; virtual; abstract;
     function GetPossibleOwnersOfUnit(const UnitFilename: string;
                                      Flags: TPkgIntfOwnerSearchFlags): TFPList; virtual; abstract;
     function GetPackageOfSourceEditor(out APackage: TIDEPackage; ASrcEdit: TObject): TLazPackageFile; virtual; abstract;
@@ -281,6 +304,7 @@ type
     function GetPackages(Index: integer): TIDEPackage; virtual; abstract;
     function FindPackageWithName(const PkgName: string; IgnorePackage: TIDEPackage = nil): TIDEPackage; virtual; abstract;
     function FindInstalledPackageWithUnit(const AnUnitName: string): TIDEPackage; virtual; abstract;
+    function IsPackageInstalled(const PkgName: string): TIDEPackage; virtual; abstract;
 
     // dependencies
     function IsOwnerDependingOnPkg(AnOwner: TObject; const PkgName: string;
@@ -389,6 +413,28 @@ type
     property ChangeStamp: Int64 read FChangeStamp;
   end;
 
+  TAbstractPackageIDEOptions = class(TAbstractIDEOptions)
+  protected
+    function GetPackage: TIDEPackage; virtual; abstract;
+  public
+    property Package: TIDEPackage read GetPackage;
+  end;
+
+  { TAbstractPackageFileIDEOptions }
+
+  TAbstractPackageFileIDEOptions = class(TAbstractIDEOptions)
+  protected
+    function GetPackageFile: TLazPackageFile; virtual; abstract;
+    function GetPackage: TIDEPackage; virtual; abstract;
+  public
+    constructor Create(APackage: TIDEPackage; APackageFile: TLazPackageFile); virtual; abstract;
+    class function GetInstance: TAbstractIDEOptions; overload; override;
+    class function GetInstance(APackage: TIDEPackage; AFile: TLazPackageFile): TAbstractIDEOptions; overload; virtual; abstract;
+    property PackageFile: TLazPackageFile read GetPackageFile;
+    property Package: TIDEPackage read GetPackage;
+  end;
+
+
 var
   PackageDescriptors: TPackageDescriptors; // will be set by the IDE
   PackageGraphInterface: TPackageGraphInterface; // must be set along with PackageSystem.PackageGraph
@@ -449,6 +495,13 @@ begin
     NewItemPkg.Descriptor:=PkgDesc;
     RegisterNewDialogItem(PkgDescGroupName,NewItemPkg);
   end;
+end;
+
+{ TAbstractPackageFileIDEOptions }
+
+class function TAbstractPackageFileIDEOptions.GetInstance: TAbstractIDEOptions;
+begin
+  Result := Nil;
 end;
 
 
@@ -788,6 +841,37 @@ end;
 procedure TLazPackageFile.SetRemoved(const AValue: boolean);
 begin
   FRemoved:=AValue;
+end;
+
+destructor TLazPackageFile.Destroy;
+begin
+  FIDEOptionsList.Free;
+  FreeAndNil(FCustomOptions);
+  inherited Destroy;
+end;
+
+function TLazPackageFile.GetOptionsInstanceOf(OptionsClass: TAbstractPackageFileIDEOptionsClass): TAbstractPackageFileIDEOptions;
+var
+  i: Integer;
+begin
+  if not Assigned(FIDEOptionsList) then
+  begin
+    FIDEOptionsList := TFPObjectList.Create(True);
+  end;
+  for i := 0 to FIDEOptionsList.Count -1 do
+    if OptionsClass=FIDEOptionsList.Items[i].ClassType then
+    begin
+      Result := TAbstractPackageFileIDEOptions(FIDEOptionsList.Items[i]);
+      Exit;
+    end;
+  Result := OptionsClass.Create(LazPackage, Self);
+  FIDEOptionsList.Add(Result);
+end;
+
+constructor TLazPackageFile.Create;
+begin
+  inherited Create;
+  FCustomOptions:=TConfigMemStorage.Create('',false);
 end;
 
 initialization

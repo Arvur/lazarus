@@ -178,7 +178,7 @@ var
   aTreeIter : TGtkTreeIter;
   value : pgValue;
 begin
-  aWidget := GetWidgetInfo({%H-}Pointer(WinControl.Handle), True)^.CoreWidget;
+  aWidget := GetOrCreateWidgetInfo({%H-}Pointer(WinControl.Handle))^.CoreWidget;
   aTreeModel := gtk_tree_view_get_model (GTK_TREE_VIEW(aWidget));
   if (gtk_tree_model_get_iter_from_string (aTreeModel, @aTreeIter, arg1)) then begin
     aTreeIter.stamp := GTK_LIST_STORE (aTreeModel)^.stamp; //strange hack
@@ -348,11 +348,13 @@ begin
   else
   begin
     // gObject
-    if AGTKObject = nil then gObject := ObjectToGTKObject(ALCLObject)
-    else gObject := AGTKObject;
+    if AGTKObject = nil then
+      gObject := ObjectToGTKObject(ALCLObject)
+    else
+      gObject := AGTKObject;
     if gObject = nil then Exit;
 
-    Info:=GetWidgetInfo(gObject, True);
+    Info:=GetWidgetInfo(gObject);
 
     // gFixed is the widget with the client area (e.g. TGroupBox, TCustomForm have this)
     gFixed := PGTKObject(GetFixedWidget(gObject));
@@ -432,19 +434,12 @@ begin
        else if ALCLObject is TCustomCheckbox then
        begin
          ConnectSenderSignal(gObject, 'toggled', @gtktoggledCB)
-       // in gtk2 callback signal of SpinEdit is 'value-changed' (in gtk1- 'changed')
-       end else
-       if ALCLObject is TCustomFloatSpinEdit then
-       begin
-         ConnectSenderSignalAfter(gObject, 'changed', @gtkchanged_spinbox);
-         ConnectSenderSignal(gObject, 'value-changed', @gtkchanged_editbox);
        end else
        begin
          if GTK_IS_ENTRY(gObject) then
          begin
            ConnectSenderSignal(gObject,'delete-text', @gtkchanged_editbox_delete_text);
            ConnectSenderSignal(gObject,'insert-text', @gtkchanged_editbox_insert_text);
-           ConnectSenderSignal(gObject,'backspace', @gtkchanged_editbox_backspace);
            ConnectSenderSignal(gObject,'delete-from-cursor', @gtkchanged_editbox_delete);
          end;
          ConnectSenderSignal(gObject, 'changed', @gtkchanged_editbox);
@@ -765,7 +760,7 @@ begin
     if gFixed = nil then gFixed := gObject;
 
     // gCore is the main widget (e.g. TListView has this)
-    gCore:= PGtkObject(GetWidgetInfo(gObject, True)^.CoreWidget);
+    gCore:= PGtkObject(GetWidgetInfo(gObject)^.CoreWidget);
   end;
 
   case AMsg of
@@ -900,7 +895,7 @@ begin
       SelectionMode:= GTK_SELECTION_SINGLE;
       
     Selection := gtk_tree_view_get_selection(GTK_TREE_VIEW(
-       GetWidgetInfo(Widget, True)^.CoreWidget));
+       GetOrCreateWidgetInfo(Widget)^.CoreWidget));
     gtk_tree_selection_set_mode(Selection, SelectionMode);
   end;
 end;
@@ -4689,7 +4684,7 @@ var
   Info: PWinWidgetInfo;
 begin
   if Widget = nil then Exit;
-  Info := GetWidgetInfo(Widget, False);
+  Info := GetWidgetInfo(Widget);
   if Info <> nil then
     g_signal_handlers_disconnect_matched(Widget, G_SIGNAL_MATCH_DATA, 0, 0, nil, nil, Info);
 end;
@@ -4718,21 +4713,21 @@ begin
   GtkWindow:=gtk_widget_get_toplevel(Widget);
   if GtkWidgetIsA(GtkWindow,GTK_TYPE_WINDOW)
   and (GetNearestLCLObject(PGtkWindow(GtkWindow)^.Focus_Widget)=Sender)
-  then begin
+  then
     gtk_window_set_focus(PGtkWindow(GtkWindow),nil);
-  end;
 
-  if Sender is TCommonDialog then begin
+  if Sender is TCommonDialog then
     DestroyCommonDialogAddOns(TCommonDialog(Sender));
-  end;
+
+  if GTK_IS_ENTRY(Widget) then
+    g_idle_remove_by_data(Widget);
 
   // destroy widget and properties
   DestroyConnectedWidget(Widget,false);
 
   // clean up unneeded containers
-  if Sender is TMenuItem then begin
+  if Sender is TMenuItem then
     DestroyEmptySubmenu(TMenuItem(Sender));
-  end;
 
   // mouse click messages
   if LastMouse.WinControl=Sender then
@@ -4745,7 +4740,7 @@ var
   WidgetInfo: PWidgetInfo;
   Allocation: TGTKAllocation;
 begin
-  WidgetInfo := GetWidgetInfo(Widget,true); // Widget info already created in CreateAPIWidget
+  WidgetInfo := GetOrCreateWidgetInfo(Widget); // Widget info already created in CreateAPIWidget
   WidgetInfo^.LCLObject := AWinControl;
   WidgetInfo^.Style := AParams.Style;
   WidgetInfo^.ExStyle := AParams.ExStyle;
@@ -4781,9 +4776,8 @@ begin
   ClearAccelKey(Widget);
 
   // untransient
-  if GtkWidgetIsA(Widget,GTK_TYPE_WINDOW) then begin
+  if GtkWidgetIsA(Widget,GTK_TYPE_WINDOW) then
     UntransientWindow(PGtkWindow(Widget));
-  end;
 
   // callbacks
   RemoveCallbacks(Widget);
@@ -4867,38 +4861,35 @@ begin
     Result := rsBlank;
 end;
 
-function TGtk2WidgetSet.CreateAPIWidget(
-  AWinControl: TWinControl): PGtkWidget;
+function TGtk2WidgetSet.CreateAPIWidget(AWinControl: TWinControl): PGtkWidget;
 // currently only used for csFixed
 var
   Adjustment: PGTKAdjustment;
   WinWidgetInfo: PWinWidgetInfo;
 begin
   Result := GTKAPIWidget_New;
-  WinWidgetInfo := GetWidgetInfo(Result, True);
+  WinWidgetInfo := GetOrCreateWidgetInfo(Result);
   WinWidgetInfo^.CoreWidget := PGTKAPIWidget(Result)^.Client;
   WinWidgetInfo^.LCLObject := AWinControl;
 
   gtk_scrolled_window_set_policy(PGTKScrolledWindow(Result),
     GTK_POLICY_NEVER, GTK_POLICY_NEVER);
 
-  Adjustment :=
-    gtk_scrolled_window_get_vadjustment(PGTKScrolledWindow(Result));
+  Adjustment := gtk_scrolled_window_get_vadjustment(PGTKScrolledWindow(Result));
   if Adjustment <> nil
   then with Adjustment^ do
   begin
     g_object_set_data(PGObject(Adjustment), odnScrollBar,
-                        PGTKScrolledWindow(Result)^.VScrollBar);
+                      PGTKScrolledWindow(Result)^.VScrollBar);
     Step_Increment := 1;
   end;
 
-  Adjustment :=
-    gtk_scrolled_window_get_hadjustment(PGTKScrolledWindow(Result));
+  Adjustment := gtk_scrolled_window_get_hadjustment(PGTKScrolledWindow(Result));
   if Adjustment <> nil
   then with Adjustment^ do
   begin
     g_object_set_data(PGObject(Adjustment), odnScrollBar,
-                        PGTKScrolledWindow(Result)^.HScrollBar);
+                      PGTKScrolledWindow(Result)^.HScrollBar);
     Step_Increment := 1;
   end;
 
@@ -4943,7 +4934,7 @@ begin
   gtk_widget_show(TempWidget);
   if NotOnParentsClientArea then
   begin
-    WinWidgetInfo:=GetWidgetInfo(Result, true);
+    WinWidgetInfo:=GetOrCreateWidgetInfo(Result);
     Include(WinWidgetInfo^.Flags, wwiNotOnParentsClientArea);
   end;
   SetFixedWidget(Result, TempWidget);

@@ -13,23 +13,24 @@
         <OtherUnitFiles Value="numlib_fix;editors"/>
         <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)\$(LCLWidgetType)"/>
       </SearchPaths>
-      <CodeGeneration>
-        <Checks>
-          <RangeChecks Value="True"/>
-        </Checks>
-      </CodeGeneration>
       <Linking>
         <Debugging>
           <UseExternalDbgSyms Value="True"/>
         </Debugging>
       </Linking>
+      <Other>
+        <CustomOptions Value="-dCHECK_VALID_SCALING"/>
+        <OtherDefines Count="1">
+          <Define0 Value="CHECK_VALID_SCALING"/>
+        </OtherDefines>
+      </Other>
     </CompilerOptions>
     <Description Value="TeeChart compatible graph component"/>
     <License Value=" See the file COPYING.modifiedLGPL, included in this distribution,
  for details about the copyright.
 "/>
     <Version Major="1"/>
-    <Files Count="52">
+    <Files Count="53">
       <Item1>
         <Filename Value="tagraph.pas"/>
         <HasRegisterProc Value="True"/>
@@ -137,126 +138,129 @@
         <UnitName Value="TADrawerCanvas"/>
       </Item24>
       <Item25>
-        <Filename Value="tadraweropengl.pas"/>
-        <AddToUsesPkgSection Value="False"/>
-        <UnitName Value="TADrawerOpenGL"/>
-      </Item25>
-      <Item26>
         <Filename Value="tadrawersvg.pas"/>
         <UnitName Value="TADrawerSVG"/>
-      </Item26>
-      <Item27>
+      </Item25>
+      <Item26>
         <Filename Value="taintervalsources.pas"/>
         <HasRegisterProc Value="True"/>
         <UnitName Value="TAIntervalSources"/>
-      </Item27>
-      <Item28>
+      </Item26>
+      <Item27>
         <Filename Value="tachartaxisutils.pas"/>
         <UnitName Value="TAChartAxisUtils"/>
-      </Item28>
-      <Item29>
+      </Item27>
+      <Item28>
         <Filename Value="tachartlistbox.pas"/>
         <HasRegisterProc Value="True"/>
         <UnitName Value="TAChartListbox"/>
-      </Item29>
-      <Item30>
+      </Item28>
+      <Item29>
         <Filename Value="taenumerators.pas"/>
         <UnitName Value="TAEnumerators"/>
-      </Item30>
-      <Item31>
-        <Filename Value="editors\tadatapointseditor.pas"/>
-        <HasRegisterProc Value="True"/>
-        <UnitName Value="TADataPointsEditor"/>
-      </Item31>
-      <Item32>
+      </Item29>
+      <Item30>
         <Filename Value="tachartextentlink.pas"/>
         <HasRegisterProc Value="True"/>
         <UnitName Value="TAChartExtentLink"/>
-      </Item32>
-      <Item33>
+      </Item30>
+      <Item31>
         <Filename Value="editors\tatooleditors.pas"/>
         <HasRegisterProc Value="True"/>
         <UnitName Value="TAToolEditors"/>
-      </Item33>
-      <Item34>
+      </Item31>
+      <Item32>
         <Filename Value="tamath.pas"/>
         <UnitName Value="TAMath"/>
-      </Item34>
-      <Item35>
+      </Item32>
+      <Item33>
         <Filename Value="tachartimagelist.pas"/>
         <HasRegisterProc Value="True"/>
         <UnitName Value="TAChartImageList"/>
-      </Item35>
-      <Item36>
+      </Item33>
+      <Item34>
         <Filename Value="tachartteechart.pas"/>
         <UnitName Value="TAChartTeeChart"/>
-      </Item36>
-      <Item37>
+      </Item34>
+      <Item35>
         <Filename Value="tadatatools.pas"/>
         <UnitName Value="TADataTools"/>
-      </Item37>
-      <Item38>
+      </Item35>
+      <Item36>
         <Filename Value="taanimatedsource.pas"/>
         <UnitName Value="TAAnimatedSource"/>
-      </Item38>
-      <Item39>
+      </Item36>
+      <Item37>
         <Filename Value="tatextelements.pas"/>
         <UnitName Value="TATextElements"/>
-      </Item39>
-      <Item40>
+      </Item37>
+      <Item38>
         <Filename Value="taaxissource.pas"/>
         <UnitName Value="TAAxisSource"/>
-      </Item40>
-      <Item41>
+      </Item38>
+      <Item39>
         <Filename Value="editors\taseriespropeditors.pas"/>
         <HasRegisterProc Value="True"/>
         <UnitName Value="TASeriesPropEditors"/>
-      </Item41>
-      <Item42>
+      </Item39>
+      <Item40>
         <Filename Value="tacustomfuncseries.pas"/>
         <UnitName Value="TACustomFuncSeries"/>
-      </Item42>
-      <Item43>
+      </Item40>
+      <Item41>
         <Filename Value="tafitutils.pas"/>
         <UnitName Value="TAFitUtils"/>
-      </Item43>
-      <Item44>
+      </Item41>
+      <Item42>
         <Filename Value="taguiconnector.pas"/>
         <UnitName Value="TAGUIConnector"/>
-      </Item44>
-      <Item45>
+      </Item42>
+      <Item43>
         <Filename Value="tadiagram.pas"/>
         <UnitName Value="TADiagram"/>
-      </Item45>
-      <Item46>
+      </Item43>
+      <Item44>
         <Filename Value="tadiagramdrawing.pas"/>
         <UnitName Value="TADiagramDrawing"/>
-      </Item46>
-      <Item47>
+      </Item44>
+      <Item45>
         <Filename Value="tadiagramlayout.pas"/>
         <UnitName Value="TADiagramLayout"/>
-      </Item47>
-      <Item48>
+      </Item45>
+      <Item46>
         <Filename Value="tachartstrconsts.pas"/>
         <UnitName Value="TAChartStrConsts"/>
-      </Item48>
-      <Item49>
+      </Item46>
+      <Item47>
         <Filename Value="tachartcombos.pas"/>
         <HasRegisterProc Value="True"/>
         <UnitName Value="TAChartCombos"/>
-      </Item49>
-      <Item50>
+      </Item47>
+      <Item48>
         <Filename Value="tahtml.pas"/>
         <UnitName Value="TAHtml"/>
-      </Item50>
-      <Item51>
+      </Item48>
+      <Item49>
         <Filename Value="tafonts.pas"/>
         <UnitName Value="TAFonts"/>
-      </Item51>
-      <Item52>
+      </Item49>
+      <Item50>
         <Filename Value="taexpressionseries.pas"/>
         <UnitName Value="TAExpressionSeries"/>
+      </Item50>
+      <Item51>
+        <Filename Value="tafitlib.pas"/>
+        <UnitName Value="TAFitLib"/>
+      </Item51>
+      <Item52>
+        <Filename Value="editors\tasourcepropeditors.pas"/>
+        <HasRegisterProc Value="True"/>
+        <UnitName Value="TASourcePropEditors"/>
       </Item52>
+      <Item53>
+        <Filename Value="tadatapointseditor.pas"/>
+        <UnitName Value="TADataPointsEditor"/>
+      </Item53>
     </Files>
     <LazDoc Paths="$(LazarusDir)\components\tachart\fpdoc"/>
     <i18n>
@@ -281,7 +285,6 @@
     </UsageOptions>
     <PublishOptions>
       <Version Value="2"/>
-      <IgnoreBinaries Value="False"/>
     </PublishOptions>
   </Package>
 </CONFIG>

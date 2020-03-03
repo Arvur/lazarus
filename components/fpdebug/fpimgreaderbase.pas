@@ -4,6 +4,8 @@ unit FpImgReaderBase;
 {$modeswitch advancedrecords}
 
 interface
+{$ifdef CD_Cocoa}{$DEFINE MacOS}{$ENDIF}
+{$IFDEF Darwin}{$DEFINE MacOS}{$ENDIF}
 
 uses
   {$ifdef windows}
@@ -11,7 +13,7 @@ uses
   {$endif}
   fgl, lazfglhash,
   fpDbgSymTable,
-  Classes, SysUtils, LazUTF8Classes;
+  Classes, SysUtils, LazUTF8Classes, DbgIntfBaseTypes, contnrs;
 
 type
   TDbgImageSection = record
@@ -35,8 +37,23 @@ type
     NewAddr: QWord;
     class operator =(r1,r2: TDbgAddressMap) : boolean;
   end;
+  PDbgAddressMap = ^TDbgAddressMap;
   TDbgAddressMapList = specialize TFPGList<TDbgAddressMap>;
-  TDbgAddressMapHashList = specialize TLazFPGHashTable<TDbgAddressMap>;
+
+  { TDbgAddressMapHashList }
+
+  TDbgAddressMapHashList = class(specialize TLazFPGHashTable<TDbgAddressMap>)
+  public
+    function ItemFromNode(ANode: THTCustomNode): TDbgAddressMap;
+    function ItemPointerFromNode(ANode: THTCustomNode): PDbgAddressMap;
+  end;
+
+  { TDbgAddressMapPointerHashList }
+
+  TDbgAddressMapPointerHashList = class(specialize TLazFPGHashTable<PDbgAddressMap>)
+  public
+    function ItemPointerFromNode(ANode: THTCustomNode): PDbgAddressMap;
+  end;
 
   { TDbgFileLoader }
   {$ifdef windows}
@@ -50,6 +67,7 @@ type
     FMapHandle: THandle;
     FModulePtr: Pointer;
     {$else}
+    FFileName: String;
     FStream: TStream;
     FList: TList;
     {$endif}
@@ -59,6 +77,7 @@ type
     constructor Create(AFileHandle: THandle);
     {$endif}
     destructor Destroy; override;
+    procedure Close;
     function  Read(AOffset, ASize: QWord; AMem: Pointer): QWord;
     function  LoadMemory(AOffset, ASize: QWord; out AMem: Pointer): QWord;
     procedure UnloadMemory({%H-}AMem: Pointer);
@@ -70,6 +89,8 @@ type
   private
     FImage64Bit: Boolean;
     FImageBase: QWord;
+    FLoadedTargetImageAddr: TDBGPtr;
+    FReaderErrors: String;
     FUUID: TGuid;
   protected
     function GetSubFiles: TStrings; virtual;
@@ -78,11 +99,14 @@ type
     procedure SetUUID(AGuid: TGuid);
     procedure SetImageBase(ABase: QWord);
     procedure SetImage64Bit(AValue: Boolean);
+    procedure AddReaderError(AnError: String);
   public
     class function isValid(ASource: TDbgFileLoader): Boolean; virtual; abstract;
     class function UserName: AnsiString; virtual; abstract;
     procedure ParseSymbolTable(AFpSymbolInfo: TfpSymbolList); virtual;
+    procedure ParseLibrarySymbolTable(AFpSymbolInfo: TfpSymbolList); virtual;
     constructor Create({%H-}ASource: TDbgFileLoader; {%H-}ADebugMap: TObject; OwnSource: Boolean); virtual;
+    procedure AddSubFilesToLoaderList(ALoaderList: TObject; PrimaryLoader: TObject); virtual;
 
     property ImageBase: QWord read FImageBase;
     Property Image64Bit: Boolean read FImage64Bit;
@@ -90,6 +114,9 @@ type
     property Section[const AName: String]: PDbgImageSection read GetSection;
     property SubFiles: TStrings read GetSubFiles;
     property AddressMapList: TDbgAddressMapList read GetAddressMapList;
+    property ReaderErrors: String read FReaderErrors;
+
+    property LoadedTargetImageAddr: TDBGPtr read FLoadedTargetImageAddr write FLoadedTargetImageAddr;
   end;
   TDbgImageReaderClass = class of TDbgImageReader;
 
@@ -100,6 +127,28 @@ implementation
 
 var
   RegisteredImageReaderClasses  : TFPList;
+
+{ TDbgAddressMapPointerHashList }
+
+function TDbgAddressMapPointerHashList.ItemPointerFromNode(ANode: THTCustomNode
+  ): PDbgAddressMap;
+begin
+  Result := THTGNode(ANode).Data;
+end;
+
+{ TDbgAddressMapHashList }
+
+function TDbgAddressMapHashList.ItemFromNode(ANode: THTCustomNode
+ ): TDbgAddressMap;
+begin
+  Result := THTGNode(ANode).Data;
+end;
+
+function TDbgAddressMapHashList.ItemPointerFromNode(ANode: THTCustomNode
+  ): PDbgAddressMap;
+begin
+  Result := @THTGNode(ANode).Data;
+end;
 
  class operator TDbgAddressMap.=(r1,r2: TDbgAddressMap) : boolean;
  begin
@@ -119,6 +168,7 @@ begin
     try
       if cls.isValid(ASource) then begin
         Result := cls.Create(ASource, ADebugMap, OwnSource);
+        ASource.Close;
         Exit;
       end
       else
@@ -129,6 +179,7 @@ begin
       end;
     end;
   end;
+  ASource.Close;
   Result := nil;
 end;
 
@@ -142,12 +193,24 @@ end;
 { TDbgFileLoader }
 
 constructor TDbgFileLoader.Create(AFileName: String);
+{$IFDEF MacOS}
+var
+  s: String;
+{$ENDIF}
 begin
   {$ifdef USE_WIN_FILE_MAPPING}
   FFileHandle := CreateFile(PChar(AFileName), GENERIC_READ, FILE_SHARE_READ, nil, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
   Create(FFileHandle);
   {$else}
   FList := TList.Create;
+  {$IFDEF MacOS}
+  if (RightStr(AFileName,4) = '.app') then begin
+    s := ExtractFileName(AFileName);
+    s := AFileName + PathDelim + 'Contents' + PathDelim + 'MacOS' + PathDelim + copy(s, 1, Length(s) - 4);
+    if (FileExists(s)) then AFileName := s
+  end;
+  {$ENDIF}
+  FFileName := AFileName;
   FStream := TFileStreamUTF8.Create(AFileName, fmOpenRead or fmShareDenyNone);
   inherited Create;
   {$endif}
@@ -172,7 +235,7 @@ begin
   FModulePtr := MapViewOfFile(FMapHandle, FILE_MAP_READ, 0, 0, 0);
   if FModulePtr = nil
   then begin
-    raise Exception.Create('Could not map view');
+    raise Exception.Create('Could not map view: ' + IntToStr(GetLastOSError));
     Exit;
   end;
 
@@ -198,6 +261,13 @@ begin
   {$endif}
 end;
 
+procedure TDbgFileLoader.Close;
+begin
+  {$ifNdef USE_WIN_FILE_MAPPING}
+  FreeAndNil(FStream);
+  {$endif}
+end;
+
 function TDbgFileLoader.Read(AOffset, ASize: QWord; AMem: Pointer): QWord;
 begin
   {$ifdef USE_WIN_FILE_MAPPING}
@@ -207,6 +277,8 @@ begin
   Result := 0;
   if AMem = nil then
     exit;
+  if FStream = nil then
+    FStream := TFileStreamUTF8.Create(FFileName, fmOpenRead or fmShareDenyNone);
   FStream.Position := AOffset;
   Result := FStream.Read(AMem^, ASize);
   {$endif}
@@ -222,6 +294,8 @@ begin
   AMem := AllocMem(ASize);
   if AMem = nil then
     exit;
+  if FStream = nil then
+    FStream := TFileStreamUTF8.Create(FFileName, fmOpenRead or fmShareDenyNone);
   FList.Add(AMem);
   FStream.Position := AOffset;
   Result := FStream.Read(AMem^, ASize);
@@ -264,15 +338,33 @@ begin
   FImage64Bit := AValue;
 end;
 
+procedure TDbgImageReader.AddReaderError(AnError: String);
+begin
+  if FReaderErrors <> '' then
+    FReaderErrors := FReaderErrors + LineEnding;
+  FReaderErrors := FReaderErrors + AnError;
+end;
+
 procedure TDbgImageReader.ParseSymbolTable(AFpSymbolInfo: TfpSymbolList);
 begin
   // The format of the symbol-table-section(s) can be different on each
   // platform. That's why parsing the data is done in TDbgImageReader.
 end;
 
+procedure TDbgImageReader.ParseLibrarySymbolTable(AFpSymbolInfo: TfpSymbolList);
+begin
+  //
+end;
+
 constructor TDbgImageReader.Create(ASource: TDbgFileLoader; ADebugMap: TObject; OwnSource: Boolean);
 begin
   inherited Create;
+end;
+
+procedure TDbgImageReader.AddSubFilesToLoaderList(ALoaderList: TObject;
+  PrimaryLoader: TObject);
+begin
+  //
 end;
 
 

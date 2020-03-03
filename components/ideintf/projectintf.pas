@@ -17,10 +17,10 @@ interface
 
 uses
   Classes, SysUtils, Contnrs,
-  FileUtil, LazFileUtils, LazFileCache, LazMethodList, AvgLvlTree,
-  Controls, Forms, ImgList, Graphics,
-  IDEOptionsIntf, NewItemIntf, ProjPackIntf, CompOptsIntf, ObjInspStrConsts,
-  IDEImagesIntf;
+  // LazUtils
+  FileUtil, LazFileUtils, LazFileCache, LazMethodList, UITypes, AvgLvlTree,
+  // IdeIntf
+  IDEOptionsIntf, NewItemIntf, ProjPackIntf, CompOptsIntf, ObjInspStrConsts;
 
 const
   FileDescGroupName = 'File';
@@ -247,7 +247,8 @@ type
     pfLRSFilesInOutputDirectory, // put .lrs files in output directory
     pfUseDefaultCompilerOptions, // load users default compiler options
     pfSaveJumpHistory,
-    pfSaveFoldState
+    pfSaveFoldState,
+    pfCompatibilityMode // use legacy file format to maximize compatibility with old Lazarus versions
     );
   TProjectFlags = set of TProjectFlag;
 
@@ -274,7 +275,8 @@ const
       'LRSInOutputDirectory',
       'UseDefaultCompilerOptions',
       'SaveJumpHistory',
-      'SaveFoldState'
+      'SaveFoldState',
+      'CompatibilityMode'
     );
   ProjectSessionStorageNames: array[TProjectSessionStorage] of string = (
     'InProjectInfo',
@@ -528,6 +530,7 @@ type
     procedure SetSessionStorage(const AValue: TProjectSessionStorage); virtual;
     procedure SetTitle(const AValue: String); virtual;
     procedure SetUseManifest(AValue: boolean); virtual; abstract;
+    function GetCurrentDebuggerBackend: String; virtual; abstract;
   public
     constructor Create({%H-}ProjectDescription: TProjectDescriptor); virtual; reintroduce;
     destructor Destroy; override;
@@ -541,6 +544,7 @@ type
     procedure RemoveUnit(Index: integer; RemoveFromUsesSection: boolean = true); virtual; abstract;
     procedure AddSrcPath(const SrcPathAddition: string); virtual; abstract;
     procedure AddPackageDependency(const PackageName: string); virtual; abstract;
+    function RemovePackageDependency(const PackageName: string): boolean; virtual; abstract;
     procedure ClearModifieds(ClearUnits: boolean);
     function FindFile(const AFilename: string;
                       SearchFlags: TProjectFileSearchFlags): TLazProjectFile; virtual; abstract;
@@ -585,6 +589,7 @@ type
     property Resources: TObject read FResources; // TAbstractProjectResources
     property UseManifest: boolean read GetUseManifest write SetUseManifest;
     property RunParameters: TAbstractRunParamsOptions read FRunParameters;
+    property CurrentDebuggerBackend: String read GetCurrentDebuggerBackend;
   end;
 
   TLazProjectClass = class of TLazProject;
@@ -629,14 +634,12 @@ const
                          pfRunnable,
                          pfLRSFilesInOutputDirectory,
                          pfSaveJumpHistory,
-                         pfSaveFoldState];
+                         pfSaveFoldState
+                         ];
   DefaultProjectFlags = DefaultProjectNoApplicationFlags+[
                          pfMainUnitHasCreateFormStatements,
                          pfMainUnitHasTitleStatement,
                          pfMainUnitHasScaledStatement];
-
-function LoadProjectIconIntoImages(const ProjFile: string;
-  const Images: TCustomImageList; const Index: TStringList): Integer;
 
 function ProjectFlagsToStr(Flags: TProjectFlags): string;
 function StrToProjectSessionStorage(const s: string): TProjectSessionStorage;
@@ -665,9 +668,9 @@ procedure RegisterProjectDescriptor(ProjDesc: TProjectDescriptor;
   Description: A brief summary of your form class as it appears in the New... dialog
   Units: A list of units to add the uses clause of a unit with your form class
     (Typically just the name of the unit defining your form class) }
-procedure RegisterForm(const Package: string; FormClass: TCustomFormClass;
+{procedure RegisterForm(const Package: string; FormClass: TCustomFormClass;
   const Category, Caption, Description, Units: string);
-
+}
 
 implementation
 
@@ -759,81 +762,6 @@ end;
 function ProjectDescriptorEmptyProject: TProjectDescriptor;
 begin
   Result:=ProjectDescriptors.FindByName(ProjDescNameEmpty);
-end;
-
-type
-  TLoadProjectIconIntoImagesObject = class
-    ImageIndex: Integer;
-  end;
-
-function LoadProjectIconIntoImages(const ProjFile: string;
-  const Images: TCustomImageList; const Index: TStringList): Integer;
-var
-  xIconFile: String;
-  xIcon: TIcon;
-  I, xAlternativeIcon: Integer;
-  xObj: TLoadProjectIconIntoImagesObject;
-  xScaledIcon: TCustomBitmap;
-  xNewIcon: Boolean;
-begin
-  //ToDo: better index
-
-  I := Index.IndexOf(ProjFile);
-  if I >= 0 then
-    Exit(TLoadProjectIconIntoImagesObject(Index.Objects[I]).ImageIndex);
-
-  if not Index.Sorted or (Index.Count = 0) then
-  begin // initialize index
-    Index.Sorted := True;
-    Index.Duplicates := dupIgnore;
-    Index.CaseSensitive := False;
-    Index.OwnsObjects := True;
-  end;
-
-  Result := -1;
-  xIconFile := ChangeFileExt(ProjFile, '.ico');
-  if FileExists(xIconFile) then
-  begin
-    xIcon := TIcon.Create;
-    try
-      xIcon.LoadFromFile(xIconFile);
-      if xIcon.Count>0 then
-        xAlternativeIcon := 0
-      else
-        xAlternativeIcon := -1;
-      for I := 0 to xIcon.Count-1 do
-      begin
-        xIcon.Current := I;
-        if (xIcon.Width = Images.Width)
-        and(xIcon.Height = Images.Height) then
-        begin
-          Result := Images.AddIcon(xIcon);
-          Break;
-        end;
-        if (xIcon.Width = 16)
-        and(xIcon.Height = 16) then
-          xAlternativeIcon := I;
-      end;
-
-      if (Result<0) and (xAlternativeIcon>=0) then
-      begin
-        xIcon.Current := xAlternativeIcon;
-        xScaledIcon := TIDEImages.ScaleImage(xIcon, xNewIcon, Images.Width, Images.Height, Images.Width/xIcon.Width);
-        try
-          Result := Images.Add(xScaledIcon, nil);
-        finally
-          if xNewIcon then
-            xScaledIcon.Free;
-        end;
-      end;
-    finally
-      xIcon.Free;
-    end;
-  end;
-
-  xObj := TLoadProjectIconIntoImagesObject.Create;
-  xObj.ImageIndex := Result;
-  Index.AddObject(ProjFile, xObj);
 end;
 
 function ProjectFlagsToStr(Flags: TProjectFlags): string;
@@ -1096,7 +1024,7 @@ end;
 procedure TProjectFileDescriptor.Release;
 begin
   //debugln('TProjectFileDescriptor.Release A ',Name,' ',dbgs(FReferenceCount));
-  if FReferenceCount=0 then
+  if FReferenceCount<=0 then
     raise Exception.Create('');
   dec(FReferenceCount);
   if FReferenceCount=0 then Free;
@@ -1655,7 +1583,7 @@ begin
 end;
 
 { TCustomFormDescriptor }
-
+{
 type
   TCustomFormDescriptor = class(TFileDescPascalUnitWithResource)
   private
@@ -1703,9 +1631,9 @@ begin
   Result := inherited GetInterfaceUsesSection
     + ', Controls, Forms,'#13#10 + '  ' + FUnits;
 end;
-
+}
 { RegisterForm }
-
+{
 procedure RegisterForm(const Package: string; FormClass: TCustomFormClass;
   const Category, Caption, Description, Units: string);
 begin
@@ -1715,7 +1643,7 @@ begin
   RegisterProjectFileDescriptor(TCustomFormDescriptor.Create(Package, FormClass,
     Caption, Description, Units), Category);
 end;
-
+}
 initialization
   ProjectFileDescriptors:=nil;
 

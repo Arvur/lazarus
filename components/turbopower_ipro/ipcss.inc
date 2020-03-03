@@ -20,6 +20,11 @@
    Size: single; // negative values are allowed (not implemented)
  end;
 
+ TCSSLengthType =  (cltUndefined, cltAbsolute, cltPercent);
+ TCSSLength = record
+   LengthValue: Integer;
+   LengthType: TCSSLengthType
+ end;
 
  { TCSSFont }
 
@@ -72,6 +77,7 @@
    FMarginLeft: TCSSMargin;
    FMarginRight: TCSSMargin;
    FMarginTop: TCSSMargin;
+   FWidth: TCSSLength;
    function GetCommandArgs(ACommand: String): TStringList;
    function GetCommandName(ACommand: String): String;
  public
@@ -79,6 +85,7 @@
    property MarginLeft: TCSSMargin read FMarginLeft write FMarginLeft;
    property MarginBottom: TCSSMargin read FMarginBottom write FMarginBottom;
    property MarginRight: TCSSMargin read FMarginRight write FMarginRight;
+   property Width: TCSSLength read FWidth write FWidth;
  published
    property Font: TCSSFont read  FFont write FFont;
    property Color: TColor read FColor write FColor;
@@ -135,6 +142,16 @@ type
     constructor Create(AStream: TStream; AGlobalProps: TCSSGlobalProps);
   end;
 
+function ForceRange(x, xmin, xmax: Integer): Integer;
+begin
+  if x < xmin then
+    Result := xmin
+  else if x > xmax then
+    Result := xmax
+  else
+    Result := x;
+end;
+
 function IsWhiteSpace(AChar: Char; ExcludeSpaces: Boolean = False): Boolean;
 begin
   Result := AChar in [#9, #10, #11, #13];
@@ -142,6 +159,22 @@ begin
     Result := AChar = ' ';
 end;
 
+function StrToCSSLength(AValue: String): TCssLength;
+var
+  P, Err: Integer;
+begin
+  P := Pos('%', AValue);
+  if P <> 0 then begin
+    Result.LengthType := cltPercent;
+    Delete(AValue, P, 1);
+  end else
+    Result.LengthType := cltAbsolute;
+  val(AValue, Result.LengthValue, Err);
+  if (Err <> 0) or (Result.LengthValue < 0) then
+    Result.LengthType := cltUndefined
+  else if (Result.LengthType = cltPercent) and (Result.LengthValue > 100) then
+    Result.LengthValue := 100;
+end;
 
 function SeperateCommands(Commands: String): TStringList;
 var
@@ -374,47 +407,108 @@ end;
 
 function ColorFromString(S: String): TColor;
 var
-  R, G, B, Err : Integer;
+  vR, vG, vB, Err : Integer;
+  vH: Integer = 255;
+  vL: Integer = 255;
+  vS: Integer = 255;
+  L: TStringList;
+
+  procedure SplitAfter(S: String; AIndex: Integer; AList: TStrings);
+  begin
+    S := Copy(S, AIndex, MaxInt);
+    while (S <> '') and (IsWhiteSpace(S[1]) or (S[1] = '(')) do
+      Delete(S, 1, 1);
+    while (S <> '') and (IsWhiteSpace(S[Length(S)]) or (S[Length(S)] = ')')) do
+      SetLength(S, Length(S)-1);
+    AList.CommaText := S;
+  end;
+
+  function TrimPercent(S: String): String;
+  var
+    n: Integer;
+  begin
+    Result := S;
+    n := Length(Result);
+    While (n > 0) and (IsWhiteSpace(Result[n]) or (Result[n] = '%')) do begin
+      SetLength(Result, n - 1);
+      n := Length(Result);
+    end;
+  end;
+
 begin
-  Result := -1;
+  Result := clWhite;
   if S = '' then
     Exit;
   S := UpperCase(S);
   if S[1] = '#' then
-    if length(S) <> 7 then
+    if Length(S) <> 7 then
       exit
     else begin
-      val('$'+Copy(S,2,2), R, Err);
+      val('$'+Copy(S,2,2), vR, Err);
       if Err <> 0 then
-        R := 255;
-      val('$'+Copy(S,4,2), G, Err);
+        vR := 255;
+      val('$'+Copy(S,4,2), vG, Err);
       if Err <> 0 then
-        G := 255;
-      val('$'+Copy(S,6,2), B, Err);
+        vG := 255;
+      val('$'+Copy(S,6,2), vB, Err);
       if Err <> 0 then
-        B := 255;
-      Exit(RGB(R, G, B));
+        vB := 255;
+      Exit(RGB(ForceRange(vR, 0, 255), ForceRange(vG, 0, 255), ForceRange(vB, 0, 255)));
     end
   else
-  if BinSearchNamedColor(S, result) then exit
+  if BinSearchNamedColor(S, result) then
+    exit
   else
-  if length(S) = 6 then
-    try
-      val('$'+Copy(S,1,2), R, Err);
-      if Err <> 0 then
-        R := 255;
-      val('$'+Copy(S,3,2), G, Err);
-      if Err <> 0 then
-        G := 255;
-      val('$'+Copy(S,5,2), B, Err);
-      if Err <> 0 then
-        B := 255;
-      Result := RGB(R, G, B);
-    except
-        Result := -1;
-    end
-  //else WriteLn('>>>>> Unknwn Color! = ', S);
-
+    case S[1] of
+      'R':
+        if (pos('RGB', S) = 1) then begin
+          L := TStringList.Create;
+          try
+            SplitAfter(S, 4, L);
+            if L.Count > 0 then vR := StrToIntDef(L[0], 255) else vR := 255;
+            if L.Count > 1 then vG := StrToIntDef(L[1], 255) else vG := 255;
+            if L.Count > 2 then vB := StrToIntDef(L[2], 255) else vB := 255;
+            Exit(RGB(ForceRange(vR, 0, 255), ForceRange(vG, 0, 255), ForceRange(vB, 0, 255)));
+          finally
+            L.Free;
+          end;
+        end;
+      'H':
+        if (pos('HSL', S) = 1) then begin
+          L := TStringList.Create;
+          try
+            SplitAfter(S, 4, L);
+            if L.Count > 0 then begin
+              if L[0][Length(L[0])] = '%' then
+                vH := StrToIntDef(TrimPercent(L[0]), 100) * 255 div 100
+              else
+                vH := StrToIntDef(L[0], 360) * 255 div 360;
+            end;
+            if L.Count > 1 then vS := StrToIntDef(TrimPercent(L[1]), 100) * 255 div 100;
+            if L.Count > 2 then vL := StrToIntDef(TrimPercent(L[2]), 100) * 255 div 100;
+            Exit(HLSToColor(ForceRange(vH, 0, 255), ForceRange(vL, 0, 255), ForceRange(vS, 0, 255)));
+          finally
+            L.Free;
+          end;
+        end;
+      else
+        if length(S) = 6 then
+          try
+            val('$'+Copy(S,1,2), vR, Err);
+            if Err <> 0 then
+              vR := 255;
+            val('$'+Copy(S,3,2), vG, Err);
+            if Err <> 0 then
+              vG := 255;
+            val('$'+Copy(S,5,2), vB, Err);
+            if Err <> 0 then
+              vB := 255;
+            Exit(RGB(ForceRange(vR, 0, 255), ForceRange(vG, 0, 255), ForceRange(vB, 0, 255)));
+          except
+            Exit(clWhite);
+          end
+        //else WriteLn('>>>>> Unknwn Color! = ', S);
+    end;   // case S[1]...
 end;
 
 function SizePxFromString(S: String): Integer;
@@ -515,7 +609,11 @@ begin
   end;
 
   for i := 0 to Result.Count-1 do begin
+    {$IFDEF CSS_CASESENSITIVE_CLASSID}
+    Element := Result[i];
+    {$ELSE}
     Element := LowerCase(Result[i]);
+    {$ENDIF}
     ElementClass := '';
     fpos := Pos('.', Element);
     if fpos = 0 then
@@ -523,8 +621,13 @@ begin
       Result.Objects[i] := FGlobalProps.GetPropsObject(Element, '', True);
     end
     else begin
+      {$IFDEF CSS_CASESENSITIVE_CLASSID}
+      ElementClass := Copy(Element, FPos+1, Length(Element));
+      Element := Copy(Element, 1, FPos-1);
+      {$ELSE}
       ElementClass := LowerCase(Copy(Element, FPos+1, Length(Element)));
       Element := LowerCase(Copy(Element, 1, FPos-1));
+      {$ENDIF}
       Result.Objects[i] := FGlobalProps.GetPropsObject(Element, ElementClass, True);
     end;
   end;
@@ -550,12 +653,14 @@ var
   Start: Integer;
   Quote: char;
   WantChar: Boolean;
+  WantPar: Boolean;
   Len: Integer;
 begin
   Result := TStringList.Create;
   Start := Pos(':', ACommand)+1;
 
   WantArg := True;
+  WantPar := false;
   Quote := #0;
   for i := Start to Length(ACommand) do
   begin
@@ -584,7 +689,9 @@ begin
     else // we have an arg we are reading ...
     begin
       WantChar:=not (ACommand[i] in [';',' ',#9]);
-      if (i<Length(ACommand)) and WantChar
+      if ACommand[i] = '(' then WantPar := True;
+      if ACommand[i] = ')' then WantPar := False;
+      if (i<Length(ACommand)) and (WantChar or WantPar)
       then
         continue;
       WantArg := True;
@@ -647,13 +754,16 @@ begin
   while FindStatement(Statement) do begin
    Elements := GetStatementElements(Statement);
    Commands := GetStatementCommands(Statement);
-   for I := 0 to Elements.Count-1 do
-   begin
-     Element := TCSSProps(Elements.Objects[I]);
-     Element.ReadCommands(Commands);
+   try
+     for I := 0 to Elements.Count-1 do
+     begin
+       Element := TCSSProps(Elements.Objects[I]);
+       Element.ReadCommands(Commands);
+     end;
+   finally
+     Elements.Free;
+     Commands.Free;
    end;
-   Elements.Free;
-   Commands.Free;
   end;
 end;
 
@@ -733,6 +843,7 @@ begin
   FColor := -1;
   FAlignment := haUnknown;
   FBorder := TCSSBorder.Create;
+  FWidth.LengthType := cltUndefined;
 end;
 
 destructor TCSSProps.Destroy;
@@ -858,7 +969,7 @@ begin
           if (Length(Command) > 7) and (Args.Count > 0) then
             case Command[7] of
               'a': if (Command = 'font-family') then
-                     Font.Name := Args[0];
+                     Font.Name := Args.CommaText; //Args[0];
               'i': if (Command = 'font-size') then
                      Font.Size := Args[0];
               't': if (Command = 'font-style') then
@@ -866,6 +977,9 @@ begin
               'e': if (Command = 'font-weight') then
                      Font.Weight := FontWeightFromString(Args[0]);
             end;
+      'w':
+        if (Command = 'width') and (Args.Count > 0) then
+          FWidth := StrToCSSLength(Args[0]);
       end;
     finally
       Args.Free;
@@ -903,6 +1017,8 @@ begin
   if AProps.MarginTop.Size <> 0 then
     FMarginTop.Size := AProps.MarginTop.Size;
 
+  if AProps.Width.LengthType <> cltUndefined then
+    FWidth := AProps.Width;
 end;
 
 
@@ -946,7 +1062,11 @@ var
   procedure Lookup(const AName: String);
   begin
     if length(AClassID) > 0 then
+      {$IFDEF CSS_CASESENSITIVE_CLASSID}
       Selector := AName + '.' + AClassID
+      {$ELSE}
+      Selector := AName + '.' + Lowercase(AClassID)
+      {$ENDIF}
     else
       Selector := AName;
 

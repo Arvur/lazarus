@@ -25,11 +25,17 @@ unit editor_keymapping_options;
 interface
 
 uses
-  Classes, SysUtils, FileUtil, TreeFilterEdit, Forms, StdCtrls, ComCtrls,
-  Controls, Dialogs, LCLType, LazUTF8, Menus, Buttons, Clipbrd, EditorOptions,
-  LazarusIDEStrConsts, IDEOptionsIntf, IDEImagesIntf, editor_general_options,
-  KeymapSchemeDlg, KeyMapping, IDECommands, KeyMapShortCutDlg, SrcEditorIntf,
-  EditBtn, ExtCtrls;
+  Classes, SysUtils,
+  // LCL
+  Forms, StdCtrls, ComCtrls, Controls, Dialogs, LCLType, LazUTF8, Menus, Buttons,
+  Clipbrd, EditBtn, ExtCtrls,
+  // LazControls
+  TreeFilterEdit,
+  // IdeIntf
+  IDEOptionsIntf, IDEOptEditorIntf, IDEImagesIntf, SrcEditorIntf,
+  // IDE
+  EditorOptions, LazarusIDEStrConsts, editor_general_options,
+  KeymapSchemeDlg, KeyMapping, IDECommands, KeyMapShortCutDlg;
 
 type
 
@@ -86,8 +92,7 @@ type
     procedure ClearCommandRelation(ARelation: TKeyCommandRelation);
     function KeyMappingRelationToCaption(Index: Integer): String;
     function KeyMappingRelationToCaption(KeyRelation: TKeyCommandRelation): String;
-    function KeyShortCutToCaption(const aKey: TKeyCommandRelation;
-      const aShortCut: TIDEShortCut): string;
+    function KeyShortCutToCaption(const aKey: TKeyCommandRelation): string;
     function CaptionToKeyMappingRelation(aCaption: string): TKeyCommandRelation;
     procedure SetIdleConnected(AValue: boolean);
     procedure UpdateKeyFilterButton;
@@ -188,7 +193,6 @@ begin
   EditButton.Enabled:=false;
   ClearButton.Enabled:=false;
   fModified:=False;
-  TIDEImages.AssignImage(FilterEdit.Glyph, 'btnfiltercancel');
 end;
 
 destructor TEditorKeymappingOptionsFrame.Destroy;
@@ -387,15 +391,15 @@ begin
   ConflictsTreeView.Images := IDEImages.Images_16;
   imgKeyCategory := IDEImages.LoadImage('item_keyboard');
   imgKeyItem := IDEImages.LoadImage('item_character');
-  TIDEImages.AssignImage(ChooseSchemeButton.Glyph, 'item_keyboard'); // keymapcategory
-  TIDEImages.AssignImage(FindKeyButton.Glyph, 'menu_search_find');
-  TIDEImages.AssignImage(EditButton.Glyph, 'laz_edit');
-  TIDEImages.AssignImage(ClearButton.Glyph, 'menu_clean');
+  IDEImages.AssignImage(ChooseSchemeButton, 'item_keyboard'); // keymapcategory
+  IDEImages.AssignImage(FindKeyButton, 'menu_search_find');
+  IDEImages.AssignImage(EditButton, 'laz_edit');
+  IDEImages.AssignImage(ClearButton, 'menu_clean');
   PopupMenu1.Images := IDEImages.Images_16;
   EditMenuItem.ImageIndex := IDEImages.LoadImage('laz_edit');
   ClearMenuItem.ImageIndex := IDEImages.LoadImage('menu_clean');
 
-  TIDEImages.AssignImage(ResetKeyFilterBtn.Glyph, ResBtnListFilter);
+  IDEImages.AssignImage(ResetKeyFilterBtn, ResBtnListFilter);
   ResetKeyFilterBtn.Enabled := not IDEShortCutEmpty(KeyMapKeyFilter);
 
 //  FillKeyMappingTreeView;    ... Done in ReadSettings.
@@ -426,6 +430,18 @@ end;
 class function TEditorKeymappingOptionsFrame.SupportedOptionsClass: TAbstractIDEOptionsClass;
 begin
   Result := TEditorOptions;
+end;
+
+function GetIDECommandImageIndex(AKeyRelation: TKeyCommandRelation): Integer;
+var
+  IDECommand: TIDECommand;
+begin
+  IDECommand:=IDECommandList.FindIDECommand(AKeyRelation.Command);
+  if IDECommand.UserCount=0 then
+    Exit(imgKeyItem);
+  Result:=IDECommand.Users[0].ImageIndex;
+  if Result=-1 then
+    Result:=imgKeyItem;
 end;
 
 procedure TEditorKeymappingOptionsFrame.FillKeyMappingTreeView;
@@ -468,7 +484,7 @@ begin
         end
         else
           NewKeyNode := Items.AddChildObject(NewCategoryNode,ItemCaption, CurKeyRelation);
-        NewKeyNode.ImageIndex := imgKeyItem;
+        NewKeyNode.ImageIndex := GetIDECommandImageIndex(CurKeyRelation);
         NewKeyNode.SelectedIndex := NewKeyNode.ImageIndex;
         inc(ChildNodeIndex);
       end;
@@ -511,11 +527,10 @@ begin
 end;
 
 function TEditorKeymappingOptionsFrame.KeyShortCutToCaption(
-  const aKey: TKeyCommandRelation; const aShortCut: TIDEShortCut): string;
+  const aKey: TKeyCommandRelation): string;
 begin
   Result:=aKey.Category.Description+'/'
-        +EditorCommandToDescriptionString(aKey.Command)
-        +'->'+KeyAndShiftStateToEditorKeyString(aShortCut);
+        +KeyMappingRelationToCaption(aKey);
 end;
 
 function TEditorKeymappingOptionsFrame.CaptionToKeyMappingRelation(
@@ -611,7 +626,7 @@ var
     if (ShortCut1.Key1=VK_UNKNOWN)
     or (ShortCut1.Key1<>ShortCut2.Key1)
     or (ShortCut1.Shift1<>ShortCut2.Shift1) then
-      exit;    // first keys differ
+      exit;    // first key differ
 
     if (ShortCut1.Key2=VK_UNKNOWN) or (ShortCut2.Key2=VK_UNKNOWN)
     or ((ShortCut1.Key2=ShortCut2.Key2) and (ShortCut1.Shift2=ShortCut2.Shift2))
@@ -622,11 +637,11 @@ var
       ConflictNode.ImageIndex:=imgKeyItem;
       ConflictNode.StateIndex:=imgKeyItem;
       KeyNode:=ConflictsTreeView.Items.AddChild(ConflictNode,
-                                          KeyShortCutToCaption(Key1,ShortCut1));
+                                          KeyShortCutToCaption(Key1));
       KeyNode.ImageIndex := imgKeyItem;
       KeyNode.SelectedIndex := imgKeyItem;
       KeyNode:=ConflictsTreeView.Items.AddChild(ConflictNode,
-                                          KeyShortCutToCaption(Key2,ShortCut2));
+                                          KeyShortCutToCaption(Key2));
       KeyNode.ImageIndex := imgKeyItem;
       KeyNode.SelectedIndex := imgKeyItem;
       ConflictNode.Expanded:=true;

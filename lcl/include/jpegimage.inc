@@ -23,6 +23,21 @@ begin
   FQuality := 75;
 end;
 
+procedure TJPEGImage.Compress;
+var
+  TempStream: TMemoryStream;
+begin
+  TempStream := TMemoryStream.Create;
+  try
+    FreeSaveStream;
+    SaveToStream(TempStream);
+    TempStream.Position := 0;
+    LoadFromStream(TempStream);
+  finally
+    TempStream.Free;
+  end;
+end;
+
 class function TJPEGImage.IsStreamFormatSupported(Stream: TStream): Boolean;
 var
   Pos: Int64;
@@ -67,7 +82,11 @@ end;
 procedure TJPEGImage.InitializeReader(AImage: TLazIntfImage; AReader: TFPCustomImageReader);
 begin
   inherited;
+  TFPReaderJPEG(AReader).MinHeight := MinHeight;
+  TFPReaderJPEG(AReader).MinWidth := MinWidth;
   TFPReaderJPEG(AReader).Performance := Performance;
+  TFPReaderJPEG(AReader).Scale := Scale;
+  TFPReaderJPEG(AReader).Smoothing := Smoothing;
 end;
 
 procedure TJPEGImage.InitializeWriter(AImage: TLazIntfImage; AWriter: TFPCustomImageWriter);
@@ -76,5 +95,28 @@ begin
   if not(AWriter is TFPWriterJPEG) then Exit;
   TFPWriterJPEG(AWriter).ProgressiveEncoding := ProgressiveEncoding;
   TFPWriterJPEG(AWriter).CompressionQuality := CompressionQuality;
+  {$IF FPC_FullVersion >= 30400}
+  TFPWriterJPEG(AWriter).GrayScale := GrayScale;
+  {$IFEND}
 end;
 
+procedure TJPEGImage.SetCompressionQuality(AValue: TJPEGQualityRange);
+begin
+  if FQuality = AValue then Exit;
+  FQuality := AValue;
+  FreeSaveStream;
+end;
+
+procedure TJPEGImage.SetGrayScale(AValue: Boolean);
+begin
+  if FGrayScale = AValue then Exit;
+  FGrayScale := AValue;
+  FreeSaveStream;
+end;
+
+procedure TJPEGImage.SetProgressiveEncoding(AValue: boolean);
+begin
+  if FProgressiveEncoding = AValue then Exit;
+  FProgressiveEncoding := AValue;
+  FreeSaveStream;
+end;

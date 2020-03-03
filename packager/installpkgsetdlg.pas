@@ -62,22 +62,27 @@ type
     AddToInstallButton: TBitBtn;
     AvailableTreeView: TTreeView;
     AvailablePkgGroupBox: TGroupBox;
+    MiddleBevel: TBevel;
     HelpButton: TBitBtn;
     CancelButton: TBitBtn;
     ExportButton: TButton;
     BtnPanel: TPanel;
     InstallTreeView: TTreeView;
-    lblMiddle: TLabel;
     AvailableFilterEdit: TTreeFilterEdit;
     LPKParsingTimer: TTimer;
     NoteLabel: TLabel;
+    Panel1: TPanel;
+    Panel2: TPanel;
     PkgInfoMemo: TMemo;
     PkgInfoGroupBox: TGroupBox;
     ImportButton: TButton;
+    PkgInfoMemoLicense: TMemo;
     SaveAndExitButton: TBitBtn;
     InstallPkgGroupBox: TGroupBox;
     SaveAndRebuildButton: TBitBtn;
     InstalledFilterEdit: TTreeFilterEdit;
+    Splitter1: TSplitter;
+    Splitter2: TSplitter;
     UninstallButton: TBitBtn;
     procedure AddToInstallButtonClick(Sender: TObject);
     function FilterEditGetImageIndex({%H-}Str: String; {%H-}Data: TObject;
@@ -171,6 +176,18 @@ implementation
 
 {$R *.lfm}
 
+procedure SetControlsWidthOnMax(AControls: array of TControl);
+var
+  i, MaxWidth: Integer;
+begin
+  MaxWidth:=0;
+  for i:=Low(AControls) to High(AControls) do
+    if AControls[i].Width>MaxWidth then
+      MaxWidth:=AControls[i].Width;
+  for i:=Low(AControls) to High(AControls) do
+    AControls[i].Constraints.MinWidth:=MaxWidth;  // AutoSize=True
+end;
+
 function ShowEditInstallPkgsDialog(OldInstalledPackages: TPkgDependency;
   CheckInstallPackageList: TOnCheckInstallPackageList;
   var NewInstalledPackages: TObjectList; // list of TLazPackageID
@@ -222,20 +239,19 @@ begin
   ExportButton.Caption:=lisExportList;
   ImportButton.Caption:=lisImportList;
   UninstallButton.Caption:=lisUninstallSelection;
-  TIDEImages.AssignImage(UninstallButton.Glyph, 'arrow_right');
+  IDEImages.AssignImage(UninstallButton, 'arrow__darkred_right');
   InstallPkgGroupBox.Caption:=lisPckEditInstall;
   AddToInstallButton.Caption:=lisInstallSelection;
-  TIDEImages.AssignImage(AddToInstallButton.Glyph, 'arrow_left');
+  IDEImages.AssignImage(AddToInstallButton, 'arrow__darkgreen_left');
   PkgInfoGroupBox.Caption := lisPackageInfo;
   SaveAndRebuildButton.Caption:=lisSaveAndRebuildIDE;
   SaveAndExitButton.Caption:=lisSaveAndExitDialog;
   HelpButton.Caption:=lisMenuHelp;
   CancelButton.Caption:=lisCancel;
-  TIDEImages.AssignImage(AvailableFilterEdit.Glyph, 'btnfiltercancel');
-  TIDEImages.AssignImage(InstalledFilterEdit.Glyph, 'btnfiltercancel');
 
   FNewInstalledPackages:=TObjectList.Create(true);
   PkgInfoMemo.Clear;
+  PkgInfoMemoLicense.Clear;
   LPKInfoCache.AddOnQueueEmpty(@OnAllLPKParsed);
   LPKInfoCache.StartLPKReaderWithAllAvailable;
 
@@ -255,6 +271,8 @@ procedure TInstallPkgSetDialog.InstallPkgSetDialogShow(Sender: TObject);
 begin
   InstalledFilterEdit.Filter:='';    // (filter) - text is shown after this.
   AvailableFilterEdit.Filter:='';
+  SetControlsWidthOnMax([UninstallButton, AddToInstallButton]);
+  SetControlsWidthOnMax([ImportButton, ExportButton]);
 end;
 
 procedure TInstallPkgSetDialog.SaveAndRebuildButtonClick(Sender: TObject);
@@ -386,6 +404,7 @@ var
   ImgIndex: Integer;
   Unknown: Boolean;
   PackageLink: TPackageLink;
+  ImagesRes: TScaledImageListResolution;
 begin
   Tree:=Sender as TTreeView;
   if Stage=cdPostPaint then begin
@@ -407,25 +426,27 @@ begin
     else
       PackageLink := FindOnlinePackageLink(Info.ID.Name);
     Images:=Tree.Images;
+    if Images = nil then exit;
+    ImagesRes := Images.ResolutionForPPI[Tree.ImagesWidth, Font.PixelsPerInch, GetCanvasScaleFactor];
     CurCanvas:=Tree.Canvas;
 
     NodeRect:=Node.DisplayRect(False);
     x:=Node.DisplayIconLeft+1;
-    y:=(NodeRect.Top+NodeRect.Bottom-Images.Height) div 2;
+    y:=(NodeRect.Top+NodeRect.Bottom-ImagesRes.Height) div 2;
     // draw image
     ImgIndex:=GetPkgImgIndex(Installed,PackageInInstallList(PkgName), PackageLink <> nil);
-    Images.Draw(CurCanvas,x,y,ImgIndex);
+    ImagesRes.Draw(CurCanvas,x,y,ImgIndex);
     // draw overlays
     if InLazSrc then
-      Images.Draw(CurCanvas,x,y,ImgIndexOverlayLazarusPackage);
+      ImagesRes.Draw(CurCanvas,x,y,ImgIndexOverlayLazarusPackage);
     if IsBase then
-      Images.Draw(CurCanvas,x,y,ImgIndexOverlayBasePackage);
+      ImagesRes.Draw(CurCanvas,x,y,ImgIndexOverlayBasePackage);
     if PkgType=lptRunTimeOnly then
-      Images.Draw(CurCanvas,x,y,ImgIndexOverlayRuntimePackage);
+      ImagesRes.Draw(CurCanvas,x,y,ImgIndexOverlayRuntimePackage);
     if PkgType=lptDesignTime then
-      Images.Draw(CurCanvas,x,y,ImgIndexOverlayDesigntimePackage);
+      ImagesRes.Draw(CurCanvas,x,y,ImgIndexOverlayDesigntimePackage);
     if Unknown then
-      Images.Draw(CurCanvas,x,y,ImgIndexOverlayUnknown);
+      ImagesRes.Draw(CurCanvas,x,y,ImgIndexOverlayUnknown);
   end;
   PaintImages:=false;
 end;
@@ -767,6 +788,7 @@ begin
     then
       exit; // no change
     PkgInfoMemo.Clear;
+    PkgInfoMemoLicense.Clear;
     if (Info=nil) then begin
       FSelectedPkgID:='';
       exit;
@@ -785,24 +807,25 @@ begin
     if PackageLink = nil then
     begin
       Author := Info.Author;
-      Description := Info.Description;
+      Description := Trim(Info.Description);
       License := Info.License;
     end
     else
     begin
       Author := PackageLink.Author;
-      Description := PackageLink.Description;
+      Description := Trim(PackageLink.Description);
       License := PackageLink.License;
     end;
 
+    if Description<>'' then         // Description is the most interesting piece.
+      PkgInfoMemo.Lines.Add(Description); // Put it first.
+    PkgInfoMemo.Lines.Add('');
     if Author<>'' then
-      PkgInfoMemo.Lines.Add(lisPckOptsAuthor + ': ' + Author);
-    if Description<>'' then
-      PkgInfoMemo.Lines.Add(lisPckOptsDescriptionAbstract + ': ' + Description);
-    if License<>'' then
-      PkgInfoMemo.Lines.Add(lisPckOptsLicense + ': ' + License);
+      PkgInfoMemo.Lines.Add(lisPckOptsAuthor + ': ' + Author);         // Author
+    PkgInfoMemo.Lines.Add(Format(lisOIPFilename, [Info.LPKFilename])); // Pkg name
 
-    PkgInfoMemo.Lines.Add(Format(lisOIPFilename, [Info.LPKFilename]));
+    if License<>'' then             // License has its own memo.
+      PkgInfoMemoLicense.Lines.Add(lisPckOptsLicense + ': ' + License);
 
     InfoStr:=lisCurrentState;
     if Info.Installed<>pitNope then
@@ -823,6 +846,8 @@ begin
       AddState(lisPckExplBase);
     AddState(LazPackageTypeIdents[Info.PkgType]);
     PkgInfoMemo.Lines.Add(InfoStr);
+    PkgInfoMemo.SelStart := 1;
+    PkgInfoMemoLicense.SelStart := 1;
   finally
     LPKInfoCache.LeaveCritSection;
   end;

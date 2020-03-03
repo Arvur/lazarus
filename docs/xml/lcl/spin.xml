@@ -9,54 +9,16 @@
     <module name="Spin">
       <short>This unit contains classes for spin edit controls.</short>
       <descr/>
-      <!-- unresolved type reference Visibility: default -->
-      <element name="Classes">
-        <short/>
-        <descr/>
-        <seealso/>
-      </element>
-      <!-- unresolved type reference Visibility: default -->
-      <element name="Controls">
-        <short/>
-        <descr/>
-        <seealso/>
-      </element>
-      <!-- unresolved type reference Visibility: default -->
-      <element name="SysUtils">
-        <short/>
-        <descr/>
-        <seealso/>
-      </element>
-      <!-- unresolved type reference Visibility: default -->
-      <element name="LCLType">
-        <short/>
-        <descr/>
-        <seealso/>
-      </element>
-      <!-- unresolved type reference Visibility: default -->
-      <element name="LCLProc">
-        <short/>
-        <descr/>
-        <seealso/>
-      </element>
-      <!-- unresolved type reference Visibility: default -->
-      <element name="LMessages">
-        <short/>
-        <descr/>
-        <seealso/>
-      </element>
-      <!-- unresolved type reference Visibility: default -->
-      <element name="ClipBrd">
-        <short/>
-        <descr/>
-        <seealso/>
-      </element>
-      <!-- unresolved type reference Visibility: default -->
-      <element name="StdCtrls">
-        <short/>
-        <descr/>
-        <seealso/>
-      </element>
+
+      <!-- unresolved type references Visibility: default -->
+      <element name="Types"/>
+      <element name="Classes"/>
+      <element name="Controls"/>
+      <element name="SysUtils"/>
+      <element name="LCLType"/>
+      <element name="StdCtrls"/>
+      <element name="Math"/>
+
       <!-- object Visibility: default -->
       <element name="TCustomFloatSpinEdit">
         <short>The base class for the float-based spin control</short>
@@ -555,6 +517,19 @@
       <element name="TCustomSpinEdit.Create.TheOwner">
         <short/>
       </element>
+
+      <element name="TCustomSpinEdit.GetLimitedValue">
+        <short></short>
+        <descr></descr>
+        <seealso></seealso>
+      </element>
+      <element name="TCustomSpinEdit.GetLimitedValue.Result">
+        <short></short>
+      </element>
+      <element name="TCustomSpinEdit.GetLimitedValue.AValue">
+        <short></short>
+      </element>
+
       <!-- property Visibility: public -->
       <element name="TCustomSpinEdit.Value">
         <short>The value of spin control.</short>
@@ -579,7 +554,7 @@
       </element>
       <!-- property Visibility: public -->
       <element name="TCustomSpinEdit.MaxValue">
-        <short>Maximal valueallowed for the spin edit.</short>
+        <short>Maximal value allowed for the spin edit.</short>
         <descr>
           <p>Maximal value allowed for the spin edit. Set the MinValue property equal to MaxValue to allow any number to be selected.</p>
         </descr>
@@ -591,7 +566,7 @@
       </element>
       <!-- property Visibility: public -->
       <element name="TCustomSpinEdit.Increment">
-        <short>The value by which the value of the control should be increased/decresed when the user clicks one of the arrows or one of the keyboard up/down arrows</short>
+        <short>The value by which the value of the control should be increased/decreased when the user clicks one of the arrows or one of the keyboard up/down arrows</short>
         <descr/>
         <seealso>
           <link id="TCustomSpinEdit.MinValue"/>

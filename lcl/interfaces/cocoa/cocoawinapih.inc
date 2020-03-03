@@ -29,6 +29,7 @@ function BitBlt(DestDC: HDC; X, Y, Width, Height: Integer; SrcDC: HDC; XSrc, YSr
 
 {function CallNextHookEx(hHk: HHOOK; ncode : Integer; wParam: WParam; lParam : LParam) : Integer; override;
 function CallWindowProc(lpPrevWndFunc : TFarProc; Handle : HWND; Msg : UINT; wParam: WParam; lParam : lParam) : Integer; override;}
+procedure CallDefaultWndHandler(Sender: TObject; var Message); override;
 function ClientToScreen(Handle: HWND; var P: TPoint) : Boolean; override;
 
 function ClipboardFormatToMimeType(FormatID: TClipboardFormat): string; override;
@@ -41,6 +42,7 @@ function ClipboardGetOwnerShip(ClipboardType: TClipboardType;
   OnRequestProc: TClipboardRequestEvent;  FormatCount: integer;
   Formats: PClipboardFormat): boolean; override;
 function ClipboardRegisterFormat(const AMimeType: string): TClipboardFormat; override;
+function ClipboardFormatNeedsNullByte(const AFormat: TPredefinedClipboardFormat): Boolean; override;
 
 function CombineRgn(Dest, Src1, Src2: HRGN; fnCombineMode: Longint): Longint;  override;
 function CreateBitmap(Width, Height: Integer; Planes, BitCount: Longint; BitmapBits: Pointer): HBITMAP; override;
@@ -62,6 +64,7 @@ function DestroyCaret(Handle : HWND): Boolean; override;
 function DestroyIcon(Handle: HICON): Boolean; override;
 function DPtoLP(DC: HDC; var Points; Count: Integer): BOOL; override;
 function DrawFocusRect(DC: HDC; const Rect: TRect): boolean; override;
+function DrawEdge(DC: HDC; var Rect: TRect; edge: Cardinal; grfFlags: Cardinal): Boolean; override;
 
 function Ellipse(DC: HDC; x1, y1, x2, y2: Integer): Boolean; override;
 {function EnableScrollBar(Wnd: HWND; wSBflags, wArrows: Cardinal): Boolean; override;}
@@ -70,7 +73,7 @@ function EndPaint(Handle: hwnd; var PS: TPaintStruct): Integer; override;
 procedure EnterCriticalSection(var CritSection: TCriticalSection); override;
 function EnumFontFamiliesEx(DC: HDC; lpLogFont: PLogFont; Callback: FontEnumExProc; Lparam: LParam; Flags: dword): longint; override;
 function EnumDisplayMonitors(hdc: HDC; lprcClip: PRect; lpfnEnum: MonitorEnumProc; dwData: LPARAM): LongBool; override;
-{function ExcludeClipRect(dc: hdc; Left, Top, Right, Bottom : Integer) : Integer; override;}
+function ExcludeClipRect(dc: hdc; Left, Top, Right, Bottom : Integer) : Integer; override;
 function ExtSelectClipRGN(dc: hdc; rgn : hrgn; Mode : Longint): Integer;  override;
 function ExtCreatePen(dwPenStyle, dwWidth: DWord; const lplb: TLogBrush; dwStyleCount: DWord; lpStyle: PDWord): HPEN; override;
 function ExtTextOut(DC: HDC; X, Y: Integer; Options: Longint; Rect: PRect; Str: PChar; Count: Longint; Dx: PInteger): Boolean; override;
@@ -92,7 +95,7 @@ function GetClipBox(DC : hDC; lpRect : PRect) : Longint; override;
 function GetClipRGN(DC: hDC; RGN: hRGN): Longint; override;
 function GetCursorPos(var lpPoint: TPoint ): Boolean; override;
 function GetDC(hWnd: HWND): HDC; override;
-{function GetDCOriginRelativeToWindow(PaintDC: HDC; WindowHandle: HWND; var OriginDiff: TPoint): boolean; override;}
+function GetDCOriginRelativeToWindow(PaintDC: HDC; WindowHandle: HWND; var OriginDiff: TPoint): boolean; override;
 function GetDeviceCaps(DC: HDC; Index: Integer): Integer; override;
 function GetDeviceSize(DC: HDC; var P: TPoint): Boolean; override;
 {function GetDIBits(DC: HDC; Bitmap: HBitmap; StartScan, NumScans: UINT; Bits: Pointer; var BitInfo: BitmapInfo; Usage: UINT): Integer; override;}

@@ -25,11 +25,18 @@ unit editor_indent_options;
 interface
 
 uses
-  Classes, SysUtils, LCLProc, LCLType, StdCtrls, Controls, ExtCtrls, Graphics,
-  Forms, ComCtrls, Spin, EditorOptions, LazarusIDEStrConsts, IDEProcs,
-  KeyMapping, editor_keymapping_options, editor_general_options, IDEOptionsIntf,
-  IDEUtils, SynEdit, SynBeautifier, SynHighlighterPas, SynEditKeyCmds,
-  DividerBevel;
+  Classes, SysUtils,
+  // LCL
+  LCLProc, LCLType, StdCtrls, Controls, ExtCtrls, Graphics, ComCtrls, Spin,
+  // LazControls
+  DividerBevel,
+  // SynEdit
+  SynEdit, SynBeautifier, SynHighlighterPas, SynEditKeyCmds,
+  // IdeIntf
+  IDEOptionsIntf, IDEOptEditorIntf, IDEUtils, SrcEditorIntf,
+  // IDE
+  EditorOptions, LazarusIDEStrConsts, KeyMapping,
+  editor_keymapping_options, editor_general_options;
 
 type
   TPreviewEditor = TSynEdit;
@@ -85,11 +92,7 @@ type
     lbSlashAlignMax: TLabel;
     edSlashAlignMax: TSpinEdit;
 
-    Notebook1: TNotebook;
-    AnsiPage: TPage;
-    CurlyPage: TPage;
-    StringPage: TPage;
-    SlashPage: TPage;
+    CommentsPageControl: TPageControl;
     TabsGroupDivider: TDividerBevel;
     AutoIndentLink: TLabel;
     CenterLabel:TLabel;
@@ -97,14 +100,13 @@ type
     lblBlockIndentKeys: TLabel;
     TabIndentBlocksCheckBox: TCheckBox;
     SmartTabsCheckBox: TCheckBox;
+    tbAnsi: TTabSheet;
+    tbCurly: TTabSheet;
+    tbShlash: TTabSheet;
+    tbString: TTabSheet;
     TabsToSpacesCheckBox: TCheckBox;
     TabWidthsComboBox: TComboBox;
     TabWidthsLabel: TLabel;
-    ToolBar1: TToolBar;
-    tbAnsi: TToolButton;
-    tbCurly: TToolButton;
-    tbShlash: TToolButton;
-    tbString: TToolButton;
     procedure AutoIndentCheckBoxChange(Sender: TObject);
     procedure AutoIndentLinkClick(Sender: TObject);
     procedure AutoIndentLinkMouseEnter(Sender: TObject);
@@ -124,7 +126,6 @@ type
     procedure SmartTabsCheckBoxChange(Sender: TObject);
     procedure TabIndentBlocksCheckBoxChange(Sender: TObject);
     procedure TabsToSpacesCheckBoxChange(Sender: TObject);
-    procedure tbAnsiClick(Sender: TObject);
   private
     FDefaultBookmarkImages: TImageList;
     FDialog: TAbstractOptionsEditorDialog;
@@ -199,8 +200,6 @@ begin
   tbCurly.Caption := dlgCurlyCommentTab;
   tbShlash.Caption := dlgSlashCommentTab;
   tbString.Caption := dlgStringBreakIndentTab;
-
-  Notebook1.AutoSize := True;
 
   cbAnsiEnableAutoContinue.Caption := dlgCommentContinue;
   lbAnsiMatch.Caption := dlgCommentContinueMatch;
@@ -654,11 +653,6 @@ begin
   SetPreviewOption(TabsToSpacesCheckBox.Checked, eoTabsToSpaces);
 end;
 
-procedure TEditorIndentOptionsFrame.tbAnsiClick(Sender: TObject);
-begin
-  Notebook1.PageIndex := TComponent(Sender).Tag;
-end;
-
 function TEditorIndentOptionsFrame.DefaultBookmarkImages: TImageList;
 var
   i: integer;
@@ -668,7 +662,7 @@ begin
     FDefaultBookmarkImages := TImageList.Create(Self);
     FDefaultBookmarkImages.Width := 11;
     FDefaultBookmarkImages.Height := 11;
-    for i := 0 to 9 do
+    for i in TBookmarkNumRange do
       FDefaultBookmarkImages.AddResourceName(HInstance, 'bookmark' + IntToStr(i));
   end;
   Result := FDefaultBookmarkImages;

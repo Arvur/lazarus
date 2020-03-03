@@ -15,9 +15,21 @@ msgstr ""
 msgid "Advanced"
 msgstr "Avançado"
 
+#: printer4lazstrconst.p4lrsallpages
+msgid "All"
+msgstr "Tudo"
+
 #: printer4lazstrconst.p4lrsbanners
 msgid "Banners"
 msgstr "Bandas"
+
+#: printer4lazstrconst.p4lrsbuttonlessarrow
+msgid "<< Less"
+msgstr "<< Menos"
+
+#: printer4lazstrconst.p4lrsbuttonmorearrow
+msgid "More >>"
+msgstr "Mais >>"
 
 #: printer4lazstrconst.p4lrscancel
 msgid "Cancel"
@@ -31,6 +43,26 @@ msgstr "Final"
 msgid "General"
 msgstr "Geral"
 
+#: printer4lazstrconst.p4lrsjobstateaccepting
+msgid "(Accepting jobs)"
+msgstr "(Aceitando trabalhos)"
+
+#: printer4lazstrconst.p4lrsjobstateprinting
+msgid "Printing"
+msgstr "Imprimindo"
+
+#: printer4lazstrconst.p4lrsjobstateready
+msgid "Ready"
+msgstr "Pronto"
+
+#: printer4lazstrconst.p4lrsjobstaterejecting
+msgid "(Rejecting jobs)"
+msgstr "(Rejeitando trabalhos)"
+
+#: printer4lazstrconst.p4lrsjobstatestopped
+msgid "Stopped"
+msgstr "Parado"
+
 #: printer4lazstrconst.p4lrslandscape
 msgid "Landscape"
 msgstr "Paisagem"
@@ -39,6 +71,10 @@ msgstr "Paisagem"
 msgid "Margins"
 msgstr "Margens"
 
+#: printer4lazstrconst.p4lrsnodefaultprinter
+msgid "No default printer found."
+msgstr "Nenhuma impressora padrão encontrada."
+
 #: printer4lazstrconst.p4lrsok
 msgid "Ok"
 msgstr "Ok"
@@ -46,6 +82,14 @@ msgstr "Ok"
 #: printer4lazstrconst.p4lrsorientation
 msgid "Orientation"
 msgstr "Orientação"
+
+#: printer4lazstrconst.p4lrspageeven
+msgid "Even"
+msgstr "Par"
+
+#: printer4lazstrconst.p4lrspageodd
+msgid "Odd"
+msgstr "Ímpar"
 
 #: printer4lazstrconst.p4lrspagespersheet
 msgid "Pages per sheet"
@@ -82,6 +126,14 @@ msgstr "Paisagem inversa"
 #: printer4lazstrconst.p4lrsreverseportrait
 msgid "Reverse portrait"
 msgstr "Retrato inverso"
+
+#: printer4lazstrconst.p4lrsshortunitsinches
+msgid "(inches)"
+msgstr "(polegadas)"
+
+#: printer4lazstrconst.p4lrsshortunitsmm
+msgid "(mm)"
+msgstr "(mm)"
 
 #: printer4lazstrconst.p4lrsstart
 msgid "Start"

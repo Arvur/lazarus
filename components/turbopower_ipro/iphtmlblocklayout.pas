@@ -149,6 +149,7 @@ begin
     FCanvas.Font.Name := aProps.FontName;
     FCanvas.Font.Size := aProps.FontSize;
     FCanvas.Font.Style := aProps.FontStyle;
+    FCanvas.Font.Quality := FOwner.Owner.FontQuality;
     FSizeOfSpace := FCanvas.TextExtent(' ');
     {$IFDEF IP_LAZARUS_DBG}
     if FSizeOfSpace.CX=0 then
@@ -188,7 +189,7 @@ begin
 
   if FBlockOwner is TIpHtmlNodeBody then
     RemoveLeadingLFs;
-  RemoveDuplicateLFs;
+  ProcessDuplicateLFs;
 
   if not RenderProps.IsEqualTo(Props) then
   begin
@@ -376,8 +377,6 @@ var
   WDelta, WMod : Integer;
 
   function CalcDelta: Integer;     // Returns dx
-  var
-    m : Integer;
   begin
     WDelta := 0;
     WMod := 0;
@@ -396,7 +395,9 @@ var
       haChar :
         if FTotWidth >= FTextWidth then
           Result := (FTotWidth - FTextWidth) div 2;
-      else //haJustify :
+      {
+      else
+        //haJustify :
         if iElem < FElementQueue.Count then begin
           m := iElem - FFirstWord - 2;
           if m > 0 then begin
@@ -404,6 +405,7 @@ var
             WMod := (FTotWidth - FTextWidth) mod m;
           end;
         end;
+        }
     end;
   end;
 
@@ -511,12 +513,11 @@ begin
       FBlockDescent := PropA.tmDescent;
     end;
     if (FCurProps = nil) or not BIsEqualTo(FCurProps) then begin
-//      FAl := self.Props.Alignment;      // was: FAl := Alignment
-      // wp: next line was changed to "FAl := self.Props.Alignment" in order
+      FAl := self.Props.Alignment;      // was: FAl := Alignment
+      // wp: line was changed to "FAl := self.Props.Alignment" in order
       // to fix horizontal text alignment of table cells (r50145).
       // But with this change, something like "<p align="center"> does not work any more!
       // Alignment within cells still seems to work correctly after user to old code.
-      FAl := Alignment;
       FVAL := VAlignment;
       FBaseOffset := FontBaseline;
       aPrefor := Preformatted;
@@ -526,7 +527,35 @@ begin
 end;
 
 procedure TIpNodeBlockLayouter.DoQueueElemWord(aCurElem: PIpHtmlElement);
+var
+  lAlign: TIpHtmlAlign;
+  node: TIpHtmlNode;
 begin
+  // wp: added to fix Align of <p> and <div> nodes in <tc>
+  if Assigned(aCurElem.Owner) then begin
+    lAlign := FAl;
+    node := aCurElem.Owner.ParentNode;
+    while Assigned(node) do begin
+      if (node is TIpHtmlNodeCore) then
+        lAlign := TIpHtmlNodeCore(node).Align
+      {
+      if (node is TIpHtmlNodeP) then
+        lAlign := TIpHtmlNodeP(node).Align
+      else
+      if (node is TIpHtmlNodeDIV) then
+        lAlign := TIpHtmlNodeDIV(node).Align
+        }
+      else
+        break;
+      if lAlign = haDefault then
+        node := node.ParentNode
+      else begin
+        FAl := lAlign;
+        break;
+      end;
+    end;
+  end;
+
   FIgnoreHardLF := False;
   if FLTrim and (aCurElem.IsBlank <> 0) then
     FxySize := SizeRec(0, 0)
@@ -542,6 +571,7 @@ begin
         FCanvas.Font.Name := FCurProps.FontName;
         FCanvas.Font.Size := FCurProps.FontSize;
         FCanvas.Font.Style := FCurProps.FontStyle;
+        FCanvas.Font.Quality := FOwner.Owner.FontQuality;
         aCurElem.Size := FCanvas.TextExtent(NoBreakToSpace(aCurElem.AnsiWord));
         FxySize := aCurElem.Size;
         aCurElem.SizeProp := FCurProps.PropA;
@@ -806,6 +836,7 @@ var
   Prefor : Boolean;
   CurElem : PIpHtmlElement;
   wi: PWordInfo;
+  lfh: Integer;
 
   procedure InitInner;
   begin
@@ -831,6 +862,7 @@ var
     FBaseOffset := 0;
     FSoftBreak := False;
     FHyphenSpace := 0;
+    lfh := 0;
   end;
 
   procedure ContinueRow;
@@ -935,12 +967,20 @@ begin
               Break;
           etSoftLF :
             if not DoQueueElemSoftLF(WW) then
+            begin
+              if CurElem.LFHeight > 0 then
+                lfh := CurElem.LFHeight;
               Break;
+            end;
           etHardLF :
             if not DoQueueElemHardLF then
+            begin
+              if CurElem.LFHeight > 0 then
+                lfh := CurElem.LFHeight;
             //  raise EIpHtmlException.Create('TIpNodeBlockLayouter.LayoutQueue: FIgnoreHardLF is True after all.')
             //else
               Break;
+            end;
           etClearLeft, etClearRight, etClearBoth :
             if not DoQueueElemClear(CurElem) then
               Break;
@@ -977,7 +1017,7 @@ begin
       OutputQueueLine;
       if (not FExpBreak) and (FTextWidth=0) and (FVRemainL=0) and (FVRemainR=0) then
         break;
-      Inc(YYY, FMaxAscent + FMaxDescent);
+      Inc(YYY, FMaxAscent + FMaxDescent + lfh);
 
       // Calculate VRemainL and VRemainR
       FVRemainL := CalcVRemain(FVRemainL, FLIdent);
@@ -1085,6 +1125,7 @@ begin
   CurFontSize := 0;
   CurFontStyle := [];
   FCanvas.Font.Style := CurFontStyle;
+  FCanvas.Font.Quality := FOwner.Owner.FontQuality;
   FSizeOfSpace := FCanvas.TextExtent(' ');
   FSizeOfHyphen := FCanvas.TextExtent('-');
   i := 0;
@@ -1213,6 +1254,7 @@ begin
   else
     if (FCurProps = nil) or not FCurProps.BIsEqualTo(aCurWord.Props) then
       FCanvas.Font.Color := aCurWord.Props.FontColor;
+  FIpHtml.Target.Font.Quality := FIpHtml.FontQuality;
   {$IFDEF IP_LAZARUS}
   FIpHtml.Target.Font.EndUpdate;
   {$ENDIF}
@@ -1229,6 +1271,7 @@ var
   OldFontColor: TColor;
   OldFontStyle: TFontStyles;
   OldBrushStyle: TBrushStyle;
+  OldFontQuality: TFontQuality;
 
   procedure saveCanvasProperties;
   begin
@@ -1236,6 +1279,7 @@ var
     OldBrushStyle := FCanvas.Brush.Style;
     OldFontColor := FCanvas.Font.Color;
     OldFontStyle := FCanvas.Font.Style;
+    OldFontQuality := FCanvas.Font.Quality;
   end;
 
   procedure restoreCanvasProperties;
@@ -1244,6 +1288,7 @@ var
     FCanvas.Brush.Color := OldBrushColor;
     FCanvas.Brush.Style := OldBrushStyle;
     FCanvas.Font.Style := OldFontStyle;
+    FCanvas.Font.Quality := OldFontQuality;
   end;
   {$ENDIF}
 
@@ -1283,11 +1328,12 @@ begin
     FCanvas.DrawFocusRect(R);
   if FCanvas.Font.color = -1 then
     FCanvas.Font.color := clBlack;
+  FCanvas.Font.Quality := FOwner.Owner.FontQuality;
   {$ENDIF}
   if aCurWord.AnsiWord <> NAnchorChar then
     FCanvas.TextRect(R, P.x, P.y, NoBreakToSpace(aCurWord.AnsiWord));
   {$IFDEF IP_LAZARUS}
-  restoreCanvasProperties;
+  RestoreCanvasProperties;
   {$ENDIF}
 
   FIpHtml.AddRect(aCurWord.WordRect2, aCurWord, FBlockOwner);

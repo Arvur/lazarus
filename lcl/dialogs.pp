@@ -24,22 +24,40 @@ uses
   // RTL + FCL
   Types, typinfo, Classes, SysUtils,
   // LCL
-  LMessages, LResources, LCLIntf, InterfaceBase, LCLStrConsts, LCLType, LCLProc,
+  LMessages, LResources, LCLIntf, InterfaceBase, LCLStrConsts, LCLType,
   Forms, Controls, Themes, GraphType, Graphics, Buttons, ButtonPanel, StdCtrls,
   ExtCtrls, LCLClasses, ClipBrd, Menus, LCLTaskDialog,
   // LazUtils
-  FileUtil, LazFileUtils;
-
+  UITypes, FileUtil, LazFileUtils, LazStringUtils, LazLoggerBase;
 
 type
-  TMsgDlgType    = (mtWarning, mtError, mtInformation, mtConfirmation,
-                    mtCustom);
-  TMsgDlgBtn     = (mbYes, mbNo, mbOK, mbCancel, mbAbort, mbRetry, mbIgnore,
-                    mbAll, mbNoToAll, mbYesToAll, mbHelp, mbClose);
-  TMsgDlgButtons = set of TMsgDlgBtn;
+  // Aliases for types in UITypes.
+  TMsgDlgType    = UITypes.TMsgDlgType;
+  TMsgDlgBtn     = UITypes.TMsgDlgBtn;
+  TMsgDlgButtons = UITypes.TMsgDlgButtons;
 
-   
 const
+  // Aliases for enum values in UITypes.
+  mtWarning      = UITypes.TMsgDlgType.mtWarning;
+  mtError        = UITypes.TMsgDlgType.mtError;
+  mtInformation  = UITypes.TMsgDlgType.mtInformation;
+  mtConfirmation = UITypes.TMsgDlgType.mtConfirmation;
+  mtCustom       = UITypes.TMsgDlgType.mtCustom;
+
+  mbYes      = UITypes.TMsgDlgBtn.mbYes;
+  mbNo       = UITypes.TMsgDlgBtn.mbNo;
+  mbOK       = UITypes.TMsgDlgBtn.mbOK;
+  mbCancel   = UITypes.TMsgDlgBtn.mbCancel;
+  mbAbort    = UITypes.TMsgDlgBtn.mbAbort;
+  mbRetry    = UITypes.TMsgDlgBtn.mbRetry;
+  mbIgnore   = UITypes.TMsgDlgBtn.mbIgnore;
+  mbAll      = UITypes.TMsgDlgBtn.mbAll;
+  mbNoToAll  = UITypes.TMsgDlgBtn.mbNoToAll;
+  mbYesToAll = UITypes.TMsgDlgBtn.mbYesToAll;
+  mbHelp     = UITypes.TMsgDlgBtn.mbHelp;
+  mbClose    = UITypes.TMsgDlgBtn.mbClose;
+
+  // Combinations of buttons.
   mbYesNoCancel = [mbYes, mbNo, mbCancel];
   mbYesNo = [mbYes, mbNo];
   mbOKCancel = [mbOK, mbCancel];
@@ -63,10 +81,14 @@ type
                           cdecWSNOCanCloseSupport);
   TCDWSEventCapabilities = set of TCDWSEventCapability;
 
+  TDialogResultEvent = procedure(sender: TObject; Success: boolean) of object;
+
   TCommonDialog = class(TLCLComponent)
   private
+    FAttachTo: TCustomForm;
     FHandle : THandle;
     FHeight: integer;
+    FOnDialogResult: TDialogResultEvent;
     FWidth: integer;
     FOnCanClose: TCloseQueryEvent;
     FOnShow, FOnClose : TNotifyEvent;
@@ -89,6 +111,8 @@ type
     procedure SetHeight(const AValue: integer); virtual;
     procedure SetWidth(const AValue: integer); virtual;
     procedure ResetShowCloseFlags;
+    property AttachTo: TCustomForm read FAttachTo write FAttachTo; platform;
+    property OnDialogResult:TDialogResultEvent read FOnDialogResult write FOnDialogResult; platform;
   public
     FCompStyle : LongInt;
     constructor Create(TheOwner: TComponent); override;
@@ -100,13 +124,13 @@ type
     procedure DoCanClose(var CanClose: Boolean); virtual;
     procedure DoClose; virtual;
     function HandleAllocated: boolean;
+    property Width: integer read GetWidth write SetWidth;
+    property Height: integer read GetHeight write SetHeight;
   published
     property OnClose: TNotifyEvent read FOnClose write FOnClose;
     property OnCanClose: TCloseQueryEvent read FOnCanClose write FOnCanClose;
     property OnShow: TNotifyEvent read FOnShow write FOnShow;
     property HelpContext: THelpContext read FHelpContext write FHelpContext default 0;
-    property Width: integer read GetWidth write SetWidth default 0;
-    property Height: integer read GetHeight write SetHeight default 0;
     property Title: TTranslateString read FTitle write FTitle stored IsTitleStored;
   end;
 
@@ -476,7 +500,7 @@ type
 
   TPrintRange = (prAllPages, prSelection, prPageNums, prCurrentPage);
   TPrintDialogOption = (poPrintToFile, poPageNums, poSelection, poWarning,
-    poHelp, poDisablePrintToFile);
+    poHelp, poDisablePrintToFile, poBeforeBeginDoc);
   TPrintDialogOptions = set of TPrintDialogOption;
 
   TCustomPrintDialog = class(TCommonDialog)
@@ -679,7 +703,9 @@ function MessageDlgPos(const aMsg: string; DlgType: TMsgDlgType;
 function MessageDlgPosHelp(const aMsg: string; DlgType: TMsgDlgType;
             Buttons: TMsgDlgButtons; HelpCtx: Longint; X, Y: Integer;
             const HelpFileName: string): TModalResult; overload;
-function CreateMessageDialog(const Msg: string; DlgType: TMsgDlgType;
+function CreateMessageDialog(const aMsg: string; DlgType: TMsgDlgType;
+            Buttons: TMsgDlgButtons): TForm; overload;
+function CreateMessageDialog(const aCaption, aMsg: string; DlgType: TMsgDlgType;
             Buttons: TMsgDlgButtons): TForm; overload;
 function DefaultPromptDialog(const DialogCaption,
   DialogMessage: String;

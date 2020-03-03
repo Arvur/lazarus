@@ -138,7 +138,7 @@ begin
   BorderStyle := bsDialog;
   Position    := poScreenCenter;
   SetInitialBounds(0,0,200,100);
-  MSG         := ConvertLineEndings(AMSG);
+  MSG         := LineBreaksToSystemLineBreaks(AMSG);
   Buttons     := nil;
   FBitmap := nil;
   case DialogType of
@@ -562,14 +562,20 @@ begin
     end;
 end;
 
-function CreateMessageDialog(const Msg: string; DlgType: TMsgDlgType; Buttons: TMsgDlgButtons): TForm;
+function CreateMessageDialog(const aMsg: string; DlgType: TMsgDlgType;
+  Buttons: TMsgDlgButtons): TForm;
+begin
+  Result := CreateMessageDialog('', aMsg, DlgType, Buttons);
+end;
+
+function CreateMessageDialog(const aCaption, aMsg: string; DlgType: TMsgDlgType; Buttons: TMsgDlgButtons): TForm;
 var
   PDlg: TPromptDialog;
   Btns: PLongInt;
   CancelValue, DefaultIndex, ButtonCount: Longint;
 begin
   Btns := GetPromptUserButtons(Buttons, CancelValue, DefaultIndex, ButtonCount, False, mbOk);
-  PDlg := TPromptDialog.CreateMessageDialog('', Msg, DialogIds[DlgType], Btns, ButtonCount, DefaultIndex);
+  PDlg := TPromptDialog.CreateMessageDialog(aCaption, aMsg, DialogIds[DlgType], Btns, ButtonCount, DefaultIndex);
   Result := TForm(PDlg);
   ReallocMem(Btns, 0);
 end;
@@ -821,7 +827,7 @@ begin
   PopupMode := pmAuto;
   BorderStyle := bsDialog;
   Position := poDesigned;
-  MessageTxt := ConvertLineEndings(aMsg);
+  MessageTxt := LineBreaksToSystemLineBreaks(aMsg);
   HelpContext := HelpCtx;
   KeyPreview := True;
 
@@ -936,16 +942,12 @@ function DefaultQuestionDialog(const aCaption, aMsg: string; DlgType: LongInt;
 }
 var
   QuestionDialog: TQuestionDlg;
-  last_cur: TCursor;
 begin
   QuestionDialog := TQuestionDlg.CreateQuestionDlg(aCaption, aMsg, DlgType, Buttons, HelpCtx);
-  last_cur := Screen.Cursor;
-  Screen.Cursor := crDefault;
   try
     Result := QuestionDialog.ShowModal;
   finally
     QuestionDialog.Free;
-    Screen.Cursor := last_cur;
   end;
 end;
 
@@ -1052,7 +1054,7 @@ begin
     end;
     if DialogButtons.DefaultButton = nil then
       DialogButtons.DefaultButton := DialogButtons.FindButton([mrYes, mrOk, mrYesToAll, mrAll, mrRetry, mrCancel, mrNo, mrNoToAll, mrAbort, mrIgnore]);
-    Result := WidgetSet.AskUser(aCaption, ConvertLineEndings(aMsg),
+    Result := WidgetSet.AskUser(aCaption, LineBreaksToSystemLineBreaks(aMsg),
       DialogIds[DlgType], DialogButtons, HelpCtx);
   finally
     DialogButtons.Free;

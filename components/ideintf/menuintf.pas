@@ -18,7 +18,12 @@ unit MenuIntf;
 interface
 
 uses
-  Classes, SysUtils, LCLType, LCLProc, Menus, ImgList, Graphics,
+  Classes, SysUtils,
+  // LCL
+  LCLType, LCLProc, Menus, ImgList, Graphics,
+  // LazUtils
+  LazMethodList, LazLoggerBase,
+  // IdeIntf
   IDECommands, IDEImagesIntf;
   
 type
@@ -158,9 +163,6 @@ type
     function NeedBottomSeparator: boolean;
     function GetFirstChildSameContainer: TIDEMenuItem;
     function GetLastChildSameContainer: TIDEMenuItem;
-    procedure BeginUpdate; deprecated;
-    procedure EndUpdate; deprecated;
-
     procedure NotifySubSectionOnShow(Sender: TObject;
                                      WithChildren: Boolean = true); virtual;
     procedure RemoveAllHandlersOfObject(AnObject: TObject);
@@ -173,8 +175,6 @@ type
   public
     property ChildrenAsSubMenu: boolean read FChildrenAsSubMenu
                                           write SetChildrenAsSubMenu default true;
-    property ChildsAsSubMenu: boolean read FChildrenAsSubMenu
-                                          write SetChildrenAsSubMenu default true; deprecated;// use ChildrenAsSubMenu instead
     property SubMenuImages: TCustomImageList read FSubMenuImages
                                              write SetSubMenuImages;
     property Items[Index: Integer]: TIDEMenuItem read GetItems; default;
@@ -410,6 +410,9 @@ var
     PkgEditMenuSectionFile: TIDEMenuSection; // e.g. open file, remove file, move file up/down
     PkgEditMenuSectionDirectory: TIDEMenuSection; // e.g. change all properties of all files in a directory and ub directories moved ..
     PkgEditMenuSectionDependency: TIDEMenuSection; // e.g. open package, remove dependency
+
+  // Component Palette, pages drop down. (no submenus allowed / only top level / must have OnClick(Proc))
+  ComponentPalettePageDropDownExtraEntries: TIDEMenuSection = nil;
 
 function RegisterIDEMenuRoot(const Name: string; MenuItem: TMenuItem = nil
                              ): TIDEMenuSection;
@@ -1461,16 +1464,6 @@ begin
   end;
 end;
 
-procedure TIDEMenuSection.BeginUpdate;
-begin
-
-end;
-
-procedure TIDEMenuSection.EndUpdate;
-begin
-
-end;
-
 procedure TIDEMenuSection.RemoveAllHandlersOfObject(AnObject: TObject);
 var
   HandlerType: TIDEMenuSectionHandlerType;
@@ -1702,9 +1695,10 @@ end;
 
 procedure TIDEMenuCommand.MenuItemClick(Sender: TObject);
 begin
+  //debugln(['TIDEMenuCommand.MenuItemClick START ',Caption,' ',dbgs(Pointer(Self)),' OnClick=',Assigned(OnClick),' OnClickProc=',Assigned(OnClickProc),' ',Assigned(Command),' Command.OnExecuteProc=',(Command<>nil) and (Command.OnExecuteProc<>nil),' OnClick.Data=',DbgSName(TObject(TMethod(OnClick).Data))]);
   inherited MenuItemClick(Sender);
   // do not execute if something is already executed
-  //debugln(['TIDEMenuCommand.MenuItemClick ',Assigned(OnClick),' ',Assigned(OnClickProc),' ',Assigned(Command),' ',(Command<>nil) and (Command.OnExecuteProc<>nil)]);
+  //debugln(['TIDEMenuCommand.MenuItemClick Exec ',Caption,' OnClick=',Assigned(OnClick),' OnClickProc=',Assigned(OnClickProc),' ',Assigned(Command),' Command.OnExecuteProc=',(Command<>nil) and (Command.OnExecuteProc<>nil)]);
   if (not Assigned(OnClick)) and (not Assigned(OnClickProc))
   and Assigned(Command) then
     Command.Execute(Sender);
@@ -1943,5 +1937,9 @@ begin
   end;
 end;
 
+initialization
+  ComponentPalettePageDropDownExtraEntries := TIDEMenuSection.Create('');
+finalization
+  ComponentPalettePageDropDownExtraEntries.Free;
 end.
 

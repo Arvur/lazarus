@@ -222,14 +222,14 @@ Type
     property OnUTF8KeyPress;
   end;
 
-function MiniMizeName(FileName: String; Canvas: TCanvas; MaxWidth: Integer): String;
+function MinimizeName(FileName: String; Canvas: TCanvas; MaxWidth: Integer): String;
 
 procedure Register;
 
+
 implementation
 
-
-function MiniMizeName(FileName: String; Canvas: TCanvas; MaxWidth: Integer): String;
+function MinimizeName(FileName: String; Canvas: TCanvas; MaxWidth: Integer): String;
 {
  This function will return a shortened version of FileName, so that it fits
  on the given Canvas, with a given MaxWidth.
@@ -250,6 +250,7 @@ function MiniMizeName(FileName: String; Canvas: TCanvas; MaxWidth: Integer): Str
       Dir := Copy(Dir,p+1,Length(Dir)-p);
     end;
   end;
+
 var Drive, Dir, Fn: String;
     ComposedName: String;
     TWidth: Integer;
@@ -286,8 +287,6 @@ begin
   until (Length(Dir) = 0) or (TWidth <= MaxWidth);
   if (TWidth <= MaxWidth) then Result := ComposedName else Result := Fn;
 end;
-
-
 
 
 { TCustomFileListBox }

@@ -130,14 +130,12 @@ end;
 class procedure TWin32WSCustomPage.DestroyHandle(const AWinControl: TWinControl);
 var
   PageIndex, RealIndex: integer;
-  PageControlHandle: HWND;
 begin
   // remove tab from pagecontrol only if not pfRemoving is set
   // if pfRemoving is set then Tab has been deleted by RemovePage
   if (AWinControl.Parent <> nil) and (AWinControl.Parent.HandleAllocated) and
      not (pfRemoving in TCustomPageAccess(AWinControl).Flags) then
   begin
-    PageControlHandle := AWinControl.Parent.Handle;
     PageIndex := TCustomPage(AWinControl).PageIndex;
     RealIndex := TCustomTabControl(AWinControl.Parent).PageToTabIndex(PageIndex);
     if RealIndex <> -1 then
@@ -317,33 +315,79 @@ begin
   Windows.SendMessage(Wnd, TCM_DELETEITEM, Windows.WPARAM(AIndex), 0);
 end;
 
+function CustomTabControlWndProc(Window: HWnd; Msg: UInt; WParam: Windows.WParam;
+    LParam: Windows.LParam): LResult; stdcall;
+var
+  Control: TWinControl;
+  LMessage: TLMessage;
+begin
+  case Msg of
+    WM_ERASEBKGND:
+      begin
+        if not ThemeServices.ThemesEnabled then
+        begin
+          // prevent flickering
+          Control := GetWin32WindowInfo(Window)^.WinControl;
+          LMessage.msg := Msg;
+          LMessage.wParam := WParam;
+          LMessage.lParam := LParam;
+          LMessage.Result := 0;
+          Result := DeliverMessage(Control, LMessage);
+          Exit;
+        end;
+      end;
+  end;
+  Result := WindowProc(Window, Msg, WParam, LParam);
+end;
+
 class function TWin32WSCustomTabControl.CreateHandle(const AWinControl: TWinControl;
   const AParams: TCreateParams): HWND;
 const
-  TabPositionFlags: array[TTabPosition] of DWord = (
- { tpTop    } 0,
- { tpBottom } TCS_BOTTOM,
- { tpLeft   } TCS_VERTICAL or TCS_MULTILINE,
- { tpRight  } TCS_VERTICAL or TCS_RIGHT or TCS_MULTILINE
+  TabPositionFlags: array[TTabPosition, Boolean] of DWord = (
+ { tpTop    } (0, 0),
+ { tpBottom } (TCS_BOTTOM, TCS_BOTTOM),
+ { tpLeft   } (TCS_MULTILINE or TCS_VERTICAL, TCS_MULTILINE or TCS_VERTICAL or TCS_RIGHT),
+ { tpRight  } (TCS_MULTILINE or TCS_VERTICAL or TCS_RIGHT, TCS_MULTILINE or TCS_VERTICAL)
+  );
+ TabStyleFlags: array[TTabStyle] of DWord = (
+ { tsTabs        } TCS_TABS,
+ { tsButtons     } TCS_BUTTONS,
+ { tsFlatButtons } TCS_BUTTONS or TCS_FLATBUTTONS
   );
 var
   Params: TCreateWindowExParams;
+  T: TCustomTabControl;
 begin
+  T := TCustomTabControl(AWinControl);
   // general initialization of Params
   PrepareCreateWindow(AWinControl, AParams, Params);
   // customization of Params
   with Params do
   begin
+    SubClassWndProc := @CustomTabControlWndProc;
     if AWinControl is TTabControl then begin
       // TTabControl is not really a TabControl, it is a container, and has a child that does the tabs
       pClassName := @ClsName[0];
     end
     else begin
-      Flags := Flags or TabPositionFlags[TCustomTabControl(AWinControl).TabPosition];
-      if nboMultiLine in TCustomTabControl(AWinControl).Options then
+      Flags := Flags or TabPositionFlags[T.TabPosition, T.UseRightToLeftAlignment];
+      Flags := Flags or TabStyleFlags[T.Style];
+      if not T.TabStop then
+        Flags := Flags or TCS_FOCUSNEVER;
+      if nboMultiLine in T.Options then
         Flags := Flags or TCS_MULTILINE;
-      if TCustomTabControl(AWinControl).TabWidth > 0 then
+      if T.MultiSelect then
+        Flags := Flags or TCS_MULTISELECT;
+      if T.RaggedRight then
+        Flags := Flags or TCS_RAGGEDRIGHT;
+      if T.ScrollOpposite then
+        Flags := Flags or TCS_SCROLLOPPOSITE;
+      if T.TabWidth > 0 then
         Flags := Flags or TCS_FIXEDWIDTH;
+      if T.HotTrack and not (csDesigning in T.ComponentState) then
+        Flags := Flags or TCS_HOTTRACK;
+      if T.OwnerDraw and not (csDesigning in T.ComponentState) then
+        Flags := Flags or TCS_OWNERDRAWFIXED;
       pClassName := WC_TABCONTROL;
     end;
   end;
@@ -352,8 +396,8 @@ begin
   Result := Params.Window;
 
   if not (AWinControl is TTabControl) then begin
-    if TCustomTabControl(AWinControl).Images <> nil then
-      SendMessage(Result, TCM_SETIMAGELIST, 0, TCustomTabControl(AWinControl).Images.Reference._Handle);
+    if T.Images <> nil then
+      SendMessage(Result, TCM_SETIMAGELIST, 0, T.Images.ReferenceForPPI[T.ImagesWidth, T.Font.PixelsPerInch]._Handle);
 
     // although we may be child of tabpage, cut the paint chain
     // to improve speed and possible paint anomalities
@@ -362,8 +406,8 @@ begin
     Params.WindowInfo^.ClientOffsetProc := @TabControlClientOffset;
 
     SendMessage(Result, TCM_SETITEMSIZE, 0, MakeLParam(
-      TCustomTabControl(AWinControl).TabWidth,
-      TCustomTabControl(AWinControl).TabHeight));
+      T.TabWidth,
+      T.TabHeight));
   end;
 end;
 
@@ -642,7 +686,7 @@ begin
 end;
 
 class procedure TWin32WSCustomTabControl.SetImageList(
-  const ATabControl: TCustomTabControl; const AImageList: TCustomImageList);
+  const ATabControl: TCustomTabControl; const AImageList: TCustomImageListResolution);
 begin
   if ATabControl is TTabControl then
     exit;

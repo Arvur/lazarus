@@ -32,10 +32,16 @@ unit ComponentList;
 interface
 
 uses
-  Classes, SysUtils, LCLType, Forms, Controls, Graphics, StdCtrls, ExtCtrls,
-  ComCtrls, Menus, Dialogs, LazarusIDEStrConsts, ComponentReg, PackageDefs,
-  IDEImagesIntf, TreeFilterEdit, FormEditingIntf, PropEdits, IDEOptionDefs,
-  EnvironmentOpts, Designer;
+  Classes, SysUtils,
+  // LCL
+  LCLType, Forms, Controls, Graphics, StdCtrls, ExtCtrls, ComCtrls, Menus, Buttons,
+  Dialogs, ImgList,
+  // LazControls
+  TreeFilterEdit,
+  // IdeIntf
+  FormEditingIntf, PropEdits, ComponentReg,
+  // IDE
+  LazarusIDEStrConsts, PackageDefs, IDEOptionDefs, EnvironmentOpts, Designer;
 
 type
 
@@ -43,8 +49,6 @@ type
 
   TComponentListForm = class(TForm)
     chbKeepOpen: TCheckBox;
-    imListPalette: TImageList;
-    imInheritance: TImageList;
     ListTree: TTreeView;
     ButtonPanel: TPanel;
     miCollapse: TMenuItem;
@@ -66,9 +70,9 @@ type
     TabSheetList: TTabSheet;
     tmDeselect: TTimer;
     TreeFilterEd: TTreeFilterEdit;
+    SelectionToolButton: TSpeedButton;
     procedure chbKeepOpenChange(Sender: TObject);
     procedure FormActivate(Sender: TObject);
-    procedure FormCreate(Sender: TObject);
     procedure FormShow(Sender: TObject);
     procedure ListTreeSelectionChanged(Sender: TObject);
     procedure miCollapseAllClick(Sender: TObject);
@@ -84,6 +88,7 @@ type
     procedure PageControlChange(Sender: TObject);
     procedure TreeKeyPress(Sender: TObject; var Key: char);
     procedure FormKeyDown(Sender: TObject; var Key: Word; {%H-}Shift: TShiftState);
+    procedure SelectionToolButtonClick(Sender: TObject);
   private
     PrevPageIndex: Integer;
     PrevChangeStamp: Integer;
@@ -128,6 +133,14 @@ begin
 
   Name:=NonModalIDEWindowNames[nmiwComponentList];
   FActiveTree := ListTree;
+
+  with SelectionToolButton do begin
+    LoadGlyphFromResourceName(hInstance, 'tmouse');
+    ShowHint := EnvironmentOptions.ShowHintsForComponentPalette;
+    Width := ComponentPaletteBtnWidth;
+    BorderSpacing.Around := (FilterPanel.Height - ComponentPaletteImageHeight) div 2;
+  end;
+
   //Translations
   LabelSearch.Caption := lisMenuFind;
   Caption := lisCmpLstComponents;
@@ -136,15 +149,11 @@ begin
   TabSheetInheritance.Caption := lisCmpLstInheritance;
   OKButton.Caption := lisUse;
   chbKeepOpen.Caption := lisKeepOpen;
+  SelectionToolButton.Hint := lisSelectionTool;
 
-  imListPalette.Width  := MulDiv(ComponentPaletteImageWidth, TIDEImages.GetScalePercent, 100);
-  imListPalette.Height := MulDiv(ComponentPaletteImageHeight, TIDEImages.GetScalePercent, 100);
-  imInheritance.Width  := MulDiv(ComponentPaletteImageWidth, TIDEImages.GetScalePercent, 100);
-  imInheritance.Height := MulDiv(ComponentPaletteImageHeight, TIDEImages.GetScalePercent, 100);
-
-  ListTree.Images := imListPalette;
-  PalletteTree.Images := imListPalette;
-  InheritanceTree.Images := imInheritance;
+  ListTree.Images := TPkgComponent.Images;
+  PalletteTree.Images := TPkgComponent.Images;
+  InheritanceTree.Images := TPkgComponent.Images;
   PrevPageIndex := -1;
   PageControl.ActivePage := TabSheetList;
   if Assigned(IDEComponentPalette) then
@@ -236,11 +245,6 @@ begin
     UpdateComponents;
 end;
 
-procedure TComponentListForm.FormCreate(Sender: TObject);
-begin
-  TIDEImages.AssignImage(TreeFilterEd.Glyph, 'btnfiltercancel');
-end;
-
 procedure TComponentListForm.ClearSelection;
 begin
   ListTree.Selected := Nil;
@@ -264,6 +268,8 @@ end;
 
 procedure TComponentListForm.SelectionWasChanged;
 begin
+  SelectionToolButton.Down := (IDEComponentPalette.Selected = nil);
+
   // ToDo: Select the component in active treeview.
   if FIgnoreSelection then
     Exit;
@@ -328,7 +334,7 @@ var
   Node: TTreeNode;
   ClssName: string;
   i, Ind: Integer;
-  CurIcon: TCustomBitmap;
+  II: TImageIndex;
 begin
   PalList := TStringList.Create;
   try
@@ -358,12 +364,12 @@ begin
         begin
           Node := InheritanceTree.Items.AddChildObject(Node, ClssName, Comp);
           if Comp is TPkgComponent then
-            CurIcon := TPkgComponent(Comp).Icon
+            II := TPkgComponent(Comp).ImageIndex
           else
-            CurIcon := nil;
-          if Assigned(CurIcon) then
+            II := -1;
+          if II>=0 then
           begin
-            Node.ImageIndex := imInheritance.Add(CurIcon, nil);
+            Node.ImageIndex := II;
             Node.SelectedIndex := Node.ImageIndex;
           end;
         end;
@@ -385,10 +391,10 @@ var
   AListNode: TTreeNode;
   APaletteNode: TTreeNode;
   i, j: Integer;
-  CurIcon: TCustomBitmap;
+  CurIcon: TImageIndex;
 begin
   if [csDestroying,csLoading]*ComponentState<>[] then exit;
-  Screen.Cursor := crHourGlass;
+  Screen.BeginWaitCursor;
   ListTree.BeginUpdate;
   PalletteTree.BeginUpdate;
   InheritanceTree.Items.BeginUpdate;
@@ -417,12 +423,12 @@ begin
         // Palette layout item
         APaletteNode := PalletteTree.Items.AddChildObject(ParentNode, Comps[j], Comp);
         if Comp is TPkgComponent then
-          CurIcon := TPkgComponent(Comp).Icon
+          CurIcon := TPkgComponent(Comp).ImageIndex
         else
-          CurIcon := nil;
-        if Assigned(CurIcon) then
+          CurIcon := -1;
+        if CurIcon>=0 then
         begin
-          AListNode.ImageIndex := imListPalette.Add(CurIcon, nil);
+          AListNode.ImageIndex := CurIcon;
           AListNode.SelectedIndex := AListNode.ImageIndex;
           APaletteNode.ImageIndex := AListNode.ImageIndex;
           APaletteNode.SelectedIndex := AListNode.ImageIndex;
@@ -440,12 +446,14 @@ begin
     InheritanceTree.Items.EndUpdate;
     PalletteTree.EndUpdate;
     ListTree.EndUpdate;
-    Screen.Cursor := crDefault;
+    Screen.EndWaitCursor;
   end;
 end;
 
 procedure TComponentListForm.TreeFilterEdAfterFilter(Sender: TObject);
 begin
+  if TreeFilterEd.Filter = '' then
+    IDEComponentPalette.SetSelectedComp(nil, False);
   UpdateButtonState;
 end;
 
@@ -619,6 +627,12 @@ begin
     miExpand.Enabled := (Node.HasChildren) and (not Node.Expanded);
     miCollapse.Enabled := (Node.HasChildren) and (Node.Expanded);
   end;
+end;
+
+procedure TComponentListForm.SelectionToolButtonClick(Sender: TObject);
+begin
+  SelectionToolButton.Down := True;
+  IDEComponentPalette.SetSelectedComp(nil, False);
 end;
 
 end.

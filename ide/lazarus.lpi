@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CONFIG>
   <ProjectOptions>
-    <Version Value="11"/>
+    <Version Value="12"/>
     <General>
       <Flags>
         <MainUnitHasUsesSectionForAllUnits Value="False"/>
         <MainUnitHasCreateFormStatements Value="False"/>
         <MainUnitHasTitleStatement Value="False"/>
         <LRSInOutputDirectory Value="False"/>
+        <CompatibilityMode Value="True"/>
       </Flags>
       <SessionStorage Value="InIDEConfig"/>
-      <MainUnit Value="0"/>
       <Title Value="Lazarus"/>
       <Scaled Value="True"/>
       <ResourceType Value="res"/>
@@ -23,9 +23,8 @@
     <LazDoc Paths="docs/xml/ide"/>
     <VersionInfo>
       <UseVersionInfo Value="True"/>
-      <MajorVersionNr Value="1"/>
-      <MinorVersionNr Value="8"/>
-      <BuildNr Value="1"/>
+      <MajorVersionNr Value="2"/>
+      <MinorVersionNr Value="1"/>
       <CharSet Value="04B0"/>
       <StringTable ProductName="Lazarus IDE"/>
     </VersionInfo>
@@ -34,12 +33,9 @@
     </BuildModes>
     <PublishOptions>
       <Version Value="2"/>
-      <IncludeFileFilter Value="*.(pas|pp|inc|lfm|lpr|lrs|lpi|lpk|sh|xml)"/>
-      <ExcludeFileFilter Value="*.(bak|ppu|ppw|o|so);*~;backup"/>
     </PublishOptions>
     <RunParams>
       <FormatVersion Value="2"/>
-      <Modes Count="0"/>
     </RunParams>
     <RequiredPackages Count="7">
       <Item1>
@@ -269,6 +265,7 @@
         <ComponentName Value="ComponentListForm"/>
         <HasResources Value="True"/>
         <ResourceBaseClass Value="Form"/>
+        <UnitName Value="ComponentList"/>
       </Unit31>
       <Unit32>
         <Filename Value="frames/codeexplorer_update_options.pas"/>
@@ -620,6 +617,7 @@
       <Unit87>
         <Filename Value="sourcesyneditor.pas"/>
         <IsPartOfProject Value="True"/>
+        <UnitName Value="SourceSynEditor"/>
       </Unit87>
       <Unit88>
         <Filename Value="editoroptions.pp"/>
@@ -743,10 +741,12 @@
       <Unit108>
         <Filename Value="idecmdline.pas"/>
         <IsPartOfProject Value="True"/>
+        <UnitName Value="IDECmdLine"/>
       </Unit108>
       <Unit109>
         <Filename Value="lazconf.pp"/>
         <IsPartOfProject Value="True"/>
+        <UnitName Value="LazConf"/>
       </Unit109>
       <Unit110>
         <Filename Value="initialsetupdlgs.pas"/>
@@ -776,6 +776,7 @@
       <Unit115>
         <Filename Value="sourcemarks.pas"/>
         <IsPartOfProject Value="True"/>
+        <UnitName Value="SourceMarks"/>
       </Unit115>
       <Unit116>
         <Filename Value="checklfmdlg.pas"/>
@@ -786,11 +787,15 @@
         <Filename Value="sortselectiondlg.pas"/>
         <IsPartOfProject Value="True"/>
         <HasResources Value="True"/>
+        <UnitName Value="SortSelectionDlg"/>
       </Unit117>
       <Unit118>
         <Filename Value="syncolorattribeditor.pas"/>
         <IsPartOfProject Value="True"/>
+        <ComponentName Value="SynColorAttrEditor"/>
         <HasResources Value="True"/>
+        <ResourceBaseClass Value="Frame"/>
+        <UnitName Value="SynColorAttribEditor"/>
       </Unit118>
       <Unit119>
         <Filename Value="inputhistory.pas"/>
@@ -871,6 +876,7 @@
       <Unit134>
         <Filename Value="dialogprocs.pas"/>
         <IsPartOfProject Value="True"/>
+        <UnitName Value="DialogProcs"/>
       </Unit134>
       <Unit135>
         <Filename Value="abstractsmethodsdlg.pas"/>
@@ -975,6 +981,7 @@
       <Unit156>
         <Filename Value="codetoolsoptions.pas"/>
         <IsPartOfProject Value="True"/>
+        <UnitName Value="CodeToolsOptions"/>
       </Unit156>
       <Unit157>
         <Filename Value="keymapshortcutdlg.pas"/>
@@ -1003,6 +1010,7 @@
       <Unit162>
         <Filename Value="publishmodule.pas"/>
         <IsPartOfProject Value="True"/>
+        <UnitName Value="PublishModule"/>
       </Unit162>
       <Unit163>
         <Filename Value="checkcompileropts.pas"/>
@@ -1051,12 +1059,12 @@
         <IsPartOfProject Value="True"/>
       </Unit172>
       <Unit173>
-        <Filename Value="publishprojectdlg.pas"/>
+        <Filename Value="publishmoduledlg.pas"/>
         <IsPartOfProject Value="True"/>
-        <ComponentName Value="PublishProjectDialog"/>
+        <ComponentName Value="PublishModuleDialog"/>
         <HasResources Value="True"/>
         <ResourceBaseClass Value="Form"/>
-        <UnitName Value="PublishProjectDlg"/>
+        <UnitName Value="PublishModuleDlg"/>
       </Unit173>
       <Unit174>
         <Filename Value="findoverloadsdlg.pas"/>
@@ -1113,11 +1121,14 @@
         <Filename Value="genericchecklist.pas"/>
         <IsPartOfProject Value="True"/>
         <HasResources Value="True"/>
+        <UnitName Value="GenericCheckList"/>
       </Unit184>
       <Unit185>
         <Filename Value="patheditordlg.pas"/>
         <IsPartOfProject Value="True"/>
+        <ComponentName Value="PathEditorDialog"/>
         <HasResources Value="True"/>
+        <ResourceBaseClass Value="Form"/>
         <UnitName Value="PathEditorDlg"/>
       </Unit185>
       <Unit186>
@@ -1159,250 +1170,257 @@
         <HasResources Value="True"/>
       </Unit192>
       <Unit193>
-        <Filename Value="advhistorylist.pas"/>
+        <Filename Value="exttooleditdlg.pas"/>
         <IsPartOfProject Value="True"/>
+        <HasResources Value="True"/>
       </Unit193>
       <Unit194>
-        <Filename Value="exttooleditdlg.pas"/>
+        <Filename Value="addtoprojectdlg.pas"/>
         <IsPartOfProject Value="True"/>
         <HasResources Value="True"/>
       </Unit194>
       <Unit195>
-        <Filename Value="addtoprojectdlg.pas"/>
+        <Filename Value="sysvaruseroverridedlg.pas"/>
         <IsPartOfProject Value="True"/>
         <HasResources Value="True"/>
       </Unit195>
       <Unit196>
-        <Filename Value="sysvaruseroverridedlg.pas"/>
+        <Filename Value="raw_window.pas"/>
         <IsPartOfProject Value="True"/>
-        <HasResources Value="True"/>
       </Unit196>
       <Unit197>
-        <Filename Value="raw_window.pas"/>
+        <Filename Value="codehelp.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit197>
       <Unit198>
-        <Filename Value="codehelp.pas"/>
+        <Filename Value="diffdialog.pas"/>
         <IsPartOfProject Value="True"/>
+        <HasResources Value="True"/>
       </Unit198>
       <Unit199>
-        <Filename Value="diffdialog.pas"/>
+        <Filename Value="keymapschemedlg.pas"/>
         <IsPartOfProject Value="True"/>
         <HasResources Value="True"/>
       </Unit199>
       <Unit200>
-        <Filename Value="keymapschemedlg.pas"/>
+        <Filename Value="gotofrm.pas"/>
         <IsPartOfProject Value="True"/>
         <HasResources Value="True"/>
       </Unit200>
       <Unit201>
-        <Filename Value="gotofrm.pas"/>
-        <IsPartOfProject Value="True"/>
-        <HasResources Value="True"/>
-      </Unit201>
-      <Unit202>
         <Filename Value="ideoptiondefs.pas"/>
         <IsPartOfProject Value="True"/>
+      </Unit201>
+      <Unit202>
+        <Filename Value="sourceeditprocs.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="SourceEditProcs"/>
       </Unit202>
       <Unit203>
-        <Filename Value="sourceeditprocs.pas"/>
+        <Filename Value="helpoptions.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit203>
       <Unit204>
-        <Filename Value="helpoptions.pas"/>
-        <IsPartOfProject Value="True"/>
-      </Unit204>
-      <Unit205>
         <Filename Value="findinfilesdlg.pas"/>
         <IsPartOfProject Value="True"/>
         <ComponentName Value="LazFindInFilesDialog"/>
         <HasResources Value="True"/>
         <ResourceBaseClass Value="Form"/>
         <UnitName Value="FindInFilesDlg"/>
-      </Unit205>
-      <Unit206>
+      </Unit204>
+      <Unit205>
         <Filename Value="ideoptionsdlg.pas"/>
         <IsPartOfProject Value="True"/>
         <ComponentName Value="IDEOptionsDialog"/>
         <HasResources Value="True"/>
         <ResourceBaseClass Value="Form"/>
-      </Unit206>
-      <Unit207>
+      </Unit205>
+      <Unit206>
         <Filename Value="findunitdlg.pas"/>
         <IsPartOfProject Value="True"/>
         <HasResources Value="True"/>
-      </Unit207>
-      <Unit208>
+      </Unit206>
+      <Unit207>
         <Filename Value="idewindowhelp.pas"/>
         <IsPartOfProject Value="True"/>
+      </Unit207>
+      <Unit208>
+        <Filename Value="showcompileropts.pas"/>
+        <IsPartOfProject Value="True"/>
+        <HasResources Value="True"/>
       </Unit208>
       <Unit209>
-        <Filename Value="showcompileropts.pas"/>
+        <Filename Value="cleandirdlg.pas"/>
         <IsPartOfProject Value="True"/>
         <HasResources Value="True"/>
       </Unit209>
       <Unit210>
-        <Filename Value="cleandirdlg.pas"/>
-        <IsPartOfProject Value="True"/>
-        <HasResources Value="True"/>
-      </Unit210>
-      <Unit211>
         <Filename Value="searchresultview.pp"/>
         <IsPartOfProject Value="True"/>
         <HasResources Value="True"/>
+        <UnitName Value="SearchResultView"/>
+      </Unit210>
+      <Unit211>
+        <Filename Value="invertassigntool.pas"/>
+        <IsPartOfProject Value="True"/>
       </Unit211>
       <Unit212>
-        <Filename Value="invertassigntool.pas"/>
+        <Filename Value="wordcompletion.pp"/>
         <IsPartOfProject Value="True"/>
       </Unit212>
       <Unit213>
-        <Filename Value="wordcompletion.pp"/>
+        <Filename Value="editdefinetree.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit213>
       <Unit214>
-        <Filename Value="editdefinetree.pas"/>
-        <IsPartOfProject Value="True"/>
-      </Unit214>
-      <Unit215>
         <Filename Value="runparamsopts.pas"/>
         <IsPartOfProject Value="True"/>
         <ComponentName Value="RunParamsOptsDlg"/>
         <HasResources Value="True"/>
         <ResourceBaseClass Value="Form"/>
         <UnitName Value="RunParamsOpts"/>
-      </Unit215>
-      <Unit216>
+      </Unit214>
+      <Unit215>
         <Filename Value="idetranslations.pas"/>
         <IsPartOfProject Value="True"/>
-      </Unit216>
-      <Unit217>
+      </Unit215>
+      <Unit216>
         <Filename Value="useunitdlg.pas"/>
         <IsPartOfProject Value="True"/>
         <HasResources Value="True"/>
         <UnitName Value="UseUnitDlg"/>
+      </Unit216>
+      <Unit217>
+        <Filename Value="keymapping.pp"/>
+        <IsPartOfProject Value="True"/>
       </Unit217>
       <Unit218>
-        <Filename Value="keymapping.pp"/>
+        <Filename Value="redirect_stderr.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit218>
       <Unit219>
-        <Filename Value="redirect_stderr.pas"/>
+        <Filename Value="clipboardhistory.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit219>
       <Unit220>
-        <Filename Value="clipboardhistory.pas"/>
+        <Filename Value="allcompileroptions.pas"/>
         <IsPartOfProject Value="True"/>
+        <ComponentName Value="frmAllCompilerOptions"/>
+        <HasResources Value="True"/>
+        <ResourceBaseClass Value="Form"/>
+        <UnitName Value="AllCompilerOptions"/>
       </Unit220>
       <Unit221>
-        <Filename Value="allcompileroptions.pas"/>
+        <Filename Value="jumphistoryview.pas"/>
         <IsPartOfProject Value="True"/>
         <HasResources Value="True"/>
       </Unit221>
       <Unit222>
-        <Filename Value="jumphistoryview.pas"/>
-        <IsPartOfProject Value="True"/>
-        <HasResources Value="True"/>
-      </Unit222>
-      <Unit223>
         <Filename Value="ideprotocol.pas"/>
         <IsPartOfProject Value="True"/>
+      </Unit222>
+      <Unit223>
+        <Filename Value="progressdlg.pas"/>
+        <IsPartOfProject Value="True"/>
+        <HasResources Value="True"/>
       </Unit223>
       <Unit224>
-        <Filename Value="progressdlg.pas"/>
+        <Filename Value="findrenameidentifier.pas"/>
         <IsPartOfProject Value="True"/>
         <HasResources Value="True"/>
       </Unit224>
       <Unit225>
-        <Filename Value="findrenameidentifier.pas"/>
+        <Filename Value="charactermapdlg.pas"/>
         <IsPartOfProject Value="True"/>
         <HasResources Value="True"/>
       </Unit225>
       <Unit226>
-        <Filename Value="charactermapdlg.pas"/>
-        <IsPartOfProject Value="True"/>
-        <HasResources Value="True"/>
-      </Unit226>
-      <Unit227>
         <Filename Value="idedefs.pas"/>
         <IsPartOfProject Value="True"/>
-      </Unit227>
-      <Unit228>
+      </Unit226>
+      <Unit227>
         <Filename Value="examplemanager.pas"/>
         <IsPartOfProject Value="True"/>
         <HasResources Value="True"/>
-      </Unit228>
-      <Unit229>
+      </Unit227>
+      <Unit228>
         <Filename Value="formeditor.pp"/>
         <IsPartOfProject Value="True"/>
         <UnitName Value="FormEditor"/>
-      </Unit229>
-      <Unit230>
+      </Unit228>
+      <Unit229>
         <Filename Value="revision.inc"/>
         <IsPartOfProject Value="True"/>
-      </Unit230>
-      <Unit231>
-        <Filename Value="objectlists.pas"/>
-        <IsPartOfProject Value="True"/>
-      </Unit231>
-      <Unit232>
+      </Unit229>
+      <Unit230>
         <Filename Value="mouseactiondialog.pas"/>
         <IsPartOfProject Value="True"/>
         <HasResources Value="True"/>
-      </Unit232>
-      <Unit233>
+      </Unit230>
+      <Unit231>
         <Filename Value="basedebugmanager.pas"/>
         <IsPartOfProject Value="True"/>
         <UnitName Value="BaseDebugManager"/>
-      </Unit233>
-      <Unit234>
+      </Unit231>
+      <Unit232>
         <Filename Value="imexportcompileropts.pas"/>
         <IsPartOfProject Value="True"/>
         <ComponentName Value="ImExportCompOptsDlg"/>
         <HasResources Value="True"/>
         <ResourceBaseClass Value="Form"/>
-      </Unit234>
-      <Unit235>
+      </Unit232>
+      <Unit233>
         <Filename Value="initialsetupproc.pas"/>
         <IsPartOfProject Value="True"/>
         <UnitName Value="InitialSetupProc"/>
-      </Unit235>
-      <Unit236>
+      </Unit233>
+      <Unit234>
         <Filename Value="qfinitlocalvardlg.pas"/>
         <IsPartOfProject Value="True"/>
         <ComponentName Value="QFInitLocalVarDialog"/>
         <HasResources Value="True"/>
         <ResourceBaseClass Value="Form"/>
-      </Unit236>
-      <Unit237>
+      </Unit234>
+      <Unit235>
         <Filename Value="../packager/interpkgconflictfiles.pas"/>
         <IsPartOfProject Value="True"/>
         <HasResources Value="True"/>
-      </Unit237>
-      <Unit238>
+      </Unit235>
+      <Unit236>
         <Filename Value="encloseifdef.pas"/>
         <IsPartOfProject Value="True"/>
         <ComponentName Value="EncloseIfDefForm"/>
         <HasResources Value="True"/>
         <ResourceBaseClass Value="Form"/>
         <UnitName Value="EncloseIfDef"/>
-      </Unit238>
-      <Unit239>
+      </Unit236>
+      <Unit237>
         <Filename Value="definesgui.pas"/>
         <IsPartOfProject Value="True"/>
         <ComponentName Value="DefinesGuiForm"/>
         <HasResources Value="True"/>
         <ResourceBaseClass Value="Form"/>
         <UnitName Value="DefinesGui"/>
-      </Unit239>
-      <Unit240>
+      </Unit237>
+      <Unit238>
         <Filename Value="inputhistorywithsearchopt.pas"/>
         <IsPartOfProject Value="True"/>
         <UnitName Value="InputhistoryWithSearchOpt"/>
-      </Unit240>
-      <Unit241>
+      </Unit238>
+      <Unit239>
         <Filename Value="projectdescriptors.pas"/>
         <IsPartOfProject Value="True"/>
         <UnitName Value="ProjectDescriptors"/>
+      </Unit239>
+      <Unit240>
+        <Filename Value="etpas2jsmsgparser.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="etPas2jsMsgParser"/>
+      </Unit240>
+      <Unit241>
+        <Filename Value="exttoolside.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="ExtToolsIDE"/>
       </Unit241>
     </Units>
   </ProjectOptions>
@@ -1416,13 +1434,6 @@
       <OtherUnitFiles Value="frames;../converter;../debugger;../debugger/frames;../packager;../designer;../packager/frames;../ide"/>
       <UnitOutputDirectory Value="$(LazarusDir)/units/$(TargetCPU)-$(TargetOS)/$(LCLWidgetType)"/>
     </SearchPaths>
-    <Linking>
-      <Options>
-        <Win32>
-          <GraphicApplication Value="True"/>
-        </Win32>
-      </Options>
-    </Linking>
     <CompileReasons Compile="False" Build="False" Run="False"/>
   </CompilerOptions>
   <Debugging>

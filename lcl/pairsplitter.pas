@@ -30,8 +30,11 @@ interface
 
 uses
   Types, Classes, SysUtils,
-  LCLType, LCLProc, LMessages, Graphics, GraphType, LCLIntf, Controls, ExtCtrls;
-  
+  // LazUtils
+  LazTracer,
+  // LCL
+  LCLType, LCLIntf, LMessages, Graphics, Controls, ExtCtrls;
+
 type
   TCustomPairSplitter = class;
 
@@ -261,8 +264,11 @@ end;
 
 procedure TCustomPairSplitter.SetPosition(const AValue: integer);
 begin
-  if FPosition = AValue then
+  if (FPosition = AValue) and
+    (TWSCustomPairSplitterClass(WidgetSetClass).GetPosition(Self) = FPosition)
+  then
     Exit;
+
   FPosition := AValue;
   if FPosition < 0 then
     FPosition := 0;

@@ -31,6 +31,8 @@ interface
 
 uses
   SysUtils, Math, Graphics, Classes,
+  // ideintf
+  MacroIntf, IDEImagesIntf,
   // LCL
   Forms, Controls, Dialogs, StdCtrls, ExtCtrls, Spin, ComCtrls, EditBtn, Menus,
   ButtonPanel, Buttons,
@@ -56,6 +58,9 @@ type
     bOpen: TButton;
     bpOptions: TButtonPanel;
     bColors: TButton;
+    cbIncompatiblePackages: TCheckBox;
+    cbAlreadyInstalledPackages: TCheckBox;
+    cbLoadJsonLocally: TCheckBox;
     cbProxy: TCheckBox;
     cbForceDownloadExtract: TCheckBox;
     cbDeleteZipAfterInstall: TCheckBox;
@@ -99,11 +104,13 @@ type
     pnBottom: TPanel;
     pnProfilesMain: TPanel;
     pnProfilesLeft: TPanel;
+    rbOpenSSL: TRadioGroup;
     rbHintFormOptions: TRadioGroup;
     SDD: TSelectDirectoryDialog;
     seProxyPort: TSpinEdit;
     spDaysToShowNewPackages: TSpinEdit;
     spConTimeOut: TSpinEdit;
+    tsOpenSSL: TTabSheet;
     tsFolders: TTabSheet;
     tsProfiles: TTabSheet;
     tsGeneral: TTabSheet;
@@ -115,6 +122,7 @@ type
     procedure bOpenClick(Sender: TObject);
     procedure cbProxyChange(Sender: TObject);
     procedure cbSelectProfileChange(Sender: TObject);
+    procedure edLocalRepositoryPackagesButtonClick(Sender:TObject);
     procedure edRemoteRepositoryKeyPress(Sender: TObject; var Key: char);
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
@@ -322,6 +330,16 @@ begin
   pnProfilesMain.Visible := cbSelectProfile.ItemIndex = 1;
 end;
 
+procedure TOptionsFrm.edLocalRepositoryPackagesButtonClick(Sender:TObject);
+var Sendert:TDirectoryEdit;
+    d:string;
+begin
+  Sendert:=sender as TDirectoryEdit;
+  d:=Sendert.Directory;
+  IDEMacros.SubstituteMacros(d);
+  Sendert.Directory:=d;
+end;
+
 procedure TOptionsFrm.edRemoteRepositoryKeyPress(Sender: TObject; var Key: char);
 begin
   if Key = #13 then
@@ -403,9 +421,12 @@ begin
   if Options.RemoteRepositoryTmp.Count > 0 then
     Options.RemoteRepository.Text := Options.RemoteRepositoryTmp.Text;
   Options.ActiveRepositoryIndex := cbRemoteRepository.ItemIndex;
+  Options.LoadJsonLocally := cbLoadJsonLocally.Checked;
   Options.ForceDownloadAndExtract := cbForceDownloadExtract.Checked;
   Options.ConTimeOut := spConTimeOut.Value;
   Options.DeleteZipAfterInstall := cbDeleteZipAfterInstall.Checked;
+  Options.IncompatiblePackages := cbIncompatiblePackages.Checked;
+  Options.AlreadyInstalledPackages := cbAlreadyInstalledPackages.Checked;
   Options.CheckForUpdates := cbCheckForUpdates.ItemIndex;
   Options.DaysToShowNewPackages := spDaysToShowNewPackages.Value;
   Options.ShowRegularIcons := cbRegularIcons.Checked;
@@ -418,15 +439,17 @@ begin
   Options.ProxyUser := edProxyUser.Text;
   Options.ProxyPassword := edProxyPassword.Text;
 
-  Options.LocalRepositoryPackages := AppendPathDelim(edLocalRepositoryPackages.Text);
-  Options.LocalRepositoryArchive := AppendPathDelim(edLocalRepositoryArchive.Text);
-  Options.LocalRepositoryUpdate := AppendPathDelim(edLocalRepositoryUpdate.Text);
-  if not DirectoryExists(Options.LocalRepositoryPackages) then
-    ForceDirectories(Options.LocalRepositoryPackages);
-  if not DirectoryExists(Options.LocalRepositoryArchive) then
-    ForceDirectories(Options.LocalRepositoryArchive);
-  if not DirectoryExists(Options.LocalRepositoryUpdate) then
-    ForceDirectories(Options.LocalRepositoryUpdate);
+  Options.OpenSSLDownloadType:= rbOpenSSL.ItemIndex;
+
+  Options.LocalRepositoryPackages := edLocalRepositoryPackages.Text;
+  Options.LocalRepositoryArchive := edLocalRepositoryArchive.Text;
+  Options.LocalRepositoryUpdate := edLocalRepositoryUpdate.Text;
+  if not DirectoryExists(Options.LocalRepositoryPackagesExpanded) then
+    ForceDirectories(Options.LocalRepositoryPackagesExpanded);
+  if not DirectoryExists(Options.LocalRepositoryArchiveExpanded) then
+    ForceDirectories(Options.LocalRepositoryArchiveExpanded);
+  if not DirectoryExists(Options.LocalRepositoryUpdateExpanded) then
+    ForceDirectories(Options.LocalRepositoryUpdateExpanded);
 
   Options.UserProfile := cbSelectProfile.ItemIndex;
   for I := 0 to lbExcludeFiles.Items.Count - 1 do
@@ -467,8 +490,13 @@ begin
   for I := 0 to Options.RemoteRepository.Count - 1 do
     cbRemoteRepository.Items.Add(Options.RemoteRepository.Strings[I]);
   cbRemoteRepository.ItemIndex := Options.ActiveRepositoryIndex;
+  cbLoadJsonLocally.Checked := Options.LoadJsonLocally;
   cbForceDownloadExtract.Checked := Options.ForceDownloadAndExtract;
   cbDeleteZipAfterInstall.Checked := Options.DeleteZipAfterInstall;
+  cbIncompatiblePackages.Checked := Options.IncompatiblePackages;
+  cbAlreadyInstalledPackages.Checked := Options.AlreadyInstalledPackages;
+  cbLoadJsonLocally.Caption := rsOptions_cbLoadJsonLocally_Caption;
+  cbLoadJsonLocally.Hint := rsOptions_cbLoadJsonLocally_Hint;
   cbForceDownloadExtract.Caption := rsOptions_cbForceDownloadExtract_Caption;
   cbForceDownloadExtract.Hint := rsOptions_cbForceDownloadExtract_Hint;
   lbConTimeOut.Caption := rsOptions_lbConTimeOut_Caption;
@@ -476,6 +504,10 @@ begin
   spConTimeOut.Value := Options.ConTimeOut;
   cbDeleteZipAfterInstall.Caption := rsOptions_cbDelete_Caption;
   cbDeleteZipAfterInstall.Hint := rsOptions_cbDelete_Hint;
+  cbIncompatiblePackages.Caption := rsOption_cbIncompatiblePackage_Caption;
+  cbIncompatiblePackages.Hint := rsOption_cbIncompatiblePackage_Hint;
+  cbAlreadyInstalledPackages.Caption := rsOption_cbcbAlreadyInstalledPackages_Caption;
+  cbAlreadyInstalledPackages.Hint := rsOption_cbcbAlreadyInstalledPackages_Hint;
   lbUpdates.Caption := rsOptions_lbCheckForUpdates_Caption;
   cbCheckForUpdates.Clear;
   cbCheckForUpdates.Items.Add(rsOptions_cbCheckForUpdates_Item0);
@@ -501,6 +533,7 @@ begin
   rbHintFormOptions.ItemIndex := Options.HintFormOption;
   cbUseDefaultTheme.Checked := Options.UseDefaultTheme;
   cbUseDefaultTheme.Caption := rsOptions_cbUseDefaultTheme_Caption;
+
   tsProxy.Caption := rsOptions_tsProxy_Caption;
   cbProxy.Caption := rsOptions_cbProxy_Caption;
   gbProxySettings.Caption := rsOptions_gbProxySettings_Caption;
@@ -515,6 +548,18 @@ begin
   //seProxyPort.Top := edProxyServer.Top + (edProxyServer.Height - seProxyPort.Height) div 2;
   edProxyUser.Text := Options.ProxyUser;
   edProxyPassword.Text := Options.ProxyPassword;
+
+  rbOpenSSL.Caption := rsOpenSSLFrm_lbMessage1_Caption;
+  rbOpenSSL.Items.Clear;
+  rbOpenSSL.Items.Add(rsOptions_rbOpenSSL_Item0);
+  rbOpenSSL.Items.Add(rsOptions_rbOpenSSL_Item1);
+  rbOpenSSL.Items.Add(rsOptions_rbOpenSSL_Item2);
+  rbOpenSSL.ItemIndex := Options.OpenSSLDownloadType;
+  {$IFDEF MSWINDOWS}
+  tsOpenSSL.TabVisible := True;
+  {$ELSE}
+  tsOpenSSL.TabVisible := False;
+  {$ENDIF}
 
   tsFolders.Caption := rsOptions_tsFolders_Caption;
   lbLocalRepositoryPackages.Caption := rsOptions_lbLocalRepositoryPackages_Caption;
@@ -556,6 +601,7 @@ begin
   pnProfilesMain.Visible := Options.UserProfile = 1;
   bColors.Caption := rsOptions_bColors_Caption;
   bpOptions.HelpButton.Caption := rsOptions_bpOptions_bHelp;
+  IDEImages.AssignImage(bpOptions.HelpButton, 'restore_defaults');
   bpOptions.HelpButton.Kind := bkCustom;
   bpOptions.HelpButton.Glyph.Clear;
   SetupColors;

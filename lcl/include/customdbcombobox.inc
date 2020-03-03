@@ -34,13 +34,109 @@ end;
 
 procedure TCustomDBComboBox.Change;
 begin
-  FDataLink.Modified;
-  inherited Change;
+  FDetectedEvents := FDetectedEvents or DBCBEVENT_CHANGE;
+  PostMessage(Handle, LM_DEFERREDEDIT, 0, 0);
+end;
+
+procedure TCustomDBComboBox.KeyDown(var Key: Word; Shift: TShiftState);
+begin
+  inherited KeyDown(Key, Shift);
+  if Key=VK_ESCAPE then begin
+    //cancel out of editing by reset on esc
+    if FDatalink.EditingSource then
+      FDatalink.DataSet.Cancel
+    else
+      FDataLink.Reset;
+    SelectAll;
+    Key := VK_UNKNOWN;
+  end;
+end;
+
+procedure TCustomDBComboBox.UpdateRecord;
+begin
+  if FDatalink.Editing and FDatalink.IsModified then
+    FDataLink.UpdateRecord;
 end;
 
 function TCustomDBComboBox.GetReadOnly: Boolean;
 begin
   Result:=FDataLink.ReadOnly;
+end;
+
+function TCustomDBComboBox.DoEdit: boolean;
+var
+  oldDataChange: TNotifyEvent;
+
+  procedure RestoreDataChange;
+  begin
+    FDataLink.OnDataChange := oldDataChange;
+    if not result then begin
+      FDatalink.Reset;
+      SelectAll;
+    end;
+  end;
+
+begin
+
+  oldDataChange := FDataLink.OnDataChange;
+  FDataLink.OnDataChange := nil;
+
+  try
+    try
+
+      result := FDatalink.Edit;
+      RestoreDataChange;
+
+      if result then begin
+        FDatalink.Modified;
+        if FDetectedEvents and DBCBEVENT_CHANGE <> 0 then
+          DoOnChange;
+        if FDetectedEvents and DBCBEVENT_SELECT <> 0 then begin
+          if FDetectedEvents and DBCBEVENT_WHEEL <> 0 then
+            FDatalink.UpdateRecord;
+          DoOnSelect;
+        end;
+      end;
+      if FDetectedEvents and DBCBEVENT_CLOSEUP <> 0 then
+        DoOnCloseUp;
+
+    except
+      on E: Exception do begin
+
+        result := false;
+        RestoreDataChange;
+        if FDetectedEvents and DBCBEVENT_CLOSEUP <> 0 then
+          DoOnCloseUp;
+
+        raise;
+      end;
+    end;
+
+  finally
+    FDetectedEvents := 0;
+  end;
+end;
+
+procedure TCustomDBComboBox.DoOnCloseUp;
+begin
+  if Assigned(OnCloseUp) then OnCloseUp(Self);
+  if AutoSelect then
+  begin
+    SelectAll;
+    if (SelText = Text) then
+      AutoSelected := True;
+  end;//End if FAutoSelect
+  FDetectedEvents := 0;   // reset because closeup may occur without editing
+end;
+
+procedure TCustomDBComboBox.DoOnSelect;
+begin
+  inherited Select;
+end;
+
+procedure TCustomDBComboBox.DoOnChange;
+begin
+  inherited Change;
 end;
 
 procedure TCustomDBComboBox.SetDataField(const AValue: string);
@@ -64,12 +160,30 @@ begin
   Message.Result := PtrUInt(FDataLink);
 end;
 
+procedure TCustomDBComboBox.LMDeferredEdit(var Message: TLMessage);
+begin
+  DoEdit;
+end;
+
 procedure TCustomDBComboBox.CloseUp;
 begin
   if [csLoading,csDestroying,csDesigning]*ComponentState<>[] then exit;
-  if not ReadOnly then
-    EditingDone;
- inherited CloseUp;
+  if FDetectedEvents and DBCBEVENT_CHANGE = 0 then
+    DoOnCloseUp
+  else
+    FDetectedEvents := FDetectedEvents or DBCBEVENT_CLOSEUP;
+end;
+
+procedure TCustomDBComboBox.Select;
+begin
+  FDetectedEvents := FDetectedEvents or DBCBEVENT_SELECT;
+end;
+
+function TCustomDBComboBox.DoMouseWheel(Shift: TShiftState;
+  WheelDelta: Integer; MousePos: TPoint): Boolean;
+begin
+  Result := inherited DoMouseWheel(Shift, WheelDelta, MousePos);
+  FDetectedEvents := FDetectedEvents or DBCBEVENT_WHEEL;
 end;
 
 procedure TCustomDBComboBox.Notification(AComponent: TComponent; Operation: TOperation);
@@ -83,7 +197,7 @@ end;
 
 procedure TCustomDBComboBox.EditingDone;
 begin
-  FDataLink.UpdateRecord;
+  UpdateRecord;
   inherited EditingDone;
 end;
 
@@ -95,16 +209,7 @@ begin
     LM_PASTE:
       begin
         if FDataLink.CanModify then
-        begin
-          //LCL changes the Text before LM_PASTE is called and not after like Delphi. Issue 20330
-          //When Edit is called the Text property is reset to the previous value
-          //Add a workaround while bug is not fixed
-          FDataLink.OnDataChange := nil;
-          FDatalink.Edit;
-          FDataLink.Modified;
-          FDataLink.OnDataChange := @DataChange;
-          inherited WndProc(Message);
-        end
+          inherited WndProc(Message)
         else
           Message.Result := 1; // prevent calling default window proc
       end;

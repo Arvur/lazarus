@@ -54,11 +54,11 @@ type
     function  ProcessStop: Boolean;
   protected
     function  GetSupportedCommands: TDBGCommands; override;
-    function  RequestCommand(const ACommand: TDBGCommand; const AParams: array of const): Boolean; override;
+    function  RequestCommand(const ACommand: TDBGCommand; const AParams: array of const;
+      const {%H-}ACallback: TMethod): Boolean; override;
   public
     class function Caption: String; override;
     class function NeedsExePath: boolean; override;
-    class function CanExternalDebugSymbolsFile: boolean; override;
   published
   end;
 
@@ -91,8 +91,14 @@ end;
 procedure TProcessDebugger.ProcessDestroyed(Sender: TObject);
 begin
   FProcess := nil;
-  if State <> dsIdle then
-    SetState(dsStop);
+
+  LockRelease;
+  try
+    if State <> dsIdle then
+      SetState(dsStop);
+  finally
+    UnlockRelease;
+  end;
 end;
 
 function TProcessDebugger.ProcessEnvironment(const AVariable: String; const ASet: Boolean): Boolean;
@@ -155,7 +161,8 @@ begin
   Result := [dcRun, dcStop, dcEnvironment]
 end;
 
-function TProcessDebugger.RequestCommand(const ACommand: TDBGCommand; const AParams: array of const): Boolean;
+function TProcessDebugger.RequestCommand(const ACommand: TDBGCommand;
+  const AParams: array of const; const ACallback: TMethod): Boolean;
 begin
   case ACommand of
     dcRun:         Result := ProcessRun;
@@ -173,11 +180,6 @@ end;
 class function TProcessDebugger.NeedsExePath: boolean;
 begin
   Result := false; // no need to have a valid exe path for the process debugger
-end;
-
-class function TProcessDebugger.CanExternalDebugSymbolsFile: boolean;
-begin
-  Result := true; // Yeah, why not.
 end;
 
 initialization

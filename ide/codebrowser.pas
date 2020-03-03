@@ -54,7 +54,7 @@ uses
   BasicCodeTools, DefineTemplates, CodeTree, CodeCache, CodeToolManager,
   PascalParserTool, LinkScanner, FileProcs, CodeIndex, StdCodeTools, SourceLog,
   // LazUtils
-  LazFileUtils, LazUtilities, AvgLvlTree,
+  LazFileUtils, LazStringUtils, AvgLvlTree,
   // IDEIntf
   IDEWindowIntf, SrcEditorIntf, IDEMsgIntf, IDEDialogs, LazConfigStorage,
   IDEHelpIntf, PackageIntf, IDECommands, LazIDEIntf, IDEExternToolIntf,
@@ -198,7 +198,6 @@ type
     IdentifierFilterBeginsSpeedButton: TSpeedButton;
     IdentifierFilterContainsSpeedButton: TSpeedButton;
     IdentifierFilterEdit: TEdit;
-    ImageList1: TImageList;
     LevelsGroupBox: TGroupBox;
     OpenMenuItem: TMenuItem;
     OptionsGroupBox: TGroupBox;
@@ -221,6 +220,7 @@ type
     UnitFilterEdit: TEdit;
     procedure BrowseTreeViewMouseMove(Sender: TObject; {%H-}Shift: TShiftState; {%H-}X,
       {%H-}Y: Integer);
+    procedure FormActivate(Sender: TObject);
     procedure FormDeactivate(Sender: TObject);
     procedure UseIdentifierInCurUnitMenuItemClick(Sender: TObject);
     procedure UsePkgInCurUnitMenuItemClick(Sender: TObject);
@@ -802,6 +802,11 @@ begin
   end;
 end;
 
+procedure TCodeBrowserView.FormActivate(Sender: TObject);
+begin
+  ScopeComboBox.DropDownCount:=EnvironmentOptions.DropDownCount;
+end;
+
 procedure TCodeBrowserView.SetIdleConnected(AValue: boolean);
 begin
   if csDestroying in ComponentState then AValue:=false;
@@ -814,30 +819,26 @@ begin
 end;
 
 procedure TCodeBrowserView.InitImageList;
-var
-  ImageSize: Integer;
 begin
-  ImageSize := TIDEImages.ScaledSize;
-  ImageList1.Width := ImageSize;
-  ImageList1.Height := ImageSize;
-  ImgIDDefault := TIDEImages.AddImageToImageList(Imagelist1, 'ce_default');
-  ImgIDProgramCode := TIDEImages.AddImageToImageList(Imagelist1, 'ce_program');
-  ImgIDUnitCode := TIDEImages.AddImageToImageList(Imagelist1, 'ce_unit');
-  ImgIDInterfaceSection := TIDEImages.AddImageToImageList(Imagelist1, 'ce_interface');
-  ImgIDImplementation := TIDEImages.AddImageToImageList(Imagelist1, 'ce_implementation');
-  ImgIDInitialization := TIDEImages.AddImageToImageList(Imagelist1, 'ce_initialization');
-  ImgIDFinalization := TIDEImages.AddImageToImageList(Imagelist1, 'ce_finalization');
-  ImgIDTypeSection := TIDEImages.AddImageToImageList(Imagelist1, 'ce_type');
-  ImgIDType := TIDEImages.AddImageToImageList(Imagelist1, 'ce_type');
-  ImgIDVarSection := TIDEImages.AddImageToImageList(Imagelist1, 'ce_variable');
-  ImgIDVariable := TIDEImages.AddImageToImageList(Imagelist1, 'ce_variable');
-  ImgIDConstSection := TIDEImages.AddImageToImageList(Imagelist1, 'ce_const');
-  ImgIDConst := TIDEImages.AddImageToImageList(Imagelist1, 'ce_const');
-  ImgIDClass := TIDEImages.AddImageToImageList(Imagelist1, 'ce_class');
-  ImgIDProc := TIDEImages.AddImageToImageList(Imagelist1, 'ce_procedure');
-  ImgIDProperty := TIDEImages.AddImageToImageList(Imagelist1, 'ce_property');
-  ImgIDPackage := TIDEImages.AddImageToImageList(Imagelist1, 'item_package');
-  ImgIDProject := TIDEImages.AddImageToImageList(Imagelist1, 'item_project');
+  BrowseTreeView.Images := IDEImages.Images_16;
+  ImgIDDefault := IDEImages.GetImageIndex('ce_default');
+  ImgIDProgramCode := IDEImages.GetImageIndex('ce_program');
+  ImgIDUnitCode := IDEImages.GetImageIndex('cc_unit');
+  ImgIDInterfaceSection := IDEImages.GetImageIndex('ce_interface');
+  ImgIDImplementation := IDEImages.GetImageIndex('ce_implementation');
+  ImgIDInitialization := IDEImages.GetImageIndex('ce_initialization');
+  ImgIDFinalization := IDEImages.GetImageIndex('ce_finalization');
+  ImgIDTypeSection := IDEImages.GetImageIndex('cc_type');
+  ImgIDType := IDEImages.GetImageIndex('cc_type');
+  ImgIDVarSection := IDEImages.GetImageIndex('cc_variable');
+  ImgIDVariable := IDEImages.GetImageIndex('cc_variable');
+  ImgIDConstSection := IDEImages.GetImageIndex('cc_constant');
+  ImgIDConst := IDEImages.GetImageIndex('cc_constant');
+  ImgIDClass := IDEImages.GetImageIndex('cc_class');
+  ImgIDProc := IDEImages.GetImageIndex('cc_procedure');
+  ImgIDProperty := IDEImages.GetImageIndex('cc_property');
+  ImgIDPackage := IDEImages.GetImageIndex('item_package');
+  ImgIDProject := IDEImages.GetImageIndex('item_project');
 end;
 
 procedure TCodeBrowserView.SetScannedBytes(const AValue: PtrInt);
@@ -2845,7 +2846,7 @@ function TCodeBrowserView.ExportTree: TModalResult;
 var
   SaveDialog: TSaveDialog;
 begin
-  SaveDialog:=TSaveDialog.Create(nil);
+  SaveDialog:=IDESaveDialogClass.Create(nil);
   try
     InitIDEFileDialog(SaveDialog);
     SaveDialog.Title:='Save tree as text (*.txt) ...';

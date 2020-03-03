@@ -25,8 +25,13 @@ unit codeobserver_options;
 interface
 
 uses
-  Classes, Graphics, SysUtils, FileUtil, Forms,
-  IDEOptionsIntf, LazarusIDEStrConsts, CodeExplOpts, ExtCtrls, Spin, StdCtrls;
+  Classes, SysUtils,
+  // LCL
+  Forms, Graphics, ExtCtrls, Spin, StdCtrls,
+  // IdeIntf
+  IDEOptionsIntf, IDEOptEditorIntf,
+  // IDE
+  LazarusIDEStrConsts, CodeExplOpts;
 
 type
 
@@ -138,17 +143,23 @@ var
 
 begin
   CodeObsCategoriesCheckGroup.Caption := lisCEShowCodeObserver;
-  for g := Low(g) to High(g) do begin
-    FGroupCheckBoxes[g] := AddCheckBox(GroupName(g) + ':');
-    with FGroupCheckBoxes[g] do begin
-      AllowGrayed := true;
-      State := cbGrayed;
-      Font.Style := [fsItalic];
+  CodeObsCategoriesCheckGroup.OnItemClick := nil;
+  try
+    for g := Low(g) to High(g) do begin
+      FGroupCheckBoxes[g] := AddCheckBox(GroupName(g) + ':');
+      with FGroupCheckBoxes[g] do begin
+        AllowGrayed := true;
+        State := cbGrayed;
+        Font.Style := [fsItalic];
+      end;
+      for c := Low(c) to High(c) do
+        if c in GroupCategories[g] then
+          FCategoryCheckBoxes[c] :=
+            AddCheckBox('   ' + CodeExplorerLocalizedString(c));
     end;
-    for c := Low(c) to High(c) do
-      if c in GroupCategories[g] then
-        FCategoryCheckBoxes[c] :=
-          AddCheckBox('   ' + CodeExplorerLocalizedString(c));
+  finally
+    CodeObsCategoriesCheckGroup.OnItemClick :=
+      @CodeObsCategoriesCheckGroupItemClick;
   end;
 
   LongProcLineCountLabel.Caption := lisCELongProcLineCount;

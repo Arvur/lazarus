@@ -7,15 +7,19 @@ unit leakinfo;
 interface
 
 uses
-  Classes, SysUtils,
+  Classes, SysUtils, fgl,
   // CodeTools
   CodeToolManager, CodeCache,
   // LazUtils
-  FileUtil, LazFileUtils, LazClasses,
+  FileUtil, LazFileUtils, LazClasses, LazLoggerBase,
   // IDEIntf
   TextTools,
   // LeakView
-  DbgInfoReader;
+  {$IFDEF LEAK_RESOLVE_USE_FPC}
+  DbgInfoReader,
+  {$ENDIF}
+  DbgIntfBaseTypes, FpDbgLoader, FpDbgDwarf, FpDbgInfo,
+  LldbHelper;
 
 type
   { TStackLine }
@@ -67,6 +71,8 @@ type
   end;
 
 
+  TStackTraceList = specialize TFPGObjectList<TStackTrace>;
+
   // abstract class
 
   { TLeakInfo }
@@ -75,8 +81,8 @@ type
     // returns True, if information has been successfully received, False otherwise
     // Fills LeakData record
     // if Traces is not nil, fill the list with TStackTrace object. User is responsible for freeing them
-    function GetLeakInfo(out LeakData: TLeakStatus; var Traces: TList): Boolean; virtual; abstract;
-    function ResolveLeakInfo(AFileName: string; Traces: TList): Boolean; virtual; abstract;
+    function GetLeakInfo(out LeakData: TLeakStatus; var Traces: TStackTraceList): Boolean; virtual; abstract;
+    function ResolveLeakInfo(AFileName: string; Traces: TStackTraceList): Boolean; virtual; abstract;
   end;
 
   // this file can be (should be?) hidden in the other unit, or to the implementation section
@@ -113,33 +119,46 @@ type
     fParsed   : Boolean;
 
     function PosInTrc(const SubStr: string; CaseSensetive: Boolean = false): Boolean;
-    function IsTraceLine(const SubStr: string; CheckOnlyLineStart: Boolean = False): Boolean;
-    function IsHeaderLine(const SubStr: string): Boolean;
+    function IsTraceLine(const Idx: Integer; CheckOnlyLineStart: Boolean = False): Boolean;
+    function IsHeaderLine(Idx: integer; NoneStrict: Boolean = False): Boolean;
     function TrcNumberAfter(var Num: Int64; const AfterSub: string): Boolean;
     function TrcNumberAfter(var Num: Integer; const AfterSub: string): Boolean;
     function TrcNumFirstAndAfter(var FirstNum, AfterNum: Int64; const AfterSub: string): Boolean;
 
     procedure ParseTraceLine(s: string; var line: TStackLine);
     procedure ParseStackTrace(trace: TStackTrace);
-    procedure DoParseTrc(traces: TList);
+    procedure DoParseTrc(traces: TStackTraceList);
   public
     TraceInfo : THeapTraceInfo;
     constructor Create(const ATRCFile: string);
     constructor CreateFromTxt(const AText: string);
     destructor Destroy; override;
-    function GetLeakInfo(out LeakData: TLeakStatus; var Traces: TList): Boolean; override;
-    function ResolveLeakInfo(AFileName: string; Traces: TList): Boolean; override;
+    function GetLeakInfo(out LeakData: TLeakStatus; var Traces: TStackTraceList): Boolean; override;
+    function ResolveLeakInfo(AFileName: string; Traces: TStackTraceList): Boolean; override;
   end;
 
 function AllocHeapTraceInfo(const TrcFile: string): TLeakInfo;
 function AllocHeapTraceInfoFromText(const TrcText: string): TLeakInfo;
 
-resourcestring
+const
   CallTracePrefix = 'Call trace for block ';
   RawTracePrefix = 'Stack trace:';
   rsStackTrace = 'Stack trace';
 
 implementation
+
+type
+
+  { TValgrindParser }
+
+  TValgrindParser = class
+    public
+      type
+        TValgrindLineType = (vltNone, vltEmpty, vltThread, vltHeader, vltTrace);
+    public
+      class function StripValgrindPrefix(var s: String): Boolean;
+      class function ValgrindLineType(s: String): TValgrindLineType;
+  end;
 
 function AllocHeapTraceInfo(const TrcFile: string): TLeakInfo;
 begin
@@ -242,6 +261,46 @@ begin
   GetNumberAfter(s, AfterNum, AfterStr);
 end;
 
+{ TValgrindParser }
+
+class function TValgrindParser.StripValgrindPrefix(var s: String): Boolean;
+var
+  i: Integer;
+begin
+  Result := False;
+  if pos('==', s) <> 1 then exit;
+  i := 3;
+  while (i<=Length(s)) and (s[i] in ['0'..'9']) do inc(i);
+  if (i+1 <= Length(s)) and (s[i] = '=') and (s[i+1] = '=')  and
+    ( (i+1 = Length(s)) or (s[i+2] in [' ', #10, #13]) )
+  then
+    Result := true;
+
+  if Result then begin
+    i := i + 3;
+    while (i<=Length(s)) and (s[i] in [#10, #13]) do inc(i);
+    delete(s, 1, i-1);
+  end;
+end;
+
+class function TValgrindParser.ValgrindLineType(s: String): TValgrindLineType;
+begin
+  Result := vltNone;
+  if not StripValgrindPrefix(s) then
+    exit;
+
+  if s = '' then
+    Result := vltEmpty
+  else
+  if pos('Thread ', s) = 1 then
+    Result := vltThread
+  else
+  if pos('   ', s) = 1 then
+    Result := vltTrace  // any sub line. Real traces begin with "by" ar "at"
+  else
+    Result := vltHeader;
+end;
+
 { TStackLine }
 
 function TStackLine.Equals(ALine: TStackLine): boolean;
@@ -283,7 +342,8 @@ begin
     Result := Pos(UpperCase(SubStr), UpperCase(Trc[TrcIndex]))>0;
 end;
 
-function THeapTrcInfo.IsTraceLine(const SubStr: string; CheckOnlyLineStart: Boolean): Boolean;
+function THeapTrcInfo.IsTraceLine(const Idx: Integer;
+  CheckOnlyLineStart: Boolean): Boolean;
 
   function IsGDBLine(s: string): boolean;
   begin
@@ -293,7 +353,7 @@ function THeapTrcInfo.IsTraceLine(const SubStr: string; CheckOnlyLineStart: Bool
       //   #4  0x007489de in EXTTOOLEDITDLG_TEXTERNALTOOLMENUITEMS_$__LOAD$TCONFIGSTORAGE$$TMODALRESULT ()
       Result:=true;
     end;
-    if REMatches(s,'^#[0-9] .* (at|from) ') then begin
+    if REMatches(s,'^#[0-9]+ .* (at|from) ') then begin
       // gdb
       //   #0 DOHANDLEMOUSEACTION (this=0x14afae00, ANACTIONLIST=0x14a96af8,ANINFO=...) at synedit.pp:3000
       Result:=true;
@@ -302,8 +362,9 @@ function THeapTrcInfo.IsTraceLine(const SubStr: string; CheckOnlyLineStart: Bool
 
 var
   i, l: integer;
-  s: String;
+  s, SubStr: String;
 begin
+  SubStr := Trc[Idx];
   Result := False;
 
   s := Trim(SubStr);
@@ -324,6 +385,16 @@ begin
     Result := Result or CheckOnlyLineStart;
   end else if IsGDBLine(s) then begin
     Result := true;
+  end else if pos('frame #', s) > 0 then begin
+    Result := True;
+  end else if TValgrindParser.ValgrindLineType(s) in [vltHeader] then begin
+    Result := (Idx > 0) and
+              (TValgrindParser.ValgrindLineType(Trc[Idx-1]) = vltTrace) and
+              ( (Idx >= Trc.Count-1) or
+                (TValgrindParser.ValgrindLineType(Trc[Idx+1]) in [vltTrace, vltEmpty, vltNone])
+              );
+  end else if TValgrindParser.ValgrindLineType(s) in [vltTrace] then begin
+    Result := True;
   end else begin
     // heaptrc line?
     i := 1;
@@ -334,16 +405,36 @@ begin
     while (i <= l) and
           ((SubStr[i] in ['0'..'9']) or ((SubStr[i] in ['A'..'F'])) or ((SubStr[i] in ['a'..'f'])))
     do inc(i);
-    if (i > l) or (SubStr[i] <> ' ') then exit;
+    if (i > l) and CheckOnlyLineStart then
+      exit(True);
+    if (i <= l) and (SubStr[i] <> ' ') then exit;
+    while (i <= l) and (SubStr[i] = ' ') do inc(i);
+
     Result := (Pos('line', SubStr) > 0)
-            or CheckOnlyLineStart;
+            or CheckOnlyLineStart
+            or (i > l);
   end;
 end;
 
-function THeapTrcInfo.IsHeaderLine(const SubStr: string): Boolean;
+function THeapTrcInfo.IsHeaderLine(Idx: integer; NoneStrict: Boolean): Boolean;
 var
   i: Integer;
+  SubStr: String;
 begin
+  SubStr := Trc[Idx];
+  if (TValgrindParser.ValgrindLineType(SubStr) = vltHeader) and
+     ( (Idx < Trc.Count-1) and (TValgrindParser.ValgrindLineType(Trc[Idx+1]) = vltTrace) ) and
+     ( (Idx = 0) or (TValgrindParser.ValgrindLineType(Trc[Idx-1]) in [vltNone, vltEmpty, vltThread]) )
+  then begin
+    Result := True;
+    exit;
+  end;
+
+  if NoneStrict and (  PosInTrc(RawTracePrefix) or PosInTrc(CallTracePrefix) ) then begin
+    Result := True;
+    exit;
+  end;
+
   i := 1;
   while (i < length(SubStr)) and (SubStr[i] in [' ', #9, '#', '~', '"', '''']) do inc(i);
   Result := (pos(UpperCase(CallTracePrefix), UpperCase(SubStr)) = i) or
@@ -373,7 +464,7 @@ begin
   GetNumFirstAndAfter(Trc[TrcIndex], FirstNum, AfterNum, AfterSub);
 end;
 
-procedure THeapTrcInfo.DoParseTrc(traces: TList);
+procedure THeapTrcInfo.DoParseTrc(traces: TStackTraceList);
 var
   st : TStackTrace;
 begin
@@ -382,22 +473,13 @@ begin
   TraceInfo.ExeName := Trc[TrcIndex];
 
   while (TrcIndex < Trc.Count)
-    and (not (PosInTrc('Heap dump') or  PosInTrc(RawTracePrefix) or
-              PosInTrc(CallTracePrefix) or IsTraceLine(Trc[TrcIndex]) ))
+    and not( PosInTrc('Heap dump') or  IsHeaderLine(TrcIndex, True) or IsTraceLine(TrcIndex) )
   do
     inc(TrcIndex);
 
   if TrcIndex >= Trc.Count then Exit;
 
-  if PosInTrc(RawTracePrefix) or IsTraceLine(Trc[TrcIndex]) then begin
-    if not Assigned(traces) then Exit;
-    st := TStackTrace.Create;
-    ParseStackTrace(st); // changes TrcIndex
-    Traces.Add(st);
-    exit;
-  end;
-
-  if not PosInTrc(CallTracePrefix) then begin
+  if PosInTrc('Heap dump') then begin
     inc(TrcIndex);
     with TraceInfo do begin
       TrcNumFirstAndAfter(AllocBlocks, AllocSize, ': '); inc(TrcIndex);
@@ -416,7 +498,10 @@ begin
   if not Assigned(traces) then Exit;
 
   while TrcIndex < Trc.Count do begin
-    if PosInTrc(CallTracePrefix) then begin
+    if PosInTrc(CallTracePrefix) or
+       ( (TrcIndex < Trc.Count-1) and IsHeaderLine(TrcIndex, True) and IsTraceLine(TrcIndex+1) ) or
+       IsTraceLine(TrcIndex)
+    then begin
       st := TStackTrace.Create;
       ParseStackTrace(st); // changes TrcIndex
       Traces.Add(st);
@@ -448,6 +533,78 @@ end;
 
 procedure THeapTrcInfo.ParseTraceLine(s: string; var line: TStackLine);
 
+  procedure ReadValgrindLine;
+  var
+    i, SrcX, SrcY, SrcTopLine: Integer;
+    fn, TheErrorMsg: String;
+    Complete: boolean;
+    SrcCode: TCodeBuffer;
+  begin
+    i := 3;
+    while (i<=Length(s)) and (s[i] in ['0'..'9']) do inc(i);
+    if (i+2 < Length(s)) and (s[i] = '=') and (s[i+1] = '=')  and (s[i+2] = ' ')
+    then i := i + 3
+    else exit;
+    while (i<=Length(s)) and (s[i] = ' ') do inc(i);
+    if (i+2 < Length(s)) and ( (copy(s, i, 3) = 'at ') or (copy(s, i, 3) = 'by ') )
+    then i := i + 3
+    else exit;
+    Delete(s, 1, i-1);
+
+    i := pos(' ', s);
+    if i < 3 then exit;
+    line.Addr := StrToInt64Def(copy(s,1,i-1), 0);
+    Delete(s, 1, i);
+
+    i := pos(' (', s);
+    if i < 3 then exit;
+    fn := copy(s,1,i-1);
+    Delete(s, 1, i+1);
+
+    i := pos(':', s);
+    if i < 3 then exit;
+    line.FileName := copy(s,1,i-1);
+    Delete(s, 1, i);
+
+    i := pos(')', s);
+    if i < 3 then exit;
+    line.LineNum := StrToIntDef(copy(s,1,i-1), 0);
+    Delete(s, 1, i);
+
+    if (fn <> '') and (line.FileName = '') then begin
+      CodeToolBoss.FindFPCMangledIdentifier(fn ,Complete,TheErrorMsg,nil,
+         SrcCode,SrcX,SrcY,SrcTopLine);
+      if SrcCode<>nil then begin
+        line.FileName:=SrcCode.Filename;
+        line.LineNum:=SrcY;
+        line.Column:=SrcX;
+      end;
+    end;
+  end;
+
+  procedure ReadLLDBLine;
+  var
+    AnId, SrcX, SrcY, SrcTopLine: Integer;
+    AnIsCurrent, Complete: Boolean;
+    AFuncName, AReminder, TheErrorMsg: String;
+    AnArgs: TStringList;
+    SrcCode: TCodeBuffer;
+  begin
+    ParseFrameLocation(s, AnId, AnIsCurrent, TDBGPtr(line.Addr), AFuncName,
+      AnArgs, line.FileName, line.LineNum, AReminder);
+    AnArgs.Free;
+
+    if (line.FileName = '') and (AFuncName <> '') then begin
+      CodeToolBoss.FindFPCMangledIdentifier(AFuncName,Complete,TheErrorMsg,nil,
+        SrcCode,SrcX,SrcY,SrcTopLine);
+      if SrcCode<>nil then begin
+        line.FileName:=SrcCode.Filename;
+        line.LineNum:=SrcY;
+        line.Column:=SrcX;
+      end;
+    end;
+  end;
+
   procedure ReadGDBLine;
   var
     p: PChar;
@@ -471,13 +628,13 @@ procedure THeapTrcInfo.ParseTraceLine(s: string; var line: TStackLine);
     if p^='$' then
       inc(p)
     else if (p^='0') and (p[1]='x') then
-      inc(p,2)
-    else
-      exit;
+      inc(p,2);
+    //else
+    //  exit;
     StartP:=p;
     while p^ in ['0'..'9','a'..'z'] do inc(p);
     hex:=copy(s,StartP-PChar(s)+1,p-StartP);
-    Val(hex, line.Addr, err);
+    Val('$'+hex, line.Addr, err);
 
     line.LineNum := -1;
     line.FileName := '';
@@ -529,11 +686,26 @@ begin
   end else if LeftStr(s,4) = '0000' then begin
     // mantis mangled gdb
     ReadGDBLine;
-  end else if REMatches(s,'^#[0-9]+ +0x[0-9a-f]+ in ') then begin
+  end else if REMatches(s,'^#[0-9]+ +0x[0-9a-f]+ in ') or
+              REMatches(s,'^#[0-9]+ .* at ')
+  then begin
     // gdb
     //   #4  0x007489de in EXTTOOLEDITDLG_TEXTERNALTOOLMENUITEMS_$__LOAD$TCONFIGSTORAGE$$TMODALRESULT ()
     Delete(s,1,1);
     ReadGDBLine;
+  end
+  else
+  // lldb
+  if pos('frame #', s) > 0 then begin
+    if s[1] = '*' then
+      s := '  ' + s // restore spaces
+    else
+      s := '    ' + s; // restore spaces
+    ReadLLDBLine;
+  end
+  else // valgrind
+  if TValgrindParser.ValgrindLineType(s) = vltTrace then begin
+    ReadValgrindLine;
   end else begin
     i := Pos('$', s);
     if i > 0 then begin
@@ -606,11 +778,17 @@ var
   hex : string;
   NewLine: TStackLine;
   s: String;
+  ValHeader2: Boolean;
 begin
   i := Pos(RawTracePrefix, Trc[TrcIndex]);
-  if (i <= 0) and not IsTraceLine(Trc[TrcIndex]) then begin
+  if (i <= 0) and (not IsTraceLine(TrcIndex)) and
+     (TValgrindParser.ValgrindLineType(Trc[TrcIndex]) = vltNone)
+  then begin
     i := Pos(CallTracePrefix, Trc[TrcIndex]);
-    if i <= 0 then Exit;
+    if i <= 0 then begin
+      inc(TrcIndex);
+      Exit;
+    end;
 
     trace.RawStackData := Trc[TrcIndex]; // raw stack trace data
 
@@ -625,23 +803,37 @@ begin
     trace.BlockSize := 0;
   end;
 
-  if not IsTraceLine(Trc[TrcIndex]) then
+  if (TValgrindParser.ValgrindLineType(Trc[TrcIndex]) <> vltNone) and IsHeaderLine(TrcIndex)  // add valgrind headers
+  then begin
+    trace.RawStackData := Trc[TrcIndex]; // raw stack trace data
+    inc(Trcindex);
+  end
+  else
+  if (not IsTraceLine(TrcIndex)) then
     inc(TrcIndex);
-  while (TrcIndex < Trc.Count) and (Pos(CallTracePrefix, Trc[TrcIndex]) = 0) and
-        (Pos(RawTracePrefix, Trc[TrcIndex]) = 0)
+
+  ValHeader2 := False;
+  while (TrcIndex < Trc.Count) and (not IsHeaderLine(TrcIndex, True))
   do begin
+    s := Trc[Trcindex];
+    if (not ValHeader2) and (TValgrindParser.ValgrindLineType(s) = vltHeader) then begin
+      ValHeader2 := True;
+      TValgrindParser.StripValgrindPrefix(s);
+      trace.RawStackData := trace.RawStackData + '  /  ' + s;
+      s := Trc[Trcindex];
+    end;
     NewLine := TStackLine.Create; // No reference
     trace.Add(NewLine);
-    s := Trc[Trcindex];
-    if (TrcIndex < Trc.Count-1) and (not IsTraceLine(Trc[Trcindex+1], True)) and
-       (not IsHeaderLine(Trc[Trcindex+1]))
+    if (TrcIndex < Trc.Count-1) and (not IsTraceLine(Trcindex+1, True)) and
+       (not IsHeaderLine(Trcindex+1)) and
+       (TValgrindParser.ValgrindLineType(Trc[Trcindex+1]) <> vltEmpty)
     then begin
       // join next line, as there may be a linewrap
       while (length(s) > 0) and (s[length(s)] in [#10,#13]) do delete(s, length(s), 1);
       s := s + Trc[Trcindex+1];
     end;
     ParseTraceLine(s, NewLine);
-    NewLine.RawLineData := Trc[Trcindex]; // raw stack line data
+    NewLine.RawLineData := s; // raw stack line data
     inc(Trcindex);
 
     if (NewLine.FileName <> '') then begin
@@ -653,7 +845,8 @@ begin
   end;
 end;
 
-function THeapTrcInfo.GetLeakInfo(out LeakData: TLeakStatus; var Traces: TList): Boolean;
+function THeapTrcInfo.GetLeakInfo(out LeakData: TLeakStatus;
+  var Traces: TStackTraceList): Boolean;
 var
   i: Integer;
 begin
@@ -687,19 +880,49 @@ begin
   end;
 end;
 
-function THeapTrcInfo.ResolveLeakInfo(AFileName: string; Traces: TList): Boolean;
+function THeapTrcInfo.ResolveLeakInfo(AFileName: string; Traces: TStackTraceList
+  ): Boolean;
+var
+  DwarfInfo: TFpDwarfInfo;
+  ImageLoaderList: TDbgImageLoaderList;
+
+  procedure UnLoadDwarf;
+  begin
+    FreeAndNil(DwarfInfo);
+    FreeAndNil(ImageLoaderList);
+  end;
+  procedure LoadDwarf;
+  var
+    ImageLoader: TDbgImageLoader;
+  begin
+    ImageLoader := TDbgImageLoader.Create(AFileName);
+    ImageLoaderList := TDbgImageLoaderList.Create(True);
+    ImageLoader.AddToLoaderList(ImageLoaderList);
+    DwarfInfo := TFpDwarfInfo.Create(ImageLoaderList);
+    DwarfInfo.LoadCompilationUnits;
+  end;
+
 var
   trace: TStackTrace;
   i, j, k: Integer;
   CurLine: TStackLine;
+  {$IFDEF LEAK_RESOLVE_USE_FPC}
   FuncName, SrcName: shortstring;
   SrcLine: longint;
+  {$ENDIF}
   BadAddresses: TStackLines;
+  sym: TFpSymbol;
 begin
   Result := False;
+  {$IFDEF LEAK_RESOLVE_USE_FPC}
   if not OpenSymbolFile(AFileName) then
     exit;
+  {$ELSE}
+  LoadDwarf;
+  {$ENDIF}
   BadAddresses := TStackLines.Create;
+  if DwarfInfo = nil then
+    exit;
   try
     for i := 0 to Traces.Count - 1 do begin
       trace := TStackTrace(Traces[i]);
@@ -710,21 +933,40 @@ begin
           if k >= 0 then
             CurLine.Assign(FKnownAddresses.Lines[k])
           else
-          if BadAddresses.IndexOfAddr(CurLine.Addr) < 0 then begin
+          if (BadAddresses.IndexOfAddr(CurLine.Addr) < 0) and (CurLine.Addr > 0) then begin
+            {$IFDEF LEAK_RESOLVE_USE_FPC}
             if GetLineInfo(CurLine.Addr, FuncName, SrcName, SrcLine) then begin
               CurLine.FileName := SrcName;
               CurLine.LineNum := SrcLine;
               FKnownAddresses.Add(CurLine);
             end
+            {$ELSE}
+            if j > 0 then
+              sym := DwarfInfo.FindProcSymbol(CurLine.Addr - 1 + ImageLoaderList.ImageBase)
+            else
+              sym := DwarfInfo.FindProcSymbol(CurLine.Addr + ImageLoaderList.ImageBase);
+            if (sym <> nil) and (sym.Line > 0) then begin
+              CurLine.FileName := sym.FileName;
+              CurLine.LineNum := sym.Line;
+              FKnownAddresses.Add(CurLine);
+            end
+            {$ENDIF}
             else begin
               BadAddresses.Add(CurLine);
             end;
+            {$IFnDEF LEAK_RESOLVE_USE_FPC}
+            ReleaseRefAndNil(sym);
+            {$ENDIF}
           end;
         end;
       end;
     end;
   finally
+    {$IFDEF LEAK_RESOLVE_USE_FPC}
     CloseSymbolFile;
+    {$ELSE}
+    UnLoadDwarf;
+    {$ENDIF}
     FreeAndNil(BadAddresses);
     Result := True;
   end;

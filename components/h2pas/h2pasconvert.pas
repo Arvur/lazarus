@@ -23,15 +23,19 @@ unit H2PasConvert;
 interface
 
 uses
-  Classes, SysUtils, Laz_AVL_Tree, LCLProc, Forms, Controls, Dialogs,
-  LResources, XMLPropStorage,
+  Classes, SysUtils, Laz_AVL_Tree,
+  // LCL
+  LCLProc, LResources, Forms, Controls, Dialogs, XMLPropStorage,
+  // LazUtils
   LazConfigStorage, FileUtil, LazFileUtils, LazFileCache, LazUTF8Classes,
   // CodeTools
   CodeAtom, CodeTree, KeywordFuncLists, NonPascalCodeTools, BasicCodeTools,
   FileProcs, CodeCache, SourceChanger, CodeToolManager,
   // IDEIntf
   TextTools, IDEExternToolIntf, IDEDialogs, LazIDEIntf, SrcEditorIntf,
-  IDEMsgIntf, IDETextConverter, h2passtrconsts;
+  IDEMsgIntf, IDETextConverter,
+  // H2Pas
+  H2PasStrConsts;
   
 type
 
@@ -622,7 +626,7 @@ type
   TH2PasParser = class(TExtToolParser)
   public
     class function DefaultSubTool: string; override;
-    procedure ReadLine(Line: string; OutputIndex: integer; var {%H-}Handled: boolean
+    procedure ReadLine(Line: string; OutputIndex: integer; IsStdErr: boolean; var {%H-}Handled: boolean
       ); override; // (worker thread)
   end;
 
@@ -712,7 +716,7 @@ begin
   Result:=SubToolH2Pas;
 end;
 
-procedure TH2PasParser.ReadLine(Line: string; OutputIndex: integer;
+procedure TH2PasParser.ReadLine(Line: string; OutputIndex: integer; IsStdErr: boolean;
   var Handled: boolean);
 
   function ReadString(var p: PChar; Expected: PChar): boolean;

@@ -374,15 +374,13 @@ type
     SelFont: TQtFont;
     SelBrush: TQtBrush;
     SelPen: TQtPen;
-    PenColor: TQColor;
     FMetrics: TQtFontMetrics;
     function GetMetrics: TQtFontMetrics;
     function GetRop: Integer;
     function DeviceSupportsComposition: Boolean;
     function DeviceSupportsRasterOps: Boolean;
     function R2ToQtRasterOp(AValue: Integer): QPainterCompositionMode;
-    procedure RestorePenColor;
-    procedure RestoreTextColor;
+    procedure SetTextPen;
     procedure SetRop(const AValue: Integer);
   public
     { public fields }
@@ -495,7 +493,7 @@ type
     function getHeight: Integer;
     function getWidth: Integer;
     procedure grabWidget(AWidget: QWidgetH; x: Integer = 0; y: Integer = 0; w: Integer = -1; h: Integer = -1);
-    procedure grabWindow(p1: Cardinal; x: Integer = 0; y: Integer = 0; w: Integer = -1; h: Integer = -1);
+    procedure grabWindow(p1: PtrUInt; x: Integer = 0; y: Integer = 0; w: Integer = -1; h: Integer = -1);
     procedure toImage(retval: QImageH);
     class procedure fromImage(retval: QPixmapH; image: QImageH; flags: QtImageConversionFlags = QtAutoColor);
   end;
@@ -2480,8 +2478,10 @@ begin
   if AColor = nil then
     AColor := BackgroundBrush.getColor;
   // stop asserts from qtlib
+  {issue #36411. Seem that assert triggered in Qt4 < 4.7 only.
   if (w < x) or (h < y) then
     exit;
+  }
   q_DrawPlainRect(Widget, x, y, w, h, AColor, lineWidth, FillBrush);
 end;
 
@@ -2535,7 +2535,7 @@ begin
       Palette := QWidget_palette(Parent);
   end;
   // since q_DrawWinPanel doesnot supports lineWidth we should do it ourself
-  for i := 1 to lineWidth - 2 do
+  for i := 1 to lineWidth - 1 do
   begin
     q_DrawWinPanel(Widget, x, y, w, h, Palette, Sunken);
     inc(x);
@@ -2730,19 +2730,6 @@ begin
   end;
 end;
 
-{------------------------------------------------------------------------------
-  Function: TQtDeviceContext.RestorePenColor
-  Params:  None
-  Returns: Nothing
- ------------------------------------------------------------------------------}
-procedure TQtDeviceContext.RestorePenColor;
-begin
-  {$ifdef VerboseQt}
-  writeln('TQtDeviceContext.RestorePenColor() ');
-  {$endif}
-  QPainter_setPen(Widget, @PenColor);
-end;
-
 function TQtDeviceContext.GetRop: Integer;
 begin
   Result := FRopMode;
@@ -2754,23 +2741,20 @@ begin
 end;
 
 {------------------------------------------------------------------------------
-  Function: TQtDeviceContext.RestoreTextColor
+  Function: TQtDeviceContext.SetTextPen
   Params:  None
   Returns: Nothing
  ------------------------------------------------------------------------------}
-procedure TQtDeviceContext.RestoreTextColor;
+procedure TQtDeviceContext.SetTextPen;
 var
-  CurPen: QPenH;
   TxtColor: TQColor;
 begin
   {$ifdef VerboseQt}
   writeln('TQtDeviceContext.RestoreTextColor() ');
   {$endif}
-  CurPen := QPainter_Pen(Widget);
-  QPen_color(CurPen, @PenColor);
-  TxtColor := PenColor;
+  TxtColor := Default(TQColor);
   ColorRefToTQColor(vTextColor, TxtColor);
-  QPainter_setPen(Widget, @txtColor);
+  QPainter_setPen(Widget, PQColor(@txtColor));
 end;
 
 procedure TQtDeviceContext.SetRop(const AValue: Integer);
@@ -2792,8 +2776,6 @@ end;
  ------------------------------------------------------------------------------}
 procedure TQtDeviceContext.drawRect(x1: Integer; y1: Integer; w: Integer;
   h: Integer);
-var
-  PW: Double;
 begin
   {$ifdef VerboseQt}
   writeln('TQtDeviceContext.drawRect() x1: ',x1,' y1: ',y1,' w: ',w,' h: ',h);
@@ -2820,10 +2802,8 @@ end;
   To get a correct behavior we need to sum the text's height to the Y coordinate.
  ------------------------------------------------------------------------------}
 procedure TQtDeviceContext.drawText(x: Integer; y: Integer; s: PWideString);
-{$IFDEF DARWIN}
 var
-  OldBkMode: Integer;
-{$ENDIF}
+  APen: QPenH;
 begin
   {$ifdef VerboseQt}
   Write('TQtDeviceContext.drawText TargetX: ', X, ' TargetY: ', Y);
@@ -2840,23 +2820,16 @@ begin
   // what about Metrics.descent and Metrics.leading ?
   y := y + Metrics.ascent;
 
-  RestoreTextColor;
-
+  APen := QPen_create(QPainter_pen(Widget));
+  SetTextPen;
   // The ascent is only applied here, because it also needs
   // to be rotated
-  {$IFDEF DARWIN}
-  OldBkMode := SetBkMode(TRANSPARENT);
-  {$ENDIF}
   if Font.Angle <> 0 then
     QPainter_drawText(Widget, 0, Metrics.ascent, s)
   else
     QPainter_drawText(Widget, x, y, s);
-  {$IFDEF DARWIN}
-  SetBkMode(OldBkMode);
-  {$ENDIF}
-  
-  RestorePenColor;
-  
+  QPainter_setPen(Widget, APen);
+  QPen_destroy(APen);
   // Restore previous angle
   if Font.Angle <> 0 then
   begin
@@ -2877,10 +2850,8 @@ end;
   Returns: Nothing
  ------------------------------------------------------------------------------}
 procedure TQtDeviceContext.drawText(x, y, w, h, flags: Integer; s: PWideString);
-{$IFDEF DARWIN}
 var
-  OldBkMode: Integer;
-{$ENDIF}
+  APen: QPenH;
 begin
   {$ifdef VerboseQt}
   Write('TQtDeviceContext.drawText x: ', X, ' Y: ', Y,' w: ',w,' h: ',h);
@@ -2894,18 +2865,14 @@ begin
     Rotate(-0.1 * Font.Angle);
   end;
 
-  RestoreTextColor;
-  {$IFDEF DARWIN}
-  OldBkMode := SetBkMode(TRANSPARENT);
-  {$ENDIF}
+  APen := QPen_create(QPainter_pen(Widget));
+  SetTextPen;
   if Font.Angle <> 0 then
     QPainter_DrawText(Widget, 0, 0, w, h, Flags, s)
   else
     QPainter_DrawText(Widget, x, y, w, h, Flags, s);
-  {$IFDEF DARWIN}
-  SetBkMode(OldBkMode);
-  {$ENDIF}
-  RestorePenColor;
+  QPainter_setPen(Widget, APen);
+  QPen_destroy(APen);
 
   // Restore previous angle
   if Font.Angle <> 0 then
@@ -3135,8 +3102,9 @@ begin
   SelFont := AFont;
   if (AFont.FHandle <> nil) and (Widget <> nil) then
   begin
-    QFnt := QPainter_font(Widget);
-    AssignQtFont(AFont.FHandle, QFnt);
+    QFnt := QFont_Create(AFont.FHandle);
+    QPainter_setFont(Widget, QFnt);
+    QFont_destroy(QFnt);
     vFont.Angle := AFont.Angle;
   end;
 end;
@@ -3434,7 +3402,11 @@ var
   ScaledMask: QImageH;
   NewRect: TRect;
   ARenderHint: Boolean;
-
+  ATransformation: QtTransformationMode;
+  ARenderHints: QPainterRenderHints;
+  {$IFDEF DARWIN}
+  BMacPrinter: boolean;
+  {$ENDIF}
   function NeedScaling: boolean;
   var
     R: TRect;
@@ -3462,6 +3434,10 @@ begin
   {$endif}
   ScaledImage := nil;
   LocalRect := targetRect^;
+
+  {$IFDEF DARWIN}
+  BMacPrinter := (PaintEngine <> nil) and (QPaintEngine_type(PaintEngine) = QPaintEngineMacPrinter);
+  {$ENDIF}
 
   if mask <> nil then
   begin
@@ -3568,9 +3544,17 @@ begin
         ScaledImage := QImage_create();
         try
           QImage_copy(Image, ScaledImage, 0, 0, QImage_width(Image), QImage_height(Image));
-          // use smooth transformation when scaling image. issue #29883
+          {use smooth transformation when scaling image. issue #29883
+           check if antialiasing is on, if not then don''t call smoothTransform. issue #330011}
+          ARenderHints := QPainter_renderHints(Widget);
+          if (ARenderHints and QPainterAntialiasing <> 0) or (ARenderHints and QPainterSmoothPixmapTransform <> 0) or
+            (ARenderHints and QPainterHighQualityAntialiasing <> 0) then
+              ATransformation := QtSmoothTransformation
+          else
+            ATransformation := QtFastTransformation;
+
           QImage_scaled(ScaledImage, ScaledImage, LocalRect.Right - LocalRect.Left,
-            LocalRect.Bottom - LocalRect.Top, QtIgnoreAspectRatio, QtSmoothTransformation);
+            LocalRect.Bottom - LocalRect.Top, QtIgnoreAspectRatio, ATransformation);
           NewRect := sourceRect^;
           NewRect.Right := (LocalRect.Right - LocalRect.Left) + sourceRect^.Left;
           NewRect.Bottom := (LocalRect.Bottom - LocalRect.Top) + sourceRect^.Top;
@@ -3580,13 +3564,30 @@ begin
         end;
       end else
       begin
-        // smooth a bit. issue #29883
-        ARenderHint := QPainter_testRenderHint(Widget, QPainterSmoothPixmapTransform);
-        if (QImage_format(image) = QImageFormat_ARGB32) and (flags = QtAutoColor) and
+        {smooth a bit. issue #29883
+         check if antialiasing is on, if not then don''t call smoothTransform. issue #330011}
+
+        ARenderHints := QPainter_renderHints(Widget);
+        ARenderHint := (ARenderHints and QPainterAntialiasing <> 0) or (ARenderHints and QPainterSmoothPixmapTransform <> 0) or
+          (ARenderHints and QPainterHighQualityAntialiasing <> 0);
+
+        if ARenderHint and (QImage_format(image) = QImageFormat_ARGB32) and (flags = QtAutoColor) and
           not EqualRect(LocalRect, sourceRect^) then
             QPainter_setRenderHint(Widget, QPainterSmoothPixmapTransform, True);
-        QPainter_drawImage(Widget, PRect(@LocalRect), image, sourceRect, flags);
-        QPainter_setRenderHint(Widget, QPainterSmoothPixmapTransform, ARenderHint);
+
+        {$IFDEF DARWIN}
+        if BMacPrinter then
+        begin
+          ScaledImage := QImage_create();
+          QImage_convertToFormat(Image, ScaledImage, QImageFormat_ARGB32_Premultiplied);
+          QPainter_drawImage(Widget, PRect(@LocalRect), ScaledImage, sourceRect, flags);
+          QImage_destroy(ScaledImage);
+        end else
+        {$ENDIF}
+          QPainter_drawImage(Widget, PRect(@LocalRect), image, sourceRect, flags);
+
+        if ARenderHint then
+          QPainter_setRenderHint(Widget, QPainterSmoothPixmapTransform, not ARenderHint);
       end;
     end;
   end;
@@ -3692,7 +3693,7 @@ begin
   QPixmap_grabWidget(FHandle, AWidget, x, y, w, h);
 end;
 
-procedure TQtPixmap.grabWindow(p1: Cardinal; x: Integer; y: Integer; w: Integer; h: Integer);
+procedure TQtPixmap.grabWindow(p1: PtrUInt; x: Integer; y: Integer; w: Integer; h: Integer);
 begin
   QPixmap_grabWindow(FHandle, p1, x, y, w, h);
 end;
@@ -4425,7 +4426,8 @@ var
   Str: WideString;
 begin
   Str := GetUtf8String(AValue);
-  QPrinter_setPrinterName(FHandle, @Str);
+  if getPrinterName <> Str then
+    QPrinter_setPrinterName(FHandle, @Str);
 end;
 
 function TQtPrinter.getPrinterName: WideString;
@@ -4748,12 +4750,14 @@ end;
 
 constructor TQtStringList.Create;
 begin
+  inherited Create;
   FHandle := QStringList_create();
   FOwnHandle := True;
 end;
 
 constructor TQtStringList.Create(Source: QStringListH);
 begin
+  inherited Create;
   FHandle := Source;
   FOwnHandle := False;
 end;

@@ -23,10 +23,15 @@ unit SynEditMarkupIfDef;
 interface
 
 uses
-  SysUtils, Classes, SynEditMiscClasses, SynHighlighterPas, SynEditMarkupHighAll,
+  SysUtils, Classes,
+  // LCL
+  Graphics, LCLProc,
+  // LazUtils
+  LazClasses, LazLoggerBase, LazMethodList,
+  // SynEdit
+  SynEditMiscClasses, SynHighlighterPas, SynEditMarkupHighAll,
   SynEditHighlighterFoldBase, SynEditFoldedView, LazSynEditText, SynEditMiscProcs,
-  SynEditMarkup, SynEditPointClasses, SynEditHighlighter, LazClasses, LazLoggerBase, Graphics,
-  LCLProc;
+  SynEditMarkup, SynEditPointClasses, SynEditHighlighter;
 
 type
 
@@ -1579,6 +1584,7 @@ end;
 function TSynMarkupHighIfDefLinesNodeInfo.Precessor: TSynMarkupHighIfDefLinesNodeInfo;
 begin
   ClearNestCache;
+  Result.ClearNestCache;
   Result.FTree := FTree;
   If HasNode then begin
     Result.FStartLine := FStartLine;
@@ -1601,6 +1607,7 @@ end;
 function TSynMarkupHighIfDefLinesNodeInfo.Successor: TSynMarkupHighIfDefLinesNodeInfo;
 begin
   ClearNestCache;
+  Result.ClearNestCache;
   Result.FTree := FTree;
   If HasNode then begin
     Result.FStartLine := FStartLine;

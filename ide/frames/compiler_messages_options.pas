@@ -5,10 +5,20 @@ unit compiler_messages_options;
 interface
 
 uses
-  Classes, SysUtils, FileUtil, LazFileCache, LazLoggerBase, ListFilterEdit,
-  StdCtrls, CheckLst, Dialogs, IDEOptionsIntf, IDEExternToolIntf,
-  IDEDialogs, CompOptsIntf, IDEImagesIntf, CodeToolsFPCMsgs, CompilerOptions,
-  LazarusIDEStrConsts, etFPCMsgParser;
+  Classes, SysUtils,
+  // LCL
+  StdCtrls, CheckLst, Dialogs,
+  // LazUtils
+  FileUtil, LazFileCache, LazLoggerBase,
+  // LazControls
+  ListFilterEdit,
+  // CodeTools
+  CodeToolsFPCMsgs,
+  // IdeIntf
+  IDEOptionsIntf, IDEOptEditorIntf, IDEExternToolIntf, CompOptsIntf, IDEImagesIntf,
+  IDEDialogs,
+  // IDE
+  CompilerOptions, LazarusIDEStrConsts, etFPCMsgParser;
 
 type
 
@@ -75,7 +85,7 @@ procedure TCompilerMessagesOptionsFrame.MsgFileBrowseButtonClick(Sender: TObject
 var
   OpenDialog: TOpenDialog;
 begin
-  OpenDialog:=TOpenDialog.Create(nil);
+  OpenDialog:=IDEOpenDialogClass.Create(nil);
   try
     InitIDEFileDialog(OpenDialog);
     OpenDialog.Title:=lisChooseAnFPCMessageFile;
@@ -102,7 +112,6 @@ begin
   UseMsgFileCheckBox.Visible:=false;
   MsgFileEdit.Visible:=false;
   MsgFileBrowseButton.Visible:=false;
-  TIDEImages.AssignImage(editMsgFilter.Glyph, 'btnfiltercancel');
 end;
 
 destructor TCompilerMessagesOptionsFrame.Destroy;

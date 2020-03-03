@@ -47,7 +47,7 @@ uses
   // IDEIntf
   LazIDEIntf, IDEImagesIntf, SrcEditorIntf, IDEWindowIntf,
   // IDE
-  LazarusIDEStrConsts;
+  EnvironmentOpts, LazarusIDEStrConsts;
 
 type
 
@@ -81,8 +81,6 @@ type
     ToolButton7: TToolButton;
     tbChangeFont: TToolButton;
     ToolButton9: TToolButton;
-    procedure cbObjectsChange(Sender: TObject);
-    procedure edMethodsChange(Sender: TObject);
     procedure edMethodsKeyDown(Sender: TObject; var Key: Word;
       {%H-}Shift: TShiftState);
     procedure edMethodsKeyPress(Sender: TObject; var Key: char);
@@ -96,6 +94,7 @@ type
       {%H-}aState: TGridDrawState);
     procedure SGSelectCell(Sender: TObject; {%H-}aCol, aRow: Integer;
       var {%H-}CanSelect: Boolean);
+    procedure SomethingChange(Sender: TObject);
     procedure tbAboutClick(Sender: TObject);
     procedure tbCopyClick(Sender: TObject);
   private
@@ -158,25 +157,6 @@ begin
   finally
     frm.Free;
   end;
-end;
-
-
-{ Check, if the given string starts with this substring. Check ignores case. }
-function StrStartsWith(sStr, sSubstr: String): Boolean;
-begin
-  sStr := AnsiUpperCase(sStr);
-  sSubstr := AnsiUpperCase(sSubstr);
-
-  Result := Pos(sSubstr, sStr) = 1;
-end;
-
-
-function StrContains(const SubStr, Str: string; CaseSensitive: Boolean): Boolean;
-begin
-  if CaseSensitive then
-    Result := Pos(SubStr, Str) > 0
-  else
-    Result := Pos(AnsiUpperCase(SubStr), AnsiUpperCase(Str)) > 0;
 end;
 
 
@@ -257,15 +237,42 @@ end;
 
 { TProcedureListForm }
 
+procedure TProcedureListForm.FormCreate(Sender: TObject);
+begin
+  if SourceEditorManagerIntf.ActiveEditor = nil then
+  begin
+    //SetupGUI makes the dialog look as it should, and is clears the listview
+    //thus preventing a crash when clicking on the LV
+    SetupGUI;
+    Exit; //==>
+  end;
+
+  FMainFilename := SourceEditorManagerIntf.ActiveEditor.Filename;
+  Caption := Caption + ExtractFileName(FMainFilename);
+  SetupGUI;
+  PopulateObjectsCombo;
+  PopulateGrid;
+  StatusBar.Panels[0].Text := self.MainFilename;
+  tbFilterStart.Down := EnvironmentOptions.ProcedureListFilterStart;
+  IDEDialogLayoutList.ApplyLayout(Self, 950, 680);
+end;
+
+procedure TProcedureListForm.FormDestroy(Sender: TObject);
+begin
+  EnvironmentOptions.ProcedureListFilterStart := tbFilterStart.Down;
+  ClearGrid;
+  IDEDialogLayoutList.SaveLayout(self);
+end;
+
 procedure TProcedureListForm.FormResize(Sender: TObject);
 begin
   StatusBar.Panels[0].Width := self.ClientWidth - 105;
 end;
 
-
 procedure TProcedureListForm.FormShow(Sender: TObject);
 begin
   edMethods.SetFocus;
+  cbObjects.DropDownCount := EnvironmentOptions.DropDownCount;
 end;
 
 procedure TProcedureListForm.SGDblClick(Sender: TObject);
@@ -315,19 +322,6 @@ begin
   end;
 end;
 
-
-procedure TProcedureListForm.tbAboutClick(Sender: TObject);
-begin
-  ShowMessage(cAbout);
-end;
-
-procedure TProcedureListForm.tbCopyClick(Sender: TObject);
-begin
-  if SG.Row > 0 then
-    Clipboard.AsText := SG.Cells[SG_COLIDX_PROCEDURE,SG.Row];
-end;
-
-
 procedure TProcedureListForm.SetupGUI;
 begin
   self.KeyPreview     := True;
@@ -353,16 +347,16 @@ begin
   tbChangeFont.ImageIndex  := IDEImages.LoadImage('item_font');
   tbAbout.ImageIndex       := IDEImages.LoadImage('menu_information');
   tbJumpTo.ImageIndex      := IDEImages.LoadImage('menu_goto_line');
-  tbFilterAny.ImageIndex   := IDEImages.LoadImage('item_filter');
-  tbFilterStart.ImageIndex := IDEImages.LoadImage('item_filter');
+  tbFilterAny.ImageIndex   := IDEImages.LoadImage('filter_any_place');
+  tbFilterStart.ImageIndex := IDEImages.LoadImage('filter_from_begin');
 
   SG.Columns[SG_COLIDX_IMAGE].Width  := 20;
   SG.Columns[SG_COLIDX_PROCEDURE].Width  := 300;
   SG.Columns[SG_COLIDX_TYPE].Width  := 110;
   SG.Columns[SG_COLIDX_LINE].Width  := 60;
 
-  FImageIdxProcedure  := IDEImages.LoadImage('ce_procedure');
-  FImageIdxFunction   := IDEImages.LoadImage('ce_function');;
+  FImageIdxProcedure  := IDEImages.LoadImage('cc_procedure');
+  FImageIdxFunction   := IDEImages.LoadImage('cc_function');;
 
   cbObjects.Style     := csDropDownList;
   cbObjects.Sorted    := True;
@@ -651,34 +645,6 @@ begin
   end;
 end;
 
-
-procedure TProcedureListForm.FormCreate(Sender: TObject);
-begin
-  if SourceEditorManagerIntf.ActiveEditor = nil then
-  begin
-    //SetupGUI makes the dialog look as it should, and is clears the listview
-    //thus preventing a crash when clicking on the LV
-    SetupGUI;
-    Exit; //==>
-  end;
-
-  FMainFilename := SourceEditorManagerIntf.ActiveEditor.Filename;
-  Caption := Caption + ExtractFileName(FMainFilename);
-  SetupGUI;
-  PopulateObjectsCombo;
-  PopulateGrid;
-  StatusBar.Panels[0].Text := self.MainFilename;
-
-  IDEDialogLayoutList.ApplyLayout(Self, 950, 680);
-end;
-
-procedure TProcedureListForm.FormDestroy(Sender: TObject);
-begin
-  ClearGrid;
-  IDEDialogLayoutList.SaveLayout(self);
-end;
-
-
 procedure TProcedureListForm.edMethodsKeyPress(Sender: TObject; var Key: char);
 begin
   case Key of
@@ -694,19 +660,6 @@ begin
       end;
   end;
 end;
-
-
-procedure TProcedureListForm.edMethodsChange(Sender: TObject);
-begin
-  PopulateGrid;
-end;
-
-
-procedure TProcedureListForm.cbObjectsChange(Sender: TObject);
-begin
-  PopulateGrid;
-end;
-
 
 procedure TProcedureListForm.edMethodsKeyDown(Sender: TObject; var Key: Word;
   Shift: TShiftState);
@@ -735,6 +688,22 @@ begin
       SG.Row := SG.RowCount - 1;
   end;
 
+end;
+
+procedure TProcedureListForm.SomethingChange(Sender: TObject);
+begin
+  PopulateGrid;
+end;
+
+procedure TProcedureListForm.tbAboutClick(Sender: TObject);
+begin
+  ShowMessage(cAbout);
+end;
+
+procedure TProcedureListForm.tbCopyClick(Sender: TObject);
+begin
+  if SG.Row > 0 then
+    Clipboard.AsText := SG.Cells[SG_COLIDX_PROCEDURE,SG.Row];
 end;
 
 end.

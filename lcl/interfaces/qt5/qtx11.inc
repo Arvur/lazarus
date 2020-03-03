@@ -6,6 +6,8 @@ var
   XDisplay: PDisplay;
   WMAtom: TAtom;
 begin
+  if IsWayland then
+    exit(False);
   Result := QX11Info_isPlatformX11();
   if not Result then
     exit;
@@ -16,8 +18,13 @@ begin
 end;
 
 function IsWayland: Boolean;
+var
+  APlatform: WideString;
 begin
-  Result := GetEnvironmentVariable('XDG_SESSION_TYPE') = 'wayland';
+  Result := False;
+  QGuiApplication_platformName(@APlatform);
+  Result := APlatform = 'wayland';
+  // not QX11Info_isPlatformX11() and (GetEnvironmentVariable('XDG_SESSION_TYPE') = 'wayland');
 end;
 
 function IsOldKDEInstallation: Boolean;
@@ -68,7 +75,7 @@ var
   WidgetWin: TWindow;
 begin
   Result := True;
-  if AWidget = nil then
+  if (AWidget = nil) or IsWayland then
     exit;
   Display := QX11Info_display();
   if Display = nil then
@@ -112,7 +119,7 @@ begin
   end;
 end;
 
-function X11Raise(AHandle: HWND): boolean;
+function X11Raise(AHandle: PtrUInt): boolean;
 var
    Display: PDisplay;
    RootWin: TWindow;
@@ -121,6 +128,8 @@ var
    WMAtom: TAtom;
 begin
   Result := False;
+  if IsWayland then
+    exit;
   Display := QX11Info_display();
 
   if Display = nil then
@@ -155,6 +164,11 @@ var
   Valid: Boolean;
 begin
   Result := nil;
+  if IsWayland then
+  begin
+    Result := QApplication_activeWindow();
+    exit;
+  end;
   Display := QX11Info_display();
 
   if Display = nil then
@@ -198,6 +212,13 @@ var
   data: Pointer;
 begin
   Result := '';
+
+  if IsWayland then
+  begin
+    Result := 'wayland';
+    exit;
+  end;
+
   Display := QX11Info_display();
 
   if Display = nil then
@@ -248,10 +269,10 @@ end;
 function SetTransientForHint(Widget: QWidgetH; ATransientWin: QWidgetH): boolean;
 var
    Display: PDisplay;
-   AWin: LongWord;
+   AWin: PtrUInt;
 begin
   Result := False;
-  if Widget = nil then
+  if (Widget = nil) or IsWayland then
     exit;
   Display := QX11Info_display();
 
@@ -275,7 +296,10 @@ var
    ScreenNum: Integer;
    XClient: TXClientMessageEvent;
    WMAtom: TAtom;
+   APlatform: WideString;
 begin
+  if IsWayland then
+    exit;
   Display := QX11Info_display();
 
   if Display = nil then
@@ -318,6 +342,8 @@ var
   data: Pointer;
 begin
   Result := False;
+  if IsWayland then
+    exit;
   Display := QX11Info_display();
 
   if Display = nil then
@@ -365,6 +391,8 @@ var
   n: Cardinal;
 begin
   Result := False;
+  if IsWayland then
+    exit;
   Display := QX11Info_display();
 
   if (Display = nil) then
@@ -380,14 +408,16 @@ begin
   end;
 end;
 
-procedure MapX11Window(AWinID: LongWord);
+procedure MapX11Window(AWinID: PtrUInt);
 begin
+  if IsWayland then
+    exit;
   XMapWindow(QX11Info_display(), TWindow(AWinID));
 end;
 
 {$IFDEF QtUseAccurateFrame}
 
-function GetX11WindowRealized(AWinID: LongWord): boolean;
+function GetX11WindowRealized(AWinID: PtrUInt): boolean;
 var
   d: PDisplay;
   AXWinAttr: TXWindowAttributes;
@@ -398,7 +428,7 @@ begin
   Result := (AXWinAttr.map_installed > 0) and (AXWinAttr.map_state = 2);
 end;
 
-function GetX11WindowAttributes(AWinID: LongWord; out ALeft, ATop, AWidth, AHeight, ABorder: integer): boolean;
+function GetX11WindowAttributes(AWinID: PtrUInt; out ALeft, ATop, AWidth, AHeight, ABorder: integer): boolean;
 var
   d: PDisplay;
   Attr: TXWindowAttributes;
@@ -422,7 +452,7 @@ begin
   end;
 end;
 
-function GetX11WindowPos(AWinID: LongWord; out ALeft, ATop: integer): boolean;
+function GetX11WindowPos(AWinID: PtrUInt; out ALeft, ATop: integer): boolean;
 var
   D: PDisplay;
   ARootWindow, AChildWin: TWindow;
@@ -442,7 +472,7 @@ begin
   Result := (AXWinAttr.map_installed > 0) and (AXWinAttr.map_state = 2);
 end;
 
-function SetX11WindowPos(AWinID: LongWord; const ALeft, ATop: integer): boolean;
+function SetX11WindowPos(AWinID: PtrUInt; const ALeft, ATop: integer): boolean;
 var
   D: PDisplay;
   ARootWindow, AChildWin: TWindow;
@@ -462,10 +492,10 @@ var
 function propNotifyFrameExtents({%H-}ADisplay: PDisplay; AEvent:PXEvent;
   AData : TXPointer): TBoolResult;cdecl;
 var
-  AWin: PLongWord;
+  AWin: PPtrUInt;
 begin
   Result := False;
-  AWin := PLongWord(AData);
+  AWin := PPtrUInt(AData);
   if (AEvent^.xany.window = AWin^) then
     inc(InternalExtentsCounter);
   if (AEvent^.xany._type = PropertyNotify) and (AEvent^.xany.window = AWin^) then
@@ -480,7 +510,7 @@ begin
   end;
 end;
 
-function AskX11_NET_REQUEST_FRAME_EXTENTS(AWinID: LongWord; out AMargins: TRect): boolean;
+function AskX11_NET_REQUEST_FRAME_EXTENTS(AWinID: PtrUInt; out AMargins: TRect): boolean;
 var
   AAtom: TAtom;
   AEvent: TXEvent;
@@ -545,7 +575,7 @@ begin
   end;
 end;
 
-function GetX11WindowGeometry(AWinID: LongWord; out ARect: TRect): boolean;
+function GetX11WindowGeometry(AWinID: PtrUInt; out ARect: TRect): boolean;
 var
   d: PDisplay;
   ARootWin, X11Window: TWindow;
@@ -578,7 +608,7 @@ type
   PUint32 = PDWord;
 {$ENDIF}
 
-function GetX11RectForAtom(AWinID: LongWord; const AAtomName: string; out ARect: TRect): boolean;
+function GetX11RectForAtom(AWinID: PtrUInt; const AAtomName: string; out ARect: TRect): boolean;
 var
   d: PDisplay;
   X11Window: TWindow;
@@ -656,7 +686,7 @@ begin
   end;
 end;
 
-function GetX11SupportedAtoms(AWinID: LongWord; AList: TStrings): boolean;
+function GetX11SupportedAtoms(AWinID: PtrUInt; AList: TStrings): boolean;
 var
   d: PDisplay;
   ARoot: TWindow;

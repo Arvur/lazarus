@@ -25,16 +25,23 @@ unit fpdoc_options;
 interface
 
 uses
-  Classes, SysUtils, FileUtil, Forms, Dialogs, StdCtrls, EditBtn,
-  EnvironmentOpts, LazarusIDEStrConsts, IDEProcs, IDEOptionsIntf;
+  SysUtils,
+  // LCL
+  Dialogs, StdCtrls, EditBtn, Buttons,
+  // LazUtils
+  LazStringUtils,
+  // IdeIntf
+  IDEOptionsIntf, IDEOptEditorIntf, IDEImagesIntf,
+  // IDE
+  EnvironmentOpts, LazarusIDEStrConsts;
 
 type
 
   { TFpDocOptionsFrame }
 
   TFpDocOptionsFrame = class(TAbstractIDEOptionsEditor)
-    LazDocAddPathButton: TButton;
-    LazDocDeletePathButton: TButton;
+    LazDocAddPathButton: TBitBtn;
+    LazDocDeletePathButton: TBitBtn;
     LazDocListBox: TListBox;
     LazDocPathEdit: TDirectoryEdit;
     LazDocPathsGroupBox: TGroupBox;
@@ -66,7 +73,9 @@ procedure TFpDocOptionsFrame.Setup(ADialog: TAbstractOptionsEditorDialog);
 begin
   LazDocPathsGroupBox.Caption := lisCodeHelpGroupBox;
   LazDocAddPathButton.Caption := lisCodeHelpAddPathButton;
+  IDEImages.AssignImage(LazDocAddPathButton, 'laz_add');
   LazDocDeletePathButton.Caption := lisCodeHelpDeletePathButton;
+  IDEImages.AssignImage(LazDocDeletePathButton, 'laz_delete');
 
   LazDocPathEdit.Clear;
 end;

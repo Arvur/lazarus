@@ -73,7 +73,6 @@ type
     FMemReader: TFpGDBMIDbgMemReader;
     FMemManager: TFpDbgMemManager;
     // cache last context
-    FlastStackFrame, FLastThread: Integer;
     FLastContext: array [0..MAX_CTX_CACHE-1] of TFpDbgInfoContext;
   protected
     function CreateCommandStartDebugging(AContinueCommand: TGDBMIDebuggerCommand): TGDBMIDebuggerCommandStartDebugging; override;
@@ -84,7 +83,9 @@ type
     function  HasDwarf: Boolean;
     procedure LoadDwarf;
     procedure UnLoadDwarf;
-    function  RequestCommand(const ACommand: TDBGCommand; const AParams: array of const): Boolean; override;
+    function  RequestCommand(const ACommand: TDBGCommand;
+              const AParams: array of const;
+              const ACallback: TMethod): Boolean; override;
     procedure QueueCommand(const ACommand: TGDBMIDebuggerCommand; ForceQueue: Boolean = False);
 
     procedure GetCurrentContext(out AThreadId, AStackFrame: Integer);
@@ -93,6 +94,7 @@ type
     property CurrentCommand;
     property TargetPID;
   protected
+    procedure ClearWatchEvalList;
     procedure DoWatchFreed(Sender: TObject);
     function EvaluateExpression(AWatchValue: TWatchValue;
                                 AExpression: String;
@@ -113,7 +115,7 @@ procedure Register;
 implementation
 
 var
-  FPGDBDBG_VERBOSE, FPGDBDBG_ERROR: PLazLoggerLogGroup;
+  DBG_VERBOSE, DBG_ERRORS: PLazLoggerLogGroup;
 
 type
 
@@ -165,6 +167,7 @@ type
   private
     FOwner: TFPGDBMILocals;
     FLocals: TLocals;
+    procedure DoLocalsFreed(Sender: TObject);
   protected
     function DoExecute: Boolean; override;
     procedure DoLockQueueExecute; override;
@@ -197,7 +200,7 @@ type
     constructor Create(const ADebugger: TDebuggerIntf);
     destructor Destroy; override;
     function Count: Integer; override;
-    function GetAddress(const AIndex: Integer; const ALine: Integer): TDbgPtr; override;
+    function HasAddress(const AIndex: Integer; const ALine: Integer): Boolean; override;
     function GetInfo(AAdress: TDbgPtr; out ASource, ALine, AOffset: Integer): Boolean; override;
     function IndexOf(const ASource: String): integer; override;
     procedure Request(const ASource: String); override;
@@ -228,9 +231,17 @@ end;
 
 { TFpGDBMIDebuggerCommandLocals }
 
+procedure TFpGDBMIDebuggerCommandLocals.DoLocalsFreed(Sender: TObject);
+begin
+  FLocals := nil;
+end;
+
 function TFpGDBMIDebuggerCommandLocals.DoExecute: Boolean;
 begin
-  FOwner.ProcessLocals(FLocals);
+  if FLocals <> nil then begin
+    FOwner.ProcessLocals(FLocals);
+    FLocals.RemoveFreeNotification(@DoLocalsFreed);
+  end;
   Result := True;
 end;
 
@@ -249,6 +260,7 @@ begin
   inherited Create(AOwner.FpDebugger);
   FOwner := AOwner;
   FLocals := ALocals;
+  FLocals.AddFreeNotification(@DoLocalsFreed);
   Priority := 1; // before watches
 end;
 
@@ -257,9 +269,9 @@ end;
 procedure TFPGDBMILocals.ProcessLocals(ALocals: TLocals);
 var
   Ctx: TFpDbgInfoContext;
-  ProcVal: TFpDbgValue;
+  ProcVal: TFpValue;
   i: Integer;
-  m: TFpDbgValue;
+  m: TFpValue;
   n, v: String;
 begin
   Ctx := FpDebugger.GetInfoContextForContext(ALocals.ThreadId, ALocals.StackFrame);
@@ -275,6 +287,7 @@ begin
     exit;
   end;
   FpDebugger.FPrettyPrinter.AddressSize := ctx.SizeOfAddress;
+  FpDebugger.FPrettyPrinter.MemManager := ctx.MemManager;
 
   ALocals.Clear;
   for i := 0 to ProcVal.MemberCount - 1 do begin
@@ -285,9 +298,11 @@ begin
       else
         n := '';
       FpDebugger.FPrettyPrinter.PrintValue(v, m);
+      m.ReleaseReference;
       ALocals.Add(n, v);
     end;
   end;
+  ProcVal.ReleaseReference;
   ALocals.SetDataValidity(ddsValid);
 end;
 
@@ -335,7 +350,7 @@ end;
 
 procedure TFpGDBMIDebuggerCommandEvaluate.DoCancel;
 begin
-  FOwner.FpDebugger.FWatchEvalList.Clear;
+  FOwner.FpDebugger.ClearWatchEvalList;
   FOwner.FEvaluationCmdObj := nil;
   inherited DoCancel;
 end;
@@ -373,7 +388,7 @@ begin
   {$IFdef MSWindows}
   Result := ReadProcessMemory(
     hProcess,
-    Pointer(AnAddress),
+    {%H-}Pointer(AnAddress),
     ADest, ASize,
     BytesRead) and
   (BytesRead = ASize);
@@ -386,7 +401,7 @@ end;
 procedure TFpGDBMIAndWin32DbgMemReader.OpenProcess(APid: Cardinal);
 begin
   {$IFdef MSWindows}
-  debugln(FPGDBDBG_VERBOSE, ['OPEN process ',APid]);
+  debugln(DBG_VERBOSE, ['OPEN process ',APid]);
   if APid <> 0 then
     hProcess := windows.OpenProcess(PROCESS_CREATE_THREAD or PROCESS_QUERY_INFORMATION or PROCESS_VM_OPERATION or PROCESS_VM_WRITE or PROCESS_VM_READ, False, APid);
   {$ENDIF}
@@ -438,7 +453,7 @@ begin
   MemDump.Free;
   Result := True;
 
-debugln(FPGDBDBG_VERBOSE, ['TFpGDBMIDbgMemReader.ReadMemory ', dbgs(AnAddress), '  ', dbgMemRange(ADest, ASize)]);
+debugln(DBG_VERBOSE, ['TFpGDBMIDbgMemReader.ReadMemory ', dbgs(AnAddress), '  ', dbgMemRange(ADest, ASize)]);
 end;
 
 function TFpGDBMIDbgMemReader.ReadMemoryEx(AnAddress, AnAddressSpace: TDbgPtr;
@@ -458,43 +473,42 @@ var
 begin
   Result := False;
   // WINDOWS gdb dwarf names
-  {$IFDEF cpu64}
-  case ARegNum of
-     0:  rname := 'RAX'; // RAX
-     1:  rname := 'RDX'; // RDX
-     2:  rname := 'RCX'; // RCX
-     3:  rname := 'RBX'; // RBX
-     4:  rname := 'RSI';
-     5:  rname := 'RDI';
-     6:  rname := 'RBP';
-     7:  rname := 'RSP';
-     8:  rname := 'R8'; // R8D , but gdb uses R8
-     9:  rname := 'R9';
-    10:  rname := 'R10';
-    11:  rname := 'R11';
-    12:  rname := 'R12';
-    13:  rname := 'R13';
-    14:  rname := 'R14';
-    15:  rname := 'R15';
-    16:  rname := 'RIP';
-    else
-      exit;
-  end;
-  {$ELSE}
-  case ARegNum of
-     0:  rname := 'EAX'; // RAX
-     1:  rname := 'ECX'; // RDX
-     2:  rname := 'EDX'; // RCX
-     3:  rname := 'EBX'; // RBX
-     4:  rname := 'ESP';
-     5:  rname := 'EBP';
-     6:  rname := 'ESI';
-     7:  rname := 'EDI';
-     8:  rname := 'EIP';
-    else
-      exit;
-  end;
-  {$ENDIF}
+  if FDebugger.TargetWidth = 64 then
+    case ARegNum of
+       0:  rname := 'RAX'; // RAX
+       1:  rname := 'RDX'; // RDX
+       2:  rname := 'RCX'; // RCX
+       3:  rname := 'RBX'; // RBX
+       4:  rname := 'RSI';
+       5:  rname := 'RDI';
+       6:  rname := 'RBP';
+       7:  rname := 'RSP';
+       8:  rname := 'R8'; // R8D , but gdb uses R8
+       9:  rname := 'R9';
+      10:  rname := 'R10';
+      11:  rname := 'R11';
+      12:  rname := 'R12';
+      13:  rname := 'R13';
+      14:  rname := 'R14';
+      15:  rname := 'R15';
+      16:  rname := 'RIP';
+      else
+        exit;
+    end
+  else
+    case ARegNum of
+       0:  rname := 'EAX'; // RAX
+       1:  rname := 'ECX'; // RDX
+       2:  rname := 'EDX'; // RCX
+       3:  rname := 'EBX'; // RBX
+       4:  rname := 'ESP';
+       5:  rname := 'EBP';
+       6:  rname := 'ESI';
+       7:  rname := 'EDI';
+       8:  rname := 'EIP';
+      else
+        exit;
+    end;
   assert(AContext <> nil, 'TFpGDBMIDbgMemReader.ReadRegister: AContext <> nil');
   Reg := FDebugger.Registers.CurrentRegistersList[AContext.ThreadId, AContext.StackFrame];
   for i := 0 to Reg.Count - 1 do
@@ -506,7 +520,7 @@ begin
         else
           v := '';
         if pos(' ', v) > 1 then v := copy(v, 1, pos(' ', v)-1);
-debugln(FPGDBDBG_VERBOSE, ['TFpGDBMIDbgMemReader.ReadRegister ',rname, '  ', v]);
+debugln(DBG_VERBOSE, ['TFpGDBMIDbgMemReader.ReadRegister ',rname, '  ', v]);
         Result := true;
         try
           AValue := StrToQWord(v);
@@ -519,11 +533,10 @@ end;
 
 function TFpGDBMIDbgMemReader.RegisterSize(ARegNum: Cardinal): Integer;
 begin
-  {$IFDEF cpu64}
-  Result := 8; // for the very few supported...
-  {$ELSE}
-  Result := 4; // for the very few supported...
-  {$ENDIF}
+  if FDebugger.TargetWidth = 64 then
+    Result := 8 // for the very few supported...
+  else
+    Result := 4; // for the very few supported...
 end;
 
 { TFPGDBMIWatches }
@@ -575,7 +588,7 @@ begin
         end;
       finally
         if IsWatchValueAlive then begin
-          WatchValue.RemoveFreeeNotification(@FpDebugger.DoWatchFreed);
+          WatchValue.RemoveFreeNotification(@FpDebugger.DoWatchFreed);
           FpDebugger.FWatchEvalList.Remove(pointer(WatchValue));
         end;
         Application.ProcessMessages;
@@ -654,17 +667,19 @@ begin
   Result := FRequestedSources.Count;
 end;
 
-function TFpGDBMILineInfo.GetAddress(const AIndex: Integer; const ALine: Integer): TDbgPtr;
+function TFpGDBMILineInfo.HasAddress(const AIndex: Integer; const ALine: Integer
+  ): Boolean;
 var
   Map: PDWarfLineMap;
+  dummy: TDBGPtrArray;
 begin
-  Result := 0;
+  Result := False;
   if not FpDebugger.HasDwarf then
     exit;
   //Result := FpDebugger.FDwarfInfo.GetLineAddress(FRequestedSources[AIndex], ALine);
   Map := PDWarfLineMap(FRequestedSources.Objects[AIndex]);
   if Map <> nil then
-    Result := Map^.GetAddressForLine(ALine);
+    Result := Map^.GetAddressesForLine(ALine, dummy, True);
 end;
 
 function TFpGDBMILineInfo.GetInfo(AAdress: TDbgPtr; out ASource, ALine,
@@ -723,13 +738,8 @@ begin
   if OldState in [dsPause, dsInternalPause] then begin
     for i := 0 to MAX_CTX_CACHE-1 do
       ReleaseRefAndNil(FLastContext[i]);
-    if not(State in [dsPause, dsInternalPause]) then begin
-      for i := 0 to FWatchEvalList.Count - 1 do begin
-        TWatchValue(FWatchEvalList[i]).RemoveFreeeNotification(@DoWatchFreed);
-        //TWatchValueBase(FWatchEvalList[i]).Validity := ddsInvalid;
-      end;
-      FWatchEvalList.Clear;
-    end;
+    if not(State in [dsPause, dsInternalPause]) then
+      ClearWatchEvalList;
   end;
 end;
 
@@ -743,14 +753,14 @@ var
   AnImageLoader: TDbgImageLoader;
 begin
   UnLoadDwarf;
-  debugln(FPGDBDBG_VERBOSE, ['TFpGDBMIDebugger.LoadDwarf ']);
+  debugln(DBG_VERBOSE, ['TFpGDBMIDebugger.LoadDwarf ']);
   AnImageLoader := TDbgImageLoader.Create(FileName);
   if not AnImageLoader.IsValid then begin
     FreeAndNil(AnImageLoader);
     exit;
   end;
   FImageLoaderList := TDbgImageLoaderList.Create(True);
-  FImageLoaderList.Add(AnImageLoader);
+  AnImageLoader.AddToLoaderList(FImageLoaderList);
 {$IFdef WithWinMemReader}
   FMemReader := TFpGDBMIAndWin32DbgMemReader.Create(Self);
 {$Else}
@@ -766,7 +776,7 @@ end;
 
 procedure TFpGDBMIDebugger.UnLoadDwarf;
 begin
-  debugln(FPGDBDBG_VERBOSE, ['TFpGDBMIDebugger.UnLoadDwarf ']);
+  debugln(DBG_VERBOSE, ['TFpGDBMIDebugger.UnLoadDwarf ']);
   FreeAndNil(FDwarfInfo);
   FreeAndNil(FImageLoaderList);
   FreeAndNil(FMemReader);
@@ -777,26 +787,31 @@ begin
 end;
 
 function TFpGDBMIDebugger.RequestCommand(const ACommand: TDBGCommand;
-  const AParams: array of const): Boolean;
+  const AParams: array of const; const ACallback: TMethod): Boolean;
 var
   EvalFlags: TDBGEvaluateFlags;
+  ResText: String;
+  ResType: TDBGType;
 begin
   if (ACommand = dcEvaluate) then begin
     EvalFlags := [];
-    EvalFlags := TDBGEvaluateFlags(AParams[3].VInteger);
+    EvalFlags := TDBGEvaluateFlags(AParams[1].VInteger);
     Result := False;
     if (HasDwarf) and (not UseGDB) then begin
       Result := EvaluateExpression(nil, String(AParams[0].VAnsiString),
-        String(AParams[1].VPointer^), TDBGType(AParams[2].VPointer^),
-        EvalFlags);
+        ResText, ResType, EvalFlags);
+      if EvalFlags * [defNoTypeInfo, defSimpleTypeInfo, defFullTypeInfo] = [defNoTypeInfo]
+      then FreeAndNil(ResType);
+      TDBGEvaluateResultCallback(ACallback)(Self, Result, ResText, ResType);
+      Result := True;
     end;
     if not Result then begin
-      Result := inherited RequestCommand(ACommand, AParams);
+      Result := inherited RequestCommand(ACommand, AParams, ACallback);
       String(AParams[1].VPointer^) := '{GDB:}'+String(AParams[1].VPointer^);
     end;
   end
   else
-    Result := inherited RequestCommand(ACommand, AParams);
+    Result := inherited RequestCommand(ACommand, AParams, ACallback);
 end;
 
 procedure TFpGDBMIDebugger.QueueCommand(const ACommand: TGDBMIDebuggerCommand;
@@ -858,7 +873,7 @@ begin
 
   t := Threads.CurrentThreads.EntryById[AThreadId];
   if t = nil then begin
-    DebugLn(FPGDBDBG_ERROR, ['NO Threads']);
+    DebugLn(DBG_ERRORS, ['NO Threads']);
     exit;
   end;
   if AStackFrame = 0 then begin
@@ -868,13 +883,13 @@ begin
   end;
 
   s := CallStack.CurrentCallStackList.EntriesForThreads[AThreadId];
-  if s = nil then begin
-    DebugLn(FPGDBDBG_ERROR, ['NO Stackframe list for thread']);
+  if (s = nil) or (AStackFrame >= s.Count) then begin
+    DebugLn(DBG_ERRORS, ['NO Stackframe list for thread']);
     exit;
   end;
   f := s.Entries[AStackFrame];
   if f = nil then begin
-    DebugLn(FPGDBDBG_ERROR, ['NO Stackframe']);
+    DebugLn(DBG_ERRORS, ['NO Stackframe']);
     exit;
   end;
 
@@ -900,33 +915,52 @@ begin
   Addr := GetLocationForContext(AThreadId, AStackFrame);
 
   if Addr = 0 then begin
+    debugln(DBG_VERBOSE, ['GetInfoContextForContext ADDR NOT FOUND for ', AThreadId, ', ', AStackFrame]);
     Result := nil;
     exit;
   end;
 
-  i := AStackFrame - FlastStackFrame;
-  if (i >= 0) and
-     (i < MAX_CTX_CACHE) and
-     (FLastContext[i] <> nil) and
-     (FLastContext[i].Address = Addr) and
-     (FLastContext[i].ThreadId = AThreadId) and
-     (FLastContext[i].StackFrame = AStackFrame)
-  then begin
-    Result := FLastContext[AStackFrame - FlastStackFrame];
+  i := MAX_CTX_CACHE - 1;
+  while (i >= 0) and
+    ( (FLastContext[i] = nil) or
+      (FLastContext[i].ThreadId <> AThreadId) or (FLastContext[i].StackFrame <> AStackFrame)
+    )
+  do
+    dec(i);
+
+  if i >= 0 then begin
+    Result := FLastContext[i];
+    // TODO Result.AddReference;
     exit;
   end;
 
-  DebugLn(FPGDBDBG_VERBOSE, ['* FDwarfInfo.FindContext ', dbgs(Addr)]);
+  DebugLn(DBG_VERBOSE, ['* FDwarfInfo.FindContext ', dbgs(Addr)]);
   Result := FDwarfInfo.FindContext(AThreadId, AStackFrame, Addr);
 
-  FLastThread := AThreadId;
-  FlastStackFrame := AStackFrame;
-  FLastContext[0].ReleaseReference;
+  if Result = nil then begin
+    debugln(DBG_VERBOSE, ['GetInfoContextForContext CTX NOT FOUND for ', AThreadId, ', ', AStackFrame]);
+    exit;
+  end;
+
+  ReleaseRefAndNil(FLastContext[MAX_CTX_CACHE-1]);
+  move(FLastContext[0], FLastContext[1], (MAX_CTX_CACHE-1) + SizeOf(FLastContext[0]));
   FLastContext[0] := Result;
+  // TODO Result.AddReference;
+end;
+
+procedure TFpGDBMIDebugger.ClearWatchEvalList;
+var
+  i: Integer;
+begin
+  for i := 0 to FWatchEvalList.Count - 1 do begin
+    TWatchValue(FWatchEvalList[i]).RemoveFreeNotification(@DoWatchFreed);
+    //TWatchValueBase(FWatchEvalList[i]).Validity := ddsInvalid;
+  end;
+  FWatchEvalList.Clear;
 end;
 
 type
-  TGDBMIDwarfTypeIdentifier = class(TFpDwarfSymbolType)
+  TGDBMIDwarfTypeIdentifier = class(TFpSymbolDwarfType)
   public
     property InformationEntry;
   end;
@@ -941,11 +975,11 @@ function TFpGDBMIDebugger.EvaluateExpression(AWatchValue: TWatchValue; AExpressi
 var
   Ctx: TFpDbgInfoContext;
   PasExpr, PasExpr2: TFpPascalExpression;
-  ResValue: TFpDbgValue;
+  ResValue: TFpValue;
   s: String;
   DispFormat: TWatchDisplayFormat;
   RepeatCnt: Integer;
-  TiSym: TFpDbgSymbol;
+  TiSym: TFpSymbol;
 
   function IsWatchValueAlive: Boolean;
   begin
@@ -997,7 +1031,7 @@ begin
     if not IsWatchValueAlive then exit;
 
     if not PasExpr.Valid then begin
-DebugLn(FPGDBDBG_VERBOSE, [ErrorHandler.ErrorAsString(PasExpr.Error)]);
+DebugLn(DBG_VERBOSE, [ErrorHandler.ErrorAsString(PasExpr.Error)]);
       if ErrorCode(PasExpr.Error) <> fpErrAnyError then begin
         Result := True;
         AResText := ErrorHandler.ErrorAsString(PasExpr.Error);;
@@ -1018,14 +1052,14 @@ DebugLn(FPGDBDBG_VERBOSE, [ErrorHandler.ErrorAsString(PasExpr.Error)]);
     if (ResValue.Kind = skClass) and (ResValue.AsCardinal <> 0) and (defClassAutoCast in EvalFlags)
     then begin
       CastName := '';
-      if FMemManager.ReadAddress(ResValue.DataAddress, Ctx.SizeOfAddress, ClassAddr) then begin
+      if FMemManager.ReadAddress(ResValue.DataAddress, SizeVal(Ctx.SizeOfAddress), ClassAddr) then begin
         ClassAddr.Address := ClassAddr.Address + 3 * Ctx.SizeOfAddress;
-        if FMemManager.ReadAddress(ClassAddr, Ctx.SizeOfAddress, CNameAddr) then begin
-          if (FMemManager.ReadUnsignedInt(CNameAddr, 1, NameLen)) then
+        if FMemManager.ReadAddress(ClassAddr, SizeVal(Ctx.SizeOfAddress), CNameAddr) then begin
+          if (FMemManager.ReadUnsignedInt(CNameAddr, SizeVal(1), NameLen)) then
             if NameLen > 0 then begin
               SetLength(CastName, NameLen);
               CNameAddr.Address := CNameAddr.Address + 1;
-              FMemManager.ReadMemory(CNameAddr, NameLen, @CastName[1]);
+              FMemManager.ReadMemory(CNameAddr, SizeVal(NameLen), @CastName[1]);
               PasExpr2 := TFpPascalExpression.Create(CastName+'('+AExpression+')', Ctx);
               PasExpr2.ResultValue;
               if PasExpr2.Valid then begin
@@ -1040,34 +1074,28 @@ DebugLn(FPGDBDBG_VERBOSE, [ErrorHandler.ErrorAsString(PasExpr.Error)]);
       end;
     end;
 
-    case ResValue.Kind of
-      skNone: begin
-          // maybe type
-          TiSym := ResValue.DbgSymbol;
-          if (TiSym <> nil) and (TiSym.SymbolType = stType) then begin
-            if GetTypeAsDeclaration(AResText, TiSym) then
-              AResText := Format('{Type=} %1s', [AResText])
-            else
-            if GetTypeName(AResText, TiSym) then
-              AResText := Format('{Type=} %1s', [AResText])
-            else
-              AResText := '{Type=} unknown';
-            Result := True;
-            if AWatchValue <> nil then begin
-              if not IsWatchValueAlive then exit;
-              AWatchValue.Value    := AResText;
-              AWatchValue.Validity := ddsValid; // TODO ddsError ?
-            end;
-            exit;
-          end;
-        end;
+    TiSym := ResValue.DbgSymbol;
+    if (ResValue.Kind = skNone) and (TiSym <> nil) and (TiSym.SymbolType = stType) then begin
+      if GetTypeAsDeclaration(AResText, TiSym) then
+        AResText := Format('{Type=} %1s', [AResText])
       else
-      begin
-        if defNoTypeInfo in EvalFlags then
-          FPrettyPrinter.PrintValue(AResText, ResValue, DispFormat, RepeatCnt)
-        else
-          FPrettyPrinter.PrintValue(AResText, ATypeInfo, ResValue, DispFormat, RepeatCnt);
+      if GetTypeName(AResText, TiSym) then
+        AResText := Format('{Type=} %1s', [AResText])
+      else
+        AResText := '{Type=} unknown';
+      Result := True;
+      if AWatchValue <> nil then begin
+        if not IsWatchValueAlive then exit;
+        AWatchValue.Value    := AResText;
+        AWatchValue.Validity := ddsValid; // TODO ddsError ?
       end;
+      exit;
+    end
+    else begin
+      if defNoTypeInfo in EvalFlags then
+        FPrettyPrinter.PrintValue(AResText, ResValue, DispFormat, RepeatCnt)
+      else
+        FPrettyPrinter.PrintValue(AResText, ATypeInfo, ResValue, DispFormat, RepeatCnt);
     end;
     if not IsWatchValueAlive then exit;
 
@@ -1086,7 +1114,7 @@ DebugLn(FPGDBDBG_VERBOSE, [ErrorHandler.ErrorAsString(PasExpr.Error)]);
 
     if (ATypeInfo <> nil) or (AResText <> '') then begin
       Result := True;
-      debugln(FPGDBDBG_VERBOSE, ['TFPGDBMIWatches.InternalRequestData   GOOOOOOD ', AExpression]);
+      debugln(DBG_VERBOSE, ['TFPGDBMIWatches.InternalRequestData   GOOOOOOD ', AExpression]);
       if AWatchValue <> nil then begin
         AWatchValue.Value    := AResText;
         AWatchValue.TypeInfo := ATypeInfo;
@@ -1139,6 +1167,7 @@ destructor TFpGDBMIDebugger.Destroy;
 begin
   CurrentDebugger := nil;
   UnLoadDwarf;
+  ClearWatchEvalList;
   FWatchEvalList.Free;
   inherited Destroy;
 end;
@@ -1155,7 +1184,7 @@ begin
 end;
 
 initialization
-  FPGDBDBG_VERBOSE       := DebugLogger.FindOrRegisterLogGroup('FPGDBDBG_VERBOSE' {$IFDEF FPGDBDBG_VERBOSE} , True {$ENDIF} );
-  FPGDBDBG_ERROR         := DebugLogger.FindOrRegisterLogGroup('FPGDBDBG_ERROR' {$IFDEF FPGDBDBG_ERROR} , True {$ENDIF} );
+  DBG_VERBOSE       := DebugLogger.FindOrRegisterLogGroup('DBG_VERBOSE' {$IFDEF DBG_VERBOSE} , True {$ENDIF} );
+  DBG_ERRORS         := DebugLogger.FindOrRegisterLogGroup('DBG_ERRORS' {$IFDEF DBG_ERRORS} , True {$ENDIF} );
 end.
 

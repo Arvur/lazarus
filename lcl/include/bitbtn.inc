@@ -25,8 +25,9 @@ begin
   FButtonGlyph.NumGlyphs := 1;
   FButtonGlyph.OnChange := @GlyphChanged;
   FButtonGlyph.IsDesigning := csDesigning in ComponentState;
+  FImageChangeLink := TChangeLink.Create;
+  FImageChangeLink.OnChange := @ImageListChange;
   Align := alNone;
-  RealizeKind;
 end;
 
 {------------------------------------------------------------------------------
@@ -35,6 +36,7 @@ end;
 destructor TCustomBitBtn.Destroy;
 begin
   FreeThenNil(FButtonGlyph);
+  FreeAndNil(FImageChangeLink);
   inherited Destroy;
 end;
 
@@ -80,9 +82,19 @@ begin
   Buttons.LoadGlyphFromStock(FButtonGlyph, idButton);
 end;
 
-function TCustomBitBtn.CanShowGlyph: Boolean;
+procedure TCustomBitBtn.Notification(AComponent: TComponent;
+  Operation: TOperation);
 begin
-  Result := not Glyph.Empty and (FButtonGlyph.Images <> nil);
+  inherited Notification(AComponent, Operation);
+  if (Operation = opRemove) and (FButtonGlyph <> nil) and (AComponent = FButtonGlyph.ExternalImages) then
+    Images := nil;
+end;
+
+function TCustomBitBtn.CanShowGlyph(const AWithShowMode: Boolean): Boolean;
+begin
+  Result := FButtonGlyph.CanShowGlyph;
+  if AWithShowMode then
+    Result := Result and FButtonGlyph.CanShow;
 end;
 
 function TCustomBitBtn.GetGlyph : TBitmap;
@@ -93,6 +105,21 @@ end;
 function TCustomBitBtn.GetGlyphShowMode: TGlyphShowMode;
 begin
   Result := FButtonGlyph.ShowMode;
+end;
+
+function TCustomBitBtn.GetImageIndex: TImageIndex;
+begin
+  Result := FButtonGlyph.ExternalImageIndex;
+end;
+
+function TCustomBitBtn.GetImages: TCustomImageList;
+begin
+  Result := FButtonGlyph.ExternalImages;
+end;
+
+function TCustomBitBtn.GetImageWidth: Integer;
+begin
+  Result := FButtonGlyph.ExternalImageWidth;
 end;
 
 function TCustomBitBtn.GetNumGlyphs: Integer;
@@ -129,6 +156,35 @@ begin
   FButtonGlyph.ShowMode := AValue;
 end;
 
+procedure TCustomBitBtn.SetImageIndex(const aImageIndex: TImageIndex);
+begin
+  FButtonGlyph.ExternalImageIndex := aImageIndex;
+end;
+
+procedure TCustomBitBtn.SetImages(const aImages: TCustomImageList);
+begin
+  if FButtonGlyph.ExternalImages <> nil then
+  begin
+    FButtonGlyph.ExternalImages.UnRegisterChanges(FImageChangeLink);
+    FButtonGlyph.ExternalImages.RemoveFreeNotification(Self);
+  end;
+  FButtonGlyph.ExternalImages := aImages;
+  if FButtonGlyph.ExternalImages <> nil then
+  begin
+    FButtonGlyph.ExternalImages.FreeNotification(Self);
+    FButtonGlyph.ExternalImages.RegisterChanges(FImageChangeLink);
+  end;
+  InvalidatePreferredSize;
+  AdjustSize;
+end;
+
+procedure TCustomBitBtn.SetImageWidth(const aImageWidth: Integer);
+begin
+  FButtonGlyph.ExternalImageWidth := aImageWidth;
+  InvalidatePreferredSize;
+  AdjustSize;
+end;
+
 procedure TCustomBitBtn.GlyphChanged(Sender: TObject);
 begin
   if HandleAllocated then
@@ -137,17 +193,33 @@ begin
   AdjustSize;
 end;
 
+procedure TCustomBitBtn.ImageListChange(Sender: TObject);
+begin
+  if Sender = Images then
+    GlyphChanged(Sender);
+end;
+
 procedure TCustomBitBtn.ActionChange(Sender: TObject; CheckDefaults: Boolean);
+var
+  NewAct: TCustomAction;
+  Imgs: TCustomImageList;
+  ImgRes: TScaledImageListResolution;
 begin
   inherited ActionChange(Sender,CheckDefaults);
   if Sender is TCustomAction then
   begin
-    with TCustomAction(Sender) do
-    begin
-      if (Glyph.Empty) and (ActionList <> nil) and (ActionList.Images <> nil) and
-        (ImageIndex >= 0) and (ImageIndex < ActionList.Images.Count) then
-        ActionList.Images.GetBitmap(ImageIndex, Glyph);
-    end;
+    NewAct := TCustomAction(Sender);
+    //DebugLn(['TCustomBitBtn.ActionChange: Glyph.Empty=', Glyph.Empty,
+    //         ', Action=', NewAct.Caption,
+    //         ', ActionList=', NewAct.ActionList,
+    //         ', Images=', NewAct.ActionList.Images,
+    //         ', ImageIndex=', NewAct.ImageIndex ]);
+    if (NewAct.ActionList = nil) or (NewAct.ImageIndex < 0) then Exit;
+    Imgs := NewAct.ActionList.Images;
+    if (Imgs = nil) or (NewAct.ImageIndex >= Imgs.Count) then Exit;
+    //DebugLn([' TCustomBitBtn.ActionChange: Setting image, ImageWidth=', ImageWidth]);
+    ImgRes := Imgs.ResolutionForPPI[ImageWidth,Font.PixelsPerInch,GetCanvasScaleFactor];
+    ImgRes.GetBitmap(NewAct.ImageIndex, Glyph);
   end;
 end;
 
@@ -155,8 +227,8 @@ procedure TCustomBitBtn.SetKind(AValue: TBitBtnKind);
 begin
   if FKind = AValue then Exit;
   FKind := AValue;
-  if FKind <> bkCustom then
-    RealizeKind;
+  if (FKind <> bkCustom) and not (csLoading in ComponentState) then
+    RealizeKind(True);
   if not (csLoading in ComponentState) then
     DefaultCaption := FKind <> bkCustom;
 end;
@@ -207,11 +279,12 @@ begin
     Invalidate;
 end;
 
-procedure TCustomBitBtn.RealizeKind;
+procedure TCustomBitBtn.RealizeKind(ForceDefaults: Boolean);
 var
   GlyphValid, Handled: Boolean;
   CustomGlyph: TGraphic;
   BitmapHandle, MaskHandle: HBitmap;
+  idButton: LongInt;
 begin
   if (Kind <> bkCustom) then
   begin
@@ -243,17 +316,20 @@ begin
     
     if not GlyphValid then
     begin
-      CustomGlyph := GetLCLDefaultBtnGlyph(Kind);
-      if CustomGlyph <> nil then
+      if ForceDefaults or (Images=nil) then
       begin
-        Glyph.Assign(CustomGlyph);
-        CustomGlyph.Free;
+        idButton := BitBtnImages[Kind];
+        if (idButton >= Low(BitBtnResNames)) and (idButton <= High(BitBtnResNames))
+        and (BitBtnResNames[idButton] <> '') then
+          FButtonGlyph.LCLGlyphName := BitBtnResNames[idButton]
+        else
+          ImageIndex := -1;
         GlyphValid := True;
       end;
     end;
   end;
 
-  if not (csLoading in ComponentState) then
+  if ForceDefaults then
   begin
     Caption := GetCaptionOfKind(Kind);
     ModalResult := BitBtnModalResults[Kind];
@@ -295,6 +371,8 @@ end;
 procedure TCustomBitBtn.Loaded;
 begin
   inherited Loaded;
+  if (Kind <> bkCustom) then
+    RealizeKind(False);
   if (Kind <> bkCustom) and DefaultCaption and (Caption = '') then
   begin
     Caption := GetCaptionOfKind(Kind); // Will trigger TextChanged

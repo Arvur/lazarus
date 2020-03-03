@@ -1,20 +1,20 @@
 msgid ""
 msgstr ""
-"Project-Id-Version: X\n"
-"POT-Creation-Date: \n"
-"PO-Revision-Date: 2017-12-13 16:16+0800\n"
-"Last-Translator: 郑建平@夏宗萍 aka  robsean  <robsean@126.com>\n"
-"Language-Team: http://www.microsystem.studio\n"
-"MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
+"Project-Id-Version: X-1.9\n"
+"POT-Creation-Date: \n"
+"PO-Revision-Date: \n"
+"Last-Translator: 郑建平@夏宗萍 aka  robsean <robsean@126.com>\n"
+"Language-Team: \n"
+"MIME-Version: 1.0\n"
 "Content-Transfer-Encoding: 8bit\n"
-"X-Poedit-SourceCharset: UTF-8\n"
 "Language: zh_CN\n"
 "X-Generator: Poedit 1.8.7.1\n"
+"X-Poedit-SourceCharset: UTF-8\n"
 
 #: syneditstrconst.syns_attrannotation
 msgid "Annotation"
-msgstr ""
+msgstr "注释"
 
 #: syneditstrconst.syns_attrasp
 msgid "Asp"
@@ -34,7 +34,7 @@ msgstr "属性值"
 
 #: syneditstrconst.syns_attrblock
 msgid "Block"
-msgstr ""
+msgstr "语句块"
 
 #: syneditstrconst.syns_attrbrackets
 msgid "Brackets"
@@ -46,7 +46,7 @@ msgstr ""
 
 #: syneditstrconst.syns_attrcdata
 msgid "CDATA"
-msgstr ""
+msgstr "CDATA"
 
 #: syneditstrconst.syns_attrcdatasection
 msgid "CDATA Section"
@@ -54,11 +54,11 @@ msgstr ""
 
 #: syneditstrconst.syns_attrcharacter
 msgid "Character"
-msgstr ""
+msgstr "字符"
 
 #: syneditstrconst.syns_attrchunkmarker
 msgid "Diff Chunk Marker"
-msgstr ""
+msgstr "比较Chunk标记"
 
 #: syneditstrconst.syns_attrchunkmixed
 msgid "Diff Chunk Line Counts"
@@ -94,11 +94,11 @@ msgstr "默认包"
 
 #: syneditstrconst.syns_attrdir
 msgid "Direction"
-msgstr ""
+msgstr "方向"
 
 #: syneditstrconst.syns_attrdirective
 msgid "Directive"
-msgstr ""
+msgstr "指令"
 
 #: syneditstrconst.syns_attrdoctype
 msgid "DOCTYPE"
@@ -114,19 +114,19 @@ msgstr "文档"
 
 #: syneditstrconst.syns_attrelementname
 msgid "Element Name"
-msgstr ""
+msgstr "元素名称"
 
 #: syneditstrconst.syns_attrembedsql
 msgid "Embedded SQL"
-msgstr ""
+msgstr "嵌入SQL"
 
 #: syneditstrconst.syns_attrembedtext
 msgid "Embedded text"
-msgstr ""
+msgstr "嵌入文本"
 
 #: syneditstrconst.syns_attrentityreference
 msgid "Entity Reference"
-msgstr ""
+msgstr "实体参考"
 
 #: syneditstrconst.syns_attrescapeampersand
 msgid "Escape ampersand"
@@ -146,7 +146,7 @@ msgstr ""
 
 #: syneditstrconst.syns_attrfloat
 msgid "Float"
-msgstr "Float"
+msgstr "浮点值(Float)"
 
 #: syneditstrconst.syns_attrform
 msgid "Form"
@@ -158,19 +158,19 @@ msgstr "函数"
 
 #: syneditstrconst.syns_attrhexadecimal
 msgid "Hexadecimal"
-msgstr ""
+msgstr "十六进制"
 
 #: syneditstrconst.syns_attricon
 msgid "Icon reference"
-msgstr ""
+msgstr "Icon参考"
 
 #: syneditstrconst.syns_attridedirective
 msgid "IDE Directive"
-msgstr ""
+msgstr "IDE指令"
 
 #: syneditstrconst.syns_attridentifier
 msgid "Identifier"
-msgstr ""
+msgstr "标识符"
 
 #: syneditstrconst.syns_attrillegalchar
 msgid "Illegal char"
@@ -178,7 +178,7 @@ msgstr ""
 
 #: syneditstrconst.syns_attrinclude
 msgid "Include"
-msgstr "包含"
+msgstr "包含(include)"
 
 #: syneditstrconst.syns_attrindirect
 msgid "Indirect"
@@ -190,7 +190,7 @@ msgstr "内部函数"
 
 #: syneditstrconst.syns_attrinvalidsymbol
 msgid "Invalid symbol"
-msgstr "无效的符号"
+msgstr "无效符号"
 
 #: syneditstrconst.syns_attrkey
 msgid "Key"
@@ -274,7 +274,7 @@ msgstr "操作符"
 
 #: syneditstrconst.syns_attrorigfile
 msgid "Diff Original File"
-msgstr ""
+msgstr "比较原始文件"
 
 #: syneditstrconst.syns_attrplsql
 msgid "Reserved word (PL/SQL)"
@@ -292,9 +292,13 @@ msgstr "预处理程序"
 msgid "Previous value"
 msgstr "前一个值"
 
+#: syneditstrconst.syns_attrprocedureheadername
+msgid "Procedure header name"
+msgstr ""
+
 #: syneditstrconst.syns_attrprocessinginstr
 msgid "Processing Instruction"
-msgstr ""
+msgstr "处理指令"
 
 #: syneditstrconst.syns_attrqualifier
 msgid "Qualifier"
@@ -302,7 +306,7 @@ msgstr "限定词"
 
 #: syneditstrconst.syns_attrregister
 msgid "Register"
-msgstr ""
+msgstr "注册"
 
 #: syneditstrconst.syns_attrreservedword
 msgid "Reserved word"
@@ -310,7 +314,7 @@ msgstr "保留字"
 
 #: syneditstrconst.syns_attrroundbracket
 msgid "Round Bracket"
-msgstr ""
+msgstr "圆括号"
 
 #: syneditstrconst.syns_attrrpl
 msgid "Rpl"
@@ -338,15 +342,15 @@ msgstr ""
 
 #: syneditstrconst.syns_attrsecondreservedword
 msgid "Second reserved word"
-msgstr "等二个保留字"
+msgstr "第二个保留字"
 
 #: syneditstrconst.syns_attrsection
 msgid "Section"
-msgstr ""
+msgstr "部分(section)"
 
 #: syneditstrconst.syns_attrselectorvalue
 msgid "Selector"
-msgstr ""
+msgstr "选择器"
 
 #: syneditstrconst.syns_attrspace
 msgid "Space"
@@ -354,7 +358,7 @@ msgstr "空格"
 
 #: syneditstrconst.syns_attrspecialvariable
 msgid "Special variable"
-msgstr ""
+msgstr "特殊变量"
 
 #: syneditstrconst.syns_attrsqlkey
 msgid "SQL keyword"
@@ -366,7 +370,7 @@ msgstr ""
 
 #: syneditstrconst.syns_attrsquarebracket
 msgid "Square Bracket"
-msgstr ""
+msgstr "方括号"
 
 #: syneditstrconst.syns_attrstring
 msgid "String"
@@ -394,11 +398,11 @@ msgstr "Table名称"
 
 #: syneditstrconst.syns_attrterminator
 msgid "Terminator"
-msgstr ""
+msgstr "终止符"
 
 #: syneditstrconst.syns_attrtexcommand
 msgid "TeX Command"
-msgstr ""
+msgstr "TeX命令"
 
 #: syneditstrconst.syns_attrtext
 msgid "Text"
@@ -406,7 +410,7 @@ msgstr "文本"
 
 #: syneditstrconst.syns_attrtextmathmode
 msgid "Text in Math Mode"
-msgstr ""
+msgstr "文本在数学模式"
 
 #: syneditstrconst.syns_attrunknownword
 msgid "Unknown word"
@@ -433,16 +437,17 @@ msgid "Whitespace"
 msgstr "空白"
 
 #: syneditstrconst.syns_duplicateshortcutmsg
+#, object-pascal-format
 msgid "The keystroke \"%s\" is already assigned to another editor command. (%s)"
-msgstr "按键\"%s\"已经关联到其他编辑器命令.(%s)"
+msgstr ""
 
 #: syneditstrconst.syns_eduplicateshortcut
 msgid "Mouse-Shortcut already exists"
-msgstr "快捷方式已存在"
+msgstr "鼠标快捷方式已经存在"
 
 #: syneditstrconst.syns_emcbreakpointtoggle
 msgid "Toggle Breakpoint"
-msgstr ""
+msgstr "切换断点"
 
 #: syneditstrconst.syns_emccodefoldcollaps
 msgid "Fold Code"
@@ -466,7 +471,7 @@ msgstr ""
 
 #: syneditstrconst.syns_emccontextmenu
 msgid "Popup Menu"
-msgstr "弹出菜单"
+msgstr "弹出式菜单"
 
 #: syneditstrconst.syns_emccontextmenucaretmove_opt
 msgid "\"Move caret, when selection exists\", Never, \"Click outside\", Always"
@@ -474,7 +479,7 @@ msgstr ""
 
 #: syneditstrconst.syns_emcmouselink
 msgid "Source Link"
-msgstr ""
+msgstr "源文件链接"
 
 #: syneditstrconst.syns_emcmouselink_opt
 msgid "Underline,yes, no"
@@ -514,11 +519,11 @@ msgstr "选择行"
 
 #: syneditstrconst.syns_emcselectline_opt
 msgid "\"Include spaces\",no,yes"
-msgstr ""
+msgstr "\"包括空格\",否,是"
 
 #: syneditstrconst.syns_emcselectpara
 msgid "Select Paragraph"
-msgstr "选择分段"
+msgstr "选择分段(Paragraph)"
 
 #: syneditstrconst.syns_emcselectword
 msgid "Select Word"
@@ -538,11 +543,11 @@ msgstr ""
 
 #: syneditstrconst.syns_emcstartlineselections
 msgid "Line Selection"
-msgstr ""
+msgstr "行选择"
 
 #: syneditstrconst.syns_emcstartlineselectionsnoneempty
 msgid "Line Selection (select immediate)"
-msgstr ""
+msgstr "行选择(选择最近的)(select immediate)"
 
 #: syneditstrconst.syns_emcstartselection
 msgid "Selection"
@@ -550,7 +555,7 @@ msgstr "选择"
 
 #: syneditstrconst.syns_emcstartselectlines
 msgid "Selection (lines)"
-msgstr "选择 (行)"
+msgstr "选择(行)"
 
 #: syneditstrconst.syns_emcstartselecttokens
 msgid "Selection (tokens) "
@@ -558,7 +563,7 @@ msgstr ""
 
 #: syneditstrconst.syns_emcstartselectwords
 msgid "Selection (words)"
-msgstr ""
+msgstr "选择(单词)"
 
 #: syneditstrconst.syns_emcsyneditcommand
 msgid "IDE Command"
@@ -570,7 +575,7 @@ msgstr "滚轮下滚(水平)"
 
 #: syneditstrconst.syns_emcwheelhorizscrollup
 msgid "Wheel scroll up (Horizontal)"
-msgstr "滚轮上滚(水平)"
+msgstr "滚轮上滚(垂直)"
 
 #: syneditstrconst.syns_emcwheelscrolldown
 msgid "Wheel scroll down"
@@ -582,11 +587,11 @@ msgstr "滚轮上滚"
 
 #: syneditstrconst.syns_emcwheelscroll_opt
 msgid "Speed,\"System settings\",Lines,Pages,\"Pages (less one line)\""
-msgstr ""
+msgstr "速度,\"系统设置\",行,页,\"页(至少一行)\""
 
 #: syneditstrconst.syns_emcwheelvertscrolldown
 msgid "Wheel scroll down (Vertical)"
-msgstr "滚轮下滚(垂直)"
+msgstr "滚轮下滚(水平)"
 
 #: syneditstrconst.syns_emcwheelvertscrollup
 msgid "Wheel scroll up (Vertical)"
@@ -614,195 +619,198 @@ msgstr "RTF"
 
 #: syneditstrconst.syns_filteradsp21xx
 msgid "DSP Files (*.dsp,*.inc)|*.DSP;*.INC"
-msgstr "DSP 文件 (*.dsp,*.inc)|*.DSP;*.INC"
+msgstr "DSP文件(*.dsp,*.inc)|*.DSP;*.INC"
 
 #: syneditstrconst.syns_filterasm68hc11
 msgid "68HC11 Assembler Files (*.hc11,*.asm,*.asc)|*.HC11;*.ASM;*.ASC"
-msgstr "68HC11 Assembler 文件 (*.hc11,*.asm,*.asc)|*.HC11;*.ASM;*.ASC"
+msgstr "68HC11汇编文件(*.hc11,*.asm,*.asc)|*.HC11;*.ASM;*.ASC"
 
 #: syneditstrconst.syns_filterawk
 msgid "AWK Script (*.awk)|*.awk"
-msgstr "AWK Script (*.awk)|*.awk"
+msgstr "AWK Script(脚本) (*.awk)|*.awk"
 
 #: syneditstrconst.syns_filterbaan
 msgid "Baan 4GL Files (*.cln)|*.cln"
-msgstr "Baan 4GL 文件 (*.cln)|*.cln"
+msgstr "Baan 4GL 文件(*.cln)|*.cln"
 
 #: syneditstrconst.syns_filterbatch
 msgid "MS-DOS Batch Files (*.bat;*.cmd)|*.bat;*.cmd"
-msgstr "MS-DOS 批处理文件 (*.bat;*.cmd)|*.bat;*.cmd"
+msgstr "MS-DOS批处理文件(*.bat;*.cmd)|*.bat;*.cmd"
 
 #: syneditstrconst.syns_filtercache
 msgid "Cache Files (*.mac,*.inc,*.int)|*.mac;*.inc;*.int"
-msgstr "Cache 文件 (*.mac,*.inc,*.int)|*.mac;*.inc;*.int"
+msgstr "缓存文件(*.mac,*.inc,*.int)|*.mac;*.inc;*.int"
 
 #: syneditstrconst.syns_filtercaclipper
 msgid "CA-Clipper Files (*.prg,*.ch,*.inc)|*.prg;*.ch;*.inc"
-msgstr "CA-Clipper 文件 (*.prg,*.ch,*.inc)|*.prg;*.ch;*.inc"
+msgstr "CA-Clipper文件(*.prg,*.ch,*.inc)|*.prg;*.ch;*.inc"
 
 #: syneditstrconst.syns_filtercorbaidl
 msgid "CORBA IDL files (*.idl)|*.idl"
-msgstr "CORBA IDL 文件 (*.idl)|*.idl"
+msgstr "CORBA IDL文件(*.idl)|*.idl"
 
 #: syneditstrconst.syns_filtercpm
 msgid "CPM reports (*.rdf,*.rif,*.rmf,*.rxf)|*.rdf;*.rif;*.rmf;*.rxf"
-msgstr "CPM reports (*.rdf,*.rif,*.rmf,*.rxf)|*.rdf;*.rif;*.rmf;*.rxf"
+msgstr "CPM报告(*.rdf,*.rif,*.rmf,*.rxf)|*.rdf;*.rif;*.rmf;*.rxf"
 
 #: syneditstrconst.syns_filtercpp
 msgid "C++ Files (*.c,*.cpp,*.h,*.hpp,*.hh)|*.c;*.cpp;*.h;*.hpp;*.hh"
-msgstr "C++ 文件 (*.c,*.cpp,*.h,*.hpp,*.hh)|*.c;*.cpp;*.h;*.hpp;*.hh"
+msgstr "C++文件(*.c,*.cpp,*.h,*.hpp,*.hh)|*.c;*.cpp;*.h;*.hpp;*.hh"
 
 #: syneditstrconst.syns_filtercss
 msgid "Cascading Stylesheets (*.css)|*.css"
-msgstr "Cascading Stylesheets 层叠样式表(*.css)|*.css"
+msgstr "级联样式表(*.css)|*.css"
 
 #: syneditstrconst.syns_filterdfm
 msgid "Borland Form Files (*.dfm;*.xfm)|*.dfm;*.xfm"
-msgstr "Borland Form 文件 (*.dfm;*.xfm)|*.dfm;*.xfm"
+msgstr "Borland窗体(Form)文件(*.dfm;*.xfm)|*.dfm;*.xfm"
 
 #: syneditstrconst.syns_filterfortran
 msgid "Fortran Files (*.for)|*.for"
-msgstr "Fortran 文件 (*.for)|*.for"
+msgstr "Fortran文件(*.for)|*.for"
 
 #: syneditstrconst.syns_filterfoxpro
 msgid "Foxpro Files (*.prg)|*.prg"
-msgstr "Foxpro 文件 (*.prg)|*.prg"
+msgstr "Foxpro文件(*.prg)|*.prg"
 
 #: syneditstrconst.syns_filtergalaxy
 msgid "Galaxy Files (*.gtv,*.galrep,*.txt)|*.gtv;*.galrep;*.txt"
-msgstr "Galaxy 文件 (*.gtv,*.galrep,*.txt)|*.gtv;*.galrep;*.txt"
+msgstr "Galaxy文件(*.gtv,*.galrep,*.txt)|*.gtv;*.galrep;*.txt"
 
 #: syneditstrconst.syns_filtergembase
 msgid "GEMBASE Files (*.dml,*.gem)|*.DML;*.GEM"
-msgstr "GEMBASE 文件 (*.dml,*.gem)|*.DML;*.GEM"
+msgstr "GEMBASE文件(*.dml,*.gem)|*.DML;*.GEM"
 
 #: syneditstrconst.syns_filtergws
 msgid "GW-TEL Script Files (*.gws)|*.gws"
-msgstr "GW-TEL Script 文件 (*.gws)|*.gws"
+msgstr "GW-TEL Script 文件(*.gws)|*.gws"
 
 #: syneditstrconst.syns_filterhp48
 msgid "HP48 Files (*.s,*.sou,*.a,*.hp)|*.s;*.sou;*.a;*.hp"
-msgstr "HP48 文件 (*.s,*.sou,*.a,*.hp)|*.s;*.sou;*.a;*.hp"
+msgstr "HP48文件(*.s,*.sou,*.a,*.hp)|*.s;*.sou;*.a;*.hp"
 
 #: syneditstrconst.syns_filterhtml
 msgid "HTML Document (*.htm,*.html)|*.htm;*.html"
-msgstr "HTML 文档 (*.htm,*.html)|*.htm;*.html"
+msgstr "HTML文档(*.htm,*.html)|*.htm;*.html"
 
 #: syneditstrconst.syns_filterini
 msgid "INI Files (*.ini)|*.ini"
-msgstr "INI 文件 (*.ini)|*.ini"
+msgstr "INI文件(*.ini)|*.ini"
 
 #: syneditstrconst.syns_filterinno
 msgid "Inno Setup Script Files (*.iss)|*.iss"
-msgstr "Inno Setup Script 文件 (*.iss)|*.iss"
+msgstr "Inno Setup脚本文件(*.iss)|*.iss"
 
 #: syneditstrconst.syns_filterjava
 msgid "Java Files (*.java)|*.java"
-msgstr "Java 文件 (*.java)|*.java"
+msgstr "Java文件(*.java)|*.java"
 
 #: syneditstrconst.syns_filterjscript
 msgid "Javascript Files (*.js)|*.js"
-msgstr "Javascript 文件 (*.js)|*.js"
+msgstr "Javascript文件(*.js)|*.js"
 
 #: syneditstrconst.syns_filterkix
 msgid "KiXtart scripts (*.kix)|*.kix"
-msgstr "KiXtart scripts (*.kix)|*.kix"
+msgstr "KiXtart scripts(脚本) (*.kix)|*.kix"
 
 #: syneditstrconst.syns_filterlfm
 msgid "Lazarus Form Files (*.lfm)|*.lfm"
-msgstr "Lazarus Form 文件 (*.lfm)|*.lfm"
+msgstr "Lazarus窗体(Form)文件(*.lfm)|*.lfm"
 
 #: syneditstrconst.syns_filtermodelica
 msgid "Modelica Files (*.mo)|*.mo"
-msgstr "Modelica 文件 (*.mo)|*.mo"
+msgstr "Modelica文件(*.mo)|*.mo"
 
 #: syneditstrconst.syns_filtermodula3
 msgid "Modula-3 Files (*.m3)|*.m3"
-msgstr "Modula-3 Files (*.m3)|*.m3"
+msgstr "Modula-3文件(*.m3)|*.m3"
 
 #: syneditstrconst.syns_filterpascal
 msgid "Pascal Files (*.pas,*.dpr,*.dpk,*.inc)|*.pas;*.dpr;*.dpk;*.inc"
-msgstr "Pascal 文件 (*.pas,*.dpr,*.dpk,*.inc)|*.pas;*.dpr;*.dpk;*.inc"
+msgstr "Pascal文件(*.pas,*.dpr,*.dpk,*.inc)|*.pas;*.dpr;*.dpk;*.inc"
 
 #: syneditstrconst.syns_filterperl
 msgid "Perl Files (*.pl,*.pm,*.cgi)|*.pl;*.pm;*.cgi"
-msgstr "Perl 文件 (*.pl,*.pm,*.cgi)|*.pl;*.pm;*.cgi"
+msgstr "Perl文件(*.pl,*.pm,*.cgi)|*.pl;*.pm;*.cgi"
 
 #: syneditstrconst.syns_filterphp
 msgid "PHP Files (*.php,*.php3,*.phtml,*.inc)|*.php;*.php3;*.phtml;*.inc"
-msgstr "PHP 文件 (*.php,*.php3,*.phtml,*.inc)|*.php;*.php3;*.phtml;*.inc"
+msgstr "PHP文件(*.php,*.php3,*.phtml,*.inc)|*.php;*.php3;*.phtml;*.inc"
 
 #: syneditstrconst.syns_filterpo
 msgid "Po Files (*.po)|*.po"
-msgstr "Po文件 (*.po)|*.po"
+msgstr "Po文件(*.po)|*.po"
 
 #: syneditstrconst.syns_filterprogress
 msgid "Progress Files (*.w,*.p,*.i)|*.w;*.p;*.i"
-msgstr "Progress 文件 (*.w,*.p,*.i)|*.w;*.p;*.i"
+msgstr "进程(Progress)文件(*.w,*.p,*.i)|*.w;*.p;*.i"
 
 #: syneditstrconst.syns_filterpython
 msgid "Python Files (*.py)|*.py"
-msgstr "Python 文件 (*.py)|*.py"
+msgstr "Python文件(*.py)|*.py"
 
 #: syneditstrconst.syns_filterrtf
 msgid "Rich Text Format (*.rtf)|*.rtf"
-msgstr "Rich Text Format (*.rtf)|*.rtf"
+msgstr "富文本格式(*.rtf)|*.rtf"
 
 #: syneditstrconst.syns_filtersdd
 msgid "Semanta DD files (*.sdd)|*.sdd"
-msgstr "Semanta DD 文件 (*.sdd)|*.sdd"
+msgstr "Semanta DD文件(*.sdd)|*.sdd"
 
 #: syneditstrconst.syns_filtersml
 msgid "Standard ML Files (*.sml)|*.sml"
-msgstr "Standard ML 文件 (*.sml)|*.sml"
+msgstr "Standard ML文件(*.sml)|*.sml"
 
 #: syneditstrconst.syns_filtersql
 msgid "SQL Files (*.sql)|*.sql"
-msgstr "SQL 文件 (*.sql)|*.sql"
+msgstr "SQL文件(*.sql)|*.sql"
 
 #: syneditstrconst.syns_filtersyngenmsgfiles
 msgid "Msg files (*.msg)|*.msg"
-msgstr "Msg 文件 (*.msg)|*.msg"
+msgstr "Msg文件(*.msg)|*.msg"
 
 #: syneditstrconst.syns_filtertcltk
 msgid "Tcl/Tk Files (*.tcl)|*.tcl"
-msgstr "Tcl/Tk 文件 (*.tcl)|*.tcl"
+msgstr "Tcl/Tk文件(*.tcl)|*.tcl"
 
 #: syneditstrconst.syns_filtertex
 msgid "TeX Files (*.tex)|*.tex"
-msgstr "TeX 文件(*.tex)|*.tex"
+msgstr "TeX文件(*.tex)|*.tex"
 
 #: syneditstrconst.syns_filterunixshellscript
 msgid "UNIX Shell Scripts (*.sh)|*.sh"
-msgstr "UNIX Shell Scripts (*.sh)|*.sh"
+msgstr "UNIX Shell文件(*.sh)|*.sh"
 
 #: syneditstrconst.syns_filtervbscript
 msgid "VBScript Files (*.vbs)|*.vbs"
-msgstr "VBScript 文件 (*.vbs)|*.vbs"
+msgstr "VBScript文件(*.vbs)|*.vbs"
 
 #: syneditstrconst.syns_filtervisualbasic
 msgid "Visual Basic Files (*.bas)|*.bas"
-msgstr "Visual Basic 文件 (*.bas)|*.bas"
+msgstr "Visual Basic文件(*.bas)|*.bas"
 
 #: syneditstrconst.syns_filterx86asm
 msgid "x86 Assembly Files (*.asm)|*.ASM"
-msgstr "x86 Assembly 文件 (*.asm)|*.ASM"
+msgstr "x86汇编文件(*.asm)|*.ASM"
 
 #: syneditstrconst.syns_filterxml
 msgid "XML Document (*.xml,*.xsd,*.xsl,*.xslt,*.dtd)|*.xml;*.xsd;*.xsl;*.xslt;*.dtd"
-msgstr "XML 文档 (*.xml,*.xsd,*.xsl,*.xslt,*.dtd)|*.xml;*.xsd;*.xsl;*.xslt;*.dtd"
+msgstr "XML文档(*.xml,*.xsd,*.xsl,*.xslt,*.dtd)|*.xml;*.xsd;*.xsl;*.xslt;*.dtd"
 
 #: syneditstrconst.syns_previewscrollinfofmt
+#, object-pascal-format
 msgid "Page: %d"
-msgstr "页: %d"
+msgstr "页:%d"
 
 #: syneditstrconst.syns_scrollinfofmt
+#, object-pascal-format
 msgid "%d - %d"
 msgstr "%d - %d"
 
 #: syneditstrconst.syns_scrollinfofmttop
+#, object-pascal-format
 msgid "Top Line: %d"
-msgstr "Top Line: %d"
+msgstr "顶部行(Top Line):%d"
 
 #: syneditstrconst.syns_shortcutnone
 msgid "<none>"
@@ -810,5 +818,5 @@ msgstr "<none>"
 
 #: syneditstrconst.syns_untitled
 msgid "Untitled"
-msgstr "无标题"
+msgstr "无标题(Untitled)"
 

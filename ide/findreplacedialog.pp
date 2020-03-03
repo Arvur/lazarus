@@ -36,7 +36,7 @@ uses
   Buttons, ExtCtrls, Dialogs, Graphics, ButtonPanel,
   SynEditTypes, SynEdit,
   IDEHelpIntf, IDEImagesIntf, IDEWindowIntf, IDEDialogs,
-  LazarusIdeStrConsts, InputHistory;
+  LazarusIdeStrConsts, InputHistory, EnvironmentOpts;
 
 type
   TFindDlgComponent = (fdcText, fdcReplace);
@@ -76,6 +76,7 @@ type
     procedure EnableAutoCompleteSpeedButtonClick(Sender: TObject);
     procedure FormChangeBounds(Sender: TObject);
     procedure FormClose(Sender: TObject; var {%H-}CloseAction: TCloseAction);
+    procedure FormShow(Sender: TObject);
     procedure HelpButtonClick(Sender: TObject);
     procedure OptionsGroupBoxResize(Sender: TObject);
     procedure ReplaceWithCheckboxChange(Sender: TObject);
@@ -139,7 +140,7 @@ begin
   TextToFindLabel.Caption:=dlgTextToFind;
   ReplaceTextComboBox.Text:='';
   ReplaceWithCheckbox.Caption:=dlgReplaceWith;
-  TIDEImages.AssignImage(EnableAutoCompleteSpeedButton.Glyph, 'autocomplete');
+  IDEImages.AssignImage(EnableAutoCompleteSpeedButton, 'autocomplete');
   OptionsGroupBox.Caption:=lisOptions;
 
   with CaseSensitiveCheckBox do begin
@@ -181,7 +182,7 @@ begin
 
   // CloseButton works now as ReplaceAllButton
   BtnPanel.CloseButton.Caption := dlgReplaceAll;
-  TIDEImages.AssignImage(BtnPanel.CloseButton.Glyph, 'btn_all');
+  IDEImages.AssignImage(BtnPanel.CloseButton, 'btn_all');
 
   fReplaceAllClickedLast:=false;
   UpdateHints;
@@ -202,6 +203,12 @@ procedure TLazFindReplaceDialog.FormClose(Sender: TObject;
   var CloseAction: TCloseAction);
 begin
   IDEDialogLayoutList.SaveLayout(Self);
+end;
+
+procedure TLazFindReplaceDialog.FormShow(Sender: TObject);
+begin
+  TextToFindComboBox.DropDownCount:=EnvironmentOptions.DropDownCount;
+  ReplaceTextComboBox.DropDownCount:=EnvironmentOptions.DropDownCount;
 end;
 
 procedure TLazFindReplaceDialog.UpdateHints;

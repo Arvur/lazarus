@@ -1,13 +1,13 @@
 # Olexandr Pylypchuk <pilipchukap@rambler.ru>, 2017.
-# admin <lxlalexlxl@ukr.net>, 2017.
+# admin <lxlalexlxl@ukr.net>, 2017, 2018, 2019.
 msgid ""
 msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Project-Id-Version: \n"
 "POT-Creation-Date: \n"
-"PO-Revision-Date: 2017-11-14 23:05+0200\n"
-"Last-Translator: admin <lxlalexlxl@ukr.net>\n"
-"Language-Team: Ukrainian <trans-uk@lists.fedoraproject.org>\n"
+"PO-Revision-Date: 2019-09-20 20:43+0200\n"
+"Last-Translator: Olexandr Pylypchuk <lxlalexlxl@ukr.net>\n"
+"Language-Team: Ukrainian <kde-i18n-doc@kde.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Language: ru\n"
@@ -30,6 +30,22 @@ msgstr "Видалити рядок"
 msgid "Insert row"
 msgstr "Вставити рядок"
 
+#: tachartstrconsts.desmovedown
+msgid "Move down"
+msgstr "Перемістити вниз"
+
+#: tachartstrconsts.desmoveup
+msgid "Move up"
+msgstr "Перемістити вгору"
+
+#: tachartstrconsts.desnointeger
+msgid "Value must be an integer."
+msgstr "Значення повинне бути цілим."
+
+#: tachartstrconsts.desnonumber
+msgid "Non-numeric value."
+msgstr "Нечислове значення."
+
 #: tachartstrconsts.destext
 msgid "Text"
 msgstr "Текст"
@@ -45,6 +61,10 @@ msgstr "Діаграма з областями"
 #: tachartstrconsts.rsautoscale
 msgid "Auto scale"
 msgstr "Автоматичний масштаб"
+
+#: tachartstrconsts.rsaxisclicktool
+msgid "Axis click"
+msgstr "Клацання осі"
 
 #: tachartstrconsts.rsbarseries
 msgid "Bar series"
@@ -167,7 +187,32 @@ msgstr "Вимірювання відстані"
 msgid "Down triangle"
 msgstr "Трикутник з вершиною донизу"
 
+#: tachartstrconsts.rserrfitdimerror
+msgid "Non-matching count of x and y values."
+msgstr "Невідповідна кількість значень x і y."
+
+#: tachartstrconsts.rserrfitmoreparamsthanvalues
+msgid "There are more fitting parameters than data values."
+msgstr "Параметрів апроксимування більше, ніж значень даних."
+
+#: tachartstrconsts.rserrfitnobasefunctions
+msgid "Not enough user-provided base functions."
+msgstr "Не вистачає наданих користувачем базових функцій."
+
+#: tachartstrconsts.rserrfitnofitparams
+msgid "No fit parameters specified."
+msgstr "Не задачі параметри апроксимації."
+
+#: tachartstrconsts.rserrfitsingular
+msgid "Fitting matrix is (nearly) singular."
+msgstr "Матриця апроксимування (майже) одинична."
+
+#: tachartstrconsts.rserrillegalfitparamcount
+msgid "The number of fit parameters cannot be less than 1."
+msgstr "Число параметрів апроксимації не може бути меншим від 1."
+
 #: tachartstrconsts.rserrinvalidresulttype
+#, object-pascal-format
 msgid "Expression result type must be integer or float. Got \"%s\"."
 msgstr "Тип значення виразу повинен бути цілим або дійсним. Отримано \"%s\"."
 
@@ -183,6 +228,58 @@ msgstr "Ряд математичних виразів"
 msgid "Vector field series"
 msgstr "Діаграма з векторним полем"
 
+#: tachartstrconsts.rsfitadjcoefficientofdetermination
+msgid "Adj. coefficient of determination"
+msgstr "Скоригований коефіцієнт детермінації"
+
+#: tachartstrconsts.rsfitchisquared
+msgid "Chi-squared"
+msgstr "Хі-квадрат"
+
+#: tachartstrconsts.rsfitcoefficientofdetermination
+msgid "Coefficient of determination (R2)"
+msgstr "Коефіцієнт детермінації (R2)"
+
+#: tachartstrconsts.rsfitdegreesoffreedom
+msgid "Degrees of freedom"
+msgstr "Ступені вільності"
+
+#: tachartstrconsts.rsfiterrorsumofsquares
+msgid "Error sum of squares (SSE)"
+msgstr "Сума квадратів похибок (SSE)"
+
+#: tachartstrconsts.rsfitnumfitparams
+msgid "Number of fit parameters"
+msgstr "Кількість придатних параметрів"
+
+#: tachartstrconsts.rsfitnumobservations
+msgid "Number of observations"
+msgstr "Кількість спостережень"
+
+#: tachartstrconsts.rsfitpvalue
+msgid "p value"
+msgstr "Значення p"
+
+#: tachartstrconsts.rsfitreducedchisquared
+msgid "Reduced Chi-squared"
+msgstr "Зменшена хі-квадрат"
+
+#: tachartstrconsts.rsfitregressionsumofsquares
+msgid "Regression sum of squares (SSR)"
+msgstr "Сума квадратів регресії (SSR)"
+
+#: tachartstrconsts.rsfitresidualstandarderror
+msgid "Residual standard error"
+msgstr "Остаточна стандартна похибка"
+
+#: tachartstrconsts.rsfittotalsumofsquares
+msgid "Total sum of squares (SST)"
+msgstr "Загальна сума квадратів (SSE)"
+
+#: tachartstrconsts.rsfitvarianceratio
+msgid "Variance ratio F"
+msgstr "Коефіцієнт варіації F"
+
 #: tachartstrconsts.rsfullstarsymbol
 msgid "Star (full)"
 msgstr "Зірка (повна)"
@@ -190,6 +287,10 @@ msgstr "Зірка (повна)"
 #: tachartstrconsts.rsfunctionseries
 msgid "Function series"
 msgstr "Діаграма за функцією"
+
+#: tachartstrconsts.rsheaderfooterclicktool
+msgid "Header/footer click"
+msgstr "Клацання верхнього/нижнього колонтитулів"
 
 #: tachartstrconsts.rshexagonsymbol
 msgid "Hexagon"
@@ -231,6 +332,10 @@ msgstr "Дужка ліворуч"
 msgid "Left triangle"
 msgstr "Трикутник з вершиною ліворуч"
 
+#: tachartstrconsts.rslegendclicktool
+msgid "Legend click"
+msgstr "Клацання легенди"
+
 #: tachartstrconsts.rslinear
 msgid "Linear"
 msgstr "Лінійний масштаб"
@@ -238,6 +343,21 @@ msgstr "Лінійний масштаб"
 #: tachartstrconsts.rslineseries
 msgid "Line series"
 msgstr "Графік"
+
+#: tachartstrconsts.rslistsourcecolorerror
+#, object-pascal-format
+msgid "The %0:s.DataPoints string \"%1:s\" is not an integer."
+msgstr "%0:s.DataPoints рядок \"%1:s\" не є цілим числом."
+
+#: tachartstrconsts.rslistsourcenumericerror
+#, object-pascal-format
+msgid "The %0:s.DataPoints string \"%1:s\" is not a valid number."
+msgstr "%0:s.DataPoints рядок \"%1:s\" не є правильним числом."
+
+#: tachartstrconsts.rslistsourcestringformaterror
+#, object-pascal-format
+msgid "The data value count in the %0:s.DataPoints string \"%1:s\" differs from what is expected from XCount and YCount."
+msgstr "Число значень даних в %0:s.DataPoints рядку \"%1:s\" відрізняється від очікуваного з XCount і YCount."
 
 #: tachartstrconsts.rslogarithmic
 msgid "Logarithmic"
@@ -344,6 +464,25 @@ msgstr "Дужка праворуч"
 msgid "Right triangle"
 msgstr "Трикутник з вершиною праворуч"
 
+#: tachartstrconsts.rssourcecounterror
+#, object-pascal-format
+msgid "%0:s requires a chart source with at least %1:d %2:s value(s) per data point."
+msgstr "%0:s потребує джерела діаграми з принаймні %1:d %2:s значенням(и) на точку даних."
+
+#: tachartstrconsts.rssourcecounterror2
+#, object-pascal-format
+msgid "This %0:s instance must have at least %1:d %2:s value(s) per data point."
+msgstr "Цей примірник %0:s повинен мати принаймні %1:d %2:s значень на точку даних."
+
+#: tachartstrconsts.rssourcenoteditable
+msgid "Editable chart source required"
+msgstr "Потрібне джерело діаграми, доступне для редагування"
+
+#: tachartstrconsts.rssourcesorterror
+#, object-pascal-format
+msgid "Selected sorting parameters are not supported by %s."
+msgstr "Вибрані параметри сортування не підтримуються %s."
+
 #: tachartstrconsts.rsstarsymbol
 msgid "Star (lines)"
 msgstr "Зірка (з ліній)"
@@ -395,6 +534,7 @@ msgid "Edit axis transformations"
 msgstr "Редактор масштабів осей"
 
 #: tachartstrconsts.tasfailedsubcomponentrename
+#, object-pascal-format
 msgid "Failed to rename components: %s"
 msgstr "Неможливо перейменувати компоненти: %s"
 

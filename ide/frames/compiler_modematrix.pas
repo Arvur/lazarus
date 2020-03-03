@@ -35,10 +35,20 @@ unit Compiler_ModeMatrix;
 interface
 
 uses
-  Classes, SysUtils, types, LazLogger, LazUTF8, Controls, Graphics, ComCtrls,
-  Menus, LCLProc, IDEOptionsIntf, IDEImagesIntf, CompOptsIntf, EnvironmentOpts,
-  PackageSystem, PackageDefs, Project, LazarusIDEStrConsts, TransferMacros,
-  ModeMatrixOpts, ModeMatrixCtrl, compiler_config_target;
+  //Classes, SysUtils, types, LazLoggerBase, LazUTF8, Controls, Graphics, ComCtrls,
+  //Menus, LCLProc, IDEOptionsIntf, IDEImagesIntf, CompOptsIntf, EnvironmentOpts,
+  //PackageSystem, PackageDefs, Project, LazarusIDEStrConsts, TransferMacros,
+  //ModeMatrixOpts, ModeMatrixCtrl, compiler_config_target;
+  Classes, SysUtils, types,
+  // LazUtils
+  LazLoggerBase, LazUTF8,
+  // LCL
+  LCLProc, Controls, Graphics, ComCtrls, Menus,
+  // IdeIntf
+  IDEOptionsIntf, IDEOptEditorIntf, IDEImagesIntf, CompOptsIntf,
+  // IDE
+  EnvironmentOpts, PackageSystem, PackageDefs, Project, LazarusIDEStrConsts,
+  TransferMacros, ModeMatrixOpts, ModeMatrixCtrl, compiler_config_target;
 
 type
 
@@ -116,8 +126,6 @@ type
     procedure CreateNewOption(aTyp, aValue: string);
     procedure CreateNewTarget;
     function GetCaptionValue(aCaption, aPattern: string): string;
-    procedure UpdateEnabledModesInGrid(Options: TBuildMatrixOptions;
-                       StorageGroup: TGroupedMatrixGroup; var HasChanged: boolean);
     procedure UpdateGridStorageGroups;
   protected
     procedure VisibleChanged; override;
@@ -743,10 +751,7 @@ end;
 
 function TCompOptModeMatrixFrame.ActiveModeAsText: string;
 begin
-  if EnvironmentOptions.UseBuildModes then
-    Result:=Grid.Modes[Grid.ActiveMode].Caption
-  else
-    Result:=LazProject.BuildModes[0].GetCaption;
+  Result:=Grid.Modes[Grid.ActiveModeIndex].Caption;
 end;
 
 procedure TCompOptModeMatrixFrame.CreateNewOption(aTyp, aValue: string);
@@ -843,41 +848,6 @@ begin
   p:=Pos('%s',aPattern);
   if p<1 then exit;
   Result:=copy(aCaption,p,length(aCaption)-length(aPattern)+2);
-end;
-
-procedure TCompOptModeMatrixFrame.UpdateEnabledModesInGrid(
-  Options: TBuildMatrixOptions; StorageGroup: TGroupedMatrixGroup;
-  var HasChanged: boolean);
-// update enabled modes in grid
-var
-  GrpIndex: Integer;
-  Target: TGroupedMatrixGroup;
-  i: Integer;
-  ValueRow: TGroupedMatrixValue;
-  OptionIndex: Integer;
-  Option: TBuildMatrixOption;
-begin
-  OptionIndex:=0;
-  for GrpIndex:=0 to StorageGroup.Count-1 do begin
-    Target:=TGroupedMatrixGroup(StorageGroup[GrpIndex]);
-    if not (Target is TGroupedMatrixGroup) then
-      exit;
-    //debugln(['TCompOptModeMatrix.UpdateEnabledModesInGrid Target=',Target.AsString]);
-    for i:=0 to Target.Count-1 do begin
-      ValueRow:=TGroupedMatrixValue(Target[i]);
-      if not (ValueRow is TGroupedMatrixValue) then
-        exit;
-      //debugln(['TCompOptModeMatrix.UpdateEnabledModesInGrid ValueRow=',ValueRow.AsString]);
-      if OptionIndex>=Options.Count then exit;
-      Option:=Options[OptionIndex];
-      //debugln(['TCompOptModeMatrix.UpdateEnabledModesInGrid Option.Modes="',dbgstr(Option.Modes),'" ValueRow.GetNormalizedModes="',dbgstr(ValueRow.GetNormalizedModes),'"']);
-      if Option.Modes<>ValueRow.GetNormalizedModes then begin
-        HasChanged:=true;
-        ValueRow.ModeList.Text:=Option.Modes;
-      end;
-      inc(OptionIndex);
-    end;
-  end;
 end;
 
 procedure TCompOptModeMatrixFrame.UpdateGridStorageGroups;
@@ -984,54 +954,37 @@ var
   GridHasChanged: Boolean;
   ValuesHaveChanged: Boolean;
   aMode: TGroupedMatrixMode;
-  BuildMode: TProjectBuildMode;
-  BuildModes: TProjectBuildModes;
-  BuildModeCount: integer;
+  BM: TProjectBuildMode;
 begin
   GridHasChanged:=false;
   ValuesHaveChanged:=false;
-
   // add/update build modes
-  BuildModes:=LazProject.BuildModes;
-  if EnvironmentOptions.UseBuildModes then begin
-    for i:=0 to BuildModes.Count-1 do begin
-      BuildMode:=BuildModes[i];
-      aColor:=clDefault;
-      if BuildMode.InSession then aColor:=SessionColor;
-      if i=Grid.Modes.Count then begin
-        Grid.Modes.Add(BuildMode.Identifier,aColor);
+  for i:=0 to LazProject.BuildModes.Count-1 do begin
+    BM:=LazProject.BuildModes[i];
+    aColor:=clDefault;
+    if BM.InSession then aColor:=SessionColor;
+    if i=Grid.Modes.Count then begin
+      Grid.Modes.Add(BM.Identifier,aColor);
+      GridHasChanged:=true;
+    end
+    else begin
+      aMode:=Grid.Modes[i];
+      if aMode.Caption<>BM.Identifier then begin
+        aMode.Caption:=BM.Identifier;
         GridHasChanged:=true;
-      end
-      else begin
-        aMode:=Grid.Modes[i];
-        //debugln(['TCompOptModeMatrix.UpdateModes aMode.Caption=',aMode.Caption,' BuildMode.Identifier=',BuildMode.Identifier]);
-        if aMode.Caption<>BuildMode.Identifier then begin
-          aMode.Caption:=BuildMode.Identifier;
-          GridHasChanged:=true;
-        end;
-        if aMode.Color<>aColor then begin
-          ValuesHaveChanged:=true;
-          aMode.Color:=aColor;
-        end;
+      end;
+      if aMode.Color<>aColor then begin
+        aMode.Color:=aColor;
+        ValuesHaveChanged:=true;
       end;
     end;
-    BuildModeCount:=BuildModes.Count;
-  end
-  else
-    BuildModeCount:=0;
+  end;
   // delete leftover build modes
-  while Grid.Modes.Count>BuildModeCount do begin
+  while Grid.Modes.Count>LazProject.BuildModes.Count do begin
     Grid.Modes.Delete(Grid.Modes.Count-1);
     GridHasChanged:=true;
   end;
-
-  UpdateEnabledModesInGrid(EnvironmentOptions.BuildMatrixOptions,GroupIDE,ValuesHaveChanged);
-  UpdateEnabledModesInGrid(LazProject.BuildModes.SharedMatrixOptions,GroupProject,ValuesHaveChanged);
-  UpdateEnabledModesInGrid(LazProject.BuildModes.SessionMatrixOptions,GroupSession,ValuesHaveChanged);
-
   UpdateActiveMode;
-
-  //debugln(['TCompOptModeMatrix.UpdateModes UpdateGrid=',UpdateGrid,' GridHasChanged=',GridHasChanged]);
   if UpdateGrid and GridHasChanged then
     Grid.MatrixChanged
   else if GridHasChanged or ValuesHaveChanged then
@@ -1042,12 +995,9 @@ procedure TCompOptModeMatrixFrame.UpdateActiveMode;
 var
   i: Integer;
 begin
-  if EnvironmentOptions.UseBuildModes then
-    i:=LazProject.BuildModes.IndexOf(LazProject.ActiveBuildMode)
-  else
-    i:=-1;
+  i:=LazProject.BuildModes.IndexOf(LazProject.ActiveBuildMode);
   if i>=Grid.Modes.Count then exit;
-  Grid.ActiveMode:=i;
+  Grid.ActiveModeIndex:=i;
 end;
 
 procedure TCompOptModeMatrixFrame.MoveRow(Direction: integer);
@@ -1270,7 +1220,6 @@ procedure TCompOptModeMatrixFrame.ReadSettings(AOptions: TAbstractIDEOptions);
 var
   CompOptions: TProjectCompilerOptions;
 begin
-  //debugln(['TCompOptModeMatrix.ReadSettings ',DbgSName(AOptions)]);
   if not (AOptions is TProjectCompilerOptions) then exit;
   CompOptions:=TProjectCompilerOptions(AOptions);
   if LazProject=CompOptions.LazProject then begin
@@ -1278,9 +1227,7 @@ begin
     UpdateActiveMode;
     exit;
   end;
-
   fProject:=CompOptions.LazProject;
-
   UpdateModes(false);
   FillMenus;
 
@@ -1299,7 +1246,6 @@ begin
 
   // update Grid
   Grid.MatrixChanged;
-
   // select project
   Grid.Row:=Grid.Matrix.IndexOfRow(GroupProject)+1;
   Grid.Col:=Grid.FixedCols;

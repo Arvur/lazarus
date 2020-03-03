@@ -42,7 +42,7 @@ interface
 uses
   LCLType,
   FpImgReaderBase, FpImgReaderWinPE, FpImgReaderElf, FpImgReaderMacho,
-  fpDbgSymTable,
+  fpDbgSymTable, DbgIntfBaseTypes,
   Classes, SysUtils, contnrs;
 
 type
@@ -50,13 +50,18 @@ type
   {$ifdef windows}
     {$define USE_WIN_FILE_MAPPING}
   {$endif}
+
+  TDbgImageLoaderList = class;
+
   { TDbgImageLoader }
 
   TDbgImageLoader = class(TObject)
   private
     FFileLoader: TDbgFileLoader;
+    FFileName: String;
     FImgReader: TDbgImageReader;
     function GetAddressMapList: TDbgAddressMapList;
+    function GetReaderErrors: String;
     function GetSubFiles: TStrings;
     function GetImage64Bit: Boolean;
     function GetUUID: TGuid;
@@ -67,13 +72,18 @@ type
     property ImgReader: TDbgImageReader read FImgReader write FImgReader;
   public
     constructor Create; virtual;
-    constructor Create(AFileName: String; ADebugMap: TObject = nil);
-    procedure ParseSymbolTable(AFpSymbolInfo: TfpSymbolList);
+    constructor Create(AFileName: String; ADebugMap: TObject = nil;
+      ALoadedTargetImageAddr: TDBGPtr = 0);
+    procedure ParseSymbolTable(AFpSymbolInfo: TfpSymbolList); virtual;
     {$ifdef USE_WIN_FILE_MAPPING}
-    constructor Create(AFileHandle: THandle; ADebugMap: TObject = nil);
+    constructor Create(AFileHandle: THandle; ADebugMap: TObject = nil;
+      ALoadedTargetImageAddr: TDBGPtr = 0);
     {$endif}
     destructor Destroy; override;
+    procedure CloseFileLoader;
+    procedure AddToLoaderList(ALoaderList: TDbgImageLoaderList);
     function IsValid: Boolean;
+    property FileName: String read FFileName; // Empty if using USE_WIN_FILE_MAPPING
     property ImageBase: QWord read FImageBase; unimplemented;
     Property Image64Bit: Boolean read GetImage64Bit;
     property UUID: TGuid read GetUUID;
@@ -84,6 +94,14 @@ type
     // This is to map the addresses inside the object file
     // to their corresponding addresses in the executable. (Darwin)
     property AddressMapList: TDbgAddressMapList read GetAddressMapList;
+    property ReaderErrors: String read GetReaderErrors;
+  end;
+
+  { TDbgImageLoaderLibrary }
+
+  TDbgImageLoaderLibrary = class(TDbgImageLoader)
+  public
+    procedure ParseSymbolTable(AFpSymbolInfo: TfpSymbolList); override;
   end;
 
   { TDbgImageLoaderList }
@@ -106,7 +124,7 @@ implementation
 
 function TDbgImageLoaderList.GetImage64Bit: Boolean;
 begin
-  if Count<0 then
+  if Count>0 then
     result := Items[0].Image64Bit
   else
     {$ifdef CPU64}
@@ -118,7 +136,7 @@ end;
 
 function TDbgImageLoaderList.GetImageBase: QWord;
 begin
-  if Count<0 then
+  if Count>0 then
     result := Items[0].ImageBase
   else
     result := 0;
@@ -132,6 +150,15 @@ end;
 procedure TDbgImageLoaderList.SetItem(Index: Integer; AValue: TDbgImageLoader);
 begin
   inherited SetItem(Index, AValue);
+end;
+
+{ TDbgImageLoaderLibrary }
+
+procedure TDbgImageLoaderLibrary.ParseSymbolTable(AFpSymbolInfo: TfpSymbolList);
+begin
+  inherited ParseSymbolTable(AFpSymbolInfo);
+  if IsValid then
+    FImgReader.ParseLibrarySymbolTable(AFpSymbolInfo);
 end;
 
 { TDbgImageLoader }
@@ -154,6 +181,12 @@ begin
     result := FImgReader.AddressMapList
   else
     result := nil
+end;
+
+function TDbgImageLoader.GetReaderErrors: String;
+begin
+  if FImgReader <> nil then
+    Result := FImgReader.ReaderErrors;
 end;
 
 function TDbgImageLoader.GetSubFiles: TStrings;
@@ -185,10 +218,14 @@ begin
   inherited Create;
 end;
 
-constructor TDbgImageLoader.Create(AFileName: String; ADebugMap: TObject = nil);
+constructor TDbgImageLoader.Create(AFileName: String; ADebugMap: TObject;
+  ALoadedTargetImageAddr: TDBGPtr);
 begin
+  FFileName := AFileName;
   FFileLoader := TDbgFileLoader.Create(AFileName);
-  FImgReader := GetImageReader(FFileLoader, ADebugMap, True);
+  FImgReader := GetImageReader(FFileLoader, ADebugMap, False);
+  if FImgReader = nil then FreeAndNil(FFileLoader);
+  FImgReader.LoadedTargetImageAddr := ALoadedTargetImageAddr;
 end;
 
 procedure TDbgImageLoader.ParseSymbolTable(AFpSymbolInfo: TfpSymbolList);
@@ -198,17 +235,33 @@ begin
 end;
 
 {$ifdef USE_WIN_FILE_MAPPING}
-constructor TDbgImageLoader.Create(AFileHandle: THandle; ADebugMap: TObject = nil);
+constructor TDbgImageLoader.Create(AFileHandle: THandle; ADebugMap: TObject;
+  ALoadedTargetImageAddr: TDBGPtr);
 begin
   FFileLoader := TDbgFileLoader.Create(AFileHandle);
-  FImgReader := GetImageReader(FFileLoader, ADebugMap, True);
+  FImgReader := GetImageReader(FFileLoader, ADebugMap, False);
+  if FImgReader = nil then FreeAndNil(FFileLoader);
+  FImgReader.LoadedTargetImageAddr := ALoadedTargetImageAddr;
 end;
 {$endif}
 
 destructor TDbgImageLoader.Destroy;
 begin
   FreeAndNil(FImgReader);
+  FreeAndNil(FFileLoader);
   inherited Destroy;
+end;
+
+procedure TDbgImageLoader.CloseFileLoader;
+begin
+  if FFileLoader <> nil then
+    FFileLoader.Close;
+end;
+
+procedure TDbgImageLoader.AddToLoaderList(ALoaderList: TDbgImageLoaderList);
+begin
+  ALoaderList.Add(Self);
+  FImgReader.AddSubFilesToLoaderList(ALoaderList, Self);
 end;
 
 function TDbgImageLoader.IsValid: Boolean;

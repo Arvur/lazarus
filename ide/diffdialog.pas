@@ -39,10 +39,17 @@ unit DiffDialog;
 interface
 
 uses
-  Classes, SysUtils, Forms, Controls, Buttons, StdCtrls, FileUtil,
-  lazutf8classes, LazarusIDEStrConsts, EditorOptions, LCLType, IDEWindowIntf,
-  IDEHelpIntf, InputHistory, DiffPatch, ExtCtrls, Dialogs, ComCtrls, SynEdit,
-  IDEImagesIntf, SynHighlighterDiff, SourceEditor;
+  Classes, SysUtils,
+  // LCL
+  Forms, Controls, Buttons, StdCtrls, ExtCtrls, Dialogs, ComCtrls, LCLType,
+  // LazUtils
+  FileUtil, lazutf8classes,
+  // SynEdit
+  SynEdit, SynHighlighterDiff,
+  // IdeIntf
+  IDEWindowIntf, IDEHelpIntf, IDEImagesIntf,
+  // IDE
+  LazarusIDEStrConsts, EditorOptions, InputHistory, DiffPatch, SourceEditor, EnvironmentOpts;
 
 type
 
@@ -120,6 +127,7 @@ type
 
     procedure CancelScanningButtonClick(Sender: TObject);
     procedure FileOpenClick(Sender: TObject);
+    procedure FormCreate(Sender: TObject);
     procedure HelpButtonClick(Sender: TObject);
     procedure OnChangeFlag(Sender: TObject);
     procedure Text1ComboboxChange(Sender: TObject);
@@ -135,6 +143,7 @@ type
     procedure UpdateDiff;
     procedure SetIdleConnected(const AValue: boolean);
     procedure OnIdle(Sender: TObject; var {%H-}Done: Boolean);
+    procedure UpdateProgress(aPosition: Integer);
   public
     constructor Create(TheOwner: TComponent); override;
     destructor Destroy; override;
@@ -345,14 +354,14 @@ begin
   end;
 
   // buttons
-  TIDEImages.AssignImage(CancelScanningButton.Glyph, 'btn_cancel');
+  IDEImages.AssignImage(CancelScanningButton, 'btn_cancel');
   CloseButton.Caption:=lisClose;
   OpenInEditorButton.Caption:=lisDiffDlgOpenDiffInEditor;
   HelpButton.Caption:=lisMenuHelp;
 
   OpenInEditorButton.LoadGlyphFromStock(idButtonOpen);
   if OpenInEditorButton.Glyph.Empty then
-    TIDEImages.AssignImage(OpenInEditorButton.Glyph, 'laz_open');
+    IDEImages.AssignImage(OpenInEditorButton, 'laz_open');
   
   // dialogs
   dlgOpen.Title:=lisOpenExistingFile;
@@ -370,6 +379,12 @@ end;
 procedure TDiffDlg.UpdateDiff;
 begin
   IdleConnected:=True;
+end;
+
+procedure TDiffDlg.UpdateProgress(aPosition: Integer);
+begin
+  ProgressBar1.Position := aPosition;
+  Application.ProcessMessages;
 end;
 
 procedure TDiffDlg.SetIdleConnected(const AValue: boolean);
@@ -400,9 +415,11 @@ begin
     OpenInEditorButton.Enabled := False;
     //CancelScanningButton.Enabled := True;
 
-    DiffOutput:=TDiffOutput.Create(Text1Src, Text2Src, GetDiffOptions, ProgressBar1);
+    DiffOutput := TDiffOutput.Create(Text1Src, Text2Src, GetDiffOptions);
     try
-      DiffSynEdit.Lines.Text:=DiffOutput.CreateTextDiff;
+      ProgressBar1.Max := DiffOutput.GetProgressMax;
+      DiffOutput.OnProgressPos := @UpdateProgress;
+      DiffSynEdit.Lines.Text := DiffOutput.CreateTextDiff;
     finally
       DiffOutput.Free;
     end;
@@ -456,6 +473,12 @@ begin
   for i:=0 to fAvailableFiles.Count-1 do
     Text2Combobox.Items.Add(fAvailableFiles[i].Name);
   Text2Combobox.Items.EndUpdate;
+end;
+
+procedure TDiffDlg.FormCreate(Sender: TObject);
+begin
+  Text1Combobox.DropDownCount:=EnvironmentOptions.DropDownCount;
+  Text2Combobox.DropDownCount:=EnvironmentOptions.DropDownCount;
 end;
 
 procedure TDiffDlg.SaveSettings;

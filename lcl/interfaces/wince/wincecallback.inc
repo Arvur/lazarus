@@ -23,7 +23,7 @@ type
 
   Enumerates and removes properties for the target window
  -----------------------------------------------------------------------------}
-function PropEnumProc(Window: Hwnd; Str: PChar; Data: Handle): LongBool; stdcall;
+function PropEnumProc(Window: Hwnd; Str: PChar; Data: Handle): LongBool; cdecl;
 begin
   Result:=false;
   if PtrUInt(Str) <= $FFFF then exit; // global atom handle
@@ -711,7 +711,7 @@ Var
         Dec(P.X, BoundsOffset.Left);
         Dec(P.Y, BoundsOffset.Top);
       end;
-      ACursor := Screen.Cursor;
+      ACursor := Screen.RealCursor;
       if ACursor = crDefault then
       begin
         // statictext controls do not get WM_SETCURSOR messages...
@@ -942,15 +942,16 @@ Var
     OldUTF8Char, UTF8Char: TUTF8Char;
     WS: WideString;
   begin
-    Result := false;
+    Result := False;
     UTF8Char := UTF16ToUTF8(widestring(WideChar(AChar)));
     OldUTF8Char := UTF8Char;
     if Assigned(lWinControl) then
     begin
+      // if somewhere key is changed to '' then don't process this message
       Result := lWinControl.IntfUTF8KeyPress(UTF8Char, 1, False);
       // if somewhere key is changed then don't perform a regular keypress
       Result := Result or (UTF8Char <> OldUTF8Char);
-      if OldUTF8Char <> UTF8Char then
+      if Result then
       begin
         WS := UTF8ToUTF16(UTF8Char);
         if Length(WS) > 0 then
@@ -1552,18 +1553,27 @@ begin
       end;
       {$endif}
 
-      MouseDownTime := GetTickCount;
-      MouseDownWindow := Window;
-      GetCursorPos(MouseDownPos);
       NotifyUserInput := True;
       PLMsg:=@LMMouse;
       with LMMouse Do
       begin
         Msg := LM_LBUTTONDOWN;
-        XPos := SmallInt(Lo(LParam));
-        YPos := SmallInt(Hi(LParam));
+        XPos := GET_X_LPARAM(LParam);
+        YPos := GET_Y_LPARAM(LParam);
         Keys := WParam;
       end;
+(*
+      if (GetTickCount-MouseDownTime < GetDoubleClickTime()) and
+         (MouseDownWindow = Window) and
+         (Abs(LMMouse.XPos - MouseDownPos.x) < GetSystemMetrics(SM_CXDOUBLECLK)) and
+         (Abs(LMMouse.YPos - MouseDownPos.y) < GetSystemMetrics(SM_CYDOUBLECLK)) then
+      begin
+        LMMouse.Msg := LM_LBUTTONDBLCLK;
+      end;
+*)
+      MouseDownTime := GetTickCount();
+      MouseDownWindow := Window;
+      GetCursorPos(MouseDownPos);
 
       // CheckListBox functionality
       if lWinControl is TCheckListBox then
@@ -1581,8 +1591,8 @@ begin
       with LMMouse Do
       begin
         Msg := LM_LBUTTONUP;
-        XPos := SmallInt(Lo(LParam));
-        YPos := SmallInt(Hi(LParam));
+        XPos := GET_X_LPARAM(LParam);
+        YPos := GET_Y_LPARAM(LParam);
         Keys := WParam;
       end;
     end;
@@ -1856,8 +1866,6 @@ begin
       DebugLn('WM_SETFOCUS received for window ', IntToHex(Window, 8));
 {$endif}
       LMessage.Msg := LM_SETFOCUS;
-      if (lWinControl <> nil) and (lWinControl.FCompStyle = csEdit) then
-        Windows.SendMessage(Window, EM_SETSEL, 0, -1);
     end;
     WM_SHOWWINDOW:
     begin
@@ -2201,8 +2209,8 @@ begin
     case Msg of
       WM_NCDESTROY:
       begin
-        //roozbeh : test this....
-         // free our own data associated with window
+        //roozbeh : test this.... WinCE does not support WM_NCDESTROY message #24452
+        // free our own data associated with window
         if DisposeWindowInfo(Window) then
           WindowInfo := nil;
         //EnumProps(Window, @PropEnumProc);
@@ -2222,7 +2230,7 @@ begin
           WM_CHAR:
           begin
             // if want chars, then handled already
-            PLMsg^.Result := CallDefaultWindowProc(Window, WM_GETDLGCODE, 0, 0) and DLGC_WANTCHARS;
+            PLMsg^.Result := CallDefaultWindowProc(Window, WM_GETDLGCODE, WParam, 0) and DLGC_WANTCHARS;
             LMChar.CharCode := Word(WParam);
             LMChar.Msg := LM_CHAR;
           end;
@@ -2315,7 +2323,7 @@ end;
 {$ifdef MSG_DEBUG}
 
 function WindowProc(Window: HWnd; Msg: UInt; WParam: Windows.WParam;
-    LParam: Windows.LParam): LResult; {$ifdef Wince}cdecl;{$else}stdcall;{$endif}
+    LParam: Windows.LParam): LResult; {$ifdef wince}cdecl;{$else}stdcall;{$endif}
 begin
   DebugLn('WindowProc called for window=', IntToHex(Window, 8),' msg=',
     WM_To_String(msg),' wparam=', IntToHex(WParam, 8), ' lparam=', IntToHex(lparam, 8));

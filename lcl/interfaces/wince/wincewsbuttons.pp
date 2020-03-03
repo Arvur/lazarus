@@ -59,7 +59,8 @@ procedure DrawBitBtnImage(BitBtn: TCustomBitBtn; DrawStruct: PDrawItemStruct);
 
 implementation
 
-uses WinCEInt, WinCEExtra;
+uses
+  ImgList, WinCEInt, WinCEExtra;
 
 type
   TBitBtnAceess = class(TCustomBitBtn)
@@ -87,52 +88,54 @@ const
  ------------------------------------------------------------------------------}
 procedure DrawBitBtnImage(BitBtn: TCustomBitBtn; DrawStruct: PDrawItemStruct);
 var
-  BitBtnLayout: TButtonLayout; // Layout of button and glyph
-  OldFontHandle: HFONT; // Handle of previous font in hdcNewBitmap
-  TextSize: Windows.SIZE; // For computing the length of button caption in pixels
   XDestBitmap, YDestBitmap: integer; // X,Y coordinate of destination rectangle for bitmap
   XDestText, YDestText: integer; // X,Y coordinates of destination rectangle for caption
   newWidth, newHeight: integer; // dimensions of new combined bitmap
   srcWidth, srcHeight: integer; // width of glyph to use, bitmap may have multiple glyphs
-  DrawRect: TRect;
-  ButtonCaption: PWideChar;
   ButtonState: TButtonState;
+  AIndex: Integer;
+  AImageRes: TScaledImageListResolution;
+  AEffect: TGraphicsDrawEffect;
 
   procedure DrawBitmap;
   var
     TextFlags: integer; // flags for caption (enabled or disabled)
-    w, h: integer;
-    AIndex: Integer;
-    AEffect: TGraphicsDrawEffect;
+    OldFontHandle: HFONT; // handle of previous font
+    ButtonCaptionW: WideString;
   begin
     TextFlags := DST_PREFIXTEXT;
     if ButtonState = bsDisabled then
       TextFlags := TextFlags or DSS_DISABLED;
 
-    // fill with background color
-
     if (srcWidth <> 0) and (srcHeight <> 0) then
     begin
-      TBitBtnAceess(BitBtn).FButtonGlyph.GetImageIndexAndEffect(ButtonState, AIndex, AEffect);
-      
-      w := TBitBtnAceess(BitBtn).FButtonGlyph.Images.Width;
-      h := TBitBtnAceess(BitBtn).FButtonGlyph.Images.Height;
+      TBitBtnAceess(BitBtn).FButtonGlyph.GetImageIndexAndEffect(ButtonState, BitBtn.Font.PixelsPerInch, 1,
+        AImageRes, AIndex, AEffect);
 
-      TWinCEWSCustomImageList.DrawToDC(TBitBtnAceess(BitBtn).FButtonGlyph.Images, AIndex,
-        DrawStruct^._hDC, Rect(XDestBitmap, YDestBitmap, w, h),
-        TBitBtnAceess(BitBtn).FButtonGlyph.Images.BkColor,
-        TBitBtnAceess(BitBtn).FButtonGlyph.Images.BlendColor, AEffect,
-        TBitBtnAceess(BitBtn).FButtonGlyph.Images.DrawingStyle,
-        TBitBtnAceess(BitBtn).FButtonGlyph.Images.ImageType);
+      TWinCEWSCustomImageListResolution.DrawToDC(AImageRes.Resolution, AIndex,
+        DrawStruct^._hDC, Rect(XDestBitmap, YDestBitmap, srcWidth, srcHeight),
+        AImageRes.Resolution.ImageList.BkColor,
+        AImageRes.Resolution.ImageList.BlendColor, AEffect,
+        AImageRes.Resolution.ImageList.DrawingStyle,
+        AImageRes.Resolution.ImageList.ImageType);
     end;
     SetBkMode(DrawStruct^._hDC, TRANSPARENT);
     if ButtonState = bsDown then
       SetTextColor(DrawStruct^._hDC, $FFFFFF)
     else
       SetTextColor(DrawStruct^._hDC, 0);
-    DrawState(DrawStruct^._hDC, 0, nil, LPARAM(ButtonCaption), 0, XDestText, YDestText, 0, 0, TextFlags);
+
+    OldFontHandle := SelectObject(DrawStruct^._hDC, BitBtn.Font.Reference.Handle);
+    ButtonCaptionW := UTF8ToUTF16(BitBtn.Caption);
+    DrawState(DrawStruct^._hDC, 0, nil, LPARAM(ButtonCaptionW), 0, XDestText, YDestText, 0, 0, TextFlags);
+    SelectObject(DrawStruct^._hDC, OldFontHandle);
   end;
 
+var
+  BitBtnLayout: TButtonLayout; // Layout of button and glyph
+  TextSize: Windows.SIZE; // For computing the length of button caption in pixels
+  DrawRect: TRect;
+  ASpacing: integer;
 begin
   DrawRect := DrawStruct^.rcItem;
 
@@ -151,23 +154,27 @@ begin
 
   // DFCS_ADJUSTRECT doesnot work
   InflateRect(DrawRect, -4, -4);
-  
-  ButtonCaption := PWideChar(UTF8Decode(BitBtn.Caption));
 
   // gather info about bitbtn
-  if BitBtn.CanShowGlyph then
+  if BitBtn.CanShowGlyph(True) then
   begin
-    srcWidth := TBitBtnAceess(BitBtn).FButtonGlyph.Images.Width;
-    srcHeight := TBitBtnAceess(BitBtn).FButtonGlyph.Images.Height;
+    TBitBtnAceess(BitBtn).FButtonGlyph.GetImageIndexAndEffect(Low(TButtonState), BitBtn.Font.PixelsPerInch, 1,
+      AImageRes, AIndex, AEffect);
+    srcWidth := AImageRes.Width;
+    srcHeight := AImageRes.Height;
   end else
   begin
     srcWidth := 0;
     srcHeight := 0;
   end;
+
+  ASpacing := BitBtn.Spacing;
+  if (srcWidth = 0) or (srcHeight = 0) then
+    ASpacing := 0;
+
   BitBtnLayout := BitBtn.Layout;
 
-  OldFontHandle := SelectObject(DrawStruct^._hDC, BitBtn.Font.Reference.Handle);
-  GetTextExtentPoint32W(DrawStruct^._hDC, ButtonCaption, Length(BitBtn.Caption), TextSize);
+  MeasureText(BitBtn, BitBtn.Caption, TextSize.cx, TextSize.cy);
   // calculate size of new bitmap
   case BitBtnLayout of
     blGlyphLeft, blGlyphRight:
@@ -175,24 +182,21 @@ begin
       YDestBitmap := (DrawRect.Bottom + DrawRect.Top - srcHeight) div 2;
       YDestText := (DrawRect.Bottom + DrawRect.Top - TextSize.cy) div 2;
 
-      newWidth := TextSize.cx + srcWidth;
+      if ASpacing = -1 then
+        ASpacing := (BitBtn.Width - srcWidth - TextSize.cx) div 3;
+
+      newWidth := TextSize.cx + srcWidth + ASpacing;
       
-      if BitBtn.Spacing <> -1 then
-        newWidth := newWidth + BitBtn.Spacing;
-        
-      if srcWidth <> 0 then
-        inc(newWidth, 2);
-        
       case BitBtnLayout of
         blGlyphLeft:
         begin
           XDestBitmap := (DrawRect.Right + DrawRect.Left - newWidth) div 2;
-          XDestText := XDestBitmap + srcWidth;
+          XDestText := XDestBitmap + srcWidth + ASpacing;
         end;
         blGlyphRight:
         begin
           XDestText := (DrawRect.Right + DrawRect.Left - newWidth) div 2;
-          XDestBitmap := XDestText + TextSize.cx;
+          XDestBitmap := XDestText + TextSize.cx + ASpacing;
         end;
       end;
     end;
@@ -225,8 +229,6 @@ begin
   end;
 
   DrawBitmap;
-
-  SelectObject(DrawStruct^._hDC, OldFontHandle);
 end;
 
 

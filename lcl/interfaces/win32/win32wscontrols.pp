@@ -35,17 +35,17 @@ uses
   InterfaceBase, LCLType, LCLIntf, LCLProc, LazUTF8, Themes, Forms;
 
 type
-  { TWin32WSDragImageList }
+  { TWin32WSDragImageListResolution }
 
-  TWin32WSDragImageList = class(TWSDragImageList)
+  TWin32WSDragImageListResolution = class(TWSDragImageListResolution)
   published
-    class function BeginDrag(const ADragImageList: TDragImageList; Window: HWND;
+    class function BeginDrag(const ADragImageList: TDragImageListResolution; Window: HWND;
       AIndex, X, Y: Integer): Boolean; override;
-    class function DragMove(const ADragImageList: TDragImageList; X, Y: Integer): Boolean; override;
-    class procedure EndDrag(const ADragImageList: TDragImageList); override;
-    class function HideDragImage(const ADragImageList: TDragImageList;
+    class function DragMove(const ADragImageList: TDragImageListResolution; X, Y: Integer): Boolean; override;
+    class procedure EndDrag(const ADragImageList: TDragImageListResolution); override;
+    class function HideDragImage(const ADragImageList: TDragImageListResolution;
       ALockedWindow: HWND; DoUnLock: Boolean): Boolean; override;
-    class function ShowDragImage(const ADragImageList: TDragImageList;
+    class function ShowDragImage(const ADragImageList: TDragImageListResolution;
       ALockedWindow: HWND; X, Y: Integer; DoLock: Boolean): Boolean; override;
   end;
 
@@ -161,8 +161,11 @@ begin
     Width := CreateParams.Width;
     Height := CreateParams.Height;
 
-    LCLBoundsToWin32Bounds(AWinControl, Left, Top, Width, Height);
+    LCLBoundsToWin32Bounds(AWinControl, Left, Top);
     SetStdBiDiModeParams(AWinControl, Params);
+
+    if not (csDesigning in AWinControl.ComponentState) and not AWinControl.IsEnabled then
+      Flags := Flags or WS_DISABLED;
 
     {$IFDEF VerboseSizeMsg}
     DebugLn('PrepareCreateWindow ' + dbgsName(AWinControl) + ' ' +
@@ -443,7 +446,7 @@ begin
   IntfTop := ATop;
   IntfWidth := AWidth;
   IntfHeight := AHeight;
-  LCLBoundsToWin32Bounds(AWinControl, IntfLeft, IntfTop, IntfWidth, IntfHeight);
+  LCLBoundsToWin32Bounds(AWinControl, IntfLeft, IntfTop);
   {$IFDEF VerboseSizeMsg}
   DebugLn('TWin32WSWinControl.ResizeWindow A ', dbgsName(AWinControl),
     ' LCL=',Format('%d, %d, %d, %d', [ALeft,ATop,AWidth,AHeight]),
@@ -465,6 +468,10 @@ begin
       Windows.SetWindowPos(Handle, 0, IntfLeft, IntfTop, IntfWidth, IntfHeight, SWP_NOZORDER or SWP_NOACTIVATE);
   end;
   LCLControlSizeNeedsUpdate(AWinControl, True);
+  // If this control is a child of an MDI form, then we need to update the MDI client bounds in
+  // case this control has affected the client area
+  if Assigned(Application.MainForm) and (AWinControl.Parent=Application.MainForm) and (Application.MainForm.FormStyle=fsMDIForm) then
+    Win32WidgetSet.UpdateMDIClientBounds;
 end;
 
 class procedure TWin32WSWinControl.SetColor(const AWinControl: TWinControl);
@@ -499,7 +506,7 @@ begin
     Exit;
   end;
 
-  if Screen.Cursor <> crDefault then exit;
+  if Screen.RealCursor <> crDefault then exit;
 
   Windows.GetCursorPos(CursorPos);
 
@@ -542,7 +549,12 @@ begin
   {$ifdef RedirectDestroyMessages}
   SetWindowLong(Handle, GWL_WNDPROC, PtrInt(@DestroyWindowProc));
   {$endif}
-  DestroyWindow(Handle);
+  // Instead of calling DestroyWindow directly, we need to call WM_MDIDESTROY for MDI children
+  if Assigned(Application.MainForm) and (Application.MainForm.FormStyle=fsMDIForm) and
+    (AWinControl is TCustomForm) and (TCustomForm(AWinControl).FormStyle=fsMDIChild) then
+    SendMessage(Win32WidgetSet.MDIClientHandle, WM_MDIDESTROY, Handle, 0)
+  else
+    DestroyWindow(Handle);
 end;
 
 class procedure TWin32WSWinControl.Invalidate(const AWinControl: TWinControl);
@@ -568,7 +580,11 @@ const
   VisibilityToFlag: array[Boolean] of UINT = (SWP_HIDEWINDOW, SWP_SHOWWINDOW);
 begin
   Windows.SetWindowPos(AWinControl.Handle, 0, 0, 0, 0, 0,
-    SWP_NOSIZE or SWP_NOMOVE or SWP_NOZORDER or SWP_NOACTIVATE or VisibilityToFlag[AWinControl.HandleObjectShouldBeVisible])
+    SWP_NOSIZE or SWP_NOMOVE or SWP_NOZORDER or SWP_NOACTIVATE or VisibilityToFlag[AWinControl.HandleObjectShouldBeVisible]);
+  // If this control is a child of an MDI form, then we need to update the MDI client bounds in
+  // case altering this control's visibility has affected the client area
+  if Assigned(Application.MainForm) and (AWinControl.Parent=Application.MainForm) and (Application.MainForm.FormStyle=fsMDIForm) then
+    Win32WidgetSet.UpdateMDIClientBounds;
 end;
 
 class procedure TWin32WSWinControl.ScrollBy(const AWinControl: TWinControl;
@@ -579,28 +595,29 @@ begin
       SW_INVALIDATE or SW_ERASE or SW_SCROLLCHILDREN);
 end;
 
-{ TWin32WSDragImageList }
+{ TWin32WSDragImageListResolution }
 
-class function TWin32WSDragImageList.BeginDrag(
-  const ADragImageList: TDragImageList; Window: HWND; AIndex, X, Y: Integer): Boolean;
+class function TWin32WSDragImageListResolution.BeginDrag(
+  const ADragImageList: TDragImageListResolution; Window: HWND; AIndex, X,
+  Y: Integer): Boolean;
 begin
   // No check to Handle should be done, because if there is no handle (no needed)
   // we must create it here. This is normal for imagelist (we can never need handle)
   Result := ImageList_BeginDrag(ADragImageList.Reference.Handle, AIndex, X, Y);
 end;
 
-class function TWin32WSDragImageList.DragMove(const ADragImageList: TDragImageList;
+class function TWin32WSDragImageListResolution.DragMove(const ADragImageList: TDragImageListResolution;
   X, Y: Integer): Boolean;
 begin
   Result := ImageList_DragMove(X, Y);
 end;
 
-class procedure TWin32WSDragImageList.EndDrag(const ADragImageList: TDragImageList);
+class procedure TWin32WSDragImageListResolution.EndDrag(const ADragImageList: TDragImageListResolution);
 begin
   ImageList_EndDrag;
 end;
 
-class function TWin32WSDragImageList.HideDragImage(const ADragImageList: TDragImageList;
+class function TWin32WSDragImageListResolution.HideDragImage(const ADragImageList: TDragImageListResolution;
   ALockedWindow: HWND; DoUnLock: Boolean): Boolean;
 begin
   if DoUnLock then
@@ -609,7 +626,7 @@ begin
     Result := ImageList_DragShowNolock(False);
 end;
 
-class function TWin32WSDragImageList.ShowDragImage(const ADragImageList: TDragImageList;
+class function TWin32WSDragImageListResolution.ShowDragImage(const ADragImageList: TDragImageListResolution;
   ALockedWindow: HWND; X, Y: Integer; DoLock: Boolean): Boolean;
 begin
   if DoLock then

@@ -162,10 +162,10 @@ begin
   SelectAllButton.Caption:=lisMenuSelectAll;
   SelectNoneButton.Caption:=lisSAMSelectNone;
 
-  TIDEImages.AssignImage(OpenSelectedButton.Glyph, 'laz_open');
-  TIDEImages.AssignImage(BuildAllSelectedButton.Glyph, 'menu_build_all');
-  TIDEImages.AssignImage(SelectAllButton.Glyph, 'menu_select_all');
-  TIDEImages.AssignImage(SelectNoneButton.Glyph, 'ce_default');
+  IDEImages.AssignImage(OpenSelectedButton, 'laz_open');
+  IDEImages.AssignImage(BuildAllSelectedButton, 'menu_build_all');
+  IDEImages.AssignImage(SelectAllButton, 'menu_select_all');
+  IDEImages.AssignImage(SelectNoneButton, 'ce_default');
 
   edRootDirectory.Text:=EnvironmentOptions.GetParsedLazarusDirectory;
   FillProjectsPending;
@@ -208,7 +208,7 @@ var
   i, j: Integer;
   LastDir: String;
 begin
-  Screen.Cursor:=crHourGlass;
+  Screen.BeginWaitCursor;
   Searcher:=TListFileSearcher.Create(Self);
   IncludedDirs:=TStringList.Create;
   AllDirs:=Nil;
@@ -246,7 +246,7 @@ begin
     AllDirs.Free;
     IncludedDirs.Free;
     Searcher.Free;
-    Screen.Cursor:=crDefault;
+    Screen.EndWaitCursor;
   end;
 end;
 

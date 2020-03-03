@@ -121,7 +121,7 @@ begin
 
     TargetOS:=BuildBoss.GetTargetOS;
     TargetCPU:=BuildBoss.GetTargetCPU;
-    CompilerFilename:=LazarusIDE.GetFPCompilerFilename;
+    CompilerFilename:=LazarusIDE.GetCompilerFilename;
     FPCSrcDir:=EnvironmentOptions.GetParsedFPCSourceDirectory; // needs FPCVer macro
     UnitSetCache:=CodeToolBoss.CompilerDefinesCache.FindUnitSet(
       CompilerFilename,TargetOS,TargetCPU,'',FPCSrcDir,true);
@@ -152,7 +152,7 @@ begin
   List:=nil;
   try
     sl.Add('The IDE asks the compiler with the following command for the real OS/CPU:');
-    CompilerFilename:=LazarusIDE.GetFPCompilerFilename;
+    CompilerFilename:=LazarusIDE.GetCompilerFilename;
     CompilerOptions:='';
     if Project1<>nil then
     begin
@@ -315,7 +315,7 @@ begin
       sl.Add('RealCompilerDate='+DateTimeToStr(FileDateToDateTimeDef(CfgCache.RealCompilerDate)));
       sl.Add('RealTargetOS='+CfgCache.RealTargetOS);
       sl.Add('RealTargetCPU='+CfgCache.RealTargetCPU);
-      sl.Add('RealCompilerInPath='+CfgCache.RealCompilerInPath);
+      sl.Add('RealCompilerInPath='+CfgCache.RealTargetCPUCompiler);
       sl.Add('Version='+CfgCache.FullVersion);
       HasCfgs:=false;
       if CfgCache.ConfigFiles<>nil then begin
@@ -338,7 +338,15 @@ begin
       if CfgCache.Undefines<>nil then begin
         sl.Add(CfgCache.Undefines.AsText);
       end;
-      sl.Add('UnitPaths:');
+      sl.Add('Include Paths:');
+      if CfgCache.IncludePaths<>nil then begin
+        sl.AddStrings(CfgCache.IncludePaths);
+      end;
+      sl.Add('Unit Scopes:');
+      if CfgCache.UnitScopes<>nil then begin
+        sl.AddStrings(CfgCache.UnitScopes);
+      end;
+      sl.Add('Unit Paths:');
       if CfgCache.UnitPaths<>nil then begin
         sl.AddStrings(CfgCache.UnitPaths);
       end;

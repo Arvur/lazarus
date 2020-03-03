@@ -32,9 +32,15 @@ interface
 
 uses
   SysUtils,
-  Forms, Controls, ComCtrls, StdCtrls, ExtCtrls, LCLType, LCLProc, ButtonPanel,
+  // LCL
+  Forms, Controls, ComCtrls, StdCtrls, ExtCtrls, LCLType, ButtonPanel,
+  // LazUtils
+  LazStringUtils,
+  // LazControls
   ListViewFilterEdit,
+  // IdeIntf
   IDEHelpIntf, IDEWindowIntf, PackageIntf,
+  // IDE
   PackageDefs, LazarusIDEStrConsts, PackageSystem;
 
 type
@@ -55,8 +61,8 @@ type
     procedure PkgListViewKeyPress(Sender: TObject; var Key: char);
     procedure PkgListViewSelectItem(Sender: TObject; {%H-}Item: TListItem; {%H-}Selected: Boolean);
   private
-  public
     Package: TLazPackage;
+  public
     procedure UpdateSelection;
     procedure UpdatePackageList;
   end;
@@ -71,16 +77,13 @@ function ShowOpenLoadedPkgDlg(out OpenPackage: TLazPackage): TModalResult;
 var
   Dlg: TOpenLoadedPackagesDlg;
 begin
-  OpenPackage:=nil;
   Dlg:=TOpenLoadedPackagesDlg.Create(nil);
   try
     Dlg.UpdatePackageList;
     Dlg.UpdateSelection;
     Result:=Dlg.ShowModal;
-    if (Result=mrOK) and (Dlg.Package<>nil) then
-      OpenPackage:=Dlg.Package
-    else
-      OpenPackage:=nil;
+    OpenPackage:=Dlg.Package;
+    Assert((Result=mrOK) or (OpenPackage=nil));
   finally
     Dlg.Free;
   end;
@@ -135,12 +138,16 @@ end;
 
 procedure TOpenLoadedPackagesDlg.OpenButtonClick(Sender: TObject);
 begin
-  if PkgListView.Selected=nil then exit;
-  Package:=PackageGraph.FindPackageWithName(PkgListView.Selected.Caption,nil);
-  if Package=nil then
-    ModalResult:=mrCancel
-  else
-    ModalResult:=mrOk;
+  if Assigned(PkgListView.Selected) then
+  begin
+    Package:=PackageGraph.FindPackageWithName(PkgListView.Selected.Caption,nil);
+    if Assigned(Package) then
+    begin
+      ModalResult:=mrOk;
+      Exit;
+    end;
+  end;
+  ModalResult:=mrCancel;
 end;
 
 procedure TOpenLoadedPackagesDlg.FormCreate(Sender: TObject);

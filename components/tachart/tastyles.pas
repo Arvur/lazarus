@@ -45,7 +45,7 @@ type
     constructor Create(ACollection: TCollection); override;
     destructor Destroy; override;
   public
-    procedure Apply(ADrawer: IChartDrawer);
+    procedure Apply(ADrawer: IChartDrawer; IgnoreBrush: Boolean = false);
     procedure Assign(Source: TPersistent); override;
   published
     property Brush: TBrush read FBrush write SetBrush;
@@ -93,7 +93,9 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
   public
-    procedure Apply(ADrawer: IChartDrawer; AIndex: Cardinal); overload;
+    function Add: TChartStyle;
+    procedure Apply(ADrawer: IChartDrawer; AIndex: Cardinal;
+      IgnoreBrush: Boolean = false); overload;
     function StyleByIndex(AIndex: Cardinal): TChartStyle;
     property Broadcaster: TBroadcaster read FBroadcaster;
   published
@@ -118,9 +120,9 @@ end;
 
 { TChartStyle }
 
-procedure TChartStyle.Apply(ADrawer: IChartDrawer);
+procedure TChartStyle.Apply(ADrawer: IChartDrawer; IgnoreBrush: Boolean = false);
 begin
-  if UseBrush then
+  if UseBrush and not IgnoreBrush then
     ADrawer.Brush := Brush;
   if UseFont then
     ADrawer.Font := Font;
@@ -131,7 +133,7 @@ end;
 procedure TChartStyle.Assign(Source: TPersistent);
 begin
   if Source is TChartStyle then
-    with Source as TChartStyle do begin
+    with TChartStyle(Source) do begin
       Self.Brush := Brush;
       Self.Font := Font;
       Self.Pen := Pen;
@@ -256,13 +258,19 @@ end;
 
 { TChartStyles }
 
-procedure TChartStyles.Apply(ADrawer: IChartDrawer; AIndex: Cardinal);
+function TChartStyles.Add: TChartStyle;
+begin
+  Result := TChartStyle(FStyles.Add);
+end;
+
+procedure TChartStyles.Apply(ADrawer: IChartDrawer; AIndex: Cardinal;
+  IgnoreBrush: Boolean = false);
 var
   style: TChartStyle;
 begin
   style := StyleByIndex(AIndex);
   if style <> nil then
-    style.Apply(ADrawer);
+    style.Apply(ADrawer, IgnoreBrush);
 end;
 
 constructor TChartStyles.Create(AOwner: TComponent);

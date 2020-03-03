@@ -5,7 +5,7 @@ unit TAChartExtentLink;
 interface
 
 uses
-  Classes, TAChartUtils, TAGraph;
+  Classes, TAChartUtils, TAChartAxisUtils, TAGraph;
 
 type
   TLinkedChart = class(TCollectionItem)
@@ -34,12 +34,17 @@ type
   end;
 
   TChartExtendLinkMode = (elmXY, elmOnlyX, elmOnlyY);
+  TChartSides = set of TChartAxisAlignment;
 
   TChartExtentLink = class(TComponent)
   strict private
     FEnabled: Boolean;
     FLinkedCharts: TLinkedCharts;
     FMode: TChartExtendLinkMode;
+    FAlignSides: TChartSides;
+    procedure SetAlignSides(AValue: TChartSides);
+  protected
+    procedure DoAlignSides;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -47,6 +52,7 @@ type
     procedure AddChart(AChart: TChart);
     procedure SyncWith(AChart: TChart);
   published
+    property AlignSides: TChartSides read FAlignSides write SetAlignSides default [];
     property Enabled: Boolean read FEnabled write FEnabled default true;
     property LinkedCharts: TLinkedCharts read FLinkedCharts write FLinkedCharts;
     property Mode: TChartExtendLinkMode read FMode write FMode default elmXY;
@@ -57,7 +63,7 @@ procedure Register;
 implementation
 
 uses
-  SysUtils, TAGeometry;
+  SysUtils, Math, TAGeometry, TAChartAxis;
 
 procedure Register;
 begin
@@ -125,9 +131,15 @@ procedure TChartExtentLink.AddChart(AChart: TChart);
 var
   i: TCollectionItem;
 begin
+  if AChart = nil then
+    exit;
+
   for i in LinkedCharts do
-    if TLinkedChart(i).Chart = AChart then exit;
+    if TLinkedChart(i).Chart = AChart then
+      exit;
+
   LinkedCharts.Add.Chart := AChart;
+  SyncWith(AChart);
 end;
 
 constructor TChartExtentLink.Create(AOwner: TComponent);
@@ -143,6 +155,52 @@ begin
   inherited;
 end;
 
+// Note: ignores several axes on the same chart side
+procedure TChartExtentLink.DoAlignSides;
+var
+  c: TCollectionItem;
+  ch: TChart;
+  labelSize: array[TChartAxisAlignment] of Integer = (0, 0, 0, 0);
+  sideUsed: array[TChartAxisAlignment] of boolean = (false, false, false, false);
+  al: TChartAxisAlignment;
+  axis: TChartAxis;
+begin
+  for c in LinkedCharts do begin
+    ch := TLinkedChart(c).Chart;
+    FillChar(sideUsed, SizeOf(sideUsed), 0);
+    for al in TChartAxisAlignment do
+      if (al in FAlignsides) and not sideUsed[al] then begin
+        sideUsed[al] := true;
+        axis := ch.AxisList.GetAxisByAlign(al);
+        if axis <> nil then
+          labelsize[al] := Max(labelsize[al], axis.MeasureLabelSize(ch.Drawer));
+      end;
+  end;
+
+  for c in LinkedCharts do begin
+    ch := TLinkedChart(c).Chart;
+    FillChar(sideUsed, SizeOf(sideUsed), 0);
+    for al in TChartAxisAlignment do begin
+      axis := ch.AxisList.GetAxisByAlign(al);
+      if (axis <> nil) then begin
+        if (al in FAlignSides) and not sideUsed[al] then
+          sideUsed[al] := true;
+        if sideUsed[al] then
+          axis.labelSize := labelSize[al]
+        else
+          axis.LabelSize := 0;
+      end;
+    end;
+  end;
+end;
+
+procedure TChartExtentLink.SetAlignSides(AValue: TChartSides);
+begin
+  if AValue = FAlignSides then exit;
+  FAlignSides := AValue;
+  DoAlignSides;
+end;
+
 procedure TChartExtentLink.SyncWith(AChart: TChart);
 
   function CombineXY(const AX, AY: TDoubleRect): TDoubleRect;
@@ -155,25 +213,32 @@ var
   c: TCollectionItem;
   ch: TChart;
 begin
-  if not FEnabled or (AChart = nil) then exit;
-  for c in LinkedCharts do begin
-    ch := TLinkedChart(c).Chart;
-    // Do not sync if the chart was never drawn yet.
-    if (ch = nil) or (ch.LogicalExtent = EmptyExtent) then continue;
-    // ZoomFull is lazy by default, so full extent may be not recalculated yet.
-    if not ch.IsZoomed and (ch <> AChart) then
-      ch.LogicalExtent := ch.GetFullExtent;
-    // An event loop will be broken since setting LogicalExtent to
-    // the same value does not initiale the extent broadcast.
-    case Mode of
-      elmXY:
-        ch.LogicalExtent := AChart.LogicalExtent;
-      elmOnlyX:
-        ch.LogicalExtent := CombineXY(AChart.LogicalExtent, ch.LogicalExtent);
-      elmOnlyY:
-        ch.LogicalExtent := CombineXY(ch.LogicalExtent, AChart.LogicalExtent);
+  if (AChart = nil) then
+    exit;
+
+  if FEnabled then
+    for c in LinkedCharts do begin
+      ch := TLinkedChart(c).Chart;
+      // Do not sync if the chart was never drawn yet.
+      if (ch = nil) or (ch.LogicalExtent = EmptyExtent) then continue;
+      // ZoomFull is lazy by default, so full extent may be not recalculated yet.
+      if not ch.IsZoomed and (ch <> AChart) then
+        ch.LogicalExtent := ch.GetFullExtent;
+      // An event loop will be broken since setting LogicalExtent to
+      // the same value does not initiale the extent broadcast.
+      case Mode of
+        elmXY:
+          ch.LogicalExtent := AChart.LogicalExtent;
+        elmOnlyX:
+          ch.LogicalExtent := CombineXY(AChart.LogicalExtent, ch.LogicalExtent);
+        elmOnlyY:
+          ch.LogicalExtent := CombineXY(ch.LogicalExtent, AChart.LogicalExtent);
+      end;
     end;
-  end;
+
+  // Re-align the chart sides if they are aligned and labels have become longer
+  // or shorter upon synchronization.
+  DoAlignSides;
 end;
 
 end.

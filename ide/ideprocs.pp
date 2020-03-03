@@ -30,98 +30,41 @@ unit IDEProcs;
 interface
 
 uses
-  // RTL + LCL
-  Classes, SysUtils, LCLProc, StdCtrls, ExtCtrls, Laz_AVL_Tree,
-  // CodeTools
-  BasicCodeTools, SourceLog, FileProcs, CodeToolManager, CodeToolsConfig, CodeCache,
+  // RTL
+  Classes, SysUtils, Laz_AVL_Tree,
   // LazUtils
-  FileUtil, LazFileUtils, LazFileCache, LazUTF8, lazutf8classes, Laz2_XMLCfg,
-  AvgLvlTree, MacroIntf,
+  FileUtil, LazFileUtils, LazUtilities, LazFileCache, LazUTF8, LazUTF8Classes,
+  Laz2_XMLCfg, AvgLvlTree, LazLoggerBase, LazTracer,
+  // LCL
+  StdCtrls, ExtCtrls,
+  // CodeTools
+  BasicCodeTools, FileProcs, CodeToolManager, CodeToolsConfig, CodeCache,
+  PackageIntf,
   // IDE
-  IDECmdLine, LazConf;
+  TransferMacros,
+  LazConf;
 
-type
-  // comments
-  TCommentType = (
-    comtDefault,    // decide automatically
-    comtNone,       // no comment
-    comtPascal,     // {}
-    comtDelphi,     // //
-    comtTurboPascal,// (* *)
-    comtCPP,        // /* */
-    comtPerl,       // #
-    comtHtml        // <!-- -->
+const
+  SBuildMethod: array[TBuildMethod] of string = (
+    'Lazarus',
+    'FPMake',
+    'Both'
     );
-  TCommentTypes = set of TCommentType;
+function StringToBuildMethod(const BuildMethod: string): TBuildMethod;
+function GetFPCVer: String;
 
-  // copy
-  TOnCopyFileMethod =
-    procedure(const Filename: string; var Copy: boolean;
-      Data: TObject) of object;
-
-  TCopyErrorType = (
-    ceSrcDirDoesNotExists,
-    ceCreatingDirectory,
-    ceCopyFileError
-    );
-    
-  TCopyErrorData = record
-    Error: TCopyErrorType;
-    Param1: string;
-    Param2: string;
-  end;
-      
-  TOnCopyErrorMethod =
-    procedure(const ErrorData: TCopyErrorData; var Handled: boolean;
-      Data: TObject) of object;
-      
 // file operations
 function BackupFileForWrite(const Filename, BackupFilename: string): boolean;
-function ClearFile(const Filename: string; RaiseOnError: boolean): boolean;
 function CreateEmptyFile(const Filename: string): boolean;
-function CopyFileWithMethods(const SrcFilename, DestFilename: string;
-             {%H-}OnCopyError: TOnCopyErrorMethod; {%H-}Data: TObject): boolean;
-function CopyDirectoryWithMethods(const SrcDirectory, DestDirectory: string;
-             OnCopyFile: TOnCopyFileMethod; OnCopyError: TOnCopyErrorMethod;
-             Data: TObject): boolean;
-
-type
-  TPathDelimSwitch = (
-    pdsNone,    // no change
-    pdsSystem,  // switch to current PathDelim
-    pdsUnix,    // switch to slash /
-    pdsWindows  // switch to backslash \
-    );
-const
-  PathDelimSwitchToDelim: array[TPathDelimSwitch] of char = (
-    PathDelim, // pdsNone
-    PathDelim, // pdsSystem
-    '/',       // pdsUnix
-    '\'        // pdsWindows
-    );
 
 // file names
-function ConvertSpecialFileChars(const Filename: string): string;
 function FilenameIsPascalSource(const Filename: string): boolean;
-function FilenameIsFormText(const Filename: string): boolean;
-function SwitchPathDelims(const Filename: string; Switch: TPathDelimSwitch): string;
-function SwitchPathDelims(const Filename: string; Switch: boolean): string;
-function CheckPathDelim(const OldPathDelim: string; out Changed: boolean): TPathDelimSwitch;
-function IsCurrentPathDelim(Switch: TPathDelimSwitch): boolean;
 function ChompEndNumber(const s: string): string;
-function ShortDisplayFilename(const aFileName: string): string;
-
-// cmd line
-procedure SplitCmdLine(const CmdLine: string;
-                       out ProgramFilename, Params: string);
-function PrepareCmdLineOption(const Option: string): string;
-function AddCmdLineParameter(const CmdLine, AddParameter: string): string;
 
 // find file
 function FindFilesCaseInsensitive(const Directory,
   CaseInsensitiveFilename: string; IgnoreExact: boolean): TStringList;
 function FindFirstFileWithExt(const Directory, Ext: string): string;
-function FindShortFileNameOnDisk(const Filename: string): string;
 function CreateNonExistingFilename(const BaseFilename: string): string;
 function FindFPCTool(const Executable, CompilerFilename: string): string;
 procedure ResolveLinksInFileList(List: TStrings; RemoveDanglingLinks: Boolean);
@@ -150,7 +93,7 @@ function SearchDirectoryInSearchPath(const SearchPath, Directory: string;
 function SearchDirectoryInSearchPath(SearchPath: TStrings;
                     const Directory: string; DirStartPos: integer = 0): integer;
 
-// XMLConfig
+// Recent item lists
 type
   TRecentListType = (
     rltCaseSensitive,
@@ -169,12 +112,15 @@ function StrToRecentListType(s: string): TRecentListType;
 function CompareRecentListItem(s1, s2: string; ListType: TRecentListType): boolean;
 procedure LoadRecentList(XMLConfig: TXMLConfig; List: TStrings; const Path: string;
                          ListType: TRecentListType);
-procedure SaveRecentList(XMLConfig: TXMLConfig; List: TStrings; const Path: string);
-function AddToRecentList(const s: string; RecentList: TStrings; Max: integer;
+procedure SaveRecentList(XMLConfig: TXMLConfig; List: TStrings;
+                         const Path: string); overload;
+procedure SaveRecentList(XMLConfig: TXMLConfig; List: TStrings;
+                         const Path: string; aMax: Integer); overload;
+function AddToRecentList(const s: string; List: TStrings; aMax: integer;
                          ListType: TRecentListType): boolean;
-function AddComboTextToRecentList(cb: TCombobox; Max: integer;
+function AddComboTextToRecentList(cb: TCombobox; aMax: integer;
                                   ListType: TRecentListType): boolean;
-procedure RemoveFromRecentList(const s: string; RecentList: TStrings;
+procedure RemoveFromRecentList(const s: string; List: TStrings;
                                ListType: TRecentListType);
 procedure CleanUpRecentList(List: TStrings; ListType: TRecentListType);
 
@@ -191,46 +137,19 @@ procedure LoadPoint(XMLConfig: TXMLConfig; const Path:string;
                     var APoint:TPoint; const DefaultPoint: TPoint);
 procedure SavePoint(XMLConfig: TXMLConfig; const Path:string;
                     const APoint, DefaultPoint:TPoint);
-function PointToCfgStr(const Point: TPoint): string;
-procedure CfgStrToPoint(const s: string; var Point: TPoint;
-                        const DefaultPoint: TPoint);
-procedure LoadStringList(XMLConfig: TXMLConfig; List: TStrings;
-                         const Path: string);
-procedure SaveStringList(XMLConfig: TXMLConfig; List: TStrings;
-                         const Path: string);
+procedure LoadStringList(XMLConfig: TXMLConfig; List: TStrings; const Path: string);
+procedure SaveStringList(XMLConfig: TXMLConfig; List: TStrings; const Path: string);
 procedure LoadStringToStringTree(XMLConfig: TXMLConfig;
                                  Tree: TStringToStringTree; const Path: string);
 procedure SaveStringToStringTree(XMLConfig: TXMLConfig;
                                  Tree: TStringToStringTree; const Path: string);
 procedure MakeXMLName(var Name: string);
 function LoadXMLConfigViaCodeBuffer(Filename: string): TXMLConfig;
-  
 
-// text conversion
-function TabsToSpaces(const s: string; TabWidth: integer; UseUTF8: boolean
-                      ): string;
-function CommentLines(const s: string): string;
-function CommentText(const s: string; CommentType: TCommentType): string;
-function UncommentLines(const s: string): string;
-function CrossReplaceChars(const Src: string; PrefixChar: char;
-                           const SpecialChars: string): string;
-function SimpleSyntaxToRegExpr(const Src: string): string;
-function BinaryStrToText(const s: string): string;
-function SplitString(const s: string; Delimiter: char): TStrings;
-procedure SplitString(const s: string; Delimiter: char; AddTo: TStrings;
-                      ClearList: boolean = true);
-function SpecialCharsToSpaces(const s: string; FixUTF8: boolean): string;
-function SpecialCharsToHex(const s: string): string;
-function LineBreaksToSystemLineBreaks(const s: string): string;
-function LineBreaksToDelimiter(const s: string; Delimiter: char): string;
-function StringListToText(List: TStrings; const Delimiter: string;
-                          IgnoreEmptyLines: boolean = false): string;
-function StringListPartToText(List: TStrings; FromIndex, ToIndex: integer;
-                              const Delimiter: string;
-                              IgnoreEmptyLines: boolean = false): string;
-function StringListToString(List: TStrings; FromIndex, ToIndex: integer;
-                            IgnoreEmptyLines: boolean = false): string;
-procedure StringToStringList(const s: string; List: TStrings);
+// Point conversion
+function PointToCfgStr(const Point: TPoint): string;
+procedure CfgStrToPoint(const s: string; var Point: TPoint;
+                        const DefaultPoint: TPoint);
 
 // environment
 type
@@ -244,14 +163,8 @@ type
 function GetCurrentUserName: string;
 function GetCurrentMailAddress: string;
 function GetProgramSearchPath: string;
-function ProgramDirectory(BundleRoot: boolean): string;
-
-// debugging
-procedure RaiseException(const Msg: string);
 
 // miscellaneous
-function CompareCaret(const FirstCaret, SecondCaret: TPoint): integer;
-function CompareBoolean(b1, b2: boolean): integer;
 procedure CheckList(List: TList; TestListNil, TestDoubles, TestNils: boolean);
 procedure CheckList(List: TFPList; TestListNil, TestDoubles, TestNils: boolean);
 procedure CheckEmptyListCut(List1, List2: TList);
@@ -268,7 +181,6 @@ function CheckGroupItemChecked(CheckGroup: TCheckGroup; const Caption: string): 
 
 implementation
 
-
 {$IfNdef MSWindows}
 {$ifNdef HASAMIGA}
 // to get more detailed error messages consider the os
@@ -276,57 +188,6 @@ uses
   Unix, BaseUnix;
 {$EndIf}
 {$EndIf}
-
-function AddToRecentList(const s: string; RecentList: TStrings; Max: integer;
-  ListType: TRecentListType): boolean;
-begin
-  if (RecentList.Count>0) and CompareRecentListItem(RecentList[0],s,ListType) then
-    exit(false);
-  Result:=true;
-  RemoveFromRecentList(s,RecentList,ListType);
-  RecentList.Insert(0,s);
-  if Max>0 then
-    while RecentList.Count>Max do
-      RecentList.Delete(RecentList.Count-1);
-end;
-
-function AddComboTextToRecentList(cb: TCombobox; Max: integer;
-  ListType: TRecentListType): boolean;
-var
-  List: TStringList;
-begin
-  List := TStringList.Create;
-  try
-    List.Assign(cb.Items);
-    if (List.Count>0) and CompareRecentListItem(List[0],cb.Text,ListType) then
-      exit(false);
-    Result:=true;
-    RemoveFromRecentList(cb.Text,List,ListType);
-    List.Insert(0,cb.Text);
-    if Max>0 then
-      while List.Count>Max do
-        List.Delete(List.Count-1);
-    cb.Items.Assign(List);
-    cb.ItemIndex:=0;
-  finally
-    List.Free;
-  end;
-end;
-
-procedure RemoveFromRecentList(const s: string; RecentList: TStrings;
-  ListType: TRecentListType);
-var
-  i: integer;
-begin
-  for i:=RecentList.Count-1 downto 0 do
-    if CompareRecentListItem(RecentList[i],s,ListType) then
-      RecentList.Delete(i);
-end;
-
-procedure SaveRecentList(XMLConfig: TXMLConfig; List: TStrings; const Path: string);
-begin
-  SaveStringList(XMLConfig,List,Path);
-end;
 
 {-------------------------------------------------------------------------------
   function FindFilesCaseInsensitive(const Directory,
@@ -375,40 +236,6 @@ begin
   for i:=Low(PascalSourceExt) to High(PascalSourceExt) do
     if s=PascalSourceExt[i] then
       exit(True);
-end;
-
-function FilenameIsFormText(const Filename: string): boolean;
-var
-  Ext: string;
-begin
-  Ext:=lowercase(ExtractFileExt(Filename));
-  Result:=((Ext='.lfm') or (Ext='.dfm') or (Ext='.xfm'))
-          and (ExtractFileNameOnly(Filename)<>'');
-end;
-
-function FindShortFileNameOnDisk(const Filename: string): string;
-var
-  FileInfo: TSearchRec;
-  ADirectory: String;
-  ShortFilename: String;
-begin
-  Result:='';
-  ADirectory:=ExtractFilePath(Filename);
-  if FindFirstUTF8(AppendPathDelim(ADirectory)+GetAllFilesMask,
-                        faAnyFile,FileInfo)=0
-  then begin
-    ShortFilename:=ExtractFilename(Filename);
-    repeat
-      // check if special file
-      if (FileInfo.Name='.') or (FileInfo.Name='..') or (FileInfo.Name='') then
-        continue;
-      if CompareFilenames(ShortFilename,FileInfo.Name)=0 then begin
-        Result:=FileInfo.Name;
-        break;
-      end;
-    until FindNextUTF8(FileInfo)<>0;
-  end;
-  FindCloseUTF8(FileInfo);
 end;
 
 function CreateNonExistingFilename(const BaseFilename: string): string;
@@ -688,10 +515,7 @@ function GetNextUsedDirectoryInSearchPath(const SearchPath,
 begin
   while (NextStartPos<=length(SearchPath)) do begin
     Result:=GetNextDirectoryInSearchPath(SearchPath,NextStartPos);
-    if (Result<>'')
-    and ((CompareFilenames(Result,FilterDir)=0)
-      or FileIsInPath(Result,FilterDir))
-    then
+    if (Result<>'') and PathIsInPath(Result,FilterDir) then
       exit;
   end;
   Result:=''
@@ -866,51 +690,20 @@ begin
   end;
 end;
 
-function SwitchPathDelims(const Filename: string; Switch: TPathDelimSwitch): string;
-var
-  i: Integer;
-  p: Char;
+function StringToBuildMethod(const BuildMethod: string): TBuildMethod;
 begin
-  Result:=Filename;
-  case Switch of
-  pdsSystem:  p:=PathDelim;
-  pdsUnix:    p:='/';
-  pdsWindows: p:='\';
-  else exit;
-  end;
-  for i:=1 to length(Result) do
-    if Result[i] in ['/','\'] then
-      Result[i]:=p;
-end;
-
-function SwitchPathDelims(const Filename: string; Switch: boolean): string;
-begin
-  if Switch then
-    Result:=SwitchPathDelims(Filename,pdsSystem)
+  if BuildMethod=SBuildMethod[bmFPMake] then
+    result := bmFPMake
+  else if BuildMethod=SBuildMethod[bmBoth] then
+    result := bmBoth
   else
-    Result:=Filename;
+    result := bmLazarus;
 end;
 
-function CheckPathDelim(const OldPathDelim: string; out Changed: boolean): TPathDelimSwitch;
+function GetFPCVer: String;
 begin
-  Changed:=OldPathDelim<>PathDelim;
-  if Changed then begin
-    if OldPathDelim='/' then
-      Result:=pdsUnix
-    else if OldPathDelim='\' then
-      Result:=pdsWindows
-    else
-      Result:=pdsSystem;
-  end else begin
-    Result:=pdsNone;
-  end;
-end;
-
-function IsCurrentPathDelim(Switch: TPathDelimSwitch): boolean;
-begin
-  Result:=(Switch in [pdsNone,pdsSystem])
-     or ((Switch=pdsUnix) and (PathDelim='/'))
-     or ((Switch=pdsWindows) and (PathDelim='\'));
+  Result:='$(FPCVer)';
+  GlobalMacroList.SubstituteStr(Result);
 end;
 
 function ChompEndNumber(const s: string): string;
@@ -922,35 +715,6 @@ begin
   while (NewLen>0) and (Result[NewLen] in ['0'..'9']) do
     dec(NewLen);
   Result:=copy(Result,1,NewLen);
-end;
-
-function ShortDisplayFilename(const aFileName: string): string;
-// Shorten a long filename for display.
-// Add '...' after the 2. path delimiter, then the end part of filename.
-const
-  Limit = 80;
-var
-  StartLen, EndLen, SepCnt: Integer;
-begin
-  if Length(aFileName) > Limit then
-  begin
-    StartLen := 1;
-    SepCnt := 0;
-    while StartLen < Length(aFileName) - (Limit div 2) do
-    begin
-      if aFileName[StartLen] in AllowDirectorySeparators then
-      begin
-        Inc(SepCnt);
-        if SepCnt = 2 then Break;
-      end;
-      Inc(StartLen);
-    end;
-    EndLen := Limit - StartLen - 3;
-    Result := Copy(aFileName, 1, StartLen) + '...'
-            + Copy(aFileName, Length(aFileName)-EndLen+1, EndLen);
-  end
-  else
-    Result := aFileName;
 end;
 
 function FindFirstFileWithExt(const Directory, Ext: string): string;
@@ -974,6 +738,8 @@ begin
   end;
   FindCloseUTF8(FileInfo);
 end;
+
+// Recent item lists :
 
 function IndexInRecentList(List: TStrings; ListType: TRecentListType;
   const Path: string): integer;
@@ -1006,23 +772,87 @@ begin
   CleanUpRecentList(List,ListType);
 end;
 
-procedure LoadPoint(XMLConfig: TXMLConfig; const Path: string;
-                    var APoint: TPoint; const DefaultPoint: TPoint);
+procedure SaveRecentList(XMLConfig: TXMLConfig; List: TStrings; const Path: string);
 begin
-  APoint.X:=XMLConfig.GetValue(Path+'X',DefaultPoint.X);
-  APoint.Y:=XMLConfig.GetValue(Path+'Y',DefaultPoint.Y);
+  SaveStringList(XMLConfig,List,Path);
 end;
 
-procedure SavePoint(XMLConfig: TXMLConfig; const Path: string;
-                    const APoint, DefaultPoint: TPoint);
+procedure SaveRecentList(XMLConfig: TXMLConfig; List: TStrings;
+  const Path: string; aMax: Integer);
+var
+  i: Integer;
+  s: String;
 begin
-  XMLConfig.SetDeleteValue(Path+'X',APoint.X,DefaultPoint.X);
-  XMLConfig.SetDeleteValue(Path+'Y',APoint.Y,DefaultPoint.Y);
+  if aMax>0 then
+    while List.Count>aMax do    // Truncate list to aMax items.
+      List.Delete(List.Count-1);
+  SaveStringList(XMLConfig,List,Path);
+  i:=List.Count+1;
+  while True do
+  begin
+    s:=Path+'Item'+IntToStr(i);
+    if not XMLConfig.HasPath(s+'/Value',True) then Break;
+    XMLConfig.DeletePath(s);    // Remove excess items from XML.
+    Inc(i);
+  end;
 end;
 
-procedure LoadStringList(XMLConfig: TXMLConfig; List: TStrings;
-  const Path: string);
-var i,Count: integer;
+function AddToRecentList(const s: string; List: TStrings; aMax: integer;
+  ListType: TRecentListType): boolean;
+begin
+  if (List.Count>0) and CompareRecentListItem(List[0],s,ListType) then
+    exit(false);
+  Result:=true;
+  RemoveFromRecentList(s,List,ListType);
+  List.Insert(0,s);
+  if aMax>0 then
+    while List.Count>aMax do
+      List.Delete(List.Count-1);
+end;
+
+function AddComboTextToRecentList(cb: TCombobox; aMax: integer;
+  ListType: TRecentListType): boolean;
+var
+  List: TStringList;
+begin
+  List:=TStringList.Create;
+  try
+    List.Assign(cb.Items);
+    Result:=AddToRecentList(cb.Text,List,aMax,ListType);
+    if Result then
+    begin
+      cb.Items.Assign(List);
+      cb.ItemIndex:=0;
+    end;
+  finally
+    List.Free;
+  end;
+end;
+
+procedure RemoveFromRecentList(const s: string; List: TStrings;
+  ListType: TRecentListType);
+var
+  i: integer;
+begin
+  for i:=List.Count-1 downto 0 do
+    if CompareRecentListItem(List[i],s,ListType) then
+      List.Delete(i);
+end;
+
+procedure CleanUpRecentList(List: TStrings; ListType: TRecentListType);
+var
+  i: Integer;
+begin
+  for i:=List.Count-1 downto 1 do
+    if (List[i]='') or CompareRecentListItem(List[i],List[i-1],ListType) then
+      List.Delete(i);
+end;
+
+// XMLConfig
+
+procedure LoadStringList(XMLConfig: TXMLConfig; List: TStrings; const Path: string);
+var
+  i,Count: integer;
   s: string;
 begin
   Count:=XMLConfig.GetValue(Path+'Count',0);
@@ -1033,9 +863,9 @@ begin
   end;
 end;
 
-procedure SaveStringList(XMLConfig: TXMLConfig; List: TStrings;
-  const Path: string);
-var i: integer;
+procedure SaveStringList(XMLConfig: TXMLConfig; List: TStrings; const Path: string);
+var
+  i: integer;
 begin
   XMLConfig.SetDeleteValue(Path+'Count',List.Count,0);
   for i:=0 to List.Count-1 do
@@ -1113,15 +943,6 @@ begin
   end;
 end;
 
-procedure CleanUpRecentList(List: TStrings; ListType: TRecentListType);
-var
-  i: Integer;
-begin
-  for i:=List.Count-1 downto 1 do
-    if (List[i]='') or CompareRecentListItem(List[i],List[i-1],ListType) then
-      List.Delete(i);
-end;
-
 procedure LoadRect(XMLConfig: TXMLConfig; const Path: string;
   var ARect: TRect);
 begin
@@ -1151,65 +972,20 @@ begin
   XMLConfig.SetDeleteValue(Path+'Bottom',ARect.Bottom,DefaultRect.Bottom);
 end;
 
-procedure SplitCmdLine(const CmdLine: string;
-                       out ProgramFilename, Params: string);
-var p, s, l: integer;
-  quote: char;
+procedure LoadPoint(XMLConfig: TXMLConfig; const Path: string;
+                    var APoint: TPoint; const DefaultPoint: TPoint);
 begin
-  ProgramFilename:='';
-  Params:='';
-  if CmdLine='' then exit;
-  p:=1;
-  s:=1;
-  if (CmdLine[p] in ['"','''']) then
-  begin
-    // skip quoted string
-    quote:=CmdLine[p];
-    inc(s);
-    repeat
-      inc(p);
-      if p>Length(CmdLine) then Break;
-      // check if we have an escape char
-      if (CmdLine[p] = '\') and (CmdLine[p]<>PathDelim) then inc(p);
-    until (p>Length(CmdLine)) or (CmdLine[p]=quote);
-    // go past last character or quoted string
-    l:=p-s;
-    inc(p);
-  end else begin
-    while (p<=length(CmdLine)) and (CmdLine[p]>' ') do begin
-      if (CmdLine[p] in ['/','\']) and (CmdLine[p]<>PathDelim) then begin
-        // skip special char
-        inc(p);
-      end;
-      inc(p);
-    end;
-    l:=p-s;
-  end;
-  ProgramFilename:=Copy(CmdLine,s,l);
-  while (p<=length(CmdLine)) and (CmdLine[p]<=' ') do inc(p);
-  Params:=RightStr(CmdLine,length(CmdLine)-p+1);
+  APoint.X:=XMLConfig.GetValue(Path+'X',DefaultPoint.X);
+  APoint.Y:=XMLConfig.GetValue(Path+'Y',DefaultPoint.Y);
 end;
 
-{-------------------------------------------------------------------------------
-  function CompareCaret(const FirstCaret, SecondCaret: TPoint): integer;
--------------------------------------------------------------------------------}
-function CompareCaret(const FirstCaret, SecondCaret: TPoint): integer;
+procedure SavePoint(XMLConfig: TXMLConfig; const Path: string;
+                    const APoint, DefaultPoint: TPoint);
 begin
-  if (FirstCaret.Y<SecondCaret.Y) then
-    Result:=1
-  else if (FirstCaret.Y>SecondCaret.Y) then
-    Result:=-1
-  else if (FirstCaret.X<SecondCaret.X) then
-    Result:=1
-  else if (FirstCaret.X>SecondCaret.X) then
-    Result:=-1
-  else
-    Result:=0;
+  XMLConfig.SetDeleteValue(Path+'X',APoint.X,DefaultPoint.X);
+  XMLConfig.SetDeleteValue(Path+'Y',APoint.Y,DefaultPoint.Y);
 end;
 
-{-------------------------------------------------------------------------------
-  procedure CheckList(List: TList; TestListNil, TestDoubles, TestNils: boolean);
--------------------------------------------------------------------------------}
 procedure CheckList(List: TList; TestListNil, TestDoubles, TestNils: boolean);
 var
   Cnt: Integer;
@@ -1219,21 +995,21 @@ var
 begin
   if List=nil then begin
     if TestListNil then
-      RaiseException('CheckList List is Nil');
+      RaiseGDBException('CheckList List is Nil');
     exit;
   end;
   Cnt:=List.Count;
   if TestNils then begin
     for i:=0 to Cnt-1 do
       if List[i]=nil then
-        RaiseException('CheckList item is Nil');
+        RaiseGDBException('CheckList item is Nil');
   end;
   if TestDoubles then begin
     for i:=0 to Cnt-2 do begin
       CurItem:=List[i];
       for j:=i+1 to Cnt-1 do begin
         if List[j]=CurItem then
-          RaiseException('CheckList Double');
+          RaiseGDBException('CheckList Double');
       end;
     end;
   end;
@@ -1248,29 +1024,26 @@ var
 begin
   if List=nil then begin
     if TestListNil then
-      RaiseException('CheckList List is Nil');
+      RaiseGDBException('CheckList List is Nil');
     exit;
   end;
   Cnt:=List.Count;
   if TestNils then begin
     for i:=0 to Cnt-1 do
       if List[i]=nil then
-        RaiseException('CheckList item is Nil');
+        RaiseGDBException('CheckList item is Nil');
   end;
   if TestDoubles then begin
     for i:=0 to Cnt-2 do begin
       CurItem:=List[i];
       for j:=i+1 to Cnt-1 do begin
         if List[j]=CurItem then
-          RaiseException('CheckList Double');
+          RaiseGDBException('CheckList Double');
       end;
     end;
   end;
 end;
 
-{-------------------------------------------------------------------------------
-  procedure CheckEmptyListCut(List1, List2: TList);
--------------------------------------------------------------------------------}
 procedure CheckEmptyListCut(List1, List2: TList);
 var
   Cnt1: Integer;
@@ -1280,21 +1053,8 @@ begin
   Cnt1:=List1.Count;
   for i:=0 to Cnt1 do begin
     if List2.IndexOf(List1[i])>=0 then
-      RaiseException('CheckEmptyListCut');
+      RaiseGDBException('CheckEmptyListCut');
   end;
-end;
-
-{-------------------------------------------------------------------------------
-  function CompareBoolean(b1, b2: boolean): integer;
--------------------------------------------------------------------------------}
-function CompareBoolean(b1, b2: boolean): integer;
-begin
-  if b1=b2 then
-    Result:=0
-  else if b1 then
-    Result:=1
-  else
-    Result:=-1;
 end;
 
 procedure RemoveDoubles(List: TStrings);
@@ -1504,32 +1264,6 @@ begin
   Result := True;
 end;
 
-{-------------------------------------------------------------------------------
-  function ClearFile(const Filename: string; RaiseOnError: boolean): boolean;
-  
-  Empty file if exists.
--------------------------------------------------------------------------------}
-function ClearFile(const Filename: string; RaiseOnError: boolean): boolean;
-var
-  fs: TFileStreamUTF8;
-begin
-  if FileExistsUTF8(Filename) then begin
-    try
-      InvalidateFileStateCache;
-      fs:=TFileStreamUTF8.Create(Filename,fmOpenWrite);
-      fs.Size:=0;
-      fs.Free;
-    except
-      on E: Exception do begin
-        Result:=false;
-        if RaiseOnError then raise;
-        exit;
-      end;
-    end;
-  end;
-  Result:=true;
-end;
-
 function FindProgram(ProgramName, BaseDirectory: string;
   WithBaseDirectory: boolean): string;
 var
@@ -1551,7 +1285,7 @@ begin
       Result:='';
     exit;
   end;
-  Flags:=[];
+  Flags:=[sffFile,sffExecutable];
   if not WithBaseDirectory then
     Include(Flags,sffDontSearchInBasePath);
   Result:=FileUtil.SearchFileInPath(ProgramName,BaseDirectory,
@@ -1574,681 +1308,6 @@ begin
   Point.Y:=StrToIntDef(copy(s,p+1,length(s)-p),DefaultPoint.Y);
 end;
 
-{-------------------------------------------------------------------------------
-  TabsToSpaces
-
-  Params: const s: string; TabWidth: integer
-  Result: string
-
-  Convert all tabs to TabWidth number of spaces.
--------------------------------------------------------------------------------}
-function TabsToSpaces(const s: string; TabWidth: integer; UseUTF8: boolean): string;
-
-  function ConvertTabsToSpaces(const Src: string; var Dest: string): integer;
-  var
-    SrcLen: Integer;
-    SrcPos: Integer;
-    PhysicalX: Integer;
-    CurTabWidth: Integer;
-    i: Integer;
-    CharLen: Integer;
-    DestPos: Integer;
-  begin
-    //DebugLn('ConvertTabsToSpaces ',dbgs(length(Dest)));
-    SrcLen:=length(Src);
-    SrcPos:=1;
-    DestPos:=1;
-    PhysicalX:=1;
-    while (SrcPos<=SrcLen) do begin
-      if (SrcPos and $fffff)=0 then
-        DebugLn('ConvertTabsToSpaces ',dbgs(SrcPos));
-      case Src[SrcPos] of
-      #9:
-        begin
-          CurTabWidth:=TabWidth - ((PhysicalX-1) mod TabWidth);
-          for i:=1 to CurTabWidth do begin
-            if Dest<>'' then
-              Dest[DestPos]:=' ';
-            inc(DestPos);
-          end;
-          inc(PhysicalX,CurTabWidth);
-          inc(SrcPos);
-        end;
-      #10,#13:
-        begin
-          if Dest<>'' then
-            Dest[DestPos]:=Src[SrcPos];
-          inc(SrcPos);
-          inc(DestPos);
-          if (SrcPos<=SrcLen) and (s[SrcPos] in [#10,#13])
-          and (s[SrcPos-1]<>s[SrcPos]) then
-            inc(SrcPos);
-          PhysicalX:=1;
-        end;
-      else
-        begin
-          if Dest<>'' then
-            Dest[DestPos]:=Src[SrcPos];
-          inc(PhysicalX);
-          if UseUTF8 then
-            CharLen:=UTF8CodepointSize(@s[SrcPos])
-          else
-            CharLen:=1;
-          for i:=1 to CharLen do begin
-            if Dest<>'' then
-              Dest[DestPos]:=Src[SrcPos];
-            inc(DestPos);
-            inc(SrcPos);
-          end;
-        end;
-      end;
-    end;
-    Result:=DestPos-1;
-  end;
-  
-var
-  NewLen: LongInt;
-begin
-  Result:='';
-  NewLen:=ConvertTabsToSpaces(s,Result);
-  if NewLen=length(s) then
-    Result:=s
-  else begin
-    SetLength(Result,NewLen);
-    ConvertTabsToSpaces(s,Result);
-  end;
-  //DebugLn('TabsToSpaces ',dbgs(length(Result)));
-end;
-
-function SplitString(const s: string; Delimiter: char): TStrings;
-begin
-  Result:=TStringList.Create;
-  SplitString(s,Delimiter,Result,false);
-end;
-
-procedure SplitString(const s: string; Delimiter: char; AddTo: TStrings;
-  ClearList: boolean);
-var
-  SLen: Integer;
-  StartPos: Integer;
-  EndPos: Integer;
-begin
-  if ClearList then
-    AddTo.Clear;
-  SLen:=length(s);
-  StartPos:=1;
-  EndPos:=1;
-  repeat
-    if (EndPos<=sLen) and (s[EndPos]<>Delimiter) then
-      inc(EndPos)
-    else begin
-      if EndPos>StartPos then
-        AddTo.Add(copy(s,StartPos,EndPos-StartPos));
-      StartPos:=EndPos+1;
-      if StartPos>sLen then exit;
-      inc(EndPos);
-    end;
-  until false;
-end;
-
-{-------------------------------------------------------------------------------
-  function SpecialCharsToSpaces(const s: string): string;
-
-  Converts illegal characters to spaces.
-  Trim leading and trailing spaces.
--------------------------------------------------------------------------------}
-function SpecialCharsToSpaces(const s: string; FixUTF8: boolean): string;
-var
-  i: Integer;
-  p: LongInt;
-begin
-  Result:=s;
-  if Result='' then exit;
-  // convert line breaks to single spaces
-  i:=length(Result);
-  while (i>=1) do begin
-    if Result[i] in [#10,#13] then begin
-      Result[i]:=' ';
-      p:=i;
-      while (i>1) and (Result[i-1] in [#10,#13]) do dec(i);
-      if p>i then
-        System.Delete(Result,i,p-i);
-    end;
-    dec(i);
-  end;
-
-  // convert special characters to spaces
-  for i:=1 to length(Result) do
-    if Result[i] in [#0..#31,#127] then Result[i]:=' ';
-  if Result='' then exit;
-  if FixUTF8 then
-    UTF8FixBroken(Result);
-  Result:=UTF8Trim(Result);
-end;
-
-function SpecialCharsToHex(const s: string): string;
-var
-  i: Integer;
-begin
-  Result:=s;
-  if Result='' then exit;
-  for i:=length(Result) downto 1 do
-    if Result[i]<' ' then
-      Result:=copy(Result,1,i-1)
-              +'#'+Format('%d',[ord(Result[i])])
-              +copy(Result,i+1,length(Result));
-end;
-
-function LineBreaksToSystemLineBreaks(const s: string): string;
-begin
-  Result:=ChangeLineEndings(s,LineEnding);
-end;
-
-function LineBreaksToDelimiter(const s: string; Delimiter: char): string;
-var
-  p: Integer;
-  StartPos: LongInt;
-begin
-  Result:=s;
-  p:=1;
-  while (p<=length(Result)) do begin
-    if Result[p] in [#10,#13] then begin
-      StartPos:=p;
-      repeat
-        inc(p);
-      until (p>length(Result)) or (not (Result[p] in [#10,#13]));
-      if p<=length(Result) then
-        Result:=copy(Result,1,StartPos-1)+Delimiter+copy(Result,p,length(Result))
-      else
-        Result:=copy(Result,1,StartPos-1);
-    end else begin
-      inc(p);
-    end;
-  end;
-end;
-
-function StringListToText(List: TStrings; const Delimiter: string;
-  IgnoreEmptyLines: boolean): string;
-begin
-  if List=nil then
-    Result:=''
-  else
-    Result:=StringListPartToText(List,0,List.Count-1,Delimiter,IgnoreEmptyLines);
-end;
-
-function StringListPartToText(List: TStrings; FromIndex, ToIndex: integer;
-  const Delimiter: string; IgnoreEmptyLines: boolean): string;
-var
-  i: Integer;
-  s: string;
-  Size: Integer;
-  p: Integer;
-begin
-  if (List=nil) or (FromIndex>ToIndex) or (FromIndex>=List.Count) then begin
-    Result:='';
-    exit;
-  end;
-  if FromIndex<0 then FromIndex:=0;
-  if ToIndex>=List.Count then ToIndex:=List.Count-1;
-  // calculate size
-  Size:=0;
-  for i:=FromIndex to ToIndex do begin
-    s:=List[i];
-    if IgnoreEmptyLines and (s='') then continue;
-    if Size>0 then
-      inc(Size,length(Delimiter));
-    inc(Size,length(s));
-  end;
-  // build string
-  SetLength(Result,Size);
-  p:=1;
-  for i:=FromIndex to ToIndex do begin
-    s:=List[i];
-    if IgnoreEmptyLines and (s='') then continue;
-    if (p>1) and (Delimiter<>'') then begin
-      System.Move(Delimiter[1],Result[p],length(Delimiter));
-      inc(p,length(Delimiter));
-    end;
-    if s<>'' then begin
-      System.Move(s[1],Result[p],length(s));
-      inc(p,length(s));
-    end;
-  end;
-end;
-
-function StringListToString(List: TStrings; FromIndex, ToIndex: integer;
-  IgnoreEmptyLines: boolean): string;
-// concatenates strings with #10 characters
-// and quotes strings containing #10 with '
-var
-  Size: PtrInt;
-  i: PtrInt;
-  s: string;
-  j: PtrInt;
-  p: PtrInt;
-begin
-  if (List=nil) or (FromIndex>ToIndex) or (FromIndex>=List.Count) then begin
-    Result:='';
-    exit;
-  end;
-  if FromIndex<0 then FromIndex:=0;
-  if ToIndex>=List.Count then ToIndex:=List.Count-1;
-  // calculate size
-  Size:=0;
-  for i:=FromIndex to ToIndex do begin
-    s:=List[i];
-    if IgnoreEmptyLines and (s='') then continue;
-    if Size>0 then
-      inc(Size);// adding #10 as delimiter
-    inc(Size,length(s));
-    if System.Pos(#10,s)>0 then begin
-      inc(Size,2);
-      for j:=1 to length(s) do begin
-        if s[j]='''' then
-          inc(Size);
-      end;
-    end;
-  end;
-  // build string
-  SetLength(Result,Size);
-  p:=1;
-  for i:=FromIndex to ToIndex do begin
-    s:=List[i];
-    if IgnoreEmptyLines and (s='') then continue;
-    if p>1 then begin
-      Result[p]:=#10;
-      inc(p);
-    end;
-    if System.Pos(#10,s)<1 then begin
-      // just copy the string
-      if s<>'' then begin
-        System.Move(s[1],Result[p],length(s));
-        inc(p,length(s));
-      end;
-    end else begin
-      // quote
-      Result[p]:='''';
-      inc(p);
-      for j:=1 to length(s) do begin
-        if s[p]='''' then begin
-          Result[p]:='''';
-          inc(p);
-        end;
-        Result[p]:=s[j];
-        inc(p);
-      end;
-      Result[p]:='''';
-      inc(p);
-    end;
-  end;
-  //DebugLn(['StringListToString ',dbgstr(Result),' ',Size,' ',p]);
-  if Size<>p-1 then
-    RaiseException('StringListToString');
-end;
-
-procedure StringToStringList(const s: string; List: TStrings);
-var
-  p: PtrInt;
-  LineStartPos: PtrInt;
-  Size: PtrInt;
-  DstPos: PtrInt;
-  Line: string;
-begin
-  if s='' then exit;
-  p:=1;
-  while true do begin
-    if s[p]='''' then begin
-      // quoted
-      Size:=0;
-      inc(p);
-      LineStartPos:=p;
-      while p<=length(s) do begin
-        if (s[p]='''') then begin
-          inc(p);
-          if (p>length(s)) or (s[p]<>'''') then break;
-        end;
-        inc(Size);
-        inc(p);
-      end;
-      SetLength(Line,Size);
-      p:=LineStartPos;
-      DstPos:=1;
-      while p<=length(s) do begin
-        if (s[p]='''') then begin
-          inc(p);
-          if (p>length(s)) or (s[p]<>'''') then break;
-        end;
-        Line[DstPos]:=s[p];
-        inc(DstPos);
-        inc(p);
-      end;
-      List.Add(Line);
-      // skip line end
-      if p>length(s) then exit;
-      if s[p]=#10 then
-        inc(p);
-    end else begin
-      // just copy the string
-      LineStartPos:=p;
-      while (p<=length(s)) and (s[p]<>#10) do inc(p);
-      List.Add(copy(s,LineStartPos,p-LineStartPos));
-      // skip line end
-      if p>length(s) then exit;
-      inc(p);
-    end;
-    if p>length(s) then begin
-      List.Add('');
-      exit;
-    end;
-  end;
-end;
-
-{-------------------------------------------------------------------------------
-  function BinaryStrToText(const s: string): string;
-
-  Replaces special chars (<#32) into pascal char constants #xxx.
--------------------------------------------------------------------------------}
-function BinaryStrToText(const s: string): string;
-var
-  i, OldLen, NewLen, OldPos, NewPos: integer;
-begin
-  OldLen:=length(s);
-  NewLen:=OldLen;
-  for i:=1 to OldLen do begin
-    if s[i]<' ' then begin
-      inc(NewLen); // one additional char for #
-      if ord(s[i])>9 then inc(NewLen);
-      if ord(s[i])>99 then inc(NewLen);
-    end;
-  end;
-  if OldLen=NewLen then begin
-    Result:=s;
-    exit;
-  end;
-  SetLength(Result,NewLen);
-  OldPos:=1;
-  NewPos:=1;
-  while OldPos<=OldLen do begin
-    if s[OldPos]>=' ' then begin
-      Result[NewPos]:=s[OldPos];
-    end else begin
-      Result[NewPos]:='#';
-      inc(NewPos);
-      i:=ord(s[OldPos]);
-      if i>99 then begin
-        Result[NewPos]:=chr((i div 100)+ord('0'));
-        inc(NewPos);
-        i:=i mod 100;
-      end;
-      if i>9 then begin
-        Result[NewPos]:=chr((i div 10)+ord('0'));
-        inc(NewPos);
-        i:=i mod 10;
-      end;
-      Result[NewPos]:=chr(i+ord('0'));
-    end;
-    inc(NewPos);
-    inc(OldPos);
-  end;
-  if NewPos-1<>NewLen then
-    RaiseException('ERROR: BinaryStrToText: '+IntToStr(NewLen)+'<>'+IntToStr(NewPos-1));
-end;
-
-{-------------------------------------------------------------------------------
-  ConvertSpecialFileChars
-
-  Params: const Filename: string
-  Result: string
-
-  Replaces all spaces in a filename.
--------------------------------------------------------------------------------}
-function ConvertSpecialFileChars(const Filename: string): string;
-const
-  SpecialChar = '\';
-var i: integer;
-begin
-  Result:=Filename;
-  i:=1;
-  while (i<=length(Result)) do begin
-    if Result[i]<>' ' then begin
-      inc(i);
-    end else begin
-      Result:=LeftStr(Result,i-1)+SpecialChar+RightStr(Result,length(Result)-i+1);
-      inc(i,2);
-    end;
-  end;
-end;
-
-{-------------------------------------------------------------------------------
-  PrepareCmdLineOption
-
-  Params: const Option: string
-  Result: string
-
-  If there is a space in the option add " " around the whole option
--------------------------------------------------------------------------------}
-function PrepareCmdLineOption(const Option: string): string;
-var i: integer;
-begin
-  Result:=Option;
-  if (Result='') or (Result[1]='"') then exit;
-  for i:=1 to length(Result) do begin
-    if Result[i]=' ' then begin
-      Result:='"'+Result+'"';
-      exit;
-    end;
-  end;
-end;
-
-function AddCmdLineParameter(const CmdLine, AddParameter: string): string;
-begin
-  Result:=CmdLine;
-  if (Result<>'') and (Result[length(Result)]<>' ') then
-    Result:=Result+' ';
-  Result:=Result+AddParameter;
-end;
-
-{-------------------------------------------------------------------------------
-  function CommentLines(const s: string): string;
-
-  Comment every line with a Delphicomment //
--------------------------------------------------------------------------------}
-function CommentLines(const s: string): string;
-var
-  CurPos: integer;
-  Dest: string;
-  
-  procedure FindLineEnd;
-  begin
-    while (CurPos<=length(Dest))
-    and (not (Dest[CurPos] in [#10,#13])) do
-      inc(CurPos);
-  end;
-
-  procedure CommentLine;
-  begin
-    Dest:=LeftStr(Dest,CurPos-1)+'//'+RightStr(Dest,length(Dest)-CurPos+1);
-    FindLineEnd;
-  end;
-
-begin
-  Dest:=s;
-  CurPos:=1;
-  // find code start in line
-  while (CurPos<=length(Dest)) do begin
-    case Dest[CurPos] of
-    
-    ' ',#9:
-      // skip space
-      inc(CurPos);
-
-    #10,#13:
-      // line end found -> skip
-      inc(CurPos);
-
-    else
-      // code start found
-      CommentLine;
-    end;
-  end;
-  Result:=Dest;
-end;
-
-{-------------------------------------------------------------------------------
-  function CommentLines(const s: string; CommentType: TCommentType): string;
-
-  Comment s.
--------------------------------------------------------------------------------}
-function CommentText(const s: string; CommentType: TCommentType): string;
-
-  procedure GetTextInfo(out Len, LineCount: integer; out LastLineEmpty: boolean);
-  var
-    p: integer;
-  begin
-    Len:=length(s);
-    LineCount:=1;
-    p:=1;
-    while p<=Len do
-      if not (s[p] in [#10,#13]) then begin
-        inc(p);
-      end else begin
-        inc(p);
-        inc(LineCount);
-        if (p<=Len) and (s[p] in [#10,#13]) and (s[p]<>s[p-1]) then
-          inc(p);
-      end;
-    LastLineEmpty:=(Len=0) or (s[Len] in [#10,#13]);
-  end;
-
-  procedure DoCommentBlock(const FirstLineStart, LineStart, LastLine: string);
-  var
-    OldLen, NewLen, LineCount, OldPos, NewPos: integer;
-    LastLineEmpty: boolean;
-  begin
-    GetTextInfo(OldLen,LineCount,LastLineEmpty);
-    
-    NewLen:=OldLen+length(FirstLineStart)
-                  +(LineCount-1)*length(LineStart);
-    if LastLineEmpty then
-      dec(NewLen,length(LineStart))
-    else
-      inc(NewLen,length(EndOfLine));
-    if (LastLine<>'') then begin
-      inc(NewLen,length(LastLine)+length(EndOfLine));
-    end;
-
-    SetLength(Result,NewLen);
-    NewPos:=1;
-    OldPos:=1;
-
-    // add first line start
-    if FirstLineStart<>'' then begin
-      System.Move(FirstLineStart[1],Result[NewPos],length(FirstLineStart));
-      inc(NewPos,length(FirstLineStart));
-    end;
-    // copy all lines and add new linestart
-    while (OldPos<=OldLen) do begin
-      if (not (s[OldPos] in [#10,#13])) then begin
-        Result[NewPos]:=s[OldPos];
-        inc(OldPos);
-        inc(NewPos);
-      end else begin
-        Result[NewPos]:=s[OldPos];
-        inc(OldPos);
-        inc(NewPos);
-        if (OldPos<=OldLen) and (s[OldPos] in [#10,#13])
-        and (s[OldPos]<>s[OldPos-1]) then begin
-          Result[NewPos]:=s[OldPos];
-          inc(OldPos);
-          inc(NewPos);
-        end;
-        // start new line
-        if (LineStart<>'') and (OldPos<OldLen) then begin
-          System.Move(LineStart[1],Result[NewPos],length(LineStart));
-          inc(NewPos,length(LineStart));
-        end;
-      end;
-    end;
-    if not LastLineEmpty then begin
-      System.Move(EndOfLine[1],Result[NewPos],length(EndOfLine));
-      inc(NewPos,length(EndOfLine));
-    end;
-    // add last line
-    if LastLine<>'' then begin
-      System.Move(LastLine[1],Result[NewPos],length(LastLine));
-      inc(NewPos,length(LastLine));
-      System.Move(EndOfLine[1],Result[NewPos],length(EndOfLine));
-      inc(NewPos,length(EndOfLine));
-    end;
-    if NewPos<>NewLen+1 then
-      raise Exception.Create('IDEProcs.CommentText ERROR: '
-        +IntToStr(NewPos-1)+'<>'+IntToStr(NewLen));
-  end;
-
-begin
-  Result:=s;
-  if CommentType=comtNone then exit;
-  if CommentType=comtDefault then CommentType:=comtPascal;
-    
-  case CommentType of
-    comtPascal: DoCommentBlock('{ ','  ','}');
-    comtDelphi: DoCommentBlock('// ','// ','');
-    comtTurboPascal: DoCommentBlock('(* ',' * ',' *)');
-    comtCPP: DoCommentBlock('/* ',' * ',' */');
-    comtPerl: DoCommentBlock('# ','# ','');
-    comtHtml: DoCommentBlock('<!-- ','  ','-->');
-  end;
-end;
-
-{-------------------------------------------------------------------------------
-  function CommentLines(const s: string): string;
-
-  Uncomment every line with a Delphicomment //
--------------------------------------------------------------------------------}
-function UncommentLines(const s: string): string;
-var
-  CurPos: integer;
-  Dest: string;
-
-  procedure FindLineEnd;
-  begin
-    while (CurPos<=length(Dest))
-    and (not (Dest[CurPos] in [#10,#13])) do
-      inc(CurPos);
-  end;
-
-  procedure UncommentLine;
-  begin
-    Dest:=LeftStr(Dest,CurPos-1)+RightStr(Dest,length(Dest)-CurPos-1);
-    FindLineEnd;
-  end;
-
-begin
-  Dest:=s;
-  CurPos:=1;
-  // find Delphi comment line
-  while (CurPos<=length(Dest)) do begin
-    case Dest[CurPos] of
-
-    ' ',#9:
-      // skip space
-      inc(CurPos);
-
-    #10,#13:
-      // line end found -> skip
-      inc(CurPos);
-
-    else
-      // code start found
-      if (Dest[CurPos]='/') and (CurPos<length(Dest)) and (Dest[CurPos+1]='/')
-      then
-        UncommentLine;
-      FindLineEnd;
-    end;
-  end;
-  Result:=Dest;
-end;
-
 function GetCurrentUserName: string;
 begin
   Result:=GetEnvironmentVariableUTF8('USER');
@@ -2264,121 +1323,6 @@ begin
   GetProgramSearchPath := GetEnvironmentVariableUTF8('PATH');
 end;
 
-{------------------------------------------------------------------------------
-  procedure RaiseException(const Msg: string);
-
-  Raises an exception.
-  gdb does not catch fpc Exception objects, therefore this procedure raises
-  a standard AV which is catched by gdb.
- ------------------------------------------------------------------------------}
-procedure RaiseException(const Msg: string);
-begin
-  DebugLn('ERROR in IDE: ',Msg);
-  // creates an exception, that gdb catches:
-  DebugLn('Creating gdb catchable error:');
-  if (length(Msg) div (length(Msg) div 10000))=0 then ;
-end;
-
-function CopyDirectoryWithMethods(const SrcDirectory, DestDirectory: string;
-  OnCopyFile: TOnCopyFileMethod; OnCopyError: TOnCopyErrorMethod;
-  Data: TObject): boolean;
-var
-  SrcDir, DestDir: string;
-
-  function HandleError(ErrorNumber: TCopyErrorType;
-    const Param1, Param2: string): boolean;
-  var
-    ErrorData: TCopyErrorData;
-  begin
-    Result:=false;
-    if Assigned(OnCopyError) then begin
-      ErrorData.Error:=ErrorNumber;
-      ErrorData.Param1:=Param1;
-      ErrorData.Param2:=Param2;
-      OnCopyError(ErrorData,Result,Data);
-    end;
-  end;
-  
-  function CopyDir(const CurSrcDir, CurDestDir: string): boolean;
-  // both dirs must end with PathDelim
-  var
-    FileInfo: TSearchRec;
-    CurFilename,
-    SubSrcDir, SubDestDir,
-    DestFilename: string;
-    DoCopy: boolean;
-  begin
-    Result:=false;
-    if (CompareFilenames(CurSrcDir,DestDir)=0)
-    or (CompareFilenames(CurDestDir,SrcDir)=0) then begin
-      // copying into subdirectory. For example: /home/ to /home/user/
-      // or copying from subdirectory. For example: /home/user/ to /home/
-      // -> skip
-      Result:=true;
-      exit;
-    end;
-    
-    if not ForceDirectory(CurDestDir)
-    and not HandleError(ceCreatingDirectory,CurDestDir,'') then exit;
-    
-    if FindFirstUTF8(CurSrcDir+GetAllFilesMask,faAnyFile,FileInfo)=0 then begin
-      repeat
-        // check if special file
-        if (FileInfo.Name='.') or (FileInfo.Name='..') or (FileInfo.Name='')
-        then continue;
-        CurFilename:=CurSrcDir+FileInfo.Name;
-        // check if src file
-        if FilenameIsMatching(DestDirectory,CurFilename,false) then continue;
-        
-        // check user filter
-        if Assigned(OnCopyFile) then begin
-          DoCopy:=true;
-          OnCopyFile(CurFilename,DoCopy,Data);
-          if not DoCopy then continue;
-        end;
-
-        // copy
-        if (FileInfo.Attr and faDirectory)>0 then begin
-          // copy sub directory
-          SubSrcDir:=AppendPathDelim(CurFilename);
-          SubDestDir:=AppendPathDelim(CurDestDir+FileInfo.Name);
-          if not CopyDir(SubSrcDir,SubDestDir) then exit;
-        end else begin
-          // copy file
-          DestFilename:=CurDestDir+FileInfo.Name;
-          if not CopyFileWithMethods(CurFilename,DestFilename,OnCopyError,Data)
-          then
-            exit;
-        end;
-      until FindNextUTF8(FileInfo)<>0;
-    end;
-    FindCloseUTF8(FileInfo);
-    
-    Result:=true;
-  end;
-  
-begin
-  Result:=true;
-  SrcDir:=AppendPathDelim(TrimAndExpandDirectory(SrcDirectory));
-  DestDir:=AppendPathDelim(TrimAndExpandDirectory(DestDirectory));
-  if CompareFilenames(SrcDir,DestDir)=0 then exit;
-
-  if (not DirPathExists(SrcDir))
-  and not HandleError(ceSrcDirDoesNotExists,SrcDir,'') then exit;
-  
-  CopyDir(SrcDir,DestDirectory);
-end;
-
-function ProgramDirectory(BundleRoot: boolean): string;
-const
-  BundlePostFix='.app/Contents/MacOS';
-begin
-  Result:=FileUtil.ProgramDirectory;
-  if BundleRoot
-  and (RightStr(ChompPathDelim(Result),length(BundlePostFix))=BundlePostFix) then
-    Result:=ExtractFilePath(LeftStr(Result,length(Result)-length(BundlePostFix)));
-end;
-
 function CreateEmptyFile(const Filename: string): boolean;
 var
   fs: TFileStreamUTF8;
@@ -2391,209 +1335,6 @@ begin
     Result:=true;
   except
   end;
-end;
-
-function CopyFileWithMethods(const SrcFilename, DestFilename: string;
-  OnCopyError: TOnCopyErrorMethod; Data: TObject): boolean;
-var
-  SrcFileStream, DestFileStream: TFileStreamUTF8;
-  {$IFdef MSWindows}
-  OldAttr: Longint;
-  {$ELSE}
-  OldInfo: Stat;
-  {$ENDIF}
-begin
-  Result:=false;
-  if CompareFilenames(SrcFilename,DestFilename)=0 then exit;
-  
-  // read file attributes
-  {$IFdef MSWindows}
-  OldAttr:=FileGetAttrUTF8(SrcFilename);
-  {$ELSE}
-  FpStat(SrcFilename,OldInfo{%H-});
-  {$ENDIF}
-  
-  // copy file
-  try
-    SrcFileStream:=TFileStreamUTF8.Create(SrcFilename,fmOpenRead);
-    try
-      InvalidateFileStateCache;
-      DestFileStream:=TFileStreamUTF8.Create(DestFilename,fmCreate);
-      try
-        DestFileStream.CopyFrom(SrcFileStream,SrcFileStream.Size);
-      finally
-        DestFileStream.Free;
-      end;
-    finally
-      SrcFileStream.Free;
-    end;
-  except
-    exit;
-  end;
-  
-  // copy file attributes
-  {$IFdef MSWindows}
-  FileSetAttrUTF8(DestFileName,OldAttr);
-  {$ELSE}
-  FpChmod(DestFilename, OldInfo.st_Mode and (STAT_IRWXO+STAT_IRWXG+STAT_IRWXU
-                           +STAT_ISUID+STAT_ISGID+STAT_ISVTX));
-  {$ENDIF}
-
-  Result:=true;
-end;
-
-{------------------------------------------------------------------------------
-  function CrossReplaceChars(const Src: string; PrefixChar: char;
-    const SpecialChars: string): string;
-
-------------------------------------------------------------------------------}
-function CrossReplaceChars(const Src: string; PrefixChar: char;
-  const SpecialChars: string): string;
-var
-  SrcLen, SrcPos: Integer;
-  DestLen: Integer;
-  c: Char;
-  NeedsChange: boolean;
-  DestPos: Integer;
-begin
-  Result:=Src;
-  SrcLen:=length(Src);
-  SrcPos:=1;
-  DestLen:=SrcLen;
-  NeedsChange:=false;
-  while (SrcPos<=SrcLen) do begin
-    c:=Src[SrcPos];
-    if (c<>PrefixChar) then begin
-      if System.Pos(c,SpecialChars)>=1 then begin
-        // in front of each SpecialChar will be a PrefixChar inserted
-        inc(DestLen);
-        NeedsChange:=true;
-      end;
-      inc(SrcPos);
-    end else begin
-      inc(SrcPos);
-      if (SrcPos<=SrcLen) and (System.Pos(Src[SrcPos],SpecialChars)>=1) then
-      begin
-        // each prefixed SpecialChars will be reduced
-        dec(DestLen);
-        NeedsChange:=true;
-      end;
-      inc(SrcPos);
-    end;
-  end;
-  if not NeedsChange then exit;
-  SetLength(Result,DestLen);
-  SrcPos:=1;
-  DestPos:=1;
-  while (SrcPos<=SrcLen) do begin
-    c:=Src[SrcPos];
-    if (c<>PrefixChar) then begin
-      if System.Pos(c,SpecialChars)>=1 then begin
-        // in front of each SpecialChars will be PrefixChar inserted
-        Result[DestPos]:=PrefixChar;
-        inc(DestPos);
-      end;
-      Result[DestPos]:=c;
-      inc(SrcPos);
-      inc(DestPos);
-    end else begin
-      inc(SrcPos);
-      if SrcPos<=SrcLen then begin
-        if (System.Pos(Src[SrcPos],SpecialChars)<1) then begin
-          Result[DestPos]:=c;
-          inc(DestPos);
-        end;
-        Result[DestPos]:=Src[SrcPos];
-        inc(DestPos);
-        inc(SrcPos);
-      end else begin
-        Result[DestPos]:=c;
-        inc(DestPos);
-      end;
-    end;
-  end;
-end;
-
-{------------------------------------------------------------------------------
-  function SimpleSyntaxToRegExpr(const Src: string): string;
-
-  * -> .*
-  ? -> .
-  , -> |
-  ; -> |
-  Backslash characters .+
-
-  Finally enclose by ^( )$
-------------------------------------------------------------------------------}
-function SimpleSyntaxToRegExpr(const Src: string): string;
-var
-  SrcLen, SrcPos: Integer;
-  DestLen: Integer;
-  c: Char;
-  DestPos: Integer;
-begin
-  Result:=Src;
-  SrcLen:=length(Src);
-  SrcPos:=1;
-  DestLen:=SrcLen+4;
-  while (SrcPos<=SrcLen) do begin
-    c:=Src[SrcPos];
-    case c of
-    '\': inc(SrcPos);
-    '*','.','+':
-      inc(DestLen);
-    end;
-    inc(SrcPos);
-  end;
-  SetLength(Result,DestLen);
-  SrcPos:=1;
-  Result[1]:='^';
-  Result[2]:='(';
-  DestPos:=3;
-  while (SrcPos<=SrcLen) do begin
-    c:=Src[SrcPos];
-    case c of
-    '\':
-      begin
-        Result[DestPos]:=c;
-        inc(DestPos);
-        inc(SrcPos);
-        Result[DestPos]:=Src[SrcPos];
-        inc(DestPos);
-      end;
-    '.','+':
-      begin
-        Result[DestPos]:='\';
-        inc(DestPos);
-        Result[DestPos]:=c;
-        inc(DestPos);
-      end;
-    '*':
-      begin
-        Result[DestPos]:='.';
-        inc(DestPos);
-        Result[DestPos]:='*';
-        inc(DestPos);
-      end;
-    '?':
-      begin
-        Result[DestPos]:='.';
-        inc(DestPos);
-      end;
-    ',',';':
-      begin
-        Result[DestPos]:='|';
-        inc(DestPos);
-      end;
-    else
-      Result[DestPos]:=Src[SrcPos];
-      inc(DestPos);
-    end;
-    inc(SrcPos);
-  end;
-  Result[DestPos]:=')';
-  inc(DestPos);
-  Result[DestPos]:='$';
 end;
 
 function CompareMemStreamText(s1, s2: TMemoryStream): Boolean;
@@ -2663,11 +1404,6 @@ end;
 function CheckGroupItemChecked(CheckGroup: TCheckGroup; const Caption: string): Boolean;
 begin
   Result := CheckGroup.Checked[CheckGroup.Items.IndexOf(Caption)];
-end;
-
-procedure CTDbgOut(const s: string);
-begin
-  LCLProc.DbgOut(s);
 end;
 
 end.

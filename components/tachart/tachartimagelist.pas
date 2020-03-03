@@ -44,6 +44,8 @@ type
   public
     procedure ReadData(AStream: TStream); override;
     procedure WriteData(AStream: TStream); override;
+    procedure ReadAdvData(AStream: TStream); override;
+    procedure WriteAdvData(AStream: TStream); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -162,10 +164,20 @@ begin
   end;
 end;
 
-procedure TChartImageList.ReadData(AStream: TStream);
+procedure TChartImageList.ReadAdvData(AStream: TStream);
 begin
   Unused(AStream);
+end;
+
+procedure TChartImageList.ReadData(AStream: TStream);
+var
+  ch: TChart;
+begin
+  ch := Chart;
+  Chart := nil;
   Clear;
+  inherited ReadData(AStream);
+  Chart := ch;
 end;
 
 // Notification procedure of the listener. Responds to chart broadcasts
@@ -189,11 +201,24 @@ begin
   SeriesChanged(Self);
 end;
 
-procedure TChartImageList.WriteData(AStream: TStream);
+procedure TChartImageList.WriteAdvData(AStream: TStream);
 begin
+  Unused(AStream);
+end;
+
+procedure TChartImageList.WriteData(AStream: TStream);
+var
+  ch: TChart;
+begin
+  ch := Chart;
+  Chart := nil;
+  inherited WriteData(AStream);
+  Chart := ch;{
+
   // Don't write the series images to stream.
   // They will be recreated automatically when the chart is assigned on loading.
   Unused(AStream);
+  }
 end;
 
 end.

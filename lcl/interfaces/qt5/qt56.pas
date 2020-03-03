@@ -5785,7 +5785,7 @@ function QWindow_visibility(handle: QWindowH): QWindowVisibility; cdecl; externa
 procedure QWindow_setVisibility(handle: QWindowH; v: QWindowVisibility); cdecl; external Qt5PasLib name 'QWindow_setVisibility';
 procedure QWindow_createPlatformResources(handle: QWindowH); cdecl; external Qt5PasLib name 'QWindow_createPlatformResources';
 procedure QWindow_destroyPlatformResources(handle: QWindowH); cdecl; external Qt5PasLib name 'QWindow_destroyPlatformResources';
-function QWindow_winId(handle: QWindowH): LongWord; cdecl; external Qt5PasLib name 'QWindow_winId';
+function QWindow_winId(handle: QWindowH): PtrUInt; cdecl; external Qt5PasLib name 'QWindow_winId';
 function QWindow_parent(handle: QWindowH): QWindowH; cdecl; external Qt5PasLib name 'QWindow_parent';
 procedure QWindow_setParent(handle: QWindowH; parent: QWindowH); cdecl; external Qt5PasLib name 'QWindow_setParent';
 function QWindow_isTopLevel(handle: QWindowH): boolean; cdecl; external Qt5PasLib name 'QWindow_isTopLevel';
@@ -5856,7 +5856,7 @@ procedure QWindow_cursor(handle: QWindowH; retval: QCursorH); cdecl; external Qt
 procedure QWindow_setCursor(handle: QWindowH; AnonParam1: QCursorH); cdecl; external Qt5PasLib name 'QWindow_setCursor';
 procedure QWindow_unsetCursor(handle: QWindowH); cdecl; external Qt5PasLib name 'QWindow_unsetCursor';
 function QWindow_focusObject(handle: QWindowH): QObjectH; cdecl; external Qt5PasLib name 'QWindow_focusObject';
-function QWindow_fromWinID(id: LongWord): QWindowH; cdecl; external Qt5PasLib name 'QWindow_fromWinId';
+function QWindow_fromWinID(id: PtrUInt): QWindowH; cdecl; external Qt5PasLib name 'QWindow_fromWinId';
 procedure QWindow_requestActivate(handle: QWindowH); cdecl; external Qt5PasLib name 'QWindow_requestActivate';
 procedure QWindow_setVisible(handle: QWindowH; visible: boolean); cdecl; external Qt5PasLib name 'QWindow_setVisible';
 procedure QWindow_show(handle: QWindowH); cdecl; external Qt5PasLib name 'QWindow_show';
@@ -5913,10 +5913,10 @@ const
 function QWidget_Create(parent: QWidgetH = nil; f: QtWindowFlags = 0): QWidgetH; cdecl; external Qt5PasLib name 'QWidget_Create';
 procedure QWidget_Destroy(handle: QWidgetH); cdecl; external Qt5PasLib name 'QWidget_Destroy'; 
 function QWidget_devType(handle: QWidgetH): Integer; cdecl; external Qt5PasLib name 'QWidget_devType';
-function QWidget_winId(handle: QWidgetH): LongWord; cdecl; external Qt5PasLib name 'QWidget_winId';
+function QWidget_winId(handle: QWidgetH): PtrUInt; cdecl; external Qt5PasLib name 'QWidget_winId';
 procedure QWidget_createWinId(handle: QWidgetH); cdecl; external Qt5PasLib name 'QWidget_createWinId';
-function QWidget_internalWinId(handle: QWidgetH): LongWord; cdecl; external Qt5PasLib name 'QWidget_internalWinId';
-function QWidget_effectiveWinId(handle: QWidgetH): LongWord; cdecl; external Qt5PasLib name 'QWidget_effectiveWinId';
+function QWidget_internalWinId(handle: QWidgetH): PtrUInt; cdecl; external Qt5PasLib name 'QWidget_internalWinId';
+function QWidget_effectiveWinId(handle: QWidgetH): PtrUInt; cdecl; external Qt5PasLib name 'QWidget_effectiveWinId';
 function QWidget_style(handle: QWidgetH): QStyleH; cdecl; external Qt5PasLib name 'QWidget_style';
 procedure QWidget_setStyle(handle: QWidgetH; AnonParam1: QStyleH); cdecl; external Qt5PasLib name 'QWidget_setStyle';
 function QWidget_isTopLevel(handle: QWidgetH): Boolean; cdecl; external Qt5PasLib name 'QWidget_isTopLevel';
@@ -6137,7 +6137,7 @@ procedure QWidget_setWindowFlags(handle: QWidgetH; _type: QtWindowFlags); cdecl;
 function QWidget_windowFlags(handle: QWidgetH): QtWindowFlags; cdecl; external Qt5PasLib name 'QWidget_windowFlags';
 procedure QWidget_overrideWindowFlags(handle: QWidgetH; _type: QtWindowFlags); cdecl; external Qt5PasLib name 'QWidget_overrideWindowFlags';
 function QWidget_windowType(handle: QWidgetH): QtWindowType; cdecl; external Qt5PasLib name 'QWidget_windowType';
-function QWidget_find(AnonParam1: LongWord): QWidgetH; cdecl; external Qt5PasLib name 'QWidget_find';
+function QWidget_find(AnonParam1: PtrUInt): QWidgetH; cdecl; external Qt5PasLib name 'QWidget_find';
 function QWidget_childAt(handle: QWidgetH; x: Integer; y: Integer): QWidgetH; cdecl; external Qt5PasLib name 'QWidget_childAt';
 function QWidget_childAt(handle: QWidgetH; p: PQtPoint): QWidgetH; cdecl; external Qt5PasLib name 'QWidget_childAt2';
 procedure QWidget_setAttribute(handle: QWidgetH; AnonParam1: QtWidgetAttribute; _on: Boolean = True); cdecl; external Qt5PasLib name 'QWidget_setAttribute';
@@ -6520,7 +6520,7 @@ procedure QScreen_transformBetween(handle: QScreenH; retval: QTransformH; a: QtS
 procedure QScreen_mapBetween(handle: QScreenH; retval: PRect; a: QtScreenOrientation; b: QtScreenOrientation; AnonParam1: PRect); cdecl; external Qt5PasLib name 'QScreen_mapBetween';
 function QScreen_isPortrait(handle: QScreenH; orientation: QtScreenOrientation): boolean; cdecl; external Qt5PasLib name 'QScreen_isPortrait';
 function QScreen_isLandscape(handle: QScreenH; orientation: QtScreenOrientation): boolean; cdecl; external Qt5PasLib name 'QScreen_isLandscape';
-procedure QScreen_grabWindow(handle: QScreenH; retval: QPixmapH; window: LongWord; x: integer = 0; y: integer = 0; w: integer = -1; h: integer = -1); cdecl; external Qt5PasLib name 'QScreen_grabWindow';
+procedure QScreen_grabWindow(handle: QScreenH; retval: QPixmapH; window: PtrUInt; x: integer = 0; y: integer = 0; w: integer = -1; h: integer = -1); cdecl; external Qt5PasLib name 'QScreen_grabWindow';
 function QScreen_refreshRate(handle: QScreenH): qreal; cdecl; external Qt5PasLib name 'QScreen_refreshRate';
 
 type
@@ -7379,6 +7379,7 @@ function QPaintDevice_logicalDpiY(handle: QPaintDeviceH): Integer; cdecl; extern
 function QPaintDevice_physicalDpiX(handle: QPaintDeviceH): Integer; cdecl; external Qt5PasLib name 'QPaintDevice_physicalDpiX';
 function QPaintDevice_physicalDpiY(handle: QPaintDeviceH): Integer; cdecl; external Qt5PasLib name 'QPaintDevice_physicalDpiY';
 function QPaintDevice_devicePixelRatio(handle: QPaintDeviceH): Integer; cdecl; external Qt5PasLib name 'QPaintDevice_devicePixelRatio';
+function QPaintDevice_devicePixelRatioF(handle: QPaintDeviceH): double; cdecl; external Qt5PasLib name 'QPaintDevice_devicePixelRatioF';
 function QPaintDevice_colorCount(handle: QPaintDeviceH): Integer; cdecl; external Qt5PasLib name 'QPaintDevice_colorCount';
 function QPaintDevice_depth(handle: QPaintDeviceH): Integer; cdecl; external Qt5PasLib name 'QPaintDevice_depth';
 
@@ -7739,6 +7740,7 @@ function QPrinterInfo_isNull(handle: QPrinterInfoH): Boolean; cdecl; external Qt
 function QPrinterInfo_isDefault(handle: QPrinterInfoH): Boolean; cdecl; external Qt5PasLib name 'QPrinterInfo_isDefault';
 procedure QPrinterInfo_supportedPaperSizes(handle: QPrinterInfoH; retval: PPtrIntArray); cdecl; external Qt5PasLib name 'QPrinterInfo_supportedPaperSizes';
 procedure QPrinterInfo_availablePrinters(retval: PPtrIntArray); cdecl; external Qt5PasLib name 'QPrinterInfo_availablePrinters';
+procedure QPrinterInfo_availablePrinterNames(retval: QStringListH); cdecl; external Qt5PasLib name 'QPrinterInfo_availablePrinterNames';
 procedure QPrinterInfo_defaultPrinter(retval: QPrinterInfoH); cdecl; external Qt5PasLib name 'QPrinterInfo_defaultPrinter';
 procedure QPrinterInfo_printerInfo(retval: QPrinterInfoH; printerName: PWideString); cdecl; external Qt5PasLib name 'QPrinterInfo_printerInfo';
 
@@ -8155,6 +8157,7 @@ function QTextFormat_Create(_type: Integer): QTextFormatH; cdecl; external Qt5Pa
 function QTextFormat_Create(rhs: QTextFormatH): QTextFormatH; cdecl; external Qt5PasLib name 'QTextFormat_Create3';
 procedure QTextFormat_swap(handle: QTextFormatH; other: QTextFormatH); cdecl; external Qt5PasLib name 'QTextFormat_swap';
 procedure QTextFormat_merge(handle: QTextFormatH; other: QTextFormatH); cdecl; external Qt5PasLib name 'QTextFormat_merge';
+function QTextFormat_isEmpty(handle: QTextFormatH): Boolean; cdecl; external Qt5PasLib name 'QTextFormat_isEmpty';
 function QTextFormat_isValid(handle: QTextFormatH): Boolean; cdecl; external Qt5PasLib name 'QTextFormat_isValid';
 function QTextFormat_type(handle: QTextFormatH): Integer; cdecl; external Qt5PasLib name 'QTextFormat_type';
 function QTextFormat_objectIndex(handle: QTextFormatH): Integer; cdecl; external Qt5PasLib name 'QTextFormat_objectIndex';
@@ -8250,8 +8253,6 @@ procedure QTextCharFormat_setAnchor(handle: QTextCharFormatH; anchor: Boolean); 
 function QTextCharFormat_isAnchor(handle: QTextCharFormatH): Boolean; cdecl; external Qt5PasLib name 'QTextCharFormat_isAnchor';
 procedure QTextCharFormat_setAnchorHref(handle: QTextCharFormatH; value: PWideString); cdecl; external Qt5PasLib name 'QTextCharFormat_setAnchorHref';
 procedure QTextCharFormat_anchorHref(handle: QTextCharFormatH; retval: PWideString); cdecl; external Qt5PasLib name 'QTextCharFormat_anchorHref';
-procedure QTextCharFormat_setAnchorName(handle: QTextCharFormatH; name: PWideString); cdecl; external Qt5PasLib name 'QTextCharFormat_setAnchorName';
-procedure QTextCharFormat_anchorName(handle: QTextCharFormatH; retval: PWideString); cdecl; external Qt5PasLib name 'QTextCharFormat_anchorName';
 procedure QTextCharFormat_setAnchorNames(handle: QTextCharFormatH; names: QStringListH); cdecl; external Qt5PasLib name 'QTextCharFormat_setAnchorNames';
 procedure QTextCharFormat_anchorNames(handle: QTextCharFormatH; retval: QStringListH); cdecl; external Qt5PasLib name 'QTextCharFormat_anchorNames';
 procedure QTextCharFormat_setTableCellRowSpan(handle: QTextCharFormatH; tableCellRowSpan: Integer); cdecl; external Qt5PasLib name 'QTextCharFormat_setTableCellRowSpan';
@@ -8723,6 +8724,13 @@ type
   QTextLineCursorPosition = ( // QTextLine::CursorPosition (1)
     QTextLineCursorBetweenCharacters, QTextLineCursorOnCharacter );
 
+  PQTextLayoutFormat = ^TQTextLayoutFormat;
+  TQTextLayoutFormat = packed record
+    start: longint;
+    length: longint;
+    format: QTextCharFormatH;
+  end;
+
 function QTextInlineObject_Create(): QTextInlineObjectH; cdecl; external Qt5PasLib name 'QTextInlineObject_Create';
 procedure QTextInlineObject_Destroy(handle: QTextInlineObjectH); cdecl; external Qt5PasLib name 'QTextInlineObject_Destroy'; 
 function QTextInlineObject_isValid(handle: QTextInlineObjectH): Boolean; cdecl; external Qt5PasLib name 'QTextInlineObject_isValid';
@@ -8739,6 +8747,15 @@ function QTextInlineObject_textPosition(handle: QTextInlineObjectH): Integer; cd
 function QTextInlineObject_formatIndex(handle: QTextInlineObjectH): Integer; cdecl; external Qt5PasLib name 'QTextInlineObject_formatIndex';
 procedure QTextInlineObject_format(handle: QTextInlineObjectH; retval: QTextFormatH); cdecl; external Qt5PasLib name 'QTextInlineObject_format';
 
+type
+  TTextRange = packed record
+    start : longint;
+    length : longint;
+  end;
+  PTextRange = ^TTextRange;
+  TTextRangeArray = array[word] of TTextRange;
+  PTextRangeArray = ^TTextRangeArray;
+
 function QTextLayout_Create(): QTextLayoutH; cdecl; external Qt5PasLib name 'QTextLayout_Create';
 procedure QTextLayout_Destroy(handle: QTextLayoutH); cdecl; external Qt5PasLib name 'QTextLayout_Destroy'; 
 function QTextLayout_Create(text: PWideString): QTextLayoutH; cdecl; external Qt5PasLib name 'QTextLayout_Create2';
@@ -8754,7 +8771,6 @@ function QTextLayout_textOption(handle: QTextLayoutH): QTextOptionH; cdecl; exte
 procedure QTextLayout_setPreeditArea(handle: QTextLayoutH; position: Integer; text: PWideString); cdecl; external Qt5PasLib name 'QTextLayout_setPreeditArea';
 function QTextLayout_preeditAreaPosition(handle: QTextLayoutH): Integer; cdecl; external Qt5PasLib name 'QTextLayout_preeditAreaPosition';
 procedure QTextLayout_preeditAreaText(handle: QTextLayoutH; retval: PWideString); cdecl; external Qt5PasLib name 'QTextLayout_preeditAreaText';
-procedure QTextLayout_clearAdditionalFormats(handle: QTextLayoutH); cdecl; external Qt5PasLib name 'QTextLayout_clearAdditionalFormats';
 procedure QTextLayout_setCacheEnabled(handle: QTextLayoutH; enable: Boolean); cdecl; external Qt5PasLib name 'QTextLayout_setCacheEnabled';
 function QTextLayout_cacheEnabled(handle: QTextLayoutH): Boolean; cdecl; external Qt5PasLib name 'QTextLayout_cacheEnabled';
 procedure QTextLayout_setCursorMoveStyle(handle: QTextLayoutH; style: QtCursorMoveStyle); cdecl; external Qt5PasLib name 'QTextLayout_setCursorMoveStyle';
@@ -8780,6 +8796,10 @@ function QTextLayout_minimumWidth(handle: QTextLayoutH): qreal; cdecl; external 
 function QTextLayout_maximumWidth(handle: QTextLayoutH): qreal; cdecl; external Qt5PasLib name 'QTextLayout_maximumWidth';
 procedure QTextLayout_glyphRuns(handle: QTextLayoutH; retval: PPtrIntArray; from: Integer = -1; length: Integer = -1); cdecl; external Qt5PasLib name 'QTextLayout_glyphRuns';
 procedure QTextLayout_setFlags(handle: QTextLayoutH; flags: Integer); cdecl; external Qt5PasLib name 'QTextLayout_setFlags';
+
+procedure QTextLayout_clearFormats(handle: QTextLayoutH); cdecl; external Qt5PasLib name 'QTextLayout_clearFormats';
+function QTextLayout_formatsCount(handle: QTextLayoutH): longint; cdecl; external Qt5PasLib name 'QTextLayout_formatsCount';
+function QTextLayout_formatsRanges(handle: QTextLayoutH; ranges: PTextRangeArray; longint: integer): longint; cdecl; external Qt5PasLib name 'QTextLayout_formatsRanges';
 
 function QTextLine_Create(): QTextLineH; cdecl; external Qt5PasLib name 'QTextLine_Create';
 procedure QTextLine_Destroy(handle: QTextLineH); cdecl; external Qt5PasLib name 'QTextLine_Destroy'; 
@@ -8860,6 +8880,9 @@ function QTextBlock_lineCount(handle: QTextBlockH): Integer; cdecl; external Qt5
 procedure QTextBlock_next(handle: QTextBlockH; retval: QTextBlockH); cdecl; external Qt5PasLib name 'QTextBlock_next';
 procedure QTextBlock_previous(handle: QTextBlockH; retval: QTextBlockH); cdecl; external Qt5PasLib name 'QTextBlock_previous';
 function QTextBlock_fragmentIndex(handle: QTextBlockH): Integer; cdecl; external Qt5PasLib name 'QTextBlock_fragmentIndex';
+
+function QTextBlock_textFormatsCount(handle: QTextBlockH): longint; cdecl; external Qt5PasLib name 'QTextBlock_textFormatsCount';
+function QTextBlock_textFormatsRanges(handle: QTextBlockH; ranges: PTextRangeArray; longint: integer): longint; cdecl; external Qt5PasLib name 'QTextBlock_textFormatsRanges';
 
 function QTextFragment_Create(): QTextFragmentH; cdecl; external Qt5PasLib name 'QTextFragment_Create';
 procedure QTextFragment_Destroy(handle: QTextFragmentH); cdecl; external Qt5PasLib name 'QTextFragment_Destroy'; 
@@ -8952,7 +8975,7 @@ function QPixmap_hasAlpha(handle: QPixmapH): Boolean; cdecl; external Qt5PasLib 
 function QPixmap_hasAlphaChannel(handle: QPixmapH): Boolean; cdecl; external Qt5PasLib name 'QPixmap_hasAlphaChannel';
 procedure QPixmap_createHeuristicMask(handle: QPixmapH; retval: QBitmapH; clipTight: Boolean = True); cdecl; external Qt5PasLib name 'QPixmap_createHeuristicMask';
 procedure QPixmap_createMaskFromColor(handle: QPixmapH; retval: QBitmapH; maskColor: PQColor; mode: QtMaskMode = QtMaskInColor); cdecl; external Qt5PasLib name 'QPixmap_createMaskFromColor';
-procedure QPixmap_grabWindow(retval: QPixmapH; AnonParam1: LongWord; x: Integer = 0; y: Integer = 0; w: Integer = -1; h: Integer = -1); cdecl; external Qt5PasLib name 'QPixmap_grabWindow';
+procedure QPixmap_grabWindow(retval: QPixmapH; AnonParam1: PtrUInt; x: Integer = 0; y: Integer = 0; w: Integer = -1; h: Integer = -1); cdecl; external Qt5PasLib name 'QPixmap_grabWindow';
 procedure QPixmap_grabWidget(retval: QPixmapH; widget: QObjectH; rect: PRect); cdecl; external Qt5PasLib name 'QPixmap_grabWidget';
 procedure QPixmap_grabWidget(retval: QPixmapH; widget: QObjectH; x: Integer = 0; y: Integer = 0; w: Integer = -1; h: Integer = -1); cdecl; external Qt5PasLib name 'QPixmap_grabWidget2';
 procedure QPixmap_scaled(handle: QPixmapH; retval: QPixmapH; w: Integer; h: Integer; aspectMode: QtAspectRatioMode = QtIgnoreAspectRatio; mode: QtTransformationMode = QtFastTransformation); cdecl; external Qt5PasLib name 'QPixmap_scaled';
@@ -9873,6 +9896,8 @@ procedure QPlainTextEdit_appendHtml(handle: QPlainTextEditH; html: PWideString);
 procedure QPlainTextEdit_centerCursor(handle: QPlainTextEditH); cdecl; external Qt5PasLib name 'QPlainTextEdit_centerCursor';
 procedure QPlainTextEdit_zoomIn(handle: QPlainTextEditH; range: Integer = 1); cdecl; external Qt5PasLib name 'QPlainTextEdit_zoomIn';
 procedure QPlainTextEdit_zoomOut(handle: QPlainTextEditH; range: Integer = 1); cdecl; external Qt5PasLib name 'QPlainTextEdit_zoomOut';
+procedure QPlainTextEdit_placeholderText(handle: QPlainTextEditH; retval: PWideString); cdecl; external Qt5PasLib name 'QPlainTextEdit_placeholderText';
+procedure QPlainTextEdit_setPlaceholderText(handle: QPlainTextEditH; AnonParam1: PWideString); cdecl; external Qt5PasLib name 'QPlainTextEdit_setPlaceholderText';
 
 function QPlainTextDocumentLayout_Create(document: QTextDocumentH): QPlainTextDocumentLayoutH; cdecl; external Qt5PasLib name 'QPlainTextDocumentLayout_Create';
 procedure QPlainTextDocumentLayout_Destroy(handle: QPlainTextDocumentLayoutH); cdecl; external Qt5PasLib name 'QPlainTextDocumentLayout_Destroy'; 
@@ -9997,7 +10022,8 @@ procedure QTextEdit_append(handle: QTextEditH; text: PWideString); cdecl; extern
 procedure QTextEdit_scrollToAnchor(handle: QTextEditH; name: PWideString); cdecl; external Qt5PasLib name 'QTextEdit_scrollToAnchor';
 procedure QTextEdit_zoomIn(handle: QTextEditH; range: Integer = 1); cdecl; external Qt5PasLib name 'QTextEdit_zoomIn';
 procedure QTextEdit_zoomOut(handle: QTextEditH; range: Integer = 1); cdecl; external Qt5PasLib name 'QTextEdit_zoomOut';
-
+procedure QTextEdit_placeholderText(handle: QTextEditH; retval: PWideString); cdecl; external Qt5PasLib name 'QTextEdit_placeholderText';
+procedure QTextEdit_setPlaceholderText(handle: QTextEditH; AnonParam1: PWideString); cdecl; external Qt5PasLib name 'QTextEdit_setPlaceholderText';
 
 type
   QTextEdit_textChanged_Event = procedure () of object cdecl;
@@ -11903,8 +11929,12 @@ type
   QFontDialogFontDialogOption = cardinal; // QFontDialog::FontDialogOption
   QFontDialogFontDialogOptions = QFontDialogFontDialogOption; //QFlags<> (3)
 const
-  QFontDialogNoButtons =   $00000001;
-  QFontDialogDontUseNativeDialog =   $00000002;
+  QFontDialogNoButtons = $00000001;
+  QFontDialogDontUseNativeDialog = $00000002;
+  QFontDialogScalableFonts = $00000004;
+  QFontDialogNonScalableFonts = $00000008;
+  QFontDialogMonospacedFonts = $00000010;
+  QFontDialogProportionalFonts = $00000020;
 
 function QFontDialog_Create(parent: QWidgetH = nil): QFontDialogH; cdecl; external Qt5PasLib name 'QFontDialog_Create';
 procedure QFontDialog_Destroy(handle: QFontDialogH); cdecl; external Qt5PasLib name 'QFontDialog_Destroy'; 
@@ -12429,6 +12459,7 @@ const
   QStyleState_Sibling =   $00200000;
   QStyleState_Editing =   $00400000;
   QStyleState_KeyboardFocusChange =   $00800000;
+  QStyleState_HasEditFocus = $01000000;
   QStyleState_ReadOnly =   $02000000;
   QStyleState_Small =   $04000000;
   QStyleState_Mini =   $08000000;
@@ -12436,7 +12467,8 @@ const
 
 type
   QStyleControlElement = (  //QStyle::ControlElement (2)
-    QStyleCE_PushButton,
+    QStyleCE_CustomBase = LongInt($f0000000),
+    QStyleCE_PushButton = 0,
     QStyleCE_PushButtonBevel,
     QStyleCE_PushButtonLabel,
     QStyleCE_CheckBox,
@@ -12482,11 +12514,12 @@ type
     QStyleCE_HeaderEmptyArea,
     QStyleCE_ColumnViewGrip,
     QStyleCE_ItemViewItem,
-    QStyleCE_ShapedFrame,
-    QStyleCE_CustomBase = $f0000000 );
+    QStyleCE_ShapedFrame
+    );
 
   QStyleComplexControl = (  //QStyle::ComplexControl (2)
-    QStyleCC_SpinBox,
+    QStyleCC_CustomBase = LongInt($f0000000),
+    QStyleCC_SpinBox = 0,
     QStyleCC_ComboBox,
     QStyleCC_ScrollBar,
     QStyleCC_Slider,
@@ -12494,8 +12527,8 @@ type
     QStyleCC_TitleBar,
     QStyleCC_Dial,
     QStyleCC_GroupBox,
-    QStyleCC_MdiControls,
-    QStyleCC_CustomBase = $f0000000 );
+    QStyleCC_MdiControls
+    );
 
 type
   QStyleSubControl = cardinal; // QStyle::SubControl
@@ -12548,7 +12581,8 @@ const
 
 type
   QStyleContentsType = (  //QStyle::ContentsType (2)
-    QStyleCT_PushButton,
+    QStyleCT_CustomBase = LongInt($f0000000),
+    QStyleCT_PushButton = 0,
     QStyleCT_CheckBox,
     QStyleCT_RadioButton,
     QStyleCT_ToolButton,
@@ -12570,11 +12604,12 @@ type
     QStyleCT_HeaderSection,
     QStyleCT_GroupBox,
     QStyleCT_MdiControls,
-    QStyleCT_ItemViewItem,
-    QStyleCT_CustomBase = $f0000000 );
+    QStyleCT_ItemViewItem
+    );
 
   QStyleStandardPixmap = (  //QStyle::StandardPixmap (2)
-    QStyleSP_TitleBarMenuButton,
+    QStyleSP_CustomBase = LongInt($f0000000),
+    QStyleSP_TitleBarMenuButton = 0,
     QStyleSP_TitleBarMinButton,
     QStyleSP_TitleBarMaxButton,
     QStyleSP_TitleBarCloseButton,
@@ -12643,8 +12678,8 @@ type
     QStyleSP_MediaSeekForward,
     QStyleSP_MediaSeekBackward,
     QStyleSP_MediaVolume,
-    QStyleSP_MediaVolumeMuted,
-    QStyleSP_CustomBase = $f0000000 );
+    QStyleSP_MediaVolumeMuted
+    );
 
 type
   QStylePrimitiveElement = cardinal; //  QStyle::PrimitiveElement (4)

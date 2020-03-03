@@ -20,7 +20,8 @@ unit reportdesignbaseforms;
 interface
 
 uses
-  Classes, SysUtils, fpreport, forms, db, fpreportdesignobjectlist, fpreportdesignreportdata;
+  Classes, SysUtils, fpreport, forms, db, fpreportdesignobjectlist,
+  fpreportdata;
 
 Type
   { TReportEditorForm }
@@ -72,13 +73,13 @@ Type
 
   TBaseReportDataForm = Class(TBaseReportEditorForm)
   private
-    FData: TDesignReportDataCollection;
+    FData: TFPReportDataDefinitions;
   Protected
-    procedure SetData(AValue: TDesignReportDataCollection); virtual;
+    procedure SetData(AValue: TFPReportDataDefinitions); virtual;
   public
     Constructor Create(AOwner: TComponent); override;
     Destructor Destroy; override;
-    Property Data : TDesignReportDataCollection Read FData Write SetData;
+    Property Data : TFPReportDataDefinitions Read FData Write SetData;
   end;
   TBaseReportDataFormClass = Class of TBaseReportDataForm;
 
@@ -109,6 +110,12 @@ Type
   end;
   TBaseReportVariablesFormClass = Class of TBaseReportVariablesForm;
 
+  TBaseImportReportForm = Class(TForm)
+  Public
+    Procedure Log(Const Msg : String); virtual; abstract;
+  end;
+  TBaseImportReportFormClass = Class of TBaseImportReportForm;
+
 Var
   ReportDataFormClass : TBaseReportDataFormClass;
   ReportResizeFormClass : TBaseReportResizeFormClass;
@@ -116,6 +123,7 @@ Var
   ReportDataPreviewClass : TBaseReportDataPreviewFormClass;
   ReportVariablesFormClass : TBaseReportVariablesFormClass;
   ReportPropertiesFormClass : TBaseReportEditorFormClass;
+  ReportImportFormClass : TBaseImportReportFormClass;
 
 implementation
 
@@ -129,7 +137,7 @@ end;
 
 function TBaseReportVariablesForm.CreateVariables: TFPReportVariables;
 begin
-  TFPReportVariables.Create(Nil,TFPReportVariable);
+  Result:=TFPReportVariables.Create(Nil,TFPReportVariable);
 end;
 
 constructor TBaseReportVariablesForm.Create(AOwner: TComponent);
@@ -153,7 +161,7 @@ end;
 
 { TReportDataForm }
 
-procedure TBaseReportDataForm.SetData(AValue: TDesignReportDataCollection);
+procedure TBaseReportDataForm.SetData(AValue: TFPReportDataDefinitions);
 begin
   if FData=AValue then Exit;
   FData.Assign(AValue);
@@ -162,7 +170,7 @@ end;
 constructor TBaseReportDataForm.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-  FData:=TDesignReportDataCollection.Create(TDesignReportData);
+  FData:=TFPReportDataDefinitions.Create(TFPReportDataDefinitionItem);
 end;
 
 destructor TBaseReportDataForm.Destroy;

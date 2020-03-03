@@ -11,7 +11,7 @@ uses
   ActionsEditor, ActionsEditorStd, BaseIDEIntf, CheckGroupEditorDlg, 
   CheckListboxEditorDlg, CollectionPropEditForm, ColumnDlg, ComponentEditors, 
   ComponentReg, ComponentTreeView, CompOptsIntf, DBPropEdits, 
-  EditorSyntaxHighlighterDef, fieldseditor, fieldslist, FileFilterPropEditor, 
+  EditorSyntaxHighlighterDef, fieldseditor, FieldsList, FileFilterPropEditor, 
   FormEditingIntf, frmSelectProps, GraphicPropEdit, GraphPropEdits, 
   HeaderControlPropEdit, HelpFPDoc, IDECommands, IDEDialogs, 
   IDEExternToolIntf, IDEHelpIntf, IDEImagesIntf, IDEMsgIntf, IDEOptionsIntf, 
@@ -22,7 +22,8 @@ uses
   ProjectIntf, ProjectResourcesIntf, PropEdits, PropEditUtils, SrcEditorIntf, 
   StatusBarPropEdit, StringsPropEditDlg, TextTools, TreeViewPropEdit, 
   UnitResources, ProjPackIntf, DBGridColumnsPropEditForm, ToolBarIntf, 
-  ChangeParentDlg, PackageDependencyIntf, PackageLinkIntf, LazarusPackageIntf;
+  ChangeParentDlg, PackageDependencyIntf, PackageLinkIntf, FppkgIntf, 
+  LazMsgDialogs, ProjectGroupIntf, LazarusPackageIntf;
 
 implementation
 

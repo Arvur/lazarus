@@ -3,13 +3,13 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Project-Id-Version: \n"
 "POT-Creation-Date: 2015-04-14 07:54+0100\n"
-"PO-Revision-Date: 2017-12-01 11:58+0100\n"
-"Last-Translator: h.mira@free.fr\n"
+"PO-Revision-Date: 2020-01-06 10:06+0100\n"
+"Last-Translator: Vasseur Gilles <gillesvasseur58@gmail.com>\n"
 "Language-Team: http://lazarus.developpez.com/\n"
 "MIME-Version: 1.0\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Language: fr\n"
-"X-Generator: Poedit 2.0.4\n"
+"X-Generator: Poedit 2.2.4\n"
 
 #: tachartstrconsts.descolor
 msgid "Color"
@@ -27,6 +27,22 @@ msgstr "Supprimer la ligne"
 msgid "Insert row"
 msgstr "Insérer une ligne"
 
+#: tachartstrconsts.desmovedown
+msgid "Move down"
+msgstr "Déplacer vers le bas"
+
+#: tachartstrconsts.desmoveup
+msgid "Move up"
+msgstr "Déplacer vers le haut"
+
+#: tachartstrconsts.desnointeger
+msgid "Value must be an integer."
+msgstr "La valeur doit être un entier."
+
+#: tachartstrconsts.desnonumber
+msgid "Non-numeric value."
+msgstr "Valeur non numérique."
+
 #: tachartstrconsts.destext
 msgid "Text"
 msgstr "Texte"
@@ -42,6 +58,10 @@ msgstr "Séries de surfaces"
 #: tachartstrconsts.rsautoscale
 msgid "Auto scale"
 msgstr "Échelle automatique"
+
+#: tachartstrconsts.rsaxisclicktool
+msgid "Axis click"
+msgstr "Clic sur l'axe"
 
 #: tachartstrconsts.rsbarseries
 msgid "Bar series"
@@ -164,7 +184,32 @@ msgstr "Mesure des distances"
 msgid "Down triangle"
 msgstr "Triangle en bas"
 
+#: tachartstrconsts.rserrfitdimerror
+msgid "Non-matching count of x and y values."
+msgstr "Compte incohérent de valeurs x et y."
+
+#: tachartstrconsts.rserrfitmoreparamsthanvalues
+msgid "There are more fitting parameters than data values."
+msgstr "Il existe des paramètres plus appropriés que les valeurs des données."
+
+#: tachartstrconsts.rserrfitnobasefunctions
+msgid "Not enough user-provided base functions."
+msgstr "Pas assez de fonctions de base proposées par l'utilisateur."
+
+#: tachartstrconsts.rserrfitnofitparams
+msgid "No fit parameters specified."
+msgstr "Pas de spécification de paramètres appropriés."
+
+#: tachartstrconsts.rserrfitsingular
+msgid "Fitting matrix is (nearly) singular."
+msgstr "La matrice d'ajustement est (presque) singulière."
+
+#: tachartstrconsts.rserrillegalfitparamcount
+msgid "The number of fit parameters cannot be less than 1."
+msgstr "Le nombre de paramètres appropriés ne peut pas être inférieur à 1."
+
 #: tachartstrconsts.rserrinvalidresulttype
+#, object-pascal-format
 msgid "Expression result type must be integer or float. Got \"%s\"."
 msgstr "Le type de résultat d'expression doit être entier ou flottant. On a obtenu \"%s\"."
 
@@ -180,6 +225,58 @@ msgstr "Séries d'expressions mathématiques"
 msgid "Vector field series"
 msgstr "Séries de champs vectoriels"
 
+#: tachartstrconsts.rsfitadjcoefficientofdetermination
+msgid "Adj. coefficient of determination"
+msgstr "Adj. coefficient de détermination"
+
+#: tachartstrconsts.rsfitchisquared
+msgid "Chi-squared"
+msgstr "Khi carré"
+
+#: tachartstrconsts.rsfitcoefficientofdetermination
+msgid "Coefficient of determination (R2)"
+msgstr "Coefficient de détermination (R2)"
+
+#: tachartstrconsts.rsfitdegreesoffreedom
+msgid "Degrees of freedom"
+msgstr "Degrés de liberté"
+
+#: tachartstrconsts.rsfiterrorsumofsquares
+msgid "Error sum of squares (SSE)"
+msgstr "Erreur dans la somme des carrés (SSE)"
+
+#: tachartstrconsts.rsfitnumfitparams
+msgid "Number of fit parameters"
+msgstr "Nombre de paramètres d'ajustement"
+
+#: tachartstrconsts.rsfitnumobservations
+msgid "Number of observations"
+msgstr "Nombre d'observations"
+
+#: tachartstrconsts.rsfitpvalue
+msgid "p value"
+msgstr "p-valeur"
+
+#: tachartstrconsts.rsfitreducedchisquared
+msgid "Reduced Chi-squared"
+msgstr "Khi carré réduit"
+
+#: tachartstrconsts.rsfitregressionsumofsquares
+msgid "Regression sum of squares (SSR)"
+msgstr "Régression de la somme des carrés (SSR)"
+
+#: tachartstrconsts.rsfitresidualstandarderror
+msgid "Residual standard error"
+msgstr "Erreur standard résiduelle"
+
+#: tachartstrconsts.rsfittotalsumofsquares
+msgid "Total sum of squares (SST)"
+msgstr "Total de la somme des carrés (SST)"
+
+#: tachartstrconsts.rsfitvarianceratio
+msgid "Variance ratio F"
+msgstr "Rapport de variance F"
+
 #: tachartstrconsts.rsfullstarsymbol
 msgid "Star (full)"
 msgstr "Étoile (remplie)"
@@ -187,6 +284,10 @@ msgstr "Étoile (remplie)"
 #: tachartstrconsts.rsfunctionseries
 msgid "Function series"
 msgstr "Séries de fonctions"
+
+#: tachartstrconsts.rsheaderfooterclicktool
+msgid "Header/footer click"
+msgstr "Clic sur l'en-tête ou le pied de page"
 
 #: tachartstrconsts.rshexagonsymbol
 msgid "Hexagon"
@@ -228,6 +329,10 @@ msgstr "Parenthèse gauche"
 msgid "Left triangle"
 msgstr "Triangle à gauche"
 
+#: tachartstrconsts.rslegendclicktool
+msgid "Legend click"
+msgstr "Clic sur la légende"
+
 #: tachartstrconsts.rslinear
 msgid "Linear"
 msgstr "Linéaire"
@@ -235,6 +340,21 @@ msgstr "Linéaire"
 #: tachartstrconsts.rslineseries
 msgid "Line series"
 msgstr "Séries de lignes"
+
+#: tachartstrconsts.rslistsourcecolorerror
+#, object-pascal-format
+msgid "The %0:s.DataPoints string \"%1:s\" is not an integer."
+msgstr "La chaîne %0:s.DataPoints \"%1:s\" n'est pas un entier."
+
+#: tachartstrconsts.rslistsourcenumericerror
+#, object-pascal-format
+msgid "The %0:s.DataPoints string \"%1:s\" is not a valid number."
+msgstr "La chaîne %0:s.DataPoints \"%1:s\" n'est pas un numéro correct."
+
+#: tachartstrconsts.rslistsourcestringformaterror
+#, object-pascal-format
+msgid "The data value count in the %0:s.DataPoints string \"%1:s\" differs from what is expected from XCount and YCount."
+msgstr "Le nombre de valeurs de données dans la chaîne de DataPoints %0:s. \"%1:s\" diffère de ce qui est attendu de XCount et de YCount."
 
 #: tachartstrconsts.rslogarithmic
 msgid "Logarithmic"
@@ -341,6 +461,25 @@ msgstr "Parenthèse droite"
 msgid "Right triangle"
 msgstr "Triangle à droite"
 
+#: tachartstrconsts.rssourcecounterror
+#, object-pascal-format
+msgid "%0:s requires a chart source with at least %1:d %2:s value(s) per data point."
+msgstr "%0:s nécessite une source graphique avec au moins %1:d %2:s valeur(s) par point de données."
+
+#: tachartstrconsts.rssourcecounterror2
+#, object-pascal-format
+msgid "This %0:s instance must have at least %1:d %2:s value(s) per data point."
+msgstr "Cette instance %0:s doit avoir au moins %1:d %2:s valeur(s) par point de donnée."
+
+#: tachartstrconsts.rssourcenoteditable
+msgid "Editable chart source required"
+msgstr "Source de graphique modifiable requise"
+
+#: tachartstrconsts.rssourcesorterror
+#, object-pascal-format
+msgid "Selected sorting parameters are not supported by %s."
+msgstr "Les paramètres de tri sélectionnés ne sont pas pris en charge par %s."
+
 #: tachartstrconsts.rsstarsymbol
 msgid "Star (lines)"
 msgstr "Étoile (lignes)"
@@ -392,6 +531,7 @@ msgid "Edit axis transformations"
 msgstr "Éditer les transformations d'axes"
 
 #: tachartstrconsts.tasfailedsubcomponentrename
+#, object-pascal-format
 msgid "Failed to rename components: %s"
 msgstr "Impossible de renommer les composants : %s"
 

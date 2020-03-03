@@ -43,6 +43,7 @@ uses
   Classes, SysUtils, contnrs, TypInfo, types, Laz_AVL_Tree,
   // LazUtils
   LazFileUtils, LazFileCache, LazMethodList, LazDbgLog, AvgLvlTree,
+  LazStringUtils,
   // Codetools
   FileProcs, BasicCodeTools, CodeToolsStrConsts,
   EventCodeTool, CodeTree, CodeAtom, SourceChanger, DefineTemplates, CodeCache,
@@ -124,6 +125,7 @@ type
     FOnGatherExternalChanges: TOnGatherExternalChanges;
     FOnFindDefinePropertyForContext: TOnFindDefinePropertyForContext;
     FOnFindDefineProperty: TOnFindDefineProperty;
+    FOnGatherUserIdentifiers: TOnGatherUserIdentifiers;
     FOnGetIndenterExamples: TOnGetFABExamples;
     FOnGetMethodName: TOnGetMethodname;
     FOnRescanFPCDirectoryCache: TNotifyEvent;
@@ -143,6 +145,8 @@ type
     FWriteLockStep: integer; // current write lock ID
     FHandlers: array[TCodeToolManagerHandler] of TMethodList;
     FErrorDbgMsg: string;
+    procedure DoOnGatherUserIdentifiers(Sender: TIdentCompletionTool;
+      const ContextFlags: TIdentifierListContextFlags);
     procedure DoOnRescanFPCDirectoryCache(Sender: TObject);
     function GetBeautifier: TBeautifyCodeOptions; inline;
     function DoOnScannerGetInitValues(Scanner: TLinkScanner; Code: Pointer;
@@ -369,6 +373,8 @@ type
                                         UseCache: boolean = true): string;// value of macro #FPCUnitPath
     procedure GetFPCVersionForDirectory(const Directory: string;
                                  out FPCVersion, FPCRelease, FPCPatch: integer);
+    function GetPCVersionForDirectory(const Directory: string): integer; deprecated 'use below'; // 2.0.1
+    function GetPCVersionForDirectory(const Directory: string; out Kind: TPascalCompiler): integer;
     function GetNamespacesForDirectory(const Directory: string;
                           UseCache: boolean = true): string;// value of macro #Namespaces
 
@@ -377,6 +383,8 @@ type
                                                write FOnGetMethodName;
     property OnGetIndenterExamples: TOnGetFABExamples
                        read FOnGetIndenterExamples write FOnGetIndenterExamples;
+    property OnGatherUserIdentifiers: TOnGatherUserIdentifiers
+      read FOnGatherUserIdentifiers write FOnGatherUserIdentifiers;
 
     // data function
     procedure FreeListOfPCodeXYPosition(var List: TFPList);
@@ -398,9 +406,11 @@ type
           out aScanner: TLinkScanner): boolean;
 
     // compiler directives
+    {$IFDEF GuessMisplacedIfdef}
     function GuessMisplacedIfdefEndif(Code: TCodeBuffer; X,Y: integer;
           out NewCode: TCodeBuffer;
           out NewX, NewY, NewTopLine: integer): boolean;
+    {$ENDIF}
     // find include directive of include file at position X,Y
     function FindEnclosingIncludeDirective(Code: TCodeBuffer; X,Y: integer;
           out NewCode: TCodeBuffer;
@@ -413,8 +423,6 @@ type
     function FindIncludeDirective(Code: TCodeBuffer; StartX, StartY: integer;
           out NewCode: TCodeBuffer; out NewX, NewY, NewTopLine: integer;
           const Filename: string = ''; SearchInCleanSrc: boolean = true): boolean;
-    function AddIncludeDirective(Code: TCodeBuffer; const Filename: string;
-          const NewSrc: string = ''): boolean; deprecated;
     function AddIncludeDirectiveForInit(Code: TCodeBuffer; const Filename: string;
           const NewSrc: string = ''): boolean;
     function AddUnitWarnDirective(Code: TCodeBuffer; WarnID, Comment: string;
@@ -502,7 +510,9 @@ type
     function FindCodeContext(Code: TCodeBuffer; X,Y: integer;
           out CodeContexts: TCodeContextInfo): boolean;
     function ExtractProcedureHeader(Code: TCodeBuffer; X,Y: integer;
-          Attributes: TProcHeadAttributes; var ProcHead: string): boolean;
+          Attributes: TProcHeadAttributes; out ProcHead: string): boolean;
+    function HasInterfaceRegisterProc(Code: TCodeBuffer;
+          out HasRegisterProc: boolean): boolean;
 
     // gather identifiers (i.e. all visible)
     function GatherUnitNames(Code: TCodeBuffer): Boolean;
@@ -654,6 +664,10 @@ type
     function InsertStatements(InsertPos: TInsertStatementPosDescription;
           const Statements: string): boolean;
 
+    // alter proc
+    function AddProcModifier(Code: TCodeBuffer;  X, Y: integer;
+          const aModifier: string): boolean;
+
     // extract proc (creates a new procedure from code in selection)
     function CheckExtractProc(Code: TCodeBuffer;
           const StartPoint, EndPoint: TPoint;
@@ -668,7 +682,7 @@ type
           FunctionResultVariableStartPos: integer = 0
           ): boolean;
 
-    // Assign method
+    // 'Assign' method
     function FindAssignMethod(Code: TCodeBuffer; X, Y: integer;
           out Tool: TCodeTool; out ClassNode: TCodeTreeNode;
           out AssignDeclNode: TCodeTreeNode;
@@ -756,10 +770,6 @@ type
                        {%H-}LFMNode: TLFMTreeNode;
                        const IdentName: string; var IsDefined: boolean);
 
-    // register proc
-    function HasInterfaceRegisterProc(Code: TCodeBuffer;
-          out HasRegisterProc: boolean): boolean;
-          
     // Delphi to Lazarus conversion
     function ConvertDelphiToLazarusSource(Code: TCodeBuffer;
           AddLRSCode: boolean): boolean;
@@ -827,7 +837,7 @@ type
           out ListOfPInstancePropInfo: TFPList;
           const OverrideGetMethodName: TOnGetMethodname = nil): boolean;
 
-    // functions for events in the object inspector
+    // utilities for the object inspector
     function GetCompatiblePublishedMethods(Code: TCodeBuffer;
           const AClassName: string;
           PropInstance: TPersistent; const PropName: string;
@@ -1577,16 +1587,11 @@ function TCodeToolManager.GetPascalCompilerForDirectory(const Directory: string
   ): TPascalCompiler;
 var
   Evaluator: TExpressionEvaluator;
-  PascalCompiler: string;
-  pc: TPascalCompiler;
 begin
   Result:=pcFPC;
   Evaluator:=DefineTree.GetDefinesForDirectory(Directory,true);
   if Evaluator=nil then exit;
-  PascalCompiler:=Evaluator.Variables[PascalCompilerDefine];
-  for pc:=Low(TPascalCompiler) to High(TPascalCompiler) do
-    if (PascalCompiler=PascalCompilerNames[pc]) then
-      Result:=pc;
+  Result:=TLinkScanner.GetPascalCompiler(Evaluator);
 end;
 
 function TCodeToolManager.GetCompilerModeForDirectory(const Directory: string
@@ -1697,11 +1702,42 @@ begin
   FPCPatch:=FPCFullVersion mod 100;
 end;
 
+function TCodeToolManager.GetPCVersionForDirectory(const Directory: string
+  ): integer;
+var
+  Kind: TPascalCompiler;
+begin
+  Result:=GetPCVersionForDirectory(Directory,Kind);
+  if Kind=pcFPC then ;
+end;
+
+function TCodeToolManager.GetPCVersionForDirectory(const Directory: string; out
+  Kind: TPascalCompiler): integer;
+var
+  Evaluator: TExpressionEvaluator;
+  s: String;
+begin
+  Result:=0;
+  Kind:=pcFPC;
+  Evaluator:=DefineTree.GetDefinesForDirectory(Directory,true);
+  if Evaluator=nil then
+    exit;
+  s:=Evaluator['FPC_FULLVERSION'];
+  if s<>'' then
+    exit(StrToIntDef(s,0));
+  s:=Evaluator['PAS2JS_FULLVERSION'];
+  if s<>'' then begin
+    Kind:=pcPas2js;
+    exit(StrToIntDef(s,0));
+  end;
+end;
+
 function TCodeToolManager.GetNamespacesForDirectory(const Directory: string;
   UseCache: boolean): string;
 var
   Evaluator: TExpressionEvaluator;
   FPCFullVersion: LongInt;
+  UnitSet: TFPCUnitSetCache;
 begin
   if UseCache then begin
     Result:=DirectoryCachePool.GetString(Directory,ctdcsNamespaces,true)
@@ -1713,9 +1749,13 @@ begin
       Result:=Evaluator[NamespacesMacroName]
     else begin
       FPCFullVersion:=StrToIntDef(Evaluator['FPC_FULLVERSION'],0);
-      if FPCFullVersion>30101 then
+      if FPCFullVersion>=30101 then
         Result:=Evaluator[NamespacesMacroName];
     end;
+    // add default unit scopes from compiler cfg
+    UnitSet:=GetUnitSetForDirectory(Directory);
+    if UnitSet<>nil then
+      Result:=MergeWithDelimiter(Result,UnitSet.GetUnitScopes,';');
   end;
 end;
 
@@ -2364,7 +2404,7 @@ begin
 end;
 
 function TCodeToolManager.ExtractProcedureHeader(Code: TCodeBuffer; X,
-  Y: integer; Attributes: TProcHeadAttributes; var ProcHead: string): boolean;
+  Y: integer; Attributes: TProcHeadAttributes; out ProcHead: string): boolean;
 var
   CursorPos: TCodeXYPosition;
 begin
@@ -2384,6 +2424,22 @@ begin
   {$IFDEF CTDEBUG}
   DebugLn('TCodeToolManager.ExtractProcedureHeader END ');
   {$ENDIF}
+end;
+
+function TCodeToolManager.HasInterfaceRegisterProc(Code: TCodeBuffer;
+  out HasRegisterProc: boolean): boolean;
+begin
+  Result:=false;
+  HasRegisterProc:=false;
+  {$IFDEF CTDEBUG}
+  DebugLn('TCodeToolManager.HasInterfaceRegisterProc A ',Code.Filename);
+  {$ENDIF}
+  if not InitCurCodeTool(Code) then exit;
+  try
+    Result:=FCurCodeTool.HasInterfaceRegisterProc(HasRegisterProc);
+  except
+    on e: Exception do Result:=HandleException(e);
+  end;
 end;
 
 function TCodeToolManager.GatherUnitNames(Code: TCodeBuffer): Boolean;
@@ -2730,7 +2786,7 @@ begin
     Result:=true;
     exit;
   end;
-  if not IsValidIdent(NewIdentifier) then exit;
+  if not LazIsValidIdent(NewIdentifier,True,True) then exit;
 
   ClearCurCodeTool;
   SourceChangeCache.Clear;
@@ -3132,6 +3188,26 @@ begin
   end;
 end;
 
+function TCodeToolManager.AddProcModifier(Code: TCodeBuffer; X, Y: integer;
+  const aModifier: string): boolean;
+var
+  CursorPos: TCodeXYPosition;
+begin
+  Result:=false;
+  {$IFDEF CTDEBUG}
+  DebugLn('TCodeToolManager.ExtractOperand A ',Code.Filename);
+  {$ENDIF}
+  if not InitCurCodeTool(Code) then exit;
+  CursorPos.X:=X;
+  CursorPos.Y:=Y;
+  CursorPos.Code:=Code;
+  try
+    Result:=FCurCodeTool.AddProcModifier(CursorPos,aModifier,SourceChangeCache);
+  except
+    on e: Exception do HandleException(e);
+  end;
+end;
+
 function TCodeToolManager.ExtractOperand(Code: TCodeBuffer; X, Y: integer; out
   Operand: string; WithPostTokens, WithAsOperator,
   WithoutTrailingPoints: boolean): boolean;
@@ -3173,6 +3249,7 @@ begin
   end;
 end;
 
+{$IFDEF GuessMisplacedIfdef}
 function TCodeToolManager.GuessMisplacedIfdefEndif(Code: TCodeBuffer; X,
   Y: integer; out NewCode: TCodeBuffer; out NewX, NewY, NewTopLine: integer
   ): boolean;
@@ -3199,6 +3276,7 @@ begin
     on e: Exception do Result:=HandleException(e);
   end;
 end;
+{$ENDIF}
 
 function TCodeToolManager.FindEnclosingIncludeDirective(Code: TCodeBuffer; X,
   Y: integer; out NewCode: TCodeBuffer; out NewX, NewY, NewTopLine: integer
@@ -3371,12 +3449,6 @@ begin
       on e: Exception do Result:=HandleException(e);
     end;
   end;
-end;
-
-function TCodeToolManager.AddIncludeDirective(Code: TCodeBuffer;
-  const Filename: string; const NewSrc: string): boolean;
-begin
-  Result:=AddIncludeDirectiveForInit(Code,Filename,NewSrc);
 end;
 
 function TCodeToolManager.AddIncludeDirectiveForInit(Code: TCodeBuffer;
@@ -5723,22 +5795,6 @@ begin
   end;
 end;
 
-function TCodeToolManager.HasInterfaceRegisterProc(Code: TCodeBuffer;
-  out HasRegisterProc: boolean): boolean;
-begin
-  Result:=false;
-  HasRegisterProc:=false;
-  {$IFDEF CTDEBUG}
-  DebugLn('TCodeToolManager.HasInterfaceRegisterProc A ',Code.Filename);
-  {$ENDIF}
-  if not InitCurCodeTool(Code) then exit;
-  try
-    Result:=FCurCodeTool.HasInterfaceRegisterProc(HasRegisterProc);
-  except
-    on e: Exception do Result:=HandleException(e);
-  end;
-end;
-
 function TCodeToolManager.ConvertDelphiToLazarusSource(Code: TCodeBuffer;
   AddLRSCode: boolean): boolean;
 begin
@@ -5763,6 +5819,14 @@ begin
                              TheUnitName,TheUnitInFilename)
   else
     Result:=nil;
+end;
+
+procedure TCodeToolManager.DoOnGatherUserIdentifiers(
+  Sender: TIdentCompletionTool; const ContextFlags: TIdentifierListContextFlags
+  );
+begin
+  if Assigned(FOnGatherUserIdentifiers) then
+    FOnGatherUserIdentifiers(Sender, ContextFlags);
 end;
 
 function TCodeToolManager.DoOnGetSrcPathForCompiledUnit(Sender: TObject;
@@ -6076,6 +6140,7 @@ begin
     TCodeTool(Result).OnGetSrcPathForCompiledUnit:=@DoOnGetSrcPathForCompiledUnit;
     TCodeTool(Result).OnGetMethodName:=@DoOnInternalGetMethodName;
     TCodeTool(Result).OnRescanFPCDirectoryCache:=@DoOnRescanFPCDirectoryCache;
+    TCodeTool(Result).OnGatherUserIdentifiers:=@DoOnGatherUserIdentifiers;
     TCodeTool(Result).DirectoryCache:=
       DirectoryCachePool.GetCache(ExtractFilePath(Code.Filename),
                                   true,true);

@@ -5,8 +5,13 @@ unit SynGutterBase;
 interface
 
 uses
-  Classes, SysUtils, Graphics, Controls, Menus, math, LCLProc, SynEditMarks,
-  SynEditMiscClasses, SynTextDrawer, SynEditMouseCmds, SynEditFoldedView;
+  Classes, SysUtils, math,
+  // LCL
+  LCLProc, Graphics, Controls, Menus,
+  // LazUtils
+  LazMethodList,
+  // SynEdit
+  SynEditMarks, SynEditMiscClasses, SynTextDrawer, SynEditMouseCmds, SynEditFoldedView;
 
 type
 
@@ -52,7 +57,6 @@ type
     procedure SetVisible(const AValue: boolean);
     procedure SetWidth(Value: integer);
   protected
-    procedure DoAutoSize;
     procedure SetChildBounds;
     procedure DoChange(Sender: TObject);
     procedure DoResize(Sender: TObject);
@@ -72,6 +76,7 @@ type
     procedure Assign(Source: TPersistent); override;
     procedure RecalcBounds;
     procedure ScalePPI(const AScaleFactor: Double);
+    procedure DoAutoSize;
     function MaybeHandleMouseAction(var AnInfo: TSynEditMouseActionInfo;
                  HandleActionProc: TSynEditMouseActionHandler): Boolean; virtual;
     procedure ResetMouseActions; virtual; // set mouse-actions according to current Options / may clear them
@@ -167,7 +172,9 @@ type
     procedure SetMouseActions(const AValue: TSynEditMouseActions);
   protected
     function  CreateMouseActions: TSynEditMouseInternalActions; virtual;
-    function  PreferedWidth: Integer; virtual;
+    function Scale96ToFont(const ASize: Integer): Integer;
+    function  PreferedWidth: Integer; virtual; // at PPI 96
+    function  PreferedWidthAtCurrentPPI: Integer; virtual;
     procedure SetBounds(ALeft, ATop, AHeight: Integer);
     procedure DoAutoSize;
     procedure SetAutoSize(const AValue : boolean); virtual;
@@ -431,7 +438,11 @@ begin
   NewWidth := FLeftOffset + FRightOffset;
   for i := PartCount-1 downto 0 do
     if Parts[i].Visible then
+    begin
+      if Parts[i].AutoSize then
+        Parts[i].DoAutoSize;
       NewWidth := NewWidth + Parts[i].Width;
+    end;
 
   if FWidth = NewWidth then exit;
 
@@ -589,6 +600,11 @@ begin
   Result := 12;
 end;
 
+function TSynGutterPartBase.PreferedWidthAtCurrentPPI: Integer;
+begin
+  Result := Scale96ToFont(PreferedWidth);
+end;
+
 procedure TSynGutterPartBase.SetBounds(ALeft, ATop, AHeight: Integer);
 begin
   if (ALeft = FLeft) and (ATop = FTop) and (AHeight = FHeight) then
@@ -603,7 +619,7 @@ procedure TSynGutterPartBase.DoAutoSize;
 var
   NewWidth: Integer;
 begin
-  NewWidth := PreferedWidth;
+  NewWidth := PreferedWidthAtCurrentPPI;
   if FWidth = NewWidth then exit;
   FWidth := NewWidth;
   VisibilityOrSize;
@@ -636,7 +652,7 @@ end;
 
 procedure TSynGutterPartBase.SetWidth(const AValue : integer);
 begin
-  if (FWidth=AValue) or (FAutoSize) then exit;
+  if (FWidth=AValue) or ((FAutoSize) and not(csLoading in ComponentState)) then exit;
   FWidth:=AValue;
   VisibilityOrSize;
 end;
@@ -652,6 +668,13 @@ begin
   Result := TSynEditMouseInternalActions.Create(Self);
 end;
 
+function TSynGutterPartBase.Scale96ToFont(const ASize: Integer): Integer;
+begin
+  Result := ASize;
+  if SynEdit<>nil then
+    Result := SynEdit.Scale96ToFont(Result);
+end;
+
 constructor TSynGutterPartBase.Create(AOwner: TComponent);
 begin
   FMarkupInfo := TSynSelectedColor.Create;
@@ -665,7 +688,6 @@ begin
   FVisible := True;
   FAutoSize := True;
   Inherited Create(AOwner); // Todo: Lock the DoChange from RegisterItem, and call DoChange at the end (after/in autosize)
-  DoAutoSize; // Calls PreferedWidth(), must be after Init();
 end;
 
 procedure TSynGutterPartBase.Init;
@@ -678,6 +700,7 @@ end;
 
 procedure TSynGutterPartBase.VisibilityOrSize(aCallDoChange: Boolean);
 begin
+  if (csLoading in ComponentState) then exit;
   Gutter.IncChangeLock;
   try
     if Gutter.AutoSize then
@@ -757,7 +780,10 @@ end;
 
 procedure TSynGutterPartBase.ScalePPI(const AScaleFactor: Double);
 begin
-  Width := Round(Width*AScaleFactor);
+  if not FAutoSize then
+    Width := Round(Width*AScaleFactor)
+  else
+    DoAutoSize;
 end;
 
 procedure TSynGutterPartBase.DoOnGutterClick(X, Y : integer);

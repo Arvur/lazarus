@@ -43,12 +43,13 @@ uses
     {$endif}
   // Other units
   Math, // Math after gtk to get the correct Float type
+  Types,
   // LCL
   LMessages, LCLProc, LCLIntf, LCLType, GraphType, Graphics,
   LResources, Controls, Forms, Buttons, Menus, StdCtrls, ComCtrls, ExtCtrls,
   Dialogs, ExtDlgs, ImgList, LCLMessageGlue,
   // LazUtils
-  Masks, FileUtil, LazFileUtils, LazUTF8, DynHashArray,
+  Masks, FileUtil, LazFileUtils, LazStringUtils, LazLoggerBase, LazUTF8, DynHashArray,
   // Gtk2
   Gtk2FontCache, Gtk2Globals, Gtk2Def, Gtk2Extra, {%H-}Gtk2Debug;
 
@@ -98,12 +99,9 @@ function gtkactivateCB(widget: PGtkWidget; data: gPointer): GBoolean; cdecl;
 function gtkchangedCB( widget: PGtkWidget; data: gPointer): GBoolean; cdecl;
 procedure gtkchanged_editbox_delete_text(Widget: PGtkWidget;
   {%H-}AStartPos, {%H-}AEndPos: gint; {%H-}data: gPointer); cdecl;
-procedure gtkchanged_editbox_insert_text(Widget: PGtkWidget; ANewText: gChar;
+procedure gtkchanged_editbox_insert_text(Widget: PGtkWidget; {%H-}ANewText: gChar;
   {%H-}ANewTextLength: gint; {%H-}APosition: pgint; {%H-}data: gPointer); cdecl;
 function gtkchanged_editbox( widget: PGtkWidget; data: gPointer): GBoolean; cdecl;
-function gtkchanged_spinbox(widget: PGtkWidget; data: gPointer): GBoolean; cdecl;
-function gtkchanged_editbox_backspace( widget: PGtkWidget;
-  {%H-}data: gPointer): GBoolean; cdecl;
 function gtkchanged_editbox_delete(widget: PGtkWidget;
   {%H-}AType: TGtkDeleteType; {%H-}APos: gint; {%H-}data: gPointer): GBoolean; cdecl;
 function gtkdaychanged(Widget: PGtkWidget; data: gPointer): GBoolean; cdecl;
@@ -188,9 +186,9 @@ function gtkMoveToColumn( {%H-}widget: PGtkWidget; data: gPointer): GBoolean; cd
 function gtkKillChar( {%H-}widget: PGtkWidget; data: gPointer): GBoolean; cdecl;
 function gtkKillWord( {%H-}widget: PGtkWidget; data: gPointer): GBoolean; cdecl;
 function gtkKillLine( {%H-}widget: PGtkWidget; data: gPointer): GBoolean; cdecl;
-function gtkCutToClip( widget: PGtkWidget; data: gPointer): GBoolean; cdecl;
+function gtkCutToClip( {%H-}widget: PGtkWidget; data: gPointer): GBoolean; cdecl;
 function gtkCopyToClip( {%H-}widget: PGtkWidget; data: gPointer): GBoolean; cdecl;
-function gtkPasteFromClip( widget: PGtkWidget; data: gPointer): GBoolean; cdecl;
+function gtkPasteFromClip( {%H-}widget: PGtkWidget; data: gPointer): GBoolean; cdecl;
 function gtkValueChanged({%H-}widget: PGtkWidget; data: gPointer): GBoolean; cdecl;
 function gtkTimerCB(Data: gPointer): gBoolean; cdecl;
 function gtkFocusInNotifyCB (widget: PGtkWidget; {%H-}event: PGdkEvent;
@@ -313,8 +311,7 @@ function DeliverPostMessage(const Target: Pointer; var TheMessage): GBoolean;
 function DeliverMessage(const Target: Pointer; var AMessage): PtrInt;
 
 // PChar
-function CreatePChar(const s: string): PChar;
-function ComparePChar(P1, P2: PChar): boolean;
+//function CreatePChar(const s: string): PChar;
 function FindChar(c: char; p:PChar; Max: integer): integer;
 function FindLineLen(p:PChar; Max: integer): integer;
 
@@ -341,7 +338,7 @@ function CreateWidgetInfo(const AWidget: Pointer): PWidgetInfo;
 function CreateWidgetInfo(const AWidget: Pointer; const AObject: TObject;
                           const AParams: TCreateParams): PWidgetInfo;
 function GetWidgetInfo(const AWidget: Pointer): PWidgetInfo;
-function GetWidgetInfo(const AWidget: Pointer; const ACreate: Boolean): PWidgetInfo;
+function GetOrCreateWidgetInfo(const AWidget: Pointer): PWidgetInfo;
 procedure FreeWidgetInfo(AWidget: Pointer);
 
 procedure DestroyWidget(Widget: PGtkWidget);
@@ -360,8 +357,7 @@ procedure FixedMoveControl(Parent, Child: PGTKWidget; Left, Top: Longint);
 procedure FixedPutControl(Parent, Child: PGTKWidget; Left, Top: Longint);
 
 // forms
-procedure SetFormShowInTaskbar(AForm: TCustomForm;
-                               const AValue: TShowInTaskbar);
+procedure SetFormShowInTaskbar(AForm: TCustomForm; const AValue: TShowInTaskbar);
 procedure SetGtkWindowShowInTaskbar(AGtkWindow: PGtkWindow; Value: boolean);
 procedure SetWindowFullScreen(AForm: TCustomForm; const AValue: Boolean);
 procedure GrabKeyBoardToForm(AForm: TCustomForm);
@@ -371,8 +367,7 @@ procedure ReleaseMouseFromForm({%H-}AForm: TCustomForm);
 procedure GtkWindowShowModal(AForm: TCustomForm; GtkWindow: PGtkWindow);
 
 // label
-procedure SetLabelAlignment(LabelWidget: PGtkLabel;
-  const NewAlignment: TAlignment);
+procedure SetLabelAlignment(LabelWidget: PGtkLabel; const NewAlignment: TAlignment);
 
 // paint messages
 function DoDeliverPaintMessage(const Target: TObject; var PaintMsg: TLMPaint): PtrInt;
@@ -433,8 +428,12 @@ type
     KeyChar: array[0..3] of TVKeyUTF8Char;
   end;
 
+const
+  GdkKeymap: PGdkKeymap = nil;
+  GdkKeyMapChangedID: gulong = 0;
 procedure InitKeyboardTables;
 procedure DoneKeyboardTables;
+procedure DisconnectGdkKeymapChangedSignal;
 function GetVKeyInfo(const AVKey: Byte): TVKeyInfo;
 function GTKEventStateToShiftState(KeyState: LongWord): TShiftState;
 procedure gdk_event_key_get_string(Event: PGDKEventKey; var theString: Pointer);
@@ -586,11 +585,9 @@ procedure ConnectInternalWidgetsSignals(AWidget: PGtkWidget;
 //--
 
 // accelerators
-function DeleteAmpersands(var Str: String): Longint;
 function Ampersands2Underscore(Src: PChar): PChar;
 function Ampersands2Underscore(const ASource: String): String;
-function RemoveAmpersands(Src: PChar; LineLength: Longint): PChar;
-function RemoveAmpersands(const ASource: String): String;
+function EscapeUnderscores(const Str: String): String; inline;
 procedure LabelFromAmpersands(var AText, APattern: String; var AAccelChar: Char);
 
 function GetAccelGroup(const Widget: PGtkWidget;
@@ -841,11 +838,12 @@ var
 {$ifdef UseOwnShiftState}
 {$ifdef HasX}
   // KeyStateMap is a quick index to scan the results of a XQueryKeymap
+  // which returns for the 256 possible keycodes a boolean bit array (32 bytes)
   // Shift is set when the mask for the Keymapkeys_return[index] is set
 var
   MKeyStateMap: array of record
-    Index: Byte;
-    Mask: Byte;
+    Index: Byte; // KeyCode shr 3
+    Mask: Byte;  // 1 shl (KeyCode and 7);
     Enum: TShiftStateEnum;
   end;
 {$endif}
@@ -860,7 +858,9 @@ type
     window: PGdkWindow;
     send_event: gint8;
     time: guint32;
+    state : guint;
     keyval: guint;
+    hardware_keycode : guint16;
     constructor Create(Event: PGdkEventKey);
     function IsEqual(Event: PGdkEventKey): boolean;
   end;
@@ -876,7 +876,11 @@ begin
   window:=Event^.window;
   send_event:=Event^.send_event;
   time:=Event^.time;
+  state:=Event^.state;
   keyval:=Event^.keyval;
+  // event^.length ?
+  // event^._string ?
+  hardware_keycode:=event^.hardware_keycode;
 end;
 
 function TLCLHandledKeyEvent.IsEqual(Event: PGdkEventKey): boolean;
@@ -885,7 +889,8 @@ begin
       and (window=Event^.window)
       and (send_event=Event^.send_event)
       and (time=Event^.time)
-      and (keyval=Event^.keyval);
+      and (keyval=Event^.keyval)
+      ;
 end;
 
 var

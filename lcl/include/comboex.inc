@@ -27,7 +27,7 @@ begin
   Changed(False);
 end;
 
-procedure TListControlItem.SetImageIndex(AValue: SmallInt);
+procedure TListControlItem.SetImageIndex(AValue: TImageIndex);
 begin
   if FImageIndex=AValue then exit;
   FImageIndex:=AValue;
@@ -59,21 +59,21 @@ end;
 
 { TComboExItem.Setters }
 
-procedure TComboExItem.SetIndent(AValue: SmallInt);
+procedure TComboExItem.SetIndent(AValue: Integer);
 begin
   if FIndent=AValue then exit;
   FIndent:=AValue;
   Changed(False);
 end;
 
-procedure TComboExItem.SetOverlayImageIndex(AValue: SmallInt);
+procedure TComboExItem.SetOverlayImageIndex(AValue: TImageIndex);
 begin
   if FOverlayImageIndex=AValue then exit;
   FOverlayImageIndex:=AValue;
   { Changed(False); }
 end;
 
-procedure TComboExItem.SetSelectedImageIndex(AValue: SmallInt);
+procedure TComboExItem.SetSelectedImageIndex(AValue: TImageIndex);
 begin
   if FSelectedImageIndex=AValue then exit;
   FSelectedImageIndex:=AValue;
@@ -287,8 +287,8 @@ begin
   inherited Destroy;
 end;
 
-procedure TCustomComboBoxEx.Add(const ACaption: string; AIndent: SmallInt; AImgIdx: SmallInt;
-  AOverlayImgIdx: SmallInt; ASelectedImgIdx: SmallInt);
+procedure TCustomComboBoxEx.Add(const ACaption: string; AIndent: Integer;
+  AImgIdx: TImageIndex; AOverlayImgIdx: TImageIndex; ASelectedImgIdx: TImageIndex);
 begin
   Insert(ItemsEx.Count, ACaption, AIndent, AImgIdx, AOverlayImgIdx, ASelectedImgIdx);
 end;
@@ -355,6 +355,7 @@ var aDetail: TThemedElementDetails;
     aItemIndex: SmallInt;
     aMainItem: Boolean;
     anyRect: TRect;
+    ImagesSize: TSize;
 begin  { do not call inherited ! }
   aDropped:=DroppedDown;
   aEnabled:=IsEnabled;
@@ -384,6 +385,7 @@ begin  { do not call inherited ! }
   if assigned(Images) then
     begin
       aItemIndex:=-1;
+      ImagesSize := Images.SizeForPPI[ImagesWidth, Font.PixelsPerInch];
       if (aMainItem or (odSelected in State)) and
         ((ItemsEx[Index].SelectedImageIndex>=0) and (ItemsEx[Index].SelectedImageIndex<Images.Count))
         then aItemIndex:=ItemsEx[Index].SelectedImageIndex;
@@ -392,11 +394,11 @@ begin  { do not call inherited ! }
         begin
           if not FRightToLeft
             then aImgPoint.X:=ARect.Left+aIndent
-            else aImgPoint.X:=ARect.Right-aIndent-Images.Width;
-          aImgPoint.Y:=(ARect.Bottom+ARect.Top-Images.Height) div 2;
+            else aImgPoint.X:=ARect.Right-aIndent-ImagesSize.cx;
+          aImgPoint.Y:=(ARect.Bottom+ARect.Top-ImagesSize.cy) div 2;
           ThemeServices.DrawIcon(Canvas, aDetail, aImgPoint, Images, aItemIndex);
         end;
-      inc(aIndent, Images.Width+2*cItemIndent);
+      inc(aIndent, ImagesSize.cx+2*cItemIndent);
     end;
   Canvas.Brush.Style:=bsClear;
   if (not (odSelected in State) or not aDropped) and not aFocusedEditableMainItemNoDD
@@ -435,8 +437,8 @@ begin
   FRightToLeft:=IsRightToLeft;
 end;
 
-procedure TCustomComboBoxEx.Insert(AIndex: Integer; const ACaption: string; AIndent: SmallInt = -1;
-            AImgIdx: SmallInt = -1; AOverlayImgIdx: SmallInt = -1; ASelectedImgIdx: SmallInt = -1);
+procedure TCustomComboBoxEx.Insert(AIndex: Integer; const ACaption: string; AIndent: Integer = -1;
+            AImgIdx: TImageIndex = -1; AOverlayImgIdx: TImageIndex = -1; ASelectedImgIdx: TImageIndex = -1);
 var aItem: TCollectionItem;
 begin
   aItem:=ItemsEx.Insert(AIndex);
@@ -462,6 +464,13 @@ procedure TCustomComboBoxEx.SetImages(AValue: TCustomImageList);
 begin
   if FImages=AValue then exit;
   FImages:=AValue;
+  Invalidate;
+end;
+
+procedure TCustomComboBoxEx.SetImagesWidth(const aImagesWidth: Integer);
+begin
+  if FImagesWidth = aImagesWidth then Exit;
+  FImagesWidth := aImagesWidth;
   Invalidate;
 end;
 
@@ -541,6 +550,7 @@ end;
 
 procedure TCustomCheckCombo.CloseUp;
 begin
+  FDropped:=False;
   if FRejectDropDown then
   begin
     FRejectDropDown:=False;
@@ -652,7 +662,10 @@ begin  { do not call inherited ! }
   Canvas.Brush.Style:=bsClear;
   if (not (odSelected in State) or not aDropped) and not aFocusedEditableMainItemNoDD
     then Canvas.Font.Color:=clWindowText
-    else Canvas.Font.Color:=clHighlightText;
+    else begin
+       Canvas.Font.Color:=clHighlightText;
+       FHilightedIndex:=Index;
+    end;
   if aFocusedEditableMainItemNoDD then
     begin
       LCLIntf.SetBkColor(Canvas.Handle, ColorToRGB(clBtnFace));
@@ -688,12 +701,13 @@ begin
   aRect:=Rect(FHiLiteLeft, 0, FHiLiteRight, Height);
   FRejectDropDown:=PtInRect(aRect, aCursorPos);
   {$ENDIF}
+  FDropped:=True;
   if not FRejectDropDown then
     begin
       inherited DropDown;
       FRejectToggleOnSelect:=False;
     end else
-    if ItemEnabled[ItemIndex] then Toggle(ItemIndex);
+    if (ItemIndex>=0) and ItemEnabled[ItemIndex] then Toggle(ItemIndex);
 end;
 
 procedure TCustomCheckCombo.FontChanged(Sender: TObject);
@@ -743,30 +757,20 @@ procedure TCustomCheckCombo.KeyDown(var Key: Word; Shift: TShiftState);
 begin
   case Key of
     VK_RETURN:
-      begin
-        if not DroppedDown then
-          begin
-            DroppedDown:=True;
-            Key:=0;
-          end else
-          begin
-            if (ItemIndex>=0) and ItemEnabled[ItemIndex] then
-              begin
-                Toggle(ItemIndex);
-                Key:=0;
-                DroppedDown:=False;
-              end;
-          end;
-      end;
+      if FDropped then
+        if (ItemIndex=FHilightedIndex) and ItemEnabled[ItemIndex] then Toggle(ItemIndex);
     VK_SPACE:
-      begin
+      if DroppedDown then
         if (ItemIndex>=0) and ItemEnabled[ItemIndex] then
+        begin
+          if ItemIndex<>FHilightedIndex then
           begin
-            Toggle(ItemIndex);
-            Key:=0;
-            if DroppedDown then DroppedDown:=False;
+            ItemIndex:=FHilightedIndex;
+            inherited Select;
           end;
-      end;
+          Toggle(ItemIndex);
+          DroppedDown:=False;
+        end;
   end;
   inherited KeyDown(Key, Shift);
 end;
@@ -787,7 +791,7 @@ procedure TCustomCheckCombo.MouseMove(Shift: TShiftState; X, Y: Integer);
 var aHighlight: Boolean;
 begin
   inherited MouseMove(Shift, X, Y);
-  aHighlight:= ((X>FHiLiteLeft) and (X<FHiLiteRight));
+  aHighlight:=((X>FHiLiteLeft) and (X<FHiLiteRight));
   if aHighlight<>FCheckHighlight then
     begin
       FCheckHighlight:=aHighlight;
@@ -806,12 +810,20 @@ begin
       if ItemEnabled[ItemIndex] then Toggle(ItemIndex);
       FRejectToggleOnSelect:=True;
     end;
+  FDropped:=False;
 end;
 
 procedure TCustomCheckCombo.SetItemHeight(const AValue: Integer);
 begin
   inherited SetItemHeight(AValue);
   FNeedMeasure:=True;
+end;
+
+procedure TCustomCheckCombo.SetItems(const Value: TStrings);
+begin
+  ClearItemStates;
+  inherited SetItems(Value);
+  InitItemStates;
 end;
 
 procedure TCustomCheckCombo.Toggle(AIndex: Integer);
@@ -890,7 +902,5 @@ begin
   if AIndex=ItemIndex then
     Invalidate;
 end;
-
-
 
 

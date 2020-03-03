@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CONFIG>
-  <Package Version="4">
+  <Package Version="5">
     <Name Value="LazUtils"/>
     <Type Value="RunAndDesignTime"/>
+    <BuildMethod Value="Both"/>
     <Author Value="Lazarus Team"/>
     <CompilerOptions>
       <Version Value="11"/>
@@ -16,7 +17,7 @@
     <Description Value="Useful units for Lazarus packages."/>
     <License Value="Modified LGPL-2"/>
     <Version Major="1"/>
-    <Files Count="96">
+    <Files Count="103">
       <Item1>
         <Filename Value="LazLoggerImpl.inc"/>
         <Type Value="Include"/>
@@ -218,8 +219,8 @@
         <UnitName Value="LazUTF8Classes"/>
       </Item50>
       <Item51>
-        <Filename Value="lazutf8sysutils.pas"/>
-        <UnitName Value="LazUTF8SysUtils"/>
+        <Filename Value="lazsysutils.pas"/>
+        <UnitName Value="LazSysUtils"/>
       </Item51>
       <Item52>
         <Filename Value="lazutilities.pas"/>
@@ -395,22 +396,54 @@
       </Item94>
       <Item95>
         <Filename Value="lazpasreadutil.pas"/>
-        <UnitName Value="lazpasreadutil"/>
+        <UnitName Value="LazPasReadUtil"/>
       </Item95>
       <Item96>
         <Filename Value="integerlist.pas"/>
-        <UnitName Value="integerlist"/>
+        <UnitName Value="IntegerList"/>
       </Item96>
+      <Item97>
+        <Filename Value="lazversion.pas"/>
+        <UnitName Value="LazVersion"/>
+      </Item97>
+      <Item98>
+        <Filename Value="uitypes.pas"/>
+        <UnitName Value="UITypes"/>
+      </Item98>
+      <Item99>
+        <Filename Value="graphtype.pp"/>
+        <UnitName Value="GraphType"/>
+      </Item99>
+      <Item100>
+        <Filename Value="laztracer.pas"/>
+        <UnitName Value="LazTracer"/>
+      </Item100>
+      <Item101>
+        <Filename Value="lazstringutils.pas"/>
+        <UnitName Value="LazStringUtils"/>
+      </Item101>
+      <Item102>
+        <Filename Value="lazutf8sysutils.pas"/>
+        <UnitName Value="LazUTF8SysUtils"/>
+      </Item102>
+      <Item103>
+        <Filename Value="objectlists.pas"/>
+        <UnitName Value="ObjectLists"/>
+      </Item103>
     </Files>
     <LazDoc Paths="../../docs/xml/lazutils"/>
     <i18n>
       <EnableI18N Value="True"/>
       <OutDir Value="languages"/>
     </i18n>
-    <RequiredPkgs Count="1">
+    <RequiredPkgs Count="2">
       <Item1>
-        <PackageName Value="FCL"/>
+        <PackageName Value="fcl-image"/>
+        <DependencyType Value="FPMake"/>
       </Item1>
+      <Item2>
+        <PackageName Value="FCL"/>
+      </Item2>
     </RequiredPkgs>
     <UsageOptions>
       <UnitPath Value="$(PkgOutDir)"/>

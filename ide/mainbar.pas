@@ -210,7 +210,9 @@ type
       //itmSourceCodeToolChecks: TIDEMenuSection;
         itmSourceSyntaxCheck: TIDEMenuCommand;
         itmSourceGuessUnclosedBlock: TIDEMenuCommand;
+        {$IFDEF GuessMisplacedIfdef}
         itmSourceGuessMisplacedIFDEF: TIDEMenuCommand;
+        {$ENDIF}
       //itmSourceInsertCVSKeyWord: TIDEMenuSection;
         itmSourceInsertCVSAuthor: TIDEMenuCommand;
         itmSourceInsertCVSDate: TIDEMenuCommand;
@@ -417,7 +419,7 @@ begin
 
   //DebugLn(['TMainIDEBar.DoSetMainIDEHeight: IDEStarted=', LazarusIDE.IDEStarted]);
 
-  DisableAutoSizing;
+  DisableAutoSizing{$IFDEF DebugDisableAutoSizing}('TMainIDEBar.DoSetMainIDEHeight'){$ENDIF};
   try
     if Assigned(IDEDockMaster) then
     begin
@@ -451,7 +453,7 @@ begin
       end;
     end;
   finally
-    EnableAutoSizing;
+    EnableAutoSizing{$IFDEF DebugDisableAutoSizing}('TMainIDEBar.DoSetMainIDEHeight'){$ENDIF};
   end;
 end;
 
@@ -690,6 +692,7 @@ var
   I: Integer;
   CoolBand: TCoolBand;
   CoolBarOpts: TIDECoolBarOptions;
+  CurToolBar: TIDEToolBar;
 begin
   CoolBarOpts := EnvironmentOptions.Desktop.IDECoolBarOptions;
   //read general settings
@@ -707,13 +710,19 @@ begin
   IDECoolBar.Sort;
   for I := 0 to IDECoolBar.ToolBars.Count - 1 do
   begin
-    CoolBand := CoolBar.Bands.Add;
-    CoolBand.Break := IDECoolBar.ToolBars[I].CurrentOptions.Break;
-    CoolBand.Control := IDECoolBar.ToolBars[I].ToolBar;
-    CoolBand.MinWidth := 25;
-    CoolBand.MinHeight := 22;
-    CoolBand.FixedSize := True;
-    IDECoolBar.ToolBars[I].UseCurrentOptions;
+    CurToolBar:=IDECoolBar.ToolBars[I];
+    CurToolBar.ToolBar.BeginUpdate;
+    try
+      CoolBand := CoolBar.Bands.Add;
+      CoolBand.Break := CurToolBar.CurrentOptions.Break;
+      CoolBand.Control := CurToolBar.ToolBar;
+      CoolBand.MinWidth := 25;
+      CoolBand.MinHeight := 22;
+      CoolBand.FixedSize := True;
+      CurToolBar.UseCurrentOptions;
+    finally
+      CurToolBar.ToolBar.EndUpdate;
+    end;
   end;
   CoolBar.AutoAdjustLayout(lapAutoAdjustForDPI, 96, PixelsPerInch, 0, 0);
   CoolBar.AutosizeBands;

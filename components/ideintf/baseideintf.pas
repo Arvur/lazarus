@@ -16,9 +16,19 @@ unit BaseIDEIntf;
 interface
 
 uses
-  Classes, SysUtils, LazUTF8, LazConfigStorage, Dialogs, MacroIntf;
+  Classes, SysUtils,
+  // LazUtils
+  LazUTF8, LazConfigStorage,
+  // IdeIntf
+  MacroIntf;
   
 type
+  TScanModeFPCSources = (
+    smsfsSkip,
+    smsfsWaitTillDone, // scan now and wait till finished
+    smsfsBackground    // start in background
+    );
+
   TGetIDEConfigStorage = function(const Filename: string; LoadFromDisk: Boolean
                                   ): TConfigStorage;
 

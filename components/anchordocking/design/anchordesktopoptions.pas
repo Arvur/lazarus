@@ -1,3 +1,5 @@
+{ For license see registeranchordocking.pas
+}
 unit AnchorDesktopOptions;
 
 {$mode objfpc}{$H+}
@@ -6,9 +8,13 @@ interface
 
 uses
   Classes, SysUtils,
+  // LCL
   LCLProc, Forms, Controls, LCLType, LResources,
+  // LazUtils
   LazFileUtils, LazConfigStorage, Laz2_XMLCfg,
-  IDEOptionsIntf, MacroIntf, LazIDEIntf, BaseIDEIntf,
+  // IdeIntf
+  IDEOptionsIntf, LazIDEIntf, BaseIDEIntf,
+  // AnchorDocking
   AnchorDocking, AnchorDockStorage;
 
 const
@@ -51,14 +57,14 @@ implementation
 
 procedure TAnchorDesktopOpt.Assign(Source: TAbstractDesktopDockingOpt);
 var
-  xSource: TAnchorDesktopOpt;
+  ADOpts: TAnchorDesktopOpt;
 begin
   if Source is TAnchorDesktopOpt then
   begin
-    xSource := TAnchorDesktopOpt(Source);
-    FTree.Assign(xSource.FTree);
-    FRestoreLayouts.Assign(xSource.FRestoreLayouts);
-    FSettings.Assign(xSource.FSettings);
+    ADOpts := TAnchorDesktopOpt(Source);
+    FTree.Assign(ADOpts.FTree);
+    FRestoreLayouts.Assign(ADOpts.FRestoreLayouts);
+    FSettings.Assign(ADOpts.FSettings);
   end;
 end;
 
@@ -87,31 +93,29 @@ end;
 
 procedure TAnchorDesktopOpt.Load(Path: String; aXMLCfg: TRttiXMLConfig);
 begin
-  //new version of old "TIDEAnchorDockMaster.LoadUserLayout"
-
   Path := Path + 'AnchorDocking/';
   try
     {$IFDEF VerboseAnchorDocking}
-    debugln(['TIDEAnchorDockMaster.LoadUserLayout ',Filename]);
+    DebugLn(['TAnchorDesktopOpt.LoadUserLayout ',Path]);
     {$ENDIF}
     if aXMLCfg.GetValue(Path+'MainConfig/Nodes/ChildCount',0) > 0 then//config is not empty
     begin
       // loading last layout
       {$IF defined(VerboseAnchorDocking) or defined(VerboseAnchorDockRestore)}
-      debugln(['TIDEAnchorDockMaster.LoadUserLayout restoring ...']);
+      DebugLn(['TAnchorDesktopOpt.LoadUserLayout restoring ...']);
       {$ENDIF}
       LoadLayoutFromConfig(Path,aXMLCfg);
     end else begin
       // loading defaults
       {$IF defined(VerboseAnchorDocking) or defined(VerboseAnchorDockRestore)}
-      debugln(['TIDEAnchorDockMaster.LoadUserLayout loading default layout ...']);
+      DebugLn(['TAnchorDesktopOpt.LoadUserLayout loading default layout ...']);
       {$ENDIF}
       LoadLegacyAnchorDockOptions;
       LoadDefaultLayout;
     end;
   except
     on E: Exception do begin
-      DebugLn(['TIDEAnchorDockMaster.LoadUserLayout loading ',aXMLCfg.GetValue(Path+'Name', ''),' failed: ',E.Message]);
+      DebugLn(['TAnchorDesktopOpt.LoadUserLayout loading ',aXMLCfg.GetValue(Path+'Name', ''),' failed: ',E.Message]);
       Raise;
     end;
   end;
@@ -209,12 +213,12 @@ begin
   Path := Path + 'AnchorDocking/';
   try
     {$IF defined(VerboseAnchorDocking) or defined(VerboseAnchorDockRestore)}
-    debugln(['TIDEAnchorDockMaster.SaveDefaultLayout ',Filename]);
+    DebugLn(['TAnchorDesktopOpt.SaveDefaultLayout ',Path]);
     {$ENDIF}
     SaveLayoutToConfig(Path, aXMLCfg);
   except
     on E: Exception do begin
-      DebugLn(['TIDEAnchorDockMaster.SaveDefaultLayout saving ',aXMLCfg.GetValue(Path+'Name', ''),' failed: ',E.Message]);
+      DebugLn(['TAnchorDesktopOpt.SaveDefaultLayout saving ',aXMLCfg.GetValue(Path+'Name', ''),' failed: ',E.Message]);
       Raise;
     end;
   end;
@@ -266,7 +270,7 @@ begin
         // custom dock site
         LayoutNode:=FTree.NewNode(FTree.Root);
         LayoutNode.NodeType:=adltnCustomSite;
-        LayoutNode.Assign(AForm);
+        LayoutNode.Assign(AForm,false,false);
         // can have one normal dock site
         Site:=TAnchorDockManager(AForm.DockManager).GetChildSite;
         if Site<>nil then begin
@@ -281,7 +285,7 @@ begin
         raise EAnchorDockLayoutError.Create('invalid root control for save: '+DbgSName(AControl));
     end;
     // remove invisible controls
-    FTree.Root.Simplify(VisibleControls);
+    FTree.Root.Simplify(VisibleControls,false);
   finally
     VisibleControls.Free;
     SavedSites.Free;

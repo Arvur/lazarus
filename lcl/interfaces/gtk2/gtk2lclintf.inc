@@ -190,16 +190,6 @@ begin
 end;
 
 {------------------------------------------------------------------------------
-  function TGtk2WidgetSet.FontCanUTF8(Font: HFont): boolean;
-  
-  True if font recognizes Unicode UTF8 encoding.
- ------------------------------------------------------------------------------}
-function TGtk2WidgetSet.FontCanUTF8(Font: HFont): boolean;
-begin
-  Result:=IsValidGDIObject(Font);
-end;
-
-{------------------------------------------------------------------------------
   function TGtk2WidgetSet.FontIsMonoSpace(Font: HFont): boolean;
 
   True if font characters have all the same width.
@@ -826,9 +816,15 @@ begin
       if TCustomTrackBar(SizeConstraints.Control).Orientation=trHorizontal then
       begin
         Widget:=GetStyleWidget(lgsHScale);
+        gtk_scale_set_draw_value(PGtkScale(Widget),
+                                 TCustomTrackBar(SizeConstraints.Control).TickStyle <> tsNone);
+        gtk_widget_size_request(Widget, @Widget^.Requisition);
         MinHeight:=Widget^.requisition.height;
       end else begin
         Widget:=GetStyleWidget(lgsVScale);
+        gtk_scale_set_draw_value(PGtkScale(Widget),
+                                 TCustomTrackBar(SizeConstraints.Control).TickStyle <> tsNone);
+        gtk_widget_size_request(Widget, @Widget^.Requisition);
         MinWidth:=Widget^.requisition.width;
       end;
       //DebugLn(['TGtk2WidgetSet.GetControlConstraints ',DbgSName(SizeConstraints.Control),' ',MinWidth,',',MinHeight]);
@@ -1281,7 +1277,7 @@ var
   Requisition: TGtkRequisition;
 begin
   Result:=True;
-  p := GetWidgetInfo({%H-}Pointer(Handle), False)^.CoreWidget;
+  p := GetWidgetInfo({%H-}Pointer(Handle))^.CoreWidget;
   
   Menu := PGtkWidget(g_object_get_data(G_OBJECT(p), 'Menu'));
   if Menu<>nil then begin

@@ -49,13 +49,14 @@ uses
   {$ENDIF}
   Classes, SysUtils,
   // LCL
-  Controls, Forms, Buttons, StdCtrls, ComCtrls, Dialogs, ButtonPanel,
+  Controls, Forms, Buttons, StdCtrls, ComCtrls, Dialogs, ButtonPanel, ExtCtrls,
   // IdeIntf
-  BaseIDEIntf, IDEHelpIntf, ProjectIntf, IDEDialogs, IDEImagesIntf,
+  BaseIDEIntf, IDEHelpIntf, ProjectIntf, IDEDialogs, IDEImagesIntf, MacroIntf,
   // LazUtils
   LazFileUtils, LazFileCache, LazUTF8, Laz2_XMLCfg,
   // IDE
-  IDEProcs, SysVarUserOverrideDlg, InputHistory, LazarusIDEStrConsts, ExtCtrls;
+  IDEProcs, MiscOptions, SysVarUserOverrideDlg, InputHistory, LazarusIDEStrConsts,
+  EnvironmentOpts;
 
 { The xml format version:
     When the format changes (new values, changed formats) we can distinguish old
@@ -112,7 +113,8 @@ type
     function LegacySave(XMLConfig: TXMLConfig; const Path: string;
       UsePathDelim: TPathDelimSwitch): TModalResult;
     function Save(XMLConfig: TXMLConfig; const Path: string;
-      UsePathDelim: TPathDelimSwitch; const ASaveIn: TRunParamsOptionsModeSave): TModalResult;
+      UsePathDelim: TPathDelimSwitch; const ASaveIn: TRunParamsOptionsModeSave;
+      const ALegacyList: Boolean): TModalResult;
     function GetActiveMode: TRunParamsOptionsMode;
   end;
 
@@ -120,46 +122,53 @@ type
 
   TRunParamsOptsDlg = class(TForm)
     ButtonPanel: TButtonPanel;
-    SaveInComboBox: TComboBox;
     CmdLineParametersComboBox: TComboBox;
-    ModesComboBox: TComboBox;
-    ModesLabel: TLabel;
-    SaveInLabel: TLabel;
-    Panel1: TPanel;
-    ToolBar1: TToolBar;
-    NewModeButton: TToolButton;
+    CmdLineParametersGroupBox: TGroupBox;
     DeleteModeButton: TToolButton;
-    UseDisplayCheckBox: TCheckBox;
     DisplayEdit: TEdit;
     DisplayGroupBox: TGroupBox;
+    EnvVarsPage: TTabSheet;
+    GeneralPage: TTabSheet;
     HostApplicationBrowseBtn: TButton;
+    HostApplicationEdit: TEdit;
+    HostApplicationGroupBox: TGroupBox;
+    IncludeSystemVariablesCheckBox: TCheckBox;
+    ModesComboBox: TComboBox;
+    ModesLabel: TLabel;
+    NewModeButton: TToolButton;
+    Notebook: TPageControl;
+    Panel1: TPanel;
+    PreviewMemo: TMemo;
+    PreviewMultilineCheckBox: TCheckBox;
+    PreviewPage: TTabSheet;
+    SaveInComboBox: TComboBox;
+    SaveInLabel: TLabel;
+    SystemVariablesGroupBox: TGroupBox;
+    SystemVariablesListView: TListView;
+    ToolBar1: TToolBar;
+    UseDisplayCheckBox: TCheckBox;
+    UseLaunchingApplicationCheckBox: TCheckBox;
+    UseLaunchingApplicationComboBox: TComboBox;
+    UseLaunchingApplicationGroupBox: TGroupBox;
     UserOverridesAddButton: TBitBtn;
     UserOverridesDeleteButton: TBitBtn;
     UserOverridesEditButton: TBitBtn;
+    UserOverridesGroupBox: TGroupBox;
+    UserOverridesListView: TListView;
     WorkingDirectoryBtn: TButton;
     WorkingDirectoryComboBox: TComboBox;
     WorkingDirectoryGroupBox: TGroupBox;
-    UseLaunchingApplicationCheckBox: TCheckBox;
-    IncludeSystemVariablesCheckBox: TCheckBox;
-    UseLaunchingApplicationComboBox: TComboBox;
-    HostApplicationEdit: TEdit;
-    UseLaunchingApplicationGroupBox: TGroupBox;
-    CmdLineParametersGroupBox: TGroupBox;
-    HostApplicationGroupBox: TGroupBox;
-    UserOverridesGroupBox: TGroupBox;
-    SystemVariablesGroupBox: TGroupBox;
-    SystemVariablesListView: TListView;
-    UserOverridesListView: TListView;
-    Notebook: TPageControl;
-    GeneralPage: TTabSheet;
-    EnvVarsPage: TTabSheet;
     procedure DeleteModeButtonClick(Sender: TObject);
     procedure EnvVarsPageResize(Sender: TObject);
+    procedure FormClose(Sender: TObject; var {%H-}CloseAction: TCloseAction);
+    procedure FormCreate(Sender: TObject);
     procedure HelpButtonClick(Sender: TObject);
     procedure ModesComboBoxChange(Sender: TObject);
+    procedure NotebookChange(Sender: TObject);
     procedure OkButtonClick(Sender: TObject);
     procedure HostApplicationBrowseBtnClick(Sender: TObject);
     procedure NewModeButtonClick(Sender: TObject);
+    procedure PreviewMultilineCheckBoxChange(Sender: TObject);
     procedure UseLaunchingApplicationCheckBoxChange(Sender: TObject);
     procedure UserOverridesListViewSelectItem(Sender: TObject; {%H-}Item: TListItem;
       {%H-}Selected: Boolean);
@@ -168,17 +177,20 @@ type
     procedure UserOverridesEditButtonClick(Sender: TObject);
     procedure UserOverridesDeleteButtonClick(Sender: TObject);
   private
+    fHistoryLists: THistoryLists;
     fOptions: TRunParamsOptions;
     fSaveToOptions: TRunParamsOptions;
     fLastSelectedMode: TRunParamsOptionsMode;
     procedure SetupNotebook;
     procedure SetupLocalPage;
     procedure SetupEnvironmentPage;
+    procedure SetupPreviewPage;
     procedure SetOptions(NewOptions: TRunParamsOptions);
     procedure FillListView(ListView: TListView; sl: TStringList);
     procedure FillSystemVariablesListView;
     procedure FillUserOverridesListView(const AMode: TRunParamsOptionsMode);
     procedure ReloadModesComboBox;
+    procedure UpdatePreview;
     procedure SaveToOptions;
     procedure SaveToOptionsMode(const AMode: TRunParamsOptionsMode);
     procedure LoadFromOptionsMode(const AMode: TRunParamsOptionsMode);
@@ -190,9 +202,10 @@ type
     constructor Create(AnOwner: TComponent); override;
     destructor Destroy; override;
     property Options: TRunParamsOptions Write SetOptions;
+    property HistoryLists: THistoryLists read fHistoryLists write fHistoryLists;
   end;
 
-function ShowRunParamsOptsDlg(RunParamsOptions: TRunParamsOptions): TModalResult;
+function ShowRunParamsOptsDlg(RunParamsOptions: TRunParamsOptions; HistoryLists: THistoryLists): TModalResult;
 
 implementation
 
@@ -202,6 +215,10 @@ const
   DefaultLauncherTitle = '''Lazarus Run Output''';
   DefaultLauncherApplication = '$(LazarusDir)/tools/runwait.sh $(TargetCmdLine)';
 
+  hlLaunchingApplication = 'LaunchingApplication';
+  hlCmdLineParameters = 'CommandLineParameters';
+  hlWorkingDirectory = 'WorkingDirectory';
+
 function FindTerminalInPath(const ATerm: String = ''): String;
 var
   List: TStrings;
@@ -210,17 +227,19 @@ var
   Term: String;
 begin
   Result := '';
-  List := TStringList.Create;
-  {$IFDEF MSWINDOWS}
-  List.Delimiter := ';';
-  {$ELSE}
-  List.Delimiter := ':';
-  {$ENDIF}
   Term := ATerm;
   if Term = '' then
     Term := GetEnvironmentVariableUTF8('TERM');
+  List := TStringList.Create;
+  {$IFDEF MSWINDOWS}
+  List.Delimiter := ';';
+  if Term = '' then
+    Term := 'cmd.exe';
+  {$ELSE}
+  List.Delimiter := ':';
   if Term = '' then
     Term := 'xterm';
+  {$ENDIF}
   List.DelimitedText := GetEnvironmentVariableUTF8('PATH');
   for i := 0 to List.Count - 1 do
   begin
@@ -231,6 +250,8 @@ begin
       if Term = 'gnome-terminal' then
         Result := S + ' -t ' + DefaultLauncherTitle + ' -e ' +
           '''' + DefaultLauncherApplication + ''''
+      else if SameText(Term,'cmd.exe') then
+        Result := S + ' /C ${TargetCmdLine}'
       else
         Result := S + ' -T ' + DefaultLauncherTitle + ' -e ' +
           DefaultLauncherApplication;
@@ -251,13 +272,15 @@ begin
   DefaultLaunchingApplicationPathPlusParams:=Result;
 end;
 
-function ShowRunParamsOptsDlg(RunParamsOptions: TRunParamsOptions): TModalResult;
+function ShowRunParamsOptsDlg(RunParamsOptions: TRunParamsOptions;
+  HistoryLists: THistoryLists): TModalResult;
 var
   RunParamsOptsForm: TRunParamsOptsDlg;
 begin
   Result := mrCancel;
   RunParamsOptsForm := TRunParamsOptsDlg.Create(nil);
   try
+    RunParamsOptsForm.HistoryLists := HistoryLists;
     RunParamsOptsForm.Options := RunParamsOptions;
     Result := RunParamsOptsForm.ShowModal;
   finally
@@ -349,16 +372,19 @@ function TRunParamsOptions.Load(XMLConfig: TXMLConfig; const Path: string;
 var
   Cnt, I: Integer;
   NewMode: TRunParamsOptionsMode;
-  ModePath: string;
+  ModePath, NewActiveModeName, ModesPath: string;
+  IsLegacyList: Boolean;
 begin
-  //don't clear!  needed for merging lpi and lps
+  //don't clear! needed for merging lpi and lps
 
-  Cnt := XMLConfig.GetValue(Path + 'Modes/Count', 0);
+  ModesPath := Path + 'Modes/';
+  IsLegacyList := XMLConfig.IsLegacyList(ModesPath);
+  Cnt := XMLConfig.GetListItemCount(ModesPath, 'Mode', IsLegacyList);
   Result := mrOK;
 
   for I := 0 to Cnt-1 do
   begin
-    ModePath := Path+'Modes/Mode'+IntToStr(I)+'/';
+    ModePath := ModesPath+XMLConfig.GetListItemXPath('Mode', I, IsLegacyList, False)+'/';
     NewMode := Add(XMLConfig.GetValue(ModePath+'Name', '')) as TRunParamsOptionsMode;
     NewMode.SaveIn := ASaveIn;
     Result := NewMode.Load(XMLConfig, ModePath, AdjustPathDelims);
@@ -368,20 +394,26 @@ begin
 
   if ASaveIn=rpsLPS then
   begin
-    ActiveModeName := XMLConfig.GetValue(Path + 'Modes/ActiveMode', '');
+    NewActiveModeName := XMLConfig.GetValue(Path + 'Modes/ActiveMode', '');
+    // sanity check -> modes from LPI could be modified independently on LPS and
+    // NewActiveModeName doesn't have to exist any more
+    if Assigned(Find(NewActiveModeName)) then
+      ActiveModeName := NewActiveModeName;
     if (GetActiveMode=nil) and (Count>0) then
       ActiveModeName := Modes[0].Name;
   end;
 end;
 
 function TRunParamsOptions.Save(XMLConfig: TXMLConfig; const Path: string;
-  UsePathDelim: TPathDelimSwitch; const ASaveIn: TRunParamsOptionsModeSave
-  ): TModalResult;
+  UsePathDelim: TPathDelimSwitch; const ASaveIn: TRunParamsOptionsModeSave;
+  const ALegacyList: Boolean): TModalResult;
 var
   AMode: TRunParamsOptionsMode;
   I, Cnt: Integer;
+  ModesPath, ModePath: string;
 begin
   Result := mrOK;
+  ModesPath := Path+'Modes/';
 
   // save a format version to distinguish old formats
   XMLConfig.SetValue(Path + 'FormatVersion/Value',
@@ -394,14 +426,15 @@ begin
 
     if AMode.SaveIn=ASaveIn then
     begin
-      Result := AMode.Save(XMLConfig, Path+'Modes/Mode'+IntToStr(Cnt)+'/', UsePathDelim);
+      ModePath := ModesPath+XMLConfig.GetListItemXPath('Mode', Cnt, ALegacyList, False)+'/';
+      Result := AMode.Save(XMLConfig, ModePath, UsePathDelim);
       if Result<>mrOK then
         Exit;
       Inc(Cnt);
     end;
   end;
 
-  XMLConfig.SetValue(Path + 'Modes/Count', Cnt);
+  XMLConfig.SetListItemCount(ModesPath, Cnt, ALegacyList);
   if ASaveIn=rpsLPS then
     XMLConfig.SetValue(Path + 'Modes/ActiveMode', ActiveModeName);
 end;
@@ -699,9 +732,10 @@ begin
 
   SetupLocalPage;
   SetupEnvironmentPage;
-  TIDEImages.AssignImage(UserOverridesAddButton.Glyph, 'laz_add');
-  TIDEImages.AssignImage(UserOverridesEditButton.Glyph, 'laz_edit');
-  TIDEImages.AssignImage(UserOverridesDeleteButton.Glyph, 'laz_delete');
+  SetupPreviewPage;
+  IDEImages.AssignImage(UserOverridesAddButton, 'laz_add');
+  IDEImages.AssignImage(UserOverridesEditButton, 'laz_edit');
+  IDEImages.AssignImage(UserOverridesDeleteButton, 'laz_delete');
 end;
 
 procedure TRunParamsOptsDlg.NewModeButtonClick(Sender: TObject);
@@ -724,6 +758,11 @@ begin
   ReloadModesComboBox;
   SelectMode(NewName);
   fLastSelectedMode := NewMode;
+end;
+
+procedure TRunParamsOptsDlg.PreviewMultilineCheckBoxChange(Sender: TObject);
+begin
+  UpdatePreview;
 end;
 
 procedure TRunParamsOptsDlg.SetupLocalPage;
@@ -769,6 +808,13 @@ begin
   IncludeSystemVariablesCheckBox.Caption := dlgIncludeSystemVariables;
 end;
 
+procedure TRunParamsOptsDlg.SetupPreviewPage;
+begin
+  PreviewPage.Caption:=dlgWRDPreview;
+  PreviewMultilineCheckBox.Caption:=lisShowMultipleLines;
+  PreviewMultilineCheckBox.Checked:=MiscellaneousOptions.ShowCompOptMultiLine;
+end;
+
 procedure TRunParamsOptsDlg.OkButtonClick(Sender: TObject);
 begin
   if SelectedMode<>nil then
@@ -787,6 +833,80 @@ begin
   begin
     AMode := fOptions[I];
     ModesComboBox.AddItem(AMode.Name, AMode);
+  end;
+end;
+
+procedure TRunParamsOptsDlg.UpdatePreview;
+var
+  sl: TStringList;
+  MultiLine: Boolean;
+
+  procedure AddLines(aCaption, Params: string);
+  var
+    ParamList: TStringList;
+  begin
+    sl.Add(aCaption);
+    if MultiLine then begin
+      ParamList:=TStringList.Create;
+      try
+        SplitCmdLineParams(Params,ParamList);
+        sl.AddStrings(ParamList);
+      finally
+        ParamList.Free;
+      end;
+    end else begin
+      sl.Add(Params);
+    end;
+  end;
+
+var
+  s: string;
+begin
+  MultiLine:=PreviewMultilineCheckBox.Checked;
+  if MultiLine then
+    PreviewMemo.ScrollBars:=ssAutoBoth
+  else
+    PreviewMemo.ScrollBars:=ssAutoVertical;
+
+  sl:=TStringList.Create;
+  try
+    s:=HostApplicationEdit.Text;
+    if s<>'' then begin
+      IDEMacros.SubstituteMacros(s);
+      sl.Add('Host Application: '+s);
+    end;
+
+    s:=WorkingDirectoryComboBox.Text;
+    if s<>'' then begin
+      IDEMacros.SubstituteMacros(s);
+      sl.Add('Working Directory: '+s);
+    end;
+
+    if UseLaunchingApplicationCheckBox.Checked then begin
+      s:=UseLaunchingApplicationComboBox.Text;
+      if s<>'' then begin
+        IDEMacros.SubstituteMacros(s);
+        AddLines('Launching Application:',s);
+      end;
+    end;
+
+    s:=CmdLineParametersComboBox.Text;
+    if s<>'' then begin
+      IDEMacros.SubstituteMacros(s);
+      AddLines('Parameters:',s);
+    end;
+
+    if UseDisplayCheckBox.Checked then begin
+      s:=DisplayEdit.Text;
+      if s<>'' then begin
+        IDEMacros.SubstituteMacros(s);
+        sl.Add('Display: '+s);
+      end;
+    end;
+
+    PreviewMemo.Lines.Assign(sl);
+  finally
+    sl.Free;
   end;
 end;
 
@@ -810,6 +930,21 @@ begin
   UserOverridesListView.Column[1].Width := UserOverridesListView.Column[0].Width;
 end;
 
+procedure TRunParamsOptsDlg.FormClose(Sender: TObject;
+  var CloseAction: TCloseAction);
+begin
+  MiscellaneousOptions.ShowCompOptMultiLine:=PreviewMultilineCheckBox.Checked;
+end;
+
+procedure TRunParamsOptsDlg.FormCreate(Sender: TObject);
+begin
+  ModesComboBox.DropDownCount := EnvironmentOptions.DropDownCount;
+  SaveInComboBox.DropDownCount := EnvironmentOptions.DropDownCount;
+  CmdLineParametersComboBox.DropDownCount := EnvironmentOptions.DropDownCount;
+  UseLaunchingApplicationComboBox.DropDownCount := EnvironmentOptions.DropDownCount;
+  WorkingDirectoryComboBox.DropDownCount := EnvironmentOptions.DropDownCount;
+end;
+
 procedure TRunParamsOptsDlg.HelpButtonClick(Sender: TObject);
 begin
   LazarusHelp.ShowHelpForIDEControl(Self);
@@ -817,9 +952,9 @@ end;
 
 procedure TRunParamsOptsDlg.HostApplicationBrowseBtnClick(Sender: TObject);
 var
-  OpenDialog: TOpenDialog;
+  OpenDialog: TIDEOpenDialog;
 begin
-  OpenDialog := TOpenDialog.Create(Self);
+  OpenDialog := IDEOpenDialogClass.Create(Self);
   with OpenDialog do
   begin
     InputHistories.ApplyFileDialogSettings(OpenDialog);
@@ -848,29 +983,32 @@ begin
     LoadFromOptionsMode(SelectedMode);
 end;
 
-procedure TRunParamsOptsDlg.LoadFromOptionsMode(
-  const AMode: TRunParamsOptionsMode);
+procedure TRunParamsOptsDlg.NotebookChange(Sender: TObject);
+begin
+  UpdatePreview;
+end;
+
+procedure TRunParamsOptsDlg.LoadFromOptionsMode(const AMode: TRunParamsOptionsMode);
 var
   List: THistoryList;
   S: String;
 begin
   // local
-  HostApplicationEdit.Text   := AMode.HostApplicationFilename;
+  HostApplicationEdit.Text := AMode.HostApplicationFilename;
 
   // WorkingDirectoryComboBox
-  List:=InputHistories.HistoryLists.GetList(hlWorkingDirectory,true,rltFile);
+  List:=HistoryLists.GetList(hlWorkingDirectory,true,rltFile);
   List.AppendEntry(AMode.WorkingDirectory);
   WorkingDirectoryComboBox.Items.Assign(List);
   WorkingDirectoryComboBox.Text := AMode.WorkingDirectory;
 
   SaveInComboBox.ItemIndex := Ord(AMode.SaveIn);
-  if SaveInComboBox.ItemIndex=-1 then
+  if SaveInComboBox.ItemIndex = -1 then
     SaveInComboBox.ItemIndex := 0;
 
   // UseLaunchingApplicationComboBox
   UseLaunchingApplicationCheckBox.Checked := AMode.UseLaunchingApplication;
-  CmdLineParametersGroupBox.Enabled:=not UseLaunchingApplicationCheckBox.Checked;
-  List := InputHistories.HistoryLists.GetList(hlLaunchingApplication,true,rltFile);
+  List := HistoryLists.GetList(hlLaunchingApplication,true,rltFile);
   List.AppendEntry(AMode.LaunchingApplicationPathPlusParams);
   S := FindTerminalInPath;
   if S <> '' then
@@ -884,10 +1022,11 @@ begin
     List.AppendEntry(S);
   {$ENDIF}
   UseLaunchingApplicationComboBox.Items.Assign(List);
-  UseLaunchingApplicationComboBox.Text:=AMode.LaunchingApplicationPathPlusParams;
+  UseLaunchingApplicationComboBox.Text := AMode.LaunchingApplicationPathPlusParams;
+  UseLaunchingApplicationComboBox.Enabled := UseLaunchingApplicationCheckBox.Checked;
 
   // CmdLineParametersComboBox
-  List:=InputHistories.HistoryLists.GetList(hlCmdLineParameters,true,rltCaseSensitive);
+  List:=HistoryLists.GetList(hlCmdLineParameters,true,rltCaseSensitive);
   List.AppendEntry(AMode.CmdLineParams);
   CmdLineParametersComboBox.Items.Assign(List);
   CmdLineParametersComboBox.Text := AMode.CmdLineParams;
@@ -903,12 +1042,13 @@ begin
 
   fOptions.ActiveModeName := AMode.Name;
   fLastSelectedMode := AMode;
+
+  UpdatePreview;
 end;
 
-procedure TRunParamsOptsDlg.UseLaunchingApplicationCheckBoxChange(
-  Sender: TObject);
+procedure TRunParamsOptsDlg.UseLaunchingApplicationCheckBoxChange(Sender: TObject);
 begin
-  CmdLineParametersGroupBox.Enabled:=not UseLaunchingApplicationCheckBox.Checked;
+  UseLaunchingApplicationComboBox.Enabled := (Sender as TCheckBox).Checked;
 end;
 
 procedure TRunParamsOptsDlg.UserOverridesListViewSelectItem(Sender: TObject;
@@ -991,14 +1131,13 @@ begin
   end;
 end;
 
-procedure TRunParamsOptsDlg.SaveToOptionsMode(const AMode: TRunParamsOptionsMode
-  );
+procedure TRunParamsOptsDlg.SaveToOptionsMode(const AMode: TRunParamsOptionsMode);
 
   procedure SaveComboHistory(AComboBox: TComboBox; const History: string;
     ListType: TRecentListType);
   begin
     AComboBox.AddHistoryItem(AComboBox.Text,20,true,false);
-    InputHistories.HistoryLists.GetList(History,true,ListType).Assign(AComboBox.Items);
+    HistoryLists.GetList(History,true,ListType).Assign(AComboBox.Items);
   end;
 
 begin

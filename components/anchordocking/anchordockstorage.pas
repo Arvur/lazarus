@@ -1,31 +1,4 @@
-{ Unit implementing anchor docking storage tree.
-
-  Copyright (C) 2010 Mattias Gaertner mattias@freepascal.org
-
-  This library is free software; you can redistribute it and/or modify it
-  under the terms of the GNU Library General Public License as published by
-  the Free Software Foundation; either version 2 of the License, or (at your
-  option) any later version with the following modification:
-
-  As a special exception, the copyright holders of this library give you
-  permission to link this library with independent modules to produce an
-  executable, regardless of the license terms of these independent modules,and
-  to copy and distribute the resulting executable under terms of your choice,
-  provided that you also meet, for each linked independent module, the terms
-  and conditions of the license of that module. An independent module is a
-  module which is not derived from or based on this library. If you modify
-  this library, you may extend this exception to your version of the library,
-  but you are not obligated to do so. If you do not wish to do so, delete this
-  exception statement from your version.
-
-  This program is distributed in the hope that it will be useful, but WITHOUT
-  ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
-  FITNESS FOR A PARTICULAR PURPOSE. See the GNU Library General Public License
-  for more details.
-
-  You should have received a copy of the GNU Library General Public License
-  along with this library; if not, write to the Free Software Foundation,
-  Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1335, USA.
+{ For license see anchordocking.pas
 }
 Unit AnchorDockStorage;
 
@@ -34,8 +7,12 @@ Unit AnchorDockStorage;
 interface
 
 uses
-  Math, Classes, SysUtils, LCLProc, ExtCtrls, ComCtrls, Forms, Controls,
-  AvgLvlTree, LazConfigStorage, Laz2_XMLCfg,
+  Classes, SysUtils, Math,
+  // LCL
+  LCLProc, ExtCtrls, ComCtrls, Forms, Controls,
+  // LazUtils
+  AvgLvlTree, LazConfigStorage, Laz2_XMLCfg, LazLoggerBase, LazTracer,
+  // AnchorDocking
   AnchorDockStr;
 
 const
@@ -82,11 +59,13 @@ type
     FName: string;
     FNodes: TFPList; // list of TAnchorDockLayoutTreeNode
     FNodeType: TADLTreeNodeType;
+    FPageIndex: integer;
     FParent: TAnchorDockLayoutTreeNode;
     FWorkAreaRect: TRect;
     FTabPosition: TTabPosition;
     FWindowState: TWindowState;
     FControlLocation: TADLControlLocation;
+    FMinimized: Boolean;
     function GetAnchors(Site: TAnchorKind): string;
     function GetBottom: integer;
     function GetHeight: integer;
@@ -106,6 +85,7 @@ type
     procedure SetMonitor(const AValue: integer);
     procedure SetName(const AValue: string);
     procedure SetNodeType(const AValue: TADLTreeNodeType);
+    procedure SetPageIndex(AValue: integer);
     procedure SetParent(const AValue: TAnchorDockLayoutTreeNode);
     procedure SetRight(const AValue: integer);
     procedure SetWorkAreaRect(const AValue: TRect);
@@ -113,13 +93,14 @@ type
     procedure SetTop(const AValue: integer);
     procedure SetWidth(const AValue: integer);
     procedure SetWindowState(const AValue: TWindowState);
+    procedure SetMinimized(const AValue: boolean);
   public
     constructor Create;
     destructor Destroy; override;
     procedure Clear;
     function IsEqual(Node: TAnchorDockLayoutTreeNode): boolean;
     procedure Assign(Node: TAnchorDockLayoutTreeNode); overload;
-    procedure Assign(AControl: TControl; OverrideBoundsRect: Boolean=false); overload;
+    procedure Assign(AControl: TControl; OverrideBoundsRect, AMinimized: boolean); overload;
     procedure LoadFromConfig(Config: TConfigStorage); overload;
     procedure LoadFromConfig(Path: string; Config: TRttiXMLConfig); overload;
     procedure SaveToConfig(Config: TConfigStorage); overload;
@@ -129,7 +110,7 @@ type
     procedure CheckConsistency; virtual;
 
     // simplifying
-    procedure Simplify(ExistingNames: TStrings);
+    procedure Simplify(ExistingNames: TStrings; ParentMinimized: boolean);
     procedure DeleteNode(ChildNode: TAnchorDockLayoutTreeNode);
     function FindNodeBoundSplitter(ChildNode: TAnchorDockLayoutTreeNode;
                                    Side: TAnchorKind): TAnchorDockLayoutTreeNode;
@@ -158,6 +139,8 @@ type
     property Monitor: integer read FMonitor write SetMonitor;
     property HeaderPosition: TADLHeaderPosition read FHeaderPosition write SetHeaderPosition;
     property TabPosition: TTabPosition read FTabPosition write SetTabPosition;
+    property PageIndex: integer read FPageIndex write SetPageIndex;
+    property Minimized: Boolean read FMinimized write SetMinimized;
     function Count: integer;
     function IsSplitter: boolean;
     function IsRootWindow: boolean;
@@ -976,6 +959,13 @@ begin
   IncreaseChangeStamp;
 end;
 
+procedure TAnchorDockLayoutTreeNode.SetPageIndex(AValue: integer);
+begin
+  if FPageIndex = AValue then Exit;
+  FPageIndex := AValue;
+  IncreaseChangeStamp;
+end;
+
 procedure TAnchorDockLayoutTreeNode.SetParent(
   const AValue: TAnchorDockLayoutTreeNode);
 begin
@@ -1008,6 +998,13 @@ procedure TAnchorDockLayoutTreeNode.SetTabPosition(const AValue: TTabPosition);
 begin
   if FTabPosition=AValue then exit;
   FTabPosition:=AValue;
+  IncreaseChangeStamp;
+end;
+
+procedure TAnchorDockLayoutTreeNode.SetMinimized(const AValue: boolean);
+begin
+  if FMinimized=AValue then exit;
+  FMinimized:=AValue;
   IncreaseChangeStamp;
 end;
 
@@ -1059,6 +1056,7 @@ begin
   Align:=alNone;
   HeaderPosition:=adlhpAuto;
   TabPosition:=tpTop;
+  PageIndex:=0;
   BoundSplitterPos:=0;
   WorkAreaRect:=Rect(0,0,0,0);
   for a:=low(TAnchorKind) to high(TAnchorKind) do
@@ -1080,6 +1078,7 @@ begin
   or (WindowState<>Node.WindowState)
   or (HeaderPosition<>Node.HeaderPosition)
   or (TabPosition<>Node.TabPosition)
+  or (PageIndex<>Node.PageIndex)
   or (BoundSplitterPos<>Node.BoundSplitterPos)
   or (not CompareRect(@FWorkAreaRect,@Node.FWorkAreaRect))
   then
@@ -1104,9 +1103,11 @@ begin
   WindowState:=Node.WindowState;
   HeaderPosition:=Node.HeaderPosition;
   TabPosition:=Node.TabPosition;
+  PageIndex:=Node.PageIndex;
   BoundSplitterPos:=Node.BoundSplitterPos;
   WorkAreaRect:=Node.WorkAreaRect;
   Monitor:=Node.Monitor;
+  Minimized:=Node.Minimized;
   for a:=low(TAnchorKind) to high(TAnchorKind) do
     Anchors[a]:=Node.Anchors[a];
   while Count>Node.Count do Nodes[Count-1].Free;
@@ -1121,9 +1122,10 @@ begin
   end;
 end;
 
-procedure TAnchorDockLayoutTreeNode.Assign(AControl: TControl; OverrideBoundsRect: Boolean=false);
+procedure TAnchorDockLayoutTreeNode.Assign(AControl: TControl; OverrideBoundsRect, AMinimized: boolean);
 var
   AnchorControl: TControl;
+  ParentForm: TCustomForm;
   a: TAnchorKind;
 begin
   Name:=AControl.Name;
@@ -1132,16 +1134,25 @@ begin
   else
     BoundsRect:=AControl.BoundsRect;
   Align:=AControl.Align;
+  Minimized:=AMinimized;
   if (AControl.Parent=nil) and (AControl is TCustomForm) then begin
     WindowState:=TCustomForm(AControl).WindowState;
     Monitor:=TCustomForm(AControl).Monitor.MonitorNum;
     WorkAreaRect:=TCustomForm(AControl).Monitor.WorkareaRect;
-  end else
-    WindowState:=GetParentForm(AControl).WindowState;
-  if AControl is TCustomTabControl then
-    TabPosition:=TCustomTabControl(AControl).TabPosition
-  else
+  end else begin
+    ParentForm:=GetParentForm(AControl);
+    if Assigned(ParentForm) then
+      WindowState:=ParentForm.WindowState
+    else
+      WindowState:=wsNormal;
+  end;
+  if AControl is TCustomTabControl then begin
+    TabPosition:=TCustomTabControl(AControl).TabPosition;
+    PageIndex:=TCustomTabControl(AControl).PageIndex;
+  end else begin
     TabPosition:=tpTop;
+    PageIndex:=0;
+  end;
   for a:=low(TAnchorKind) to high(TAnchorKind) do begin
     AnchorControl:=AControl.AnchorSide[a].Control;
     if (AnchorControl=nil) or (AnchorControl=AControl.Parent) then
@@ -1160,6 +1171,7 @@ begin
   Clear;
   Name:=Config.GetValue('Name','');
   NodeType:=NameToADLTreeNodeType(Config.GetValue('Type',ADLTreeNodeTypeNames[adltnNone]));
+  Minimized:=Config.GetValue('Minimized',false);
   Left:=Config.GetValue('Bounds/Left',0);
   Top:=Config.GetValue('Bounds/Top',0);
   Width:=Config.GetValue('Bounds/Width',0);
@@ -1174,6 +1186,7 @@ begin
   WindowState:=NameToADLWindowState(Config.GetValue('WindowState',ADLWindowStateNames[wsNormal]));
   HeaderPosition:=NameToADLHeaderPosition(Config.GetValue('Header/Position',ADLHeaderPositionNames[adlhpAuto]));
   TabPosition:=NameToADLTabPosition(Config.GetValue('Header/TabPosition',ADLTabPostionNames[tpTop]));
+  PageIndex:=Config.GetValue('Header/PageIndex',0);
   Monitor:=Config.GetValue('Monitor',0);
   NewCount:=Config.GetValue('ChildCount',0);
   for i:=1 to NewCount do begin
@@ -1194,6 +1207,7 @@ begin
   Clear;
   Name:=Config.GetValue(Path+'Name','');
   NodeType:=NameToADLTreeNodeType(Config.GetValue(Path+'Type',ADLTreeNodeTypeNames[adltnNone]));
+  Minimized:=Config.GetValue(Path+'Minimized',false);
   Left:=Config.GetValue(Path+'Bounds/Left',0);
   Top:=Config.GetValue(Path+'Bounds/Top',0);
   Width:=Config.GetValue(Path+'Bounds/Width',0);
@@ -1208,6 +1222,7 @@ begin
   WindowState:=NameToADLWindowState(Config.GetValue(Path+'WindowState',ADLWindowStateNames[wsNormal]));
   HeaderPosition:=NameToADLHeaderPosition(Config.GetValue(Path+'Header/Position',ADLHeaderPositionNames[adlhpAuto]));
   TabPosition:=NameToADLTabPosition(Config.GetValue(Path+'Header/TabPosition',ADLTabPostionNames[tpTop]));
+  PageIndex:=Config.GetValue(Path+'Header/PageIndex',0);
   Monitor:=Config.GetValue(Path+'Monitor',0);
   NewCount:=Config.GetValue(Path+'ChildCount',0);
   for i:=1 to NewCount do
@@ -1242,6 +1257,8 @@ begin
                                           ADLHeaderPositionNames[adlhpAuto]);
   Config.SetDeleteValue('Header/TabPosition',ADLTabPostionNames[TabPosition],
                                              ADLTabPostionNames[tpTop]);
+  Config.SetDeleteValue('Header/PageIndex',PageIndex,0);
+  Config.SetDeleteValue('Minimized',Minimized,False);
   Config.SetDeleteValue('Monitor',Monitor,0);
   Config.SetDeleteValue('ChildCount',Count,0);
   for i:=1 to Count do begin
@@ -1275,6 +1292,8 @@ begin
                                                ADLHeaderPositionNames[adlhpAuto]);
   Config.SetDeleteValue(Path+'Header/TabPosition',ADLTabPostionNames[TabPosition],
                                                   ADLTabPostionNames[tpTop]);
+  Config.SetDeleteValue(Path+'Header/PageIndex',PageIndex,0);
+  Config.SetDeleteValue(Path+'Minimized',Minimized,False);
   Config.SetDeleteValue(Path+'Monitor',Monitor,0);
   Config.SetDeleteValue(Path+'ChildCount',Count,0);
   for i:=1 to Count do
@@ -1420,7 +1439,7 @@ begin
   end;
 end;
 
-procedure TAnchorDockLayoutTreeNode.Simplify(ExistingNames: TStrings);
+procedure TAnchorDockLayoutTreeNode.Simplify(ExistingNames: TStrings; ParentMinimized: boolean);
 { Simplification rules:
    1. Control nodes without existing name are deleted.
    2. Empty layouts and pages are deleted
@@ -1429,16 +1448,18 @@ procedure TAnchorDockLayoutTreeNode.Simplify(ExistingNames: TStrings);
 var
   i: Integer;
   ChildNode: TAnchorDockLayoutTreeNode;
+  NodeMinimized: Boolean;
 begin
   // simplify children
   i:=Count-1;
   while i>=0 do begin
     ChildNode:=Nodes[i];
-    ChildNode.Simplify(ExistingNames);
+    NodeMinimized:=ParentMinimized or ChildNode.Minimized;
+    ChildNode.Simplify(ExistingNames,NodeMinimized);
 
     if (ChildNode.NodeType=adltnControl) then begin
       // leaf node => check if there is a control
-      if (ChildNode.Name='') or (ExistingNames.IndexOf(ChildNode.Name)<0) then
+      if (ChildNode.Name='') or ((ExistingNames.IndexOf(ChildNode.Name)<0) and (not NodeMinimized)) then
         DeleteNode(ChildNode);
     end else if ChildNode.IsSplitter then begin
       // splitter
@@ -1447,7 +1468,7 @@ begin
         ChildNode[0].Free;
     end else if ChildNode.NodeType=adltnCustomSite then begin
       // custom dock site
-    end else if ChildNode.Count=0 then begin
+    end else if (ChildNode.Count=0) and (not NodeMinimized) then begin
       // inner node without child => delete
       DeleteNode(ChildNode);
     end else if (ChildNode.Count=1)
@@ -1469,7 +1490,9 @@ var
   Side: TAnchorKind;
   Splitter: TAnchorDockLayoutTreeNode;
 begin
+  {$IFDEF VerboseAnchorDocking}
   WriteDebugLayout('TAnchorDockLayoutTreeNode.DeleteNode BEFORE DELETE Self='+Name+' Child='+ChildNode.Name+' ',Self);
+  {$ENDIF}
   ChildNode.Parent:=nil;
   try
     if not ChildNode.IsSplitter then begin
@@ -1500,7 +1523,9 @@ begin
         if Sibling.Anchors[Side]=ChildNode.Name then
           Sibling.Anchors[Side]:='';
     end;
+    {$IFDEF VerboseAnchorDocking}
     WriteDebugLayout('TAnchorDockLayoutTreeNode.DeleteNode AFTER DELETE Self='+Name+' Child='+ChildNode.Name+' ',Self);
+    {$ENDIF}
     // free node
     ChildNode.Free;
   end;
@@ -1623,7 +1648,9 @@ var
   GrandChild: TAnchorDockLayoutTreeNode;
   Side: TAnchorKind;
 begin
+  {$IFDEF VerboseAnchorDocking}
   WriteDebugLayout('TAnchorDockLayoutTreeNode.ReplaceWithChildren BEFORE REPLACE Self='+Name+' Child='+ChildNode.Name+' ',Self);
+  {$ENDIF}
   DebugWriteChildAnchors(Self);
   while ChildNode.Count>0 do begin
     GrandChild:=ChildNode[0];
@@ -1641,7 +1668,9 @@ begin
       end;
     end;
   end;
+  {$IFDEF VerboseAnchorDocking}
   WriteDebugLayout('TAnchorDockLayoutTreeNode.ReplaceWithChildren AFTER REPLACE Self='+Name+' Child='+ChildNode.Name+' ',Self);
+  {$ENDIF}
   ChildNode.Free;
   DebugWriteChildAnchors(Self);
 end;

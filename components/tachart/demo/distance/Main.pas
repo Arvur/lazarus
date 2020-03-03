@@ -27,6 +27,7 @@ type
     ChartAxisTransformations1LogarithmAxisTransform1: TLogarithmAxisTransform;
     ChartAxisTransformations3: TChartAxisTransformations;
     ChartAxisTransformations3AutoScaleAxisTransform1: TAutoScaleAxisTransform;
+    cbClipping: TCheckBox;
     chFit: TChart;
     chFitFitSeries1: TFitSeries;
     chFitLineSeries1: TLineSeries;
@@ -60,6 +61,7 @@ type
     StatusBar1: TStatusBar;
     tsMain: TTabSheet;
     tsFit: TTabSheet;
+    procedure cbClippingChange(Sender: TObject);
     procedure cbFlipLabelClick(Sender: TObject);
     procedure cbHideClick(Sender: TObject);
     procedure cbRotateLabelClick(Sender: TObject);
@@ -107,6 +109,11 @@ begin
   SwitchOptions([dpdoFlipLabel], cbFlipLabel.Checked);
 end;
 
+procedure TForm1.cbClippingChange(Sender: TObject);
+begin
+  SwitchOptions([dpdoClipping], cbClipping.Checked);
+end;
+
 procedure TForm1.cbHideClick(Sender: TObject);
 begin
   SwitchOptions([dpdoPermanent], not cbHide.Checked);
@@ -138,7 +145,11 @@ end;
 procedure TForm1.clrPenColorColorChanged(Sender: TObject);
 begin
   ctDistance1.LinePen.Color := clrPenColor.ButtonColor;
+  ctDistance1.PointerStart.Pen.Color := clrPenColor.ButtonColor;
+  ctDistance1.PointerEnd.Pen.Color := clrPenColor.ButtonColor;
   ctDistance2.LinePen.Color := clrPenColor.ButtonColor;
+  ctDistance2.PointerStart.Pen.Color := clrPenColor.ButtonColor;
+  ctDistance2.PointerEnd.Pen.Color := clrPenColor.ButtonColor;
   ctCrosshair.CrosshairPen.Color := clrPenColor.ButtonColor;
 end;
 
@@ -208,21 +219,33 @@ begin
   with chFitFitSeries1.FitRange do begin
     Min := xmin;
     Max := xmax;
+    if xmin < xmax then begin
+      UseMax := true;
+      UseMin := true;
+    end else begin
+      UseMin := true;
+      UseMax := true;
+    end;
   end;
-  case rgFitParamCount.ItemIndex of
-    0: AText := Format('Mean value: %f', [chFitFitSeries1.Param[0]]);
-    1: AText := Format('Slope: %f', [chFitFitSeries1.Param[1]]);
-    2:
-      with chFitFitSeries1 do
-        if Param[2] = 0 then
-          AText := ''
-        else
-          AText := Format('Peak at x=%f y=%f', [
-            -Param[1] / (2 * Param[2]),
-            Param[0] - Sqr(Param[1])/(4 * Param[2])
-        ]);
-  end;
+
   chFitFitSeries1.Active := true;
+  chFitFitSeries1.ExecFit;
+  if chFitFitSeries1.ErrorMsg <> '' then
+    AText := chFitFitSeries1.ErrorMsg
+  else
+    case rgFitParamCount.ItemIndex of
+      0: AText := Format('Mean value: %f', [chFitFitSeries1.Param[0]]);
+      1: AText := Format('Slope: %f', [chFitFitSeries1.Param[1]]);
+      2:
+        with chFitFitSeries1 do
+          if Param[2] = 0 then
+            AText := ''
+          else
+            AText := Format('Peak at x=%f y=%f', [
+              -Param[1] / (2 * Param[2]),
+              Param[0] - Sqr(Param[1])/(4 * Param[2])
+          ]);
+    end;
 
   lblFit.Visible := true;
   lblFit.Caption := AText;

@@ -7,7 +7,7 @@ object Form1: TForm1
   ClientHeight = 494
   ClientWidth = 610
   Position = poScreenCenter
-  LCLVersion = '1.9.0.0'
+  LCLVersion = '2.1.0.0'
   object Chart1: TChart
     Left = 0
     Height = 374
@@ -17,15 +17,19 @@ object Form1: TForm1
     AxisList = <    
       item
         Grid.Color = clGray
+        Marks.LabelBrush.Style = bsClear
         Minors = <>
         Title.LabelFont.Orientation = 900
         Title.Visible = True
+        Title.LabelBrush.Style = bsClear
       end    
       item
         Grid.Color = clGray
         Alignment = calBottom
+        Marks.LabelBrush.Style = bsClear
         Minors = <>
         Title.Visible = True
+        Title.LabelBrush.Style = bsClear
       end>
     Foot.Alignment = taLeftJustify
     Foot.Brush.Color = clBtnFace
@@ -43,6 +47,7 @@ object Form1: TForm1
       'Centered Chart Title'
     )
     Title.Visible = True
+    Toolset = ChartToolset1
     Align = alClient
     object Chart1LineHor: TConstantLine
       Legend.Visible = False
@@ -112,19 +117,6 @@ object Form1: TForm1
       Top = 92
       Width = 86
       Caption = 'Add with marks:'
-      ParentColor = False
-    end
-    object lblReticule: TLabel
-      AnchorSideTop.Control = cbReticule
-      AnchorSideTop.Side = asrCenter
-      AnchorSideRight.Control = cbReticule
-      Left = 371
-      Height = 15
-      Top = 92
-      Width = 45
-      Anchors = [akTop, akRight]
-      BorderSpacing.Right = 8
-      Caption = 'Reticule:'
       ParentColor = False
     end
     object btnAddPie: TButton
@@ -362,7 +354,6 @@ object Form1: TForm1
     object cbMarkStyle: TComboBox
       AnchorSideLeft.Control = lblMarkStyle
       AnchorSideLeft.Side = asrBottom
-      AnchorSideTop.Control = cbReticule
       Left = 141
       Height = 23
       Top = 88
@@ -388,30 +379,6 @@ object Form1: TForm1
       TabOrder = 17
       Text = 'smsLabelPercent'
     end
-    object cbReticule: TComboBox
-      AnchorSideLeft.Control = cbLegend
-      AnchorSideTop.Control = cbShowGridCheckBox
-      AnchorSideTop.Side = asrBottom
-      Left = 424
-      Height = 23
-      Top = 88
-      Width = 156
-      BorderSpacing.Top = 4
-      BorderSpacing.Right = 8
-      BorderSpacing.Bottom = 8
-      ItemHeight = 15
-      ItemIndex = 0
-      Items.Strings = (
-        'rmNone'
-        'rmVertical'
-        'rmHorizontal'
-        'rmCross'
-      )
-      OnChange = cbReticuleChange
-      Style = csDropDownList
-      TabOrder = 18
-      Text = 'rmNone'
-    end
     object btnClearAll: TButton
       AnchorSideLeft.Control = btnClearLine
       AnchorSideLeft.Side = asrBottom
@@ -424,7 +391,45 @@ object Form1: TForm1
       BorderSpacing.Left = 8
       Caption = 'All'
       OnClick = btnClearAllClick
+      TabOrder = 18
+    end
+    object lblCrossHairTool: TLabel
+      AnchorSideTop.Control = lblMarkStyle
+      AnchorSideTop.Side = asrCenter
+      AnchorSideRight.Control = cbCrosshairTool
+      Left = 340
+      Height = 15
+      Top = 92
+      Width = 76
+      Anchors = [akTop, akRight]
+      BorderSpacing.Right = 8
+      Caption = 'Crosshair tool:'
+      ParentColor = False
+    end
+    object cbCrosshairTool: TComboBox
+      AnchorSideLeft.Control = cbShowGridCheckBox
+      Left = 424
+      Height = 23
+      Top = 88
+      Width = 155
+      ItemHeight = 15
+      ItemIndex = 0
+      Items.Strings = (
+        'none'
+        'Vertical'
+        'Horizontal'
+        'Both'
+      )
+      OnChange = cbCrosshairToolChange
+      Style = csDropDownList
       TabOrder = 19
+      Text = 'none'
+    end
+  end
+  object ChartToolset1: TChartToolset
+    left = 240
+    top = 115
+    object DataPointCrosshairTool: TDataPointCrosshairTool
     end
   end
 end

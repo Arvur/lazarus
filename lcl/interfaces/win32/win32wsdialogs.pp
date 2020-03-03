@@ -29,10 +29,14 @@ uses
 // uncomment only when needed for registration
 ////////////////////////////////////////////////////
 // rtl
-  Windows, shlobj, ShellApi, ActiveX, SysUtils, Classes,
-  CommDlg,
+  Windows, shlobj, ShellApi, ActiveX, SysUtils, Classes, CommDlg,
 // lcl
-  LCLProc, LCLType, LazUTF8, Dialogs, Controls, Graphics, Forms, LazFileUtils, Masks,
+  LCLProc, LCLType, Dialogs, Controls, Graphics, Forms, Masks,
+  // LazUtils
+  {$ifdef DebugCommonDialogEvents}
+  UITypes,
+  {$endif}
+  LazFileUtils, LazUTF8,
 // ws
   WSDialogs, WSLCLClasses, Win32Extra, Win32Int, InterfaceBase,
   Win32Proc;
@@ -601,6 +605,7 @@ function CreateFileDialogHandle(AOpenDialog: TOpenDialog): THandle;
     if ofShareAware in Options then Result := Result or OFN_SHAREAWARE;
     if ofShowHelp in Options then Result := Result or OFN_SHOWHELP;
     if ofDontAddToRecent in Options then Result := Result or OFN_DONTADDTORECENT;
+    if ofForceShowHidden in Options then Result := Result or OFN_FORCESHOWHIDDEN;
   end;
 
   procedure ReplacePipe(var AFilter:string);
@@ -816,7 +821,6 @@ FOS_FORCEFILESYSTEM
 FOS_ALLNONSTORAGEITEMS
 FOS_HIDEMRUPLACES
 FOS_HIDEPINNEDPLACES
-FOS_DONTADDTORECENT
 FOS_DEFAULTNOMINIMODE
 FOS_FORCEPREVIEWPANEON}
 
@@ -836,6 +840,7 @@ begin
   if ofShareAware in Options then Result := Result or FOS_SHAREAWARE;
   if ofDontAddToRecent in Options then Result := Result or FOS_DONTADDTORECENT;
   if SelectFolder then Result := Result or FOS_PICKFOLDERS;
+  if ofForceShowHidden in Options then Result := Result or FOS_FORCESHOWHIDDEN;
   { unavailable options:
     ofHideReadOnly
     ofEnableSizing
@@ -1243,8 +1248,26 @@ begin
   begin
     with TFontDialog(ACommonDialog).Font do
     begin
+      if not Win32WidgetSet.MetricsFailed and IsFontNameDefault(Name) then
+      begin
+        if Sysutils.strlcomp(
+          @Win32WidgetSet.Metrics.lfMessageFont.lfFaceName,
+          @LF.lfFaceName,
+          Length(LF.lfFaceName)) = 0 then
+        begin
+          Sysutils.StrLCopy(
+            @LF.lfFaceName,
+            PAnsiChar(Name), // Dialog.Font.Name
+            Length(LF.lfFaceName));
+        end;
+        if LF.lfHeight = Win32WidgetSet.Metrics.lfMessageFont.lfHeight then
+          LF.lfHeight := 0;
+        if (CharSet = DEFAULT_CHARSET) and (Win32WidgetSet.Metrics.lfMessageFont.lfCharSet = LF.lfCharSet) then
+          LF.lfCharSet := DEFAULT_CHARSET;
+      end;
       Assign(LF);
-      Color := CF.RGBColors;
+      if (CF.rgbColors <> 0) or (Color <> clDefault) then
+        Color := CF.RGBColors;
     end;
   end;
   {$ifdef DebugCommonDialogEvents}

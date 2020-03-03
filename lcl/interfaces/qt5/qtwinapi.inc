@@ -2445,12 +2445,17 @@ var
 begin
   Result := 0;
   Widget := QApplication_activeWindow;
+  {return modal if activeWindow is nil issue #33409}
+  if Widget = nil then
+    Widget := QApplication_activeModalWidget;
+  if Widget = nil then
+    Widget := QApplication_activePopupWidget;
   if Widget <> nil then
   begin
     W := QtObjectFromWidgetH(Widget);
-    if W <> nil then
+    if Assigned(W) and IsValidHandle(HWND(W)) then
     begin
-      if TQtMainWindow(W).MDIAreaHandle <> nil then
+      if (TQtWidget(W) is TQtMainWindow) and Assigned(TQtMainWindow(W).MDIAreaHandle) then
       begin
         Area := QMdiAreaH(TQtMainWindow(W).MDIAreaHandle.Widget);
         SubW := QtObjectFromWidgetH(QMdiArea_activeSubWindow(Area));
@@ -4805,10 +4810,18 @@ begin
       QtFont := QWidget_font(AMenu);
       QFont_family(QtFont, @AName);
       Font.Name := UTF16ToUTF8(AName);
+      {$ifdef darwin}
+      // issue #34625
+      if QFont_pointSize(QtFont) > 0 then
+        Font.Height := -Round(QFont_pointSizeF(QtFont))
+      else
+        Font.Height := QFont_pixelSize(QtFont);
+      {$else}
       if QFont_pointSize(QtFont) > 0 then
         Font.Size := QFont_pointSize(QtFont)
       else
         Font.Height := QFont_pixelSize(QtFont);
+      {$endif}
       if QFont_bold(QtFont) then
         Font.Style := Font.Style + [fsBold];
       if QFont_italic(QtFont) then
@@ -4832,10 +4845,18 @@ begin
         QApplication_font(QtFont);
       QFont_family(QtFont, @AName);
       Font.Name := UTF16ToUTF8(AName);
+      {$ifdef darwin}
+      // issue #34625
+      if QFont_pointSize(QtFont) > 0 then
+        Font.Height := -Round(QFont_pointSizeF(QtFont))
+      else
+        Font.Height := QFont_pixelSize(QtFont);
+      {$else}
       if QFont_pointSize(QtFont) > 0 then
         Font.Size := QFont_pointSize(QtFont)
       else
         Font.Height := QFont_pixelSize(QtFont);
+      {$endif}
       if QFont_bold(QtFont) then
         Font.Style := Font.Style + [fsBold];
       if QFont_italic(QtFont) then
@@ -5351,7 +5372,7 @@ var
   Event: QLCLMessageEventH;
 begin
   Result := False;
-  if Handle <> 0 then
+  if IsValidHandle(Handle) then
   begin
     Event := QLCLMessageEvent_create(QEventLCLMessage, Msg, wParam, lParam, 0);
     QCoreApplication_postEvent(Widget.Widget, Event, 1 {high priority});
@@ -5634,8 +5655,15 @@ begin
 
   W := TQtWidget(HWND);
   if ((Flags and SW_SCROLLCHILDREN) <> 0) then
-    W.scroll(dx, dy, nil)
-  else
+  begin
+    if Assigned(W.LCLObject) then {mantis #34589}
+      W.WidgetState := W.WidgetState + [qtwsForceSendMove];
+
+    W.scroll(dx, dy, nil);
+
+    if Assigned(W.LCLObject) then {mantis #34589}
+      W.WidgetState := W.WidgetState - [qtwsForceSendMove];
+  end else
   if (PrcScroll = nil) then
   begin
     R := W.getClientBounds;
@@ -5808,7 +5836,7 @@ var
   Event: QLCLMessageEventH;
 begin
   Result := 0;
-  if (HandleWnd <> 0) and (Widget.Widget <> nil) then
+  if IsValidHandle(HandleWnd) and (Widget.Widget <> nil) then
   begin
     Event := QLCLMessageEvent_create(QEventLCLMessage, Msg, wParam, lParam, 0);
     try
@@ -6003,18 +6031,18 @@ begin
 end;
 
 function TQtWidgetSet.GetForegroundWindow: HWND;
-var
-  W: QWidgetH;
 begin
   {$IFDEF HASX11}
+  {$note this should return current system active window, not
+    application one, if our app isn''t active.
+    This is per MSDN and pretty win32 specific}
   if WindowManagerName = 'metacity' then
-    W := X11GetActivewindow
+    Result := HwndFromWidgetH(X11GetActivewindow)
   else
-    W := QApplication_activeWindow();
+    Result := GetActiveWindow;
   {$ELSE}
-  W := QApplication_activeWindow();
+  Result := GetActiveWindow;
   {$ENDIF}
-  Result := HwndFromWidgetH(W);
 end;
 
 function TQtWidgetSet.SetForegroundWindow(HWnd: HWND): boolean;
@@ -6761,7 +6789,6 @@ begin
       with SrcQDC.getDeviceSize do
         TmpPixmap := QPixmap_create(x, y);
       QScreen_grabWindow(QGuiApplication_primaryScreen, TmpPixmap, QWidget_winId(SrcQDC.Parent), 0, 0);
-      // QPixmap_grabWindow(TmpPixmap, QWidget_winId(SrcQDC.Parent), 0, 0);
       Image := QImage_create();
       QPixmap_toImage(TmpPixmap, Image);
       QPixmap_destroy(TmpPixmap);

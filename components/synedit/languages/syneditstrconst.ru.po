@@ -5,7 +5,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "POT-Creation-Date: \n"
-"PO-Revision-Date: 2016-05-11 00:34+0300\n"
+"PO-Revision-Date: 2018-07-17 01:47+0300\n"
 "Language-Team: \n"
 "MIME-Version: 1.0\n"
 "Language: ru\n"
@@ -291,6 +291,10 @@ msgstr "Команда препроцессора"
 msgid "Previous value"
 msgstr "Предыдущее значение"
 
+#: syneditstrconst.syns_attrprocedureheadername
+msgid "Procedure header name"
+msgstr "Имя процедуры в заголовке"
+
 #: syneditstrconst.syns_attrprocessinginstr
 msgid "Processing Instruction"
 msgstr "Инструкция обработки"
@@ -432,6 +436,7 @@ msgid "Whitespace"
 msgstr "Пробел"
 
 #: syneditstrconst.syns_duplicateshortcutmsg
+#, object-pascal-format
 msgid "The keystroke \"%s\" is already assigned to another editor command. (%s)"
 msgstr "Комбинация \"%s\" уже присвоена другой команде редактора. (%s)"
 
@@ -792,14 +797,17 @@ msgid "XML Document (*.xml,*.xsd,*.xsl,*.xslt,*.dtd)|*.xml;*.xsd;*.xsl;*.xslt;*.
 msgstr "Документ XML (*.xml,*.xsd,*.xsl,*.xslt,*.dtd)|*.xml;*.xsd;*.xsl;*.xslt;*.dtd"
 
 #: syneditstrconst.syns_previewscrollinfofmt
+#, object-pascal-format
 msgid "Page: %d"
 msgstr "Страница: %d"
 
 #: syneditstrconst.syns_scrollinfofmt
+#, object-pascal-format
 msgid "%d - %d"
 msgstr "%d - %d"
 
 #: syneditstrconst.syns_scrollinfofmttop
+#, object-pascal-format
 msgid "Top Line: %d"
 msgstr "Верхняя строка: %d"
 

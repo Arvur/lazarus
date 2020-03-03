@@ -44,9 +44,16 @@ type
   published
     procedure TestAtomRing;
     procedure TestRecord_ClassOperators;
+    procedure TestRecord_Nonkeywords;
     procedure TestDeprecated;
     procedure TestMissingGenericKeywordObjFPCFail;
     procedure TestParseGenericsDelphi;
+    procedure TestParseExternalConcat;
+    procedure TestParseExternalConst;
+    procedure TestParseModeTP;
+    procedure TestParseIFOpt;
+    procedure TestParseProcAnoAssign;
+    procedure TestParseProcAnoArg;
   end;
 
 implementation
@@ -320,6 +327,7 @@ procedure TTestPascalParser.TestRecord_ClassOperators;
 begin
   StartProgram;
   Add([
+    '{$modeswitch advancedrecords}',
     'type',
     '  TFlag = (flag1);',
     '{$Define FPC_HAS_MANAGEMENT_OPERATORS}',
@@ -373,6 +381,21 @@ begin
   ParseModule;
 end;
 
+procedure TTestPascalParser.TestRecord_Nonkeywords;
+begin
+  StartProgram;
+  Add([
+  'type',
+  '  t = record',
+  '    public: word;',
+  '    private: word;',
+  '    protected: word;',
+  '    published: word;',
+  '  end;',
+  'begin']);
+  ParseModule;
+end;
+
 procedure TTestPascalParser.TestDeprecated;
 begin
   StartProgram;
@@ -384,7 +407,9 @@ begin
   '    Deprecated: longint;',
   '    procedure SetA; deprecated;',
   '    property A: longint read FA; deprecated;',
-  '    Platform: longint;',
+  '    property B: string; experimental; platform;',
+  '    property C: char; experimental platform;',
+  '    property D: double; platform; experimental; ',
   '  end deprecated ''tbird'';',
   'var',
   '  c: char deprecated;',
@@ -419,6 +444,7 @@ begin
   '  TBird<B> = class(TAnimal<B>)',
   '    procedure DoIt;', // normal proc inside generic class
   '    procedure DoSome<T>;', // generic proc inside generic class
+  '    generic class procedure DoGen<P>(i: P);',
   '  end;',
   'procedure TRec.Proc<T>;', // generic proc inside normal record
   'begin',
@@ -429,7 +455,111 @@ begin
   'procedure TBird<B>.DoSome<T>;', // generic proc inside generic class
   'begin',
   'end;',
+  'generic class procedure TBird<B>.DoGen<P>(i: P);',
+  'begin',
+  'end;',
   'begin']);
+  ParseModule;
+end;
+
+procedure TTestPascalParser.TestParseExternalConcat;
+begin
+  Add([
+  'program test1;',
+  '{$mode objfpc}',
+  'procedure foo; cdecl; external name concat(''foo'', ''bar'');',
+  'begin']);
+  ParseModule;
+end;
+
+procedure TTestPascalParser.TestParseExternalConst;
+begin
+  Add([
+  'program test1;',
+  'const NaN: double; external;',
+  'const nan: double; external name ''NaN'';',
+  '{$modeswitch externalclass}',
+  'type',
+  '  TExtA = class external name ''ExtA''',
+  '    const id;',
+  '  end;',
+  'begin']);
+  ParseModule;
+end;
+
+procedure TTestPascalParser.TestParseModeTP;
+begin
+  Add([
+  'program test1;',
+  '{$mode tp}',
+  '{ {}',
+  'begin']);
+  ParseModule;
+end;
+
+procedure TTestPascalParser.TestParseIFOpt;
+begin
+  Add([
+  'program test1;',
+  '{$IFOPT R+}',
+  'RNothingError',
+  '{$ENDIF}',
+  '{$R+}',
+  '{$IFOPT R-}',
+  'RMinusError',
+  '{$ENDIF}',
+  '{$R-}',
+  '{$IFOPT R+}',
+  'RPlusError',
+  '{$ENDIF}',
+  'begin']);
+  ParseModule;
+end;
+
+procedure TTestPascalParser.TestParseProcAnoAssign;
+begin
+  Add([
+  'program test1;',
+  '{$modeswitch closures}',
+  'procedure DoIt;',
+  'begin',
+  '  p:=procedure begin end;',
+  '  p:=procedure(w: word) begin end;',
+  '  p:=procedure assembler asm end;',
+  '  p:=procedure var w:word; begin end;',
+  '  p:=procedure const c=3; begin end;',
+  '  p:=procedure type p=procedure; begin end;',
+  '  p:=procedure begin p:=function:word begin end end;',
+  '  p:=procedure begin p:=procedure(w:word) begin end; end;',
+  'end;',
+  'begin',
+  '  p:=procedure begin end;',
+  '  p:=procedure begin p:=procedure(w:word) begin end; end;',
+  '']);
+  ParseModule;
+end;
+
+procedure TTestPascalParser.TestParseProcAnoArg;
+begin
+  Add([
+  'program test1;',
+  '{$mode objfpc}',
+  '{$modeswitch closures}',
+  'procedure DoIt;',
+  'begin',
+  '  DoIt(procedure begin end);',
+  '  DoIt(procedure(var v: word; const c: word; out o: word) begin end);',
+  '  DoIt(procedure assembler asm end);',
+  '  DoIt(procedure var w:word; begin end);',
+  '  DoIt(procedure const c=3; begin end);',
+  '  DoIt(procedure type p=procedure; begin end);',
+  '  DoIt(procedure begin p:=function:word begin end end);',
+  '  DoIt(procedure begin p:=procedure(w:word) begin end; end);',
+  'end;',
+  'begin',
+  '  DoIt(procedure begin end);',
+  '  DoIt(procedure begin p:=procedure(w:word) begin end; end);',
+  '']);
   ParseModule;
 end;
 

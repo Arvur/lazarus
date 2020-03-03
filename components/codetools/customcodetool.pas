@@ -206,7 +206,6 @@ type
     function SkipResourceDirective(StartPos: integer): integer;
 
     function UpdateNeeded(Range: TLinkScannerRange): boolean;
-    function UpdateNeeded(OnlyInterfaceNeeded: boolean): boolean; deprecated; // use UpdateNeeded(lsrImplementationStart) or UpdateNeeded(lsrEnd)
     procedure BeginParsing(Range: TLinkScannerRange); virtual;
     procedure BeginParsingAndGetCleanPos(
         Range: TLinkScannerRange; CursorPos: TCodeXYPosition;
@@ -254,7 +253,7 @@ type
     function AtomIsIdentifier: boolean;
     procedure AtomIsIdentifierE; overload;
     function AtomIsIdentifierE(ExceptionOnNotFound: boolean): boolean; overload;
-    procedure AtomIsIdentifierSaveE;
+    procedure AtomIsIdentifierSaveE(id: int64);
     function AtomIsCustomOperator(AllowIdentifier, ExceptionOnNotFound, SaveE: boolean): boolean;
     function LastAtomIs(BackIndex: integer;
         const AnAtom: shortstring): boolean; // 0=current, 1=prior current, ...
@@ -298,8 +297,10 @@ type
       ClearNicePos: boolean = true); virtual;
     procedure RaiseExceptionFmt(id: int64; const AMessage: string;
       const args: array of const; ClearNicePos: boolean = true);
+    procedure RaiseExceptionAtCleanPos(id: int64; const AMessage: string;
+      CleanPos: integer); virtual;
     procedure RaiseExceptionAtErrorPos(id: int64; const AMessage: string;
-      ClearNicePos: boolean = true); virtual;
+      ClearNicePos: boolean = true); virtual; // set ErrorPosition before calling this
     // permanent errors, that the parser will raise again
     procedure SaveRaiseException(id: int64; const AMessage: string;
       ClearNicePos: boolean = true); virtual;
@@ -403,6 +404,13 @@ procedure TCustomCodeTool.RaiseExceptionFmt(id: int64; const AMessage: string;
   const args: array of const; ClearNicePos: boolean);
 begin
   RaiseException(id,Format(AMessage,args),ClearNicePos);
+end;
+
+procedure TCustomCodeTool.RaiseExceptionAtCleanPos(id: int64;
+  const AMessage: string; CleanPos: integer);
+begin
+  MoveCursorToCleanPos(CleanPos);
+  RaiseException(id,AMessage);
 end;
 
 procedure TCustomCodeTool.RaiseExceptionAtErrorPos(id: int64;
@@ -735,6 +743,10 @@ begin
     exit(false);
   p1:=@Src[CleanStartPos1];
   p2:=@Src[CleanStartPos2];
+  if p1^='&' then
+    Inc(p1);
+  if p2^='&' then
+    Inc(p2);
   while IsIdentChar[p1^] do begin
     if (UpChars[p1^]<>UpChars[p2^]) then
       exit(false);
@@ -785,8 +797,7 @@ begin
     RaiseAtomFound;
 end;
 
-function TCustomCodeTool.AtomIsIdentifierE(ExceptionOnNotFound: boolean
-  ): boolean;
+function TCustomCodeTool.AtomIsIdentifierE(ExceptionOnNotFound: boolean): boolean;
 begin
   if InternalAtomIsIdentifier then exit(true);
   Result:=false;
@@ -794,11 +805,11 @@ begin
   AtomIsIdentifierE();
 end;
 
-procedure TCustomCodeTool.AtomIsIdentifierSaveE;
+procedure TCustomCodeTool.AtomIsIdentifierSaveE(id: int64);
 
   procedure SaveRaiseIdentExpectedButEOFFound;
   begin
-    SaveRaiseExceptionFmt(20170421194611,ctsIdentExpectedButEOFFound,[GetAtom]);
+    SaveRaiseExceptionFmt(id,ctsIdentExpectedButEOFFound,[GetAtom]);
   end;
 
 begin
@@ -806,7 +817,7 @@ begin
   if CurPos.StartPos>SrcLen then
     SaveRaiseIdentExpectedButEOFFound
   else
-    SaveRaiseIdentExpectedButAtomFound(20170421194618);
+    SaveRaiseIdentExpectedButAtomFound(id);
 end;
 
 function TCustomCodeTool.AtomIsCustomOperator(AllowIdentifier,
@@ -1012,14 +1023,14 @@ begin
   Result:=true;
 end;
 
+{$IFOPT R+}{$DEFINE RangeChecking}{$ENDIF}
+{$R-}
 procedure TCustomCodeTool.ReadNextAtom;
 var
   c1, c2: char;
   CommentLvl: integer;
   p: PChar;
 begin
-  {$IFOPT R+}{$DEFINE RangeChecking}{$ENDIF}
-  {$R-}
   if LastAtoms.HasNext then begin
     //debugln(['TCustomCodeTool.ReadNextAtom HASNEXT ',LastAtoms.NextCount]);
     LastAtoms.MoveToNext(CurPos);
@@ -1372,9 +1383,9 @@ begin
       until (CurPos.EndPos>SrcLen) or (not IsIdentChar[Src[CurPos.EndPos]]);
     end;
   end;
-  {$IFDEF RangeChecking}{$R+}{$UNDEF RangeChecking}{$ENDIF}
   LastAtoms.Add(CurPos);
 end;
+{$IFDEF RangeChecking}{$R+}{$UNDEF RangeChecking}{$ENDIF}
 
 procedure TCustomCodeTool.ReadPriorAtom;
 var
@@ -1816,14 +1827,17 @@ begin
     // first atom of node is behind CleanPos => try prior node
     Node:=Node.Prior;
   until false;
-  if CurPos.EndPos>=CleanPos then begin
+  if CurPos.EndPos>CleanPos then begin
     CurPos:=CleanAtomPosition;
     exit;
   end;
+  if CurPos.EndPos=CleanPos then
+    exit;
   repeat
     ReadNextAtom;
     if CurPos.EndPos>=CleanPos then begin
-      UndoReadNextAtom;
+      if CurPos.EndPos>CleanPos then
+        UndoReadNextAtom;
       exit;
     end;
   until false;
@@ -1903,6 +1917,7 @@ function TCustomCodeTool.ReadTilBracketClose(
 // after call cursor is on the closing bracket
 var CloseBracket, AntiCloseBracket: TCommonAtomFlag;
   Start: TAtomPosition;
+  Node: TCodeTreeNode;
   
   procedure RaiseBracketNotFound;
   begin
@@ -1910,6 +1925,13 @@ var CloseBracket, AntiCloseBracket: TCommonAtomFlag;
       SaveRaiseExceptionFmt(20170421194736,ctsBracketNotFound,[')'],false)
     else
       SaveRaiseExceptionFmt(20170421194740,ctsBracketNotFound,[']'],false);
+  end;
+
+  procedure RaiseAtNicePos;
+  begin
+    SetNiceErrorPos(Start.StartPos);
+    if ExceptionOnNotFound then
+      RaiseBracketNotFound;
   end;
   
 begin
@@ -1932,11 +1954,20 @@ begin
     if (CurPos.StartPos>SrcLen)
     or (CurPos.Flag in [cafEnd,AntiCloseBracket])
     then begin
-      SetNiceErrorPos(Start.StartPos);
-      if ExceptionOnNotFound then begin
-        RaiseBracketNotFound;
-      end;
+      RaiseAtNicePos;
       exit;
+    end;
+    if (CurPos.Flag=cafWord) and (UpAtomIs('PROCEDURE') or UpAtomIs('FUNCTION'))
+    then begin
+      // check for anonymous function
+      Node:=FindDeepestNodeAtPos(CurPos.StartPos+1,false);
+      if (Node<>nil) and (Node.Desc=ctnProcedure) then
+      begin
+        MoveCursorToCleanPos(Node.EndPos);
+      end else begin
+        RaiseAtNicePos;
+        exit;
+      end;
     end;
     if (CurPos.Flag in [cafRoundBracketOpen,cafEdgedBracketOpen]) then begin
       if not ReadTilBracketClose(ExceptionOnNotFound) then exit;
@@ -1948,9 +1979,8 @@ end;
 function TCustomCodeTool.ReadBackTilBracketOpen(
   ExceptionOnNotFound: boolean): boolean;
 // reads code brackets (not comment brackets)
-var OpenBracket, AntiOpenBracket: TCommonAtomFlag;
-  Start: TAtomPosition;
-  
+var OpenBracket: TCommonAtomFlag;
+
   procedure RaiseBracketNotFound;
   begin
     if OpenBracket=cafRoundBracketOpen then
@@ -1959,6 +1989,10 @@ var OpenBracket, AntiOpenBracket: TCommonAtomFlag;
       SaveRaiseExceptionFmt(20170421194749,ctsBracketNotFound,['[']);
   end;
   
+var
+  AntiOpenBracket: TCommonAtomFlag;
+  Start: TAtomPosition;
+  Node: TCodeTreeNode;
 begin
   Result:=false;
   if (CurPos.Flag=cafRoundBracketClose) then begin
@@ -1977,12 +2011,18 @@ begin
     ReadPriorAtom;
     if (CurPos.Flag=OpenBracket) then exit(true);
     if (CurPos.StartPos<1)
-    or (CurPos.Flag in [AntiOpenBracket,cafEND])
-    or ((CurPos.Flag=cafWord)
-        and UnexpectedKeyWordInBrackets.DoItCaseInsensitive(Src,
-             CurPos.StartPos,CurPos.EndPos-CurPos.StartPos))
-    then begin
+    or (CurPos.Flag=AntiOpenBracket) then
       break;
+    if (CurPos.Flag=cafEnd) then begin
+      // check if anonymous function
+      Node:=FindDeepestNodeAtPos(CurPos.StartPos,true);
+      if (Node<>nil) and (Node.EndPos=CurPos.EndPos)
+      and (Node.Desc in [ctnBeginBlock,ctnAsmBlock])
+      and (Node.Parent.Desc=ctnProcedure) then
+        // ToDo: check if Node is anonymous procedure
+        MoveCursorToCleanPos(Node.Parent.StartPos)
+      else
+        break;
     end;
     if CurPos.Flag in [cafRoundBracketClose,cafEdgedBracketClose] then begin
       if not ReadBackTilBracketOpen(ExceptionOnNotFound) then exit;
@@ -2599,6 +2639,14 @@ function TCustomCodeTool.FindDeepestNodeAtPos(StartNode: TCodeTreeNode;
       LastPos:=Node.StartPos;
     if p>LastPos then begin
       Msg:='Behind code (last token at '+CleanPosToStr(LastPos)+')';
+      {$IFDEF VerboseNoNodeAtCursor}
+      debugln(['RaiseNoNodeFoundAtCursor CleanSrcEnd=',CleanPosToStr(SrcLen),' ...',dbgstr(RightStr(Src,50))]);
+      debugln(['   Scanner.ScannedRange=',dbgs(Scanner.ScannedRange)]);
+      debugln(['   Scanner.CleanedSrc=',dbgstr(RightStr(Scanner.CleanedSrc,50))]);
+      debugln(['   Node.StartPos=',CleanPosToStr(Node.StartPos),' EndPos=',CleanPosToStr(Node.EndPos)]);
+      Node:=Node.GetLastNode;
+      debugln(['   LastNode=',Node.DescAsString,' StartPos=',CleanPosToStr(Node.StartPos),' EndPos=',CleanPosToStr(Node.EndPos)]);
+      {$ENDIF}
       RaiseException(20170421194838,Msg);
     end;
 
@@ -2990,19 +3038,15 @@ begin
   {$ENDIF}
 end;
 
-function TCustomCodeTool.UpdateNeeded(OnlyInterfaceNeeded: boolean): boolean;
-begin
-  if OnlyInterfaceNeeded then
-    Result:=UpdateNeeded(lsrImplementationStart)
-  else
-    Result:=UpdateNeeded(lsrEnd);
-end;
-
 function TCustomCodeTool.CompareSrcIdentifiers(Identifier1, Identifier2: PChar
   ): boolean;
 begin
   Result:=false;
   if (Identifier1=nil) or (Identifier2=nil) then exit;
+  if Identifier1^='&' then
+    Inc(Identifier1);
+  if Identifier2^='&' then
+    Inc(Identifier2);
   while IsIdentChar[Identifier1^] do begin
     if (UpChars[Identifier1^]=UpChars[Identifier2^]) then begin
       inc(Identifier1);
@@ -3019,6 +3063,14 @@ begin
   Result:=false;
   if (AnIdentifier=nil) or (CleanStartPos<1) or (CleanStartPos>SrcLen) then
     exit;
+  if AnIdentifier^='&' then
+    Inc(AnIdentifier);
+  if Src[CleanStartPos]='&' then
+  begin
+    Inc(CleanStartPos);
+    if CleanStartPos>SrcLen then
+      exit;
+  end;
   while IsIdentChar[AnIdentifier^] do begin
     if (UpChars[AnIdentifier^]=UpChars[Src[CleanStartPos]]) then begin
       inc(AnIdentifier);

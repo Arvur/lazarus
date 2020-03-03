@@ -16,6 +16,8 @@ resourcestring
   MsgfpErrSymbolNotFound                  = 'Identifier not found: "%1:s"';
   MsgfpErrNoMemberWithName                = 'Member not found: %1:s';
   MsgfpErrorNotAStructure                 = 'Cannot get member "%1:s" from none structure type: %2:s';
+  MsgfpErrorBadFloatSize                  = 'Unsupported float value: Unknown precission';
+  MsgfpErrAddressIsNil                    = 'Cannot access data, Address is NIL';
 
   MsgfpErrPasParserInvalidExpression      = 'Invalid Expression';
   MsgfpErrPasParserUnexpectedToken        = 'Unexpected token ''%1:s'' at pos %2:d';
@@ -25,9 +27,10 @@ resourcestring
   MsgfpErrCannotDereferenceType           = 'Can not dereference Expression "%1:s"';
   MsgfpErrTypeHasNoIndex                  = 'Not a type or Array. Cannot access indexed element on expression %1:s';
   // 100 memreader error
-  MsgfpErrfpErrFailedReadMem              = 'Failed to read data from target mem';
-  MsgfpErrCanNotReadInvalidMem            = 'Failed to read data from invalid location';
+  MsgfpInternalErrfpErrFailedReadMem              = 'Internal error: Failed to read data from memory';
+  MsgfpInternalErrCanNotReadInvalidMem            = 'Internal error: Missing data location';
   MsgfpErrCanNotReadMemAtAddr             = 'Failed to read Mem at Address $%1:x';
+  MsgfpErrFailedReadRegiseter             = 'Failed to read data from register';
   // 200 LocationParser
   MsgfpErrLocationParser                  = 'Internal Error: Can not calculate location.';
   MsgfpErrLocationParserMemRead           = '%1:s (while calculating location)';          // Pass on nested error
@@ -42,6 +45,8 @@ const
   fpErrSymbolNotFound                  = TFpErrorCode(2);
   fpErrNoMemberWithName                = TFpErrorCode(3);
   fpErrorNotAStructure                 = TFpErrorCode(4);
+  fpErrorBadFloatSize                  = TFpErrorCode(5);
+  fpErrAddressIsNil                    = TFpErrorCode(6);
 
   fpErrPasParserInvalidExpression      = TFpErrorCode(24);
   fpErrPasParserUnexpectedToken        = TFpErrorCode(25);
@@ -52,9 +57,10 @@ const
   fpErrTypeHasNoIndex                  = TFpErrorCode(30);
 
   // 100 memreader error
-  fpErrFailedReadMem        = TFpErrorCode(100);
-  fpErrCanNotReadInvalidMem = TFpErrorCode(101);
-  fpErrCanNotReadMemAtAddr  = TFpErrorCode(102);
+  fpInternalErrFailedReadMem        = TFpErrorCode(100);
+  fpInternalErrCanNotReadInvalidMem = TFpErrorCode(101);
+  fpErrCanNotReadMemAtAddr          = TFpErrorCode(102);
+  fpErrFailedReadRegister           = TFpErrorCode(103);
 
   // 200 LocationParser
   fpErrLocationParser                 = TFpErrorCode(200);
@@ -105,6 +111,8 @@ function NoError: TFpError;  inline;
 function CreateError(AnErrorCode: TFpErrorCode): TFpError; inline;
 function CreateError(AnErrorCode: TFpErrorCode; AData: array of const): TFpError; inline;
 function CreateError(AnErrorCode: TFpErrorCode; AnError: TFpError; AData: array of const): TFpError; inline;
+
+function dbgs(AnError: TFpError): string; overload;
 
 implementation
 
@@ -157,15 +165,25 @@ begin
   Result := ErrorHandler.CreateError(AnErrorCode, AnError, AData);
 end;
 
+function dbgs(AnError: TFpError): string;
+begin
+  if IsError(AnError) then
+    Result := '[['+ GetFpErrorHandler.ErrorAsString(AnError) +']]'
+  else
+    Result := '[[no err]]';
+end;
+
 { TFpErrorHandler }
 
 function TFpErrorHandler.GetErrorRawString(AnErrorCode: TFpErrorCode): string;
 begin
   case AnErrorCode of
     fpErrAnyError:         Result := MsgfpErrAnyError;
+    fpErrAddressIsNil:     Result := MsgfpErrAddressIsNil;
     fpErrSymbolNotFound:   Result := MsgfpErrSymbolNotFound;
     fpErrNoMemberWithName: Result := MsgfpErrNoMemberWithName;
-    fpErrorNotAStructure: Result := MsgfpErrorNotAStructure;
+    fpErrorNotAStructure:  Result := MsgfpErrorNotAStructure;
+    fpErrorBadFloatSize:   Result := MsgfpErrorBadFloatSize;
 
     fpErrPasParserInvalidExpression:      Result := MsgfpErrPasParserInvalidExpression;
     fpErrPasParserUnexpectedToken:        Result := MsgfpErrPasParserUnexpectedToken;
@@ -175,9 +193,10 @@ begin
     fpErrCannotDereferenceType:           Result := MsgfpErrCannotDereferenceType;
     fpErrTypeHasNoIndex: Result := MsgfpErrTypeHasNoIndex;
 
-    fpErrCanNotReadInvalidMem: Result := MsgfpErrCanNotReadInvalidMem;
-    fpErrCanNotReadMemAtAddr:  Result := MsgfpErrCanNotReadMemAtAddr;
-    fpErrFailedReadMem:        Result := MsgfpErrfpErrFailedReadMem;
+    fpInternalErrCanNotReadInvalidMem: Result := MsgfpInternalErrCanNotReadInvalidMem;
+    fpInternalErrFailedReadMem:        Result := MsgfpInternalErrfpErrFailedReadMem;
+    fpErrCanNotReadMemAtAddr:          Result := MsgfpErrCanNotReadMemAtAddr;
+    fpErrFailedReadRegister:           Result := MsgfpErrFailedReadRegiseter;
 
     fpErrLocationParser:                 Result := MsgfpErrLocationParser;
     fpErrLocationParserMemRead:          Result := MsgfpErrLocationParserMemRead;

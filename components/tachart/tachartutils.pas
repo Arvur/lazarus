@@ -34,10 +34,16 @@ const
   clTAColor = $20000000; // = clDefault, but avoiding dependency on Graphics
   DEFAULT_FONT_SIZE = 10;
   DEFAULT_EPSILON = 1e-6;
+  RANGE_EPSILON = 1e-12;
+
+  // Replacement for +INF, Canvas does not work correctly when MaxInt is used.
+  // Any screen coordinates are clipped to range -MAX_COORD ... MAX_COORD.
+  MAX_COORD = 100*1000*1000;
 
 type
   EChartError = class(Exception);
   EChartIntervalError = class(EChartError);
+  EBroadcasterError = class(EChartError);
   EListenerError = class(EChartError);
   EDrawDataError = class(EChartError);
 
@@ -95,6 +101,9 @@ type
     smsLabelPercentTotal, { Cars 12 % of 1234 }
     smsXValue);        { 21/6/1996 }
 
+  TIntervalOption = (ioOpenStart, ioOpenEnd);
+  TIntervalOptions = set of TIntervalOption;
+
   TDoubleInterval = record
     FStart, FEnd: Double;
   end;
@@ -121,19 +130,18 @@ type
     procedure Changed;
     function GetInterval(AIndex: Integer): TDoubleInterval;
     function GetIntervalCount: Integer;
-    procedure SetEpsilon(AValue: Double);
     procedure SetOnChange(AValue: TNotifyEvent);
   public
     procedure Assign(ASource: TIntervalList);
     constructor Create;
   public
     procedure AddPoint(APoint: Double); inline;
-    procedure AddRange(AStart, AEnd: Double);
+    procedure AddRange(AStart, AEnd: Double; ALimits: TIntervalOptions = []);
     procedure Clear;
     function Intersect(
       var ALeft, ARight: Double; var AHint: Integer): Boolean;
   public
-    property Epsilon: Double read FEpsilon write SetEpsilon;
+    property Epsilon: Double read FEpsilon write FEpsilon;
     property Interval[AIndex: Integer]: TDoubleInterval read GetInterval;
     property IntervalCount: Integer read GetIntervalCount;
     property OnChange: TNotifyEvent read FOnChange write SetOnChange;
@@ -236,7 +244,7 @@ type
   end;
 
   // An ordered set of integers represented as a comma-separated string
-  // for publushing as a single property.
+  // for publishing as a single property.
   TPublishedIntegerSet = object
   strict private
     FAllSet: Boolean;
@@ -318,7 +326,12 @@ const
     ((cotNone, cotSecond), (cotFirst, cotBoth));
   ORIENTATION_UNITS_PER_DEG = 10;
 
+var
+  DefSeparatorSettings: TFormatSettings;
+
 function BoundsSize(ALeft, ATop: Integer; ASize: TSize): TRect; inline;
+
+function ChopString(const AString: String; const AMaxLen: Integer): String;
 
 function Deg16ToRad(ADeg16: Integer): Double; inline;
 function DoubleInterval(AStart, AEnd: Double): TDoubleInterval; inline;
@@ -331,10 +344,12 @@ procedure Exchange(var A, B: String); overload; inline;
 function FormatIfNotEmpty(AFormat, AStr: String): String; inline;
 
 function IfThen(ACond: Boolean; ATrue, AFalse: TObject): TObject; overload;
+function ImgRoundChecked(A: Double): Integer; inline;
 function InterpolateRGB(AColor1, AColor2: Integer; ACoeff: Double): Integer;
 function IntToColorHex(AColor: Integer): String; inline;
 function IsEquivalent(const A1, A2: Double): Boolean; inline;
 function IsNan(const APoint: TDoublePoint): Boolean; overload; inline;
+function NameOrClassName(AComponent: TComponent): String; inline;
 function NumberOr(ANum: Double; ADefault: Double = 0.0): Double; inline;
 
 function OrientToRad(AOrient: Integer): Double; inline;
@@ -350,7 +365,7 @@ function Split(
   AString: String; ADest: TStrings = nil; ADelimiter: Char = '|'): TStrings;
 
 // Accept both locale-specific and default decimal separators.
-function StrToFloatDefSep(const AStr: String): Double;
+function StrToFloatDefSep(const AStr: String; ADefault: Double = 0.0): Double;
 // .. or date/time values
 function StrToFloatOrDateTimeDef(const AStr: String): Double;
 
@@ -379,6 +394,14 @@ uses
 function BoundsSize(ALeft, ATop: Integer; ASize: TSize): TRect; inline;
 begin
   Result := Bounds(ALeft, ATop, ASize.cx, ASize.cy);
+end;
+
+function ChopString(const AString: String; const AMaxLen: Integer): String;
+begin
+  if (Length(AString) > AMaxlen) and (AMaxLen > 3) then
+    Result := copy(AString, 1, AMaxLen - 3) + '...'
+  else
+    Result := AString;
 end;
 
 function Deg16ToRad(ADeg16: Integer): Double;
@@ -444,6 +467,11 @@ begin
     Result := AFalse;
 end;
 
+function ImgRoundChecked(A: Double): Integer;
+begin
+  Result := Round(EnsureRange(A, -MAX_COORD, MAX_COORD));
+end;
+
 function InterpolateRGB(AColor1, AColor2: Integer; ACoeff: Double): Integer;
 type
   TBytes = packed array [1..4] of Byte;
@@ -467,13 +495,33 @@ begin
 end;
 
 function IsEquivalent(const A1, A2: Double): Boolean;
+{$IF SizeOf(Double) = SizeOf(QWord)}
+var
+  Q1 : QWord absolute A1;
+  Q2 : QWord absolute A2;
 begin
-  Result := CompareDWord(A1, A2, SizeOf(A1) div SizeOf(DWord)) = 0;
+  Result := Q1 = Q2;
 end;
+{$ELSE}
+begin
+  Result := CompareByte(A1, A2, SizeOf(A1)) = 0;
+end;
+{$ENDIF}
 
 function IsNan(const APoint: TDoublePoint): Boolean;
 begin
   Result := IsNan(APoint.X) or IsNan(APoint.Y);
+end;
+
+function NameOrClassName(AComponent: TComponent): String;
+begin
+  if AComponent = nil then
+    Result := '<nil>'
+  else
+  if AComponent.Name = '' then
+    Result := AComponent.ClassName
+  else
+    Result := AComponent.Name;
 end;
 
 function NumberOr(ANum: Double; ADefault: Double): Double;
@@ -512,9 +560,6 @@ begin
   end;
 end;
 
-var
-  DefSeparatorSettings: TFormatSettings;
-
 function Split(AString: String; ADest: TStrings; ADelimiter: Char): TStrings;
 begin
   Result := ADest;
@@ -525,13 +570,13 @@ begin
   Result.DelimitedText := AString;
 end;
 
-function StrToFloatDefSep(const AStr: String): Double;
+function StrToFloatDefSep(const AStr: String; ADefault: Double = 0.0): Double;
 begin
   if
     not TryStrToFloat(AStr, Result, DefSeparatorSettings) and
     not TryStrToFloat(AStr, Result)
   then
-    Result := 0.0;
+    Result := ADefault;
 end;
 
 function StrToFloatOrDateTimeDef(const AStr: String): Double;
@@ -670,22 +715,33 @@ begin
   AddRange(APoint, APoint);
 end;
 
-procedure TIntervalList.AddRange(AStart, AEnd: Double);
+procedure TIntervalList.AddRange(AStart, AEnd: Double; ALimits: TIntervalOptions = []);
 var
   i: Integer;
   j: Integer;
   k: Integer;
 begin
-  i := 0;
-  while (i <= High(FIntervals)) and (FIntervals[i].FEnd < AStart) do
-    i += 1;
+  if not (ioOpenStart in ALimits) then AStart -= FEpsilon;
+  if not (ioOpenEnd in ALimits) then AEnd += FEpsilon;
+  if AStart > AEnd then exit;
+
+  // In most cases we will be adding ranges in the ascending order,
+  // so the code here is optimized for this case
+
+  // Find index of the first interval, having its FEnd >= AStart
+  i := High(FIntervals) + 1;
+  while (i > 0) and (FIntervals[i-1].FEnd >= AStart) do
+    i -= 1;
   if i <= High(FIntervals) then
     AStart := Min(AStart, FIntervals[i].FStart);
+
+  // Find index of the last interval, having its FStart <= AEnd
   j := High(FIntervals);
   while (j >= 0) and (FIntervals[j].FStart > AEnd) do
     j -= 1;
   if j >= 0 then
     AEnd := Max(AEnd, FIntervals[j].FEnd);
+
   if i < j then begin
     for k := j + 1 to High(FIntervals) do
       FIntervals[i + k - j] := FIntervals[j];
@@ -735,40 +791,24 @@ end;
 
 function TIntervalList.Intersect(
   var ALeft, ARight: Double; var AHint: Integer): Boolean;
-var
-  fi, li: Integer;
 begin
   Result := false;
-  if Length(FIntervals) = 0 then exit;
+  if (Length(FIntervals) = 0) or (ALeft > ARight) then exit;
 
-  AHint := Min(High(FIntervals), AHint);
-  while (AHint > 0) and (FIntervals[AHint].FStart > ARight) do
+  AHint := EnsureRange(AHint, 0, High(FIntervals));
+  while (AHint > 0) and (FIntervals[AHint].FStart > ALeft) do
     Dec(AHint);
 
   while
-    (AHint <= High(FIntervals)) and (FIntervals[AHint].FStart <= ARight)
+    (AHint <= High(FIntervals)) and (FIntervals[AHint].FStart < ARight)
   do begin
-    if FIntervals[AHint].FEnd >= ALeft then begin
-      if not Result then fi := AHint;
-      li := AHint;
-      Result := true;
+    if FIntervals[AHint].FEnd > ALeft then begin
+      ALeft := FIntervals[AHint].FStart;
+      ARight := FIntervals[AHint].FEnd;
+      exit(true);
     end;
     Inc(AHint);
   end;
-
-  if Result then begin
-    ALeft := FIntervals[fi].FStart - Epsilon;
-    ARight := FIntervals[li].FEnd + Epsilon;
-  end;
-end;
-
-procedure TIntervalList.SetEpsilon(AValue: Double);
-begin
-  if FEpsilon = AValue then exit;
-  if AValue <= 0 then
-    raise EChartIntervalError.Create('Epsilon <= 0');
-  FEpsilon := AValue;
-  Changed;
 end;
 
 procedure TIntervalList.SetOnChange(AValue: TNotifyEvent);
@@ -814,11 +854,47 @@ end;
 
 procedure TBroadcaster.Broadcast(ASender: TObject);
 var
-  p: Pointer;
+  ListCopy: array of Pointer;
+  Exceptions: TStringList;
+  Aborted: Boolean;
+  i: Integer;
 begin
   if Locked then exit;
-  for p in Self do
-    TListener(p).Notify(ASender);
+  if Count = 0 then exit;
+
+  // Listeners can remove themselves when being notified, which
+  // changes the list - so we must use a copy of the list when
+  // notifying, to avoid omissions in notifying
+  SetLength(ListCopy, Count);
+  for i := 0 to High(ListCopy) do
+    ListCopy[i] := List^[i];
+
+  Exceptions := nil;
+  Aborted := False;
+  try
+    for i := 0 to High(ListCopy) do
+    try
+      TListener(ListCopy[i]).Notify(ASender);
+    except
+      on E: Exception do
+        if E is EAbort then
+          Aborted := true
+        else begin
+          if not Assigned(Exceptions) then begin
+            Exceptions := TStringList.Create;
+            Exceptions.Duplicates := dupIgnore;
+            Exceptions.Sorted := true; // required by dupIgnore
+          end;
+          Exceptions.Add(E.Message);
+        end;
+    end;
+    if Assigned(Exceptions) then
+      raise EBroadcasterError.Create(Trim(Exceptions.Text));
+    if Aborted then
+      Abort;
+  finally
+    Exceptions.Free;
+  end;
 end;
 
 destructor TBroadcaster.Destroy;
@@ -978,14 +1054,31 @@ end;
 procedure TPublishedIntegerSet.SetAsString(AValue: String);
 var
   sl: TStringList;
-  i, p: Integer;
+  i, p, pc, ps, pp: Integer;
   s: String;
 begin
   AllSet := AValue = PUB_INT_SET_ALL;
   if AllSet then exit;
   sl := TStringList.Create;
   try
-    sl.CommaText := AValue;
+    pc := pos(',', AValue);
+    ps := pos(';', AValue);
+    pp := pos('|', AValue);
+    if (pc = 0) and (ps = 0) and (pp = 0) then
+      if TryStrToInt(AValue, i) then begin
+        SetLength(FData, 1);
+        FData[0] := i;
+        exit;
+      end;
+    if pc > 0 then
+      sl.CommaText := AValue
+    else if ps > 0 then begin
+      sl.Delimiter := ';';
+      sl.DelimitedText := AValue;
+    end else if pp > 0 then begin
+      sl.Delimiter := '|';
+      sl.DelimitedText := AValue;
+    end;
     SetLength(FData, sl.Count);
     i := 0;
     for s in sl do

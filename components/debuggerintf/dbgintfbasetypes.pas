@@ -16,6 +16,8 @@ type
      datatype pointing to data on the target
   *)
   TDBGPtr = type QWord;
+  PDBGPtr = ^TDBGPtr;
+  TDBGPtrArray = Array of TDBGPtr;
 
   (* TDbgSymbolKind
      Enum of types that a value can have.
@@ -23,13 +25,15 @@ type
 
   TDbgSymbolKind = (
     skNone,          // undefined type
-    //skType         // Not a value, but a type description
+    skType,          // Not a value, but a type description
     //skUser,          // userdefined type, this sym refers to another sym defined elswhere
     //--------------------------------------------------------------------------
     skInstance,      // the main exe/dll, containing all other syms
     skUnit,          // contains syms defined in this unit
     skProcedure,     // an actual procedure, with an address // NOT just the type of a procedure
     skFunction,
+    skProcedureRef,  // a variable containing (a reference to a) procedure (some debuggers may return skProcedure)
+    skFunctionRef,
     //--------------------------------------------------------------------------
     //----------------- Basic types, these cannot have references or children
     skSimple,        // Any of the below (in this group), the dbg does not know more detailed

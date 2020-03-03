@@ -28,7 +28,7 @@ unit opkman_createrepositorypackagefrm;
 interface
 
 uses
-  Classes, SysUtils, md5, fpjson, VirtualTrees,
+  Classes, SysUtils, md5, fpjson, laz.VirtualTrees,
   // LCL
   Forms, Controls, ExtCtrls, StdCtrls, Dialogs, Graphics, Buttons, EditBtn,
   // IDEIntf
@@ -51,15 +51,14 @@ type
     bSubmit: TButton;
     cbJSONForUpdates: TCheckBox;
     edCategories: TEdit;
+    edFPCCompatibility: TEdit;
+    edSupportedWidgetset: TEdit;
+    edLazCompatibility: TEdit;
     edPackageDir: TDirectoryEdit;
     edDownloadURL: TEdit;
     edDisplayName: TEdit;
     edSVNURL: TEdit;
-    edFPCCompatibility: TEdit;
     edHomePageURL: TEdit;
-    edLazCompatibility: TEdit;
-    edSupportedWidgetset: TEdit;
-    imTree: TImageList;
     lbCategory: TLabel;
     lbDownloadURL: TLabel;
     lbDisplayName: TLabel;
@@ -73,9 +72,14 @@ type
     lbOF4: TLabel;
     lbPackagedir: TLabel;
     lbSupportedWidgetSet: TLabel;
+    lbComDescr: TLabel;
+    mComDescr: TMemo;
     pnB: TPanel;
     pnButtons: TPanel;
     pnCategories: TPanel;
+    pnFPCCompatibility: TPanel;
+    pnSupportedWidgetset: TPanel;
+    pnLazCompatibility: TPanel;
     pnPackageData: TPanel;
     pnBrowse: TPanel;
     pnCategory: TPanel;
@@ -84,6 +88,9 @@ type
     pnData: TPanel;
     SDD: TSelectDirectoryDialog;
     spCategories: TSpeedButton;
+    spFPCCompatibility: TSpeedButton;
+    spSupportedWidgetset: TSpeedButton;
+    spLazCompatibility: TSpeedButton;
     spMain: TSplitter;
     procedure bCancelClick(Sender: TObject);
     procedure bCreateClick(Sender: TObject);
@@ -97,8 +104,8 @@ type
     procedure FormDestroy(Sender: TObject);
     procedure spCategoriesClick(Sender: TObject);
   private
-    FVSTPackages: TVirtualStringTree;
-    FVSTPackageData: TVirtualStringTree;
+    FVSTPackages: TLazVirtualStringTree;
+    FVSTPackageData: TLazVirtualStringTree;
     FPackageZipper: TPackageZipper;
     FPackageDir: String;
     FPackageName: String;
@@ -153,9 +160,14 @@ var
 implementation
 
 uses opkman_const, opkman_common, opkman_options, opkman_categoriesfrm,
-     opkman_mainfrm, opkman_updates;
+     opkman_mainfrm, opkman_maindm, opkman_updates;
 
 {$R *.lfm}
+
+const
+  IMAGE_INDEX_MAP: array[0..7] of Integer = (
+    IMG_PKG_PLUS, IMG_PKG_FILE, IMG_REPO_FILE, IMG_DESCRIPTION, IMG_AUTHOR,
+    IMG_PKG_TYPE, IMG_DEPENDENCIES, IMG_LICENSE);
 
 { TCreateRepositoryPackagesFrm }
 
@@ -181,6 +193,7 @@ type
     FHomePageURL: String;
     FDownloadURL: String;
     FSVNURL: String;
+    FCommunityDescription: String;
   end;
 
 procedure TCreateRepositoryPackagesFrm.FormCreate(Sender: TObject);
@@ -197,6 +210,8 @@ begin
   lbHomePageURL.Caption := rsCreateRepositoryPackageFrm_lbHomePageURL_Caption;
   lbDownloadURL.Caption := rsCreateRepositoryPackageFrm_lbDownloadURL_Caption;
   lbSVNURL.Caption := rsCreateRepositoryPackageFrm_lbSVNURL_Caption;
+  lbComDescr.Caption := rsMainFrm_VSTText_CommunityDescription + ':';
+
   bHelp.Caption := rsCreateRepositoryPackageFrm_bHelp_Caption;
   bHelp.Hint := rsCreateRepositoryPackageFrm_bHelp_Hint;
   bOptions.Caption := rsCreateRepositoryPackageFrm_bOptions_Caption;
@@ -210,25 +225,25 @@ begin
   if not Options.UseDefaultTheme then
     Self.Color := clBtnFace;
 
-  FVSTPackages := TVirtualStringTree.Create(nil);
+  FVSTPackages := TLazVirtualStringTree.Create(nil);
   with FVSTPackages do
   begin
     Parent := pnPackages;
     Align := alClient;
     Anchors := [akLeft, akTop, akRight];
-    Images := imTree;
+    Images := MainDM.Images;
     if not Options.UseDefaultTheme then
       Color := clBtnFace;
-    DefaultNodeHeight := 25;
-    Indent := 15;
+    DefaultNodeHeight := Scale96ToForm(25);
+    Indent := Scale96ToForm(15);
     TabOrder := 1;
     DefaultText := '';
     Header.AutoSizeIndex := 0;
-    Header.Height := 25;
+    Header.Height := Scale96ToForm(25);
     Colors.BorderColor := clBlack;
     with Header.Columns.Add do begin
       Position := 0;
-      Width := 250;
+      Width := Scale96ToForm(250);
       Text := rsCreateRepositoryPackageFrm_pnCaption_Caption0;
     end;
     Header.Options := [hoAutoResize, hoColumnResize, hoRestrictDrag, hoVisible, hoAutoSpring];
@@ -247,31 +262,31 @@ begin
   end;
   FVSTPackages.NodeDataSize := SizeOf(TData);
 
-  FVSTPackageData := TVirtualStringTree.Create(nil);
+  FVSTPackageData := TLazVirtualStringTree.Create(nil);
   with FVSTPackageData do
   begin
     Parent := pnData;
     Align := alTop;
-    Height := 200;
+    Height := Scale96ToForm(200);
     Anchors := [akLeft, akTop, akRight];
-    Images := imTree;
+    Images := MainDM.Images;
     if not Options.UseDefaultTheme then
       Color := clBtnFace;
-    DefaultNodeHeight := 25;
-    Indent := 15;
+    DefaultNodeHeight := Scale96ToForm(25);
+    Indent := Scale96ToForm(15);
     TabOrder := 1;
     DefaultText := '';
     Header.AutoSizeIndex := 1;
-    Header.Height := 25;
+    Header.Height := Scale96ToForm(25);
     Colors.BorderColor := clBlack;
     with Header.Columns.Add do begin
       Position := 0;
-      Width := 150;
+      Width := Scale96ToForm(150);
       Text := rsCreateRepositoryPackageFrm_pnCaption_Caption1;
     end;
     with Header.Columns.Add do begin
       Position := 1;
-      Width := 250;
+      Width := Scale96ToForm(250);
       Text := rsCreateRepositoryPackageFrm_pnCaption_Caption2;
     end;
     Header.Options := [hoAutoResize, hoColumnResize, hoRestrictDrag, hoVisible, hoAutoSpring];
@@ -460,6 +475,7 @@ begin
         RootData^.FHomePageURL := '';
         RootData^.FDownloadURL := '';
         RootData^.FSVNURL := '';
+        RootData^.FCommunityDescription := '';
         RootData^.FDataType := 0;
         FPackageName := RootData^.FName;
         for I := 0 to PackageList.Count - 1 do
@@ -474,9 +490,9 @@ begin
           Data^.FFullPath := TPackageData(PackageList.Objects[I]).FFullPath;
           if not LoadPackageData(Data^.FFullPath, Data) then
             MessageDlgEx(rsCreateRepositoryPackageFrm_Error0, mtError, [mbOk], Self);
-          Data^.FLazCompatibility := '1.6, 1.8, Trunk';
-          Data^.FFPCCompatibility := '2.6.4, 3.0.0, 3.0.2, 3.0.4';
-          Data^.FSupportedWidgetSet := 'win32/64, gtk2, carbon';
+          Data^.FLazCompatibility := LazDefVersions;
+          Data^.FFPCCompatibility := FPCDefVersion;
+          Data^.FSupportedWidgetSet := DefWidgetSets;
           Data^.FDataType := 1;
         end;
         FVSTPackages.FullExpand;
@@ -487,7 +503,7 @@ begin
           FVSTPackages.Selected[RootNode] := True;
           CanGo := True;
         end;
-        FVSTPackages.SortTree(0, VirtualTrees.sdAscending);
+        FVSTPackages.SortTree(0, laz.VirtualTrees.sdAscending);
       end
       else
         MessageDlgEx(rsCreateRepositoryPackageFrm_NoPackage, mtInformation, [mbOk], Self);
@@ -514,11 +530,21 @@ procedure TCreateRepositoryPackagesFrm.spCategoriesClick(Sender: TObject);
 begin
   CategoriesFrm := TCategoriesFrm.Create(Self);
   try
-    CategoriesFrm.SetupControls;
-    CategoriesFrm.CategoriesCSV := edCategories.Text;
-    CategoriesFrm.PopulateTree;
+    CategoriesFrm.SetupControls(TButton(Sender).Tag);
+    case TButton(Sender).Tag of
+      1: CategoriesFrm.CategoriesCSV := edCategories.Text;
+      2: CategoriesFrm.LazCompatibility := edLazCompatibility.Text;
+      3: CategoriesFrm.FPCCompatibility := edFPCCompatibility.Text;
+      4: CategoriesFrm.SupportedWidgetSets := edSupportedWidgetset.Text;
+    end;
+    CategoriesFrm.PopulateTree(TButton(Sender).Tag);
     if CategoriesFrm.ShowModal = mrOK then
-      edCategories.Text := CategoriesFrm.CategoriesCSV;
+      case TButton(Sender).Tag of
+        1: edCategories.Text := CategoriesFrm.CategoriesCSV;
+        2: edLazCompatibility.Text := CategoriesFrm.LazCompatibility;
+        3: edFPCCompatibility.Text := CategoriesFrm.FPCCompatibility;
+        4: edSupportedWidgetset.Text := CategoriesFrm.SupportedWidgetSets;
+      end;
   finally
     CategoriesFrm.Free;
   end;
@@ -649,7 +675,7 @@ begin
   fPackageZipper := TPackageZipper.Create;
   fPackageZipper.OnZipError := @DoOnZippError;
   fPackageZipper.OnZipCompleted := @DoOnZipCompleted;
-  FDestDir := Options.LocalRepositoryUpdate;
+  FDestDir := Options.LocalRepositoryUpdateExpanded;
   RootNode := FVSTPackages.GetFirst;
   RootData := FVSTPackages.GetNodeData(RootNode);
   if RootData^.FDisplayName <> '' then
@@ -676,7 +702,11 @@ end;
 
 procedure TCreateRepositoryPackagesFrm.bOptionsClick(Sender: TObject);
 begin
+  {$IFDEF MSWINDOWS}
+  MainFrm.ShowOptions(4);
+  {$ELSE}
   MainFrm.ShowOptions(3);
+  {$ENDIF}
 end;
 
 procedure TCreateRepositoryPackagesFrm.bCancelClick(Sender: TObject);
@@ -702,7 +732,7 @@ procedure TCreateRepositoryPackagesFrm.VSTPackagesGetImageIndex(
   Column: TColumnIndex; var Ghosted: Boolean; var ImageIndex: Integer);
 begin
   if Column = 0 then
-    ImageIndex := FVSTPackages.GetNodeLevel(Node);
+    ImageIndex := IMAGE_INDEX_MAP[FVSTPackages.GetNodeLevel(Node)];
 end;
 
 procedure TCreateRepositoryPackagesFrm.SaveExtraInfo(const ANode: PVirtualNode);
@@ -717,6 +747,7 @@ begin
          Data^.FHomePageURL := edHomePageURL.Text;
          Data^.FDownloadURL :=   edDownloadURL.Text;
          Data^.FSVNURL := edSVNURL.Text;
+         Data^.FCommunityDescription := mComDescr.Text;
        end;
     1: begin
          Data^.FLazCompatibility := edLazCompatibility.Text;
@@ -765,6 +796,7 @@ begin
     edHomePageURL.Text := Data^.FHomePageURL;
     edDownloadURL.Text := Data^.FDownloadURL;
     edSVNURL.Text := Data^.FSVNURL;
+    mComDescr.Text := Data^.FCommunityDescription;
   end
   else if Level = 1 then
   begin
@@ -863,7 +895,7 @@ begin
   if Column = 0 then
   begin
     Data := FVSTPackageData.GetNodeData(Node);
-    ImageIndex := Data^.FDataType;
+    ImageIndex := IMAGE_INDEX_MAP[Data^.FDataType];
   end;
 end;
 
@@ -1034,12 +1066,16 @@ begin
       MetaPkg.RepositoryDate := now;
       MetaPkg.PackageBaseDir := RootData^.FPackageBaseDir;
       if Trim(RootData^.FDisplayName) <> '' then
-        MetaPkg.DisplayName := RootData^.FDisplayName
+      begin
+        MetaPkg.Name := RootData^.FDisplayName;
+        MetaPkg.DisplayName := RootData^.FDisplayName;
+      end
       else
         MetaPkg.DisplayName := RootData^.FName;
       MetaPkg.HomePageURL := RootData^.FHomePageURL;
       MetaPkg.DownloadURL := RootData^.FDownloadURL;
       MetaPkg.SVNURL := RootData^.FSVNURL;
+      MetaPkg.CommunityDescription := RootData^.FCommunityDescription;
       Node := FVSTPackages.GetFirstChild(RootNode);
       while Assigned(Node) do
       begin

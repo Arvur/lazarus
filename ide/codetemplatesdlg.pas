@@ -31,9 +31,12 @@ unit CodeTemplatesDlg;
 interface
 
 uses
-  Classes, SysUtils, RegExpr, LCLProc, Forms, Controls, Dialogs,
-  ClipBrd, StdCtrls, ExtCtrls, Menus, FileUtil, LazFileUtils, lazutf8classes,
+  Classes, SysUtils, RegExpr,
+  // LCL
+  LCLProc, Forms, Controls, Dialogs, ClipBrd, StdCtrls, ExtCtrls, Menus,
   ButtonPanel, EditBtn,
+  // LazUtils
+  FileUtil, LazFileUtils, LazLoggerBase, LazStringUtils,
   // synedit
   SynEdit, SynHighlighterPas, SynEditAutoComplete,
   // codetools
@@ -41,7 +44,7 @@ uses
   // IDEIntf
   SrcEditorIntf, MenuIntf, IDEWindowIntf, LazIDEIntf, IDEHelpIntf, IDEDialogs,
   // IDE
-  IDEProcs, LazarusIDEStrConsts, EditorOptions, CodeMacroSelect, CodeMacroPrompt;
+  LazarusIDEStrConsts, EditorOptions, CodeMacroSelect, CodeMacroPrompt;
 
 type
   TAutoCompleteOption = (
@@ -574,10 +577,9 @@ begin
 
     if not WithoutExtraIndent then
     begin
-      if eoTabsToSpaces in EditorOptions.EditorOpts.SynEditOptions then
-        Indent := Indent+StringOfChar(' ',EditorOptions.EditorOpts.TabWidth)
-      else
-        Indent := Indent+#9;
+      Indent := Indent
+        +StringOfChar(#9,EditorOptions.EditorOpts.BlockTabIndent)
+        +StringOfChar(' ',EditorOptions.EditorOpts.BlockIndent);
     end;
 
     Value:='';
@@ -821,7 +823,6 @@ end;
 
 procedure TCodeTemplateDialog.FormCreate(Sender: TObject);
 var
-  s: String;
   ColorScheme: String;
 begin
   IDEDialogLayoutList.ApplyLayout(Self,600,450);
@@ -853,7 +854,8 @@ begin
   AutoOnOptionsCheckGroup.Items.Add(lisAutomaticallyIgnoreForSelection);
   AutoOnOptionsCheckGroup.Items.Add(lisAutomaticallyRemoveCharacter);
 
-  FilenameEdit.Text:=EditorOpts.CodeTemplateFileName;
+  FilenameEdit.Text:=EditorOpts.CodeTemplateFileNameRaw;
+  FilenameEdit.InitialDir:=ExtractFilePath(EditorOpts.CodeTemplateFileNameExpand);
   FilenameEdit.DialogTitle:=dlgChsCodeTempl;
   FilenameEdit.Filter:=dlgFilterDciFile + '|*.dci|' + dlgFilterAll  + '|' + GetAllFilesMask;
 
@@ -870,16 +872,8 @@ begin
   TemplateSynEdit.Gutter.Visible:=false;
 
   // init SynAutoComplete
-  with SynAutoComplete do begin
-    s:=EditorOpts.CodeTemplateFileName;
-    if FileExistsUTF8(s) then
-      try
-         LoadStringsFromFileUTF8(AutoCompleteList,s);
-      except
-        DebugLn('NOTE: unable to read code template file ''',s,'''');
-      end;
-  end;
-  
+  EditorOpts.LoadCodeTemplates(SynAutoComplete);
+
   // init listbox
   FillCodeTemplateListBox;
   with TemplateListBox do
@@ -907,7 +901,7 @@ var
 begin
   SaveCurCodeTemplate;
 
-  EditorOpts.CodeTemplateFileName:=FilenameEdit.Text;
+  EditorOpts.CodeTemplateFileNameRaw:=FilenameEdit.Text;
   //EditorOpts.CodeTemplateIndentToTokenStart:=
   //  (CodeTemplateIndentTypeRadioGroup.ItemIndex=0);
 
@@ -916,12 +910,11 @@ begin
   if BuildBorlandDCIFile(SynAutoComplete) then begin
     Res:=mrOk;
     repeat
-      try
-        SaveStringsToFileUTF8(SynAutoComplete.AutoCompleteList,EditorOpts.CodeTemplateFileName);
-      except
+      res := EditorOpts.SaveCodeTemplates(SynAutoComplete);
+      if res <> mrOK then begin
         res:=IDEMessageDialog(lisCCOErrorCaption, 'Unable to write code '
           +'templates to file '''
-          +EditorOpts.CodeTemplateFileName+'''! ',mtError
+          +EditorOpts.CodeTemplateFileNameExpand+'''! ',mtError
           ,[mbAbort, mbIgnore, mbRetry]);
         if res=mrAbort then exit;
       end;

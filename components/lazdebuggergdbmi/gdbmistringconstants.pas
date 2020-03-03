@@ -67,7 +67,6 @@ resourcestring
     + 'To ensure the process is not affecting your System, you should locate '
     + 'and terminate it yourself.';
 
-
   lisNewTheGNUDebuggerThroughSshAllowsToRemoteDebugViaASsh =
       'The GNU debugger '
     +'through SSH allows to remote debug via a SSH connection. See docs/'
@@ -75,9 +74,11 @@ resourcestring
     +'Use SSH_Startup_Options for the hostname and optional username. '
     +'Use Remote_GDB_Exe for the filename of GDB on the remote computer.';
   lisUnexpectedResultTheDebuggerWillTerminate = 'Unexpected result:%sThe '
-    +'debugger will terminate';
-  lisResponseContinue = 'Response: %sContinue ?';
+    +'debugger will terminate.';
+  lisSSHDebuggerTimeout = 'Timeout has occurred:';
+  lisResponseContinue = 'Response: %sContinue?';
   dlgGroupDebugger = 'Debugger';
+  synfFailedToDownloadApplicationExecutable = 'Failed to download application executable';
   synfFailedToLoadApplicationExecutable = 'Failed to load application executable';
   synfFailedToInitializeTheDebuggerSetPascalFailed = 'Failed to initialize the debugger (set '
     +'pascal failed)';
@@ -86,6 +87,10 @@ resourcestring
     + 'all breakpoints during initialization.%0:s'
     + 'You may wish to check if all sources were compiled with debug-info.%0:s'
     + 'Press OK to ignore this and continue.';
+
+  GDBMiSNoAsyncMode = 'GDB does not support async mode';
+  GDBMiSFailedInitProc = 'Failed to execute the initialization process';
+  GDBMiSFailedInitProcWaitOnExit = 'Failed on wait on exit. Status: %d Code: %d';
 
 implementation
 

@@ -253,7 +253,10 @@ procedure TCustomComboBox.CloseUp;
 begin
   if [csLoading,csDestroying,csDesigning]*ComponentState<>[] then exit;
   if Style in [csSimple, csDropDown, csOwnerDrawEditableFixed, csOwnerDrawEditableVariable] then
+  begin
     EditingDone;
+    FEditingDone := False;
+  end;
   if Assigned(FOnCloseUp) then FOnCloseUp(Self);
   if FAutoSelect then
    begin
@@ -489,7 +492,7 @@ procedure TCustomComboBox.KeyDown(var Key: Word; Shift: TShiftState);
 var
   Skip, UserDropDown, PreventDropDown: Boolean;
 begin
-  FDroppingDown := False;
+  FEditingDone := Key = VK_RETURN;
   Skip := False;
   UserDropDown := ((Shift *[ssAlt] = [ssAlt]) and (Key = VK_DOWN));
   PreventDropDown := Key in [VK_TAB, VK_RETURN, VK_ESCAPE];
@@ -526,7 +529,7 @@ begin
         FReturnArrowState := True;
         Skip := True;
       end;
-      FDroppingDown := True;
+      DroppedDown := True;
       if UserDropDown then
         Skip := True;
     end;
@@ -541,12 +544,8 @@ procedure TCustomComboBox.KeyUp(var Key: Word; Shift: TShiftState);
 var
   iSelStart: Integer; // char position
   sCompleteText, sPrefixText, sResultText: string;
+  Utf8TextLen: Integer;
 begin
-  if DroppingDown then
-  begin
-    FDroppingDown := False;
-    DroppedDown := True;
-  end;
   inherited KeyUp(Key, Shift);
   //SelectAll when hitting return key for AutoSelect feature
   if (Key = VK_RETURN) then
@@ -572,23 +571,25 @@ begin
       iSelStart := SelStart;//Capture original cursor position
       //DebugLn(['TCustomComboBox.UTF8KeyPress SelStart=',SelStart,' Text=',Text]);
       //End of line completion
-      if ((iSelStart < UTF8Length(Text)) and
-         (cbactEndOfLineComplete in FAutoCompleteText)) then
+      Utf8TextLen := UTF8Length(Text);
+      if (iSelStart < Utf8TextLen) and (cbactEndOfLineComplete in FAutoCompleteText) then
         Exit;
       sPrefixText := UTF8Copy(Text, 1, iSelStart);
       sCompleteText := GetCompleteText(Text, iSelStart,
-                                       (cbactSearchCaseSensitive in FAutoCompleteText),
-                                       (cbactSearchAscending in FAutoCompleteText), Items);
+                                       cbactSearchCaseSensitive in FAutoCompleteText,
+                                       cbactSearchAscending in FAutoCompleteText, Items);
       //DebugLn(['TCustomComboBox.UTF8KeyPress sCompleteText=',sCompleteText,' Text=',Text]);
-      if (sCompleteText <> Text) then
+      if (sCompleteText <> Text) or (Utf8TextLen = 1) then
       begin
         sResultText := sCompleteText;
-        if ((cbactEndOfLineComplete in FAutoCompleteText) and
-            (cbactRetainPrefixCase in FAutoCompleteText)) then
-        begin//Retain Prefix Character cases
+        if (cbactEndOfLineComplete in FAutoCompleteText)
+        and (cbactRetainPrefixCase in FAutoCompleteText) then
+        begin //Retain Prefix Character cases
           UTF8Delete(sResultText, 1, iSelStart);
           UTF8Insert(sPrefixText, sResultText, 1);
         end;
+        if Utf8TextLen = 1 then
+          Text := '';
         Text := sResultText;
         SelStart := iSelStart;
         SelLength := UTF8Length(Text);
@@ -597,7 +598,6 @@ begin
     end;
   end;
 end;
-
 
 procedure TCustomComboBox.UTF8KeyPress(var UTF8Key: TUTF8Char);
 begin
@@ -696,6 +696,8 @@ end;
  ------------------------------------------------------------------------------}
 procedure TCustomComboBox.SetDropDownCount(const AValue: Integer);
 begin
+  if AValue = FDropDownCount then
+    exit;
   FDropDownCount := AValue;
   if HandleAllocated then
     TWSCustomComboBoxClass(WidgetSetClass).SetDropDownCount(Self, AValue);
@@ -710,12 +712,9 @@ procedure TCustomComboBox.SetItemHeight(const AValue: Integer);
 begin
   if AValue = FItemHeight then
     exit;
-
   FItemHeight := AValue;
-
-  if (not HandleAllocated) then 
+  if not HandleAllocated then
     exit;
-
   if Style in [csOwnerDrawFixed, csOwnerDrawVariable,
                csOwnerDrawEditableFixed, csOwnerDrawEditableVariable] then
     TWSCustomComboBoxClass(WidgetSetClass).SetItemHeight(Self, FItemHeight);
@@ -814,7 +813,6 @@ begin
   FItemWidth := 0;
   FMaxLength := 0;
   FDropDownCount := 8;
-  FDroppingDown := False;
   FCanvas := TControlCanvas.Create;
   TControlCanvas(FCanvas).Control := Self;
   ArrowKeysTraverseList := True;
@@ -1049,7 +1047,7 @@ begin
       AHeight := FItemHeight
     else
       AHeight := ItemHeight;
-    if FStyle = csOwnerDrawVariable then
+    if FStyle in [csOwnerDrawVariable, csOwnerDrawEditableVariable] then
       MeasureItem(Integer(ItemId), AHeight);
     if AHeight > 0 then
       ItemHeight := AHeight;
@@ -1066,8 +1064,9 @@ end;
 procedure TCustomComboBox.KeyUpAfterInterface(var Key: Word; Shift: TShiftState);
 begin
   inherited KeyUpAfterInterface(Key, Shift);
-  if Key = VK_RETURN then
+  if (Key = VK_RETURN) and (FEditingDone) then
     EditingDone;
+  FEditingDone := False;
 end;
 
 {------------------------------------------------------------------------------

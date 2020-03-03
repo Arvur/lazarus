@@ -22,7 +22,7 @@
 @created(Sun Sep 14 2003)
 @lastmod($Date$)
 }
-unit DbCtrls;
+unit DBCtrls;
 
 {$mode objfpc}
 {$H+}
@@ -30,10 +30,12 @@ unit DbCtrls;
 interface          
 
 uses
-  Types, Classes, SysUtils, DB,
-  LCLStrConsts, LCLProc, LMessages, LCLType, LResources, GraphType,
-  Controls, Graphics, Dialogs, StdCtrls, Buttons, MaskEdit, ExtCtrls,
-  Calendar, Variants, ImgList;
+  Types, Classes, SysUtils, DB, Variants,
+  // LazUtils
+  LazTracer, LazUtilities,
+  // LCL
+  LCLStrConsts, LMessages, LCLType, LCLIntf, LResources, GraphType, Controls, Graphics,
+  Dialogs, StdCtrls, Buttons, MaskEdit, ExtCtrls, Calendar, ImgList;
 
 Type
   { TFieldDataLink }
@@ -50,6 +52,8 @@ Type
     FOnActiveChange: TNotifyEvent;
     // Curent State of Affairs
     FEditing: Boolean;
+    FEditingSourceSet: boolean;
+    FEditingSource: Boolean;
     IsModified: Boolean;
     function FieldCanModify: boolean;
     function IsKeyField(aField: TField): Boolean;
@@ -59,6 +63,7 @@ Type
     procedure UpdateField;
     // make sure the field/fieldname is valid before we do stuff with it
     procedure ValidateField;
+    procedure ResetEditingSource;
   protected
     // Testing Events
     procedure ActiveChanged; override;
@@ -86,6 +91,7 @@ Type
     // Current State of DB
     property CanModify: Boolean read GetCanModify;
     property Editing: Boolean read FEditing;
+    property EditingSource: boolean read FEditingSource;
 
     // Our Callbacks
     property OnDataChange: TNotifyEvent read FOnDataChange write FOnDataChange;
@@ -127,6 +133,7 @@ Type
     FLookUpFieldIsCached: Boolean;
     FLookupCache: Boolean;
     FInitializing: Boolean;
+    FScrollListDataset: Boolean;
     {$IF FPC_FULLVERSION < 30000}
     FFetchingLookupData: Boolean;
     {$ENDIF}
@@ -148,7 +155,7 @@ Type
     destructor Destroy; override;
     procedure Initialize(AControlDataLink: TFieldDataLink; AControlItems: TStrings);
     function KeyFieldValue: Variant;
-    procedure UpdateData(ValueIndex: Integer; ScrollDataset: Boolean);
+    procedure UpdateData(ValueIndex: Integer);
     function  GetKeyValue(ValueIndex: Integer): Variant;
     function  GetKeyIndex: Integer;
     function  GetKeyIndex(const AKeyValue: Variant): Integer;
@@ -161,6 +168,7 @@ Type
     property ListFieldIndex: Integer read FListFieldIndex write FListFieldIndex default 0;
     property ListSource: TDataSource read GetListSource write SetListSource;
     property NullValueKey: TShortcut read FNullValueKey write FNullValueKey;
+    property ScrollListDataset: Boolean read FScrollListDataset write FScrollListDataset;
   end;
 
   { TDBEdit }
@@ -208,6 +216,7 @@ Type
     property ReadOnly: Boolean read GetReadOnly write SetReadOnly default False;
 
     property Align;
+    property Alignment;
     property Anchors;
     property AutoSelect;
     property AutoSize;
@@ -217,6 +226,7 @@ Type
     property CharCase;
     property Color;
     property Constraints;
+    property DoubleBuffered;
     property DragCursor;
     property DragKind;
     property DragMode;
@@ -226,6 +236,7 @@ Type
     property MaxLength;
     property ParentBiDiMode;
     property ParentColor;
+    property ParentDoubleBuffered;
     property ParentFont;
     property ParentShowHint;
     property PasswordChar;
@@ -386,6 +397,7 @@ Type
     property Constraints;
     property DataField;
     property DataSource;
+    property DoubleBuffered;
     property DragCursor;
     property DragKind;
     property DragMode;
@@ -419,6 +431,7 @@ Type
     property OnUTF8KeyPress;
     property Options;
     property ParentBiDiMode;
+    property ParentDoubleBuffered;
     property ParentShowHint;
     property PopupMenu;
     property ReadOnly;
@@ -437,7 +450,6 @@ Type
   TDBLookupListBox = class(TCustomDBListBox)
   private
     FLookup: TDBLookup;
-    FScrollListDataset: Boolean;
     procedure ActiveChange(Sender: TObject);
     function GetKeyField: string;
     function GetKeyValue: Variant;
@@ -446,6 +458,7 @@ Type
     function GetListSource: TDataSource;
     function GetLookupCache: boolean;
     function GetNullValueKey: TShortCut;
+    function GetScrollListDataset: Boolean;
     procedure SetKeyField(const Value: string);
     procedure SetKeyValue(const AValue: Variant);
     procedure SetListField(const Value: string);
@@ -453,6 +466,7 @@ Type
     procedure SetListSource(const Value: TDataSource);
     procedure SetLookupCache(const Value: boolean);
     procedure SetNullValueKey(const AValue: TShortCut);
+    procedure SetScrollListDataset(AValue: Boolean);
     procedure UpdateLookup;
   protected
     procedure DataChange(Sender: TObject); override;
@@ -462,6 +476,7 @@ Type
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure Loaded; override;
     procedure UpdateData(Sender: TObject); override;
+    function IsUnbound: boolean;
   public
     constructor Create(AOwner: TComponent); override;
     property KeyValue: Variant read GetKeyValue write SetKeyValue;
@@ -475,6 +490,7 @@ Type
     property Constraints;
     property DataField;
     property DataSource;
+    property DoubleBuffered;
     property DragCursor;
     property DragKind;
     property DragMode;
@@ -514,10 +530,11 @@ Type
     property OnUTF8KeyPress;
     property Options;
     property ParentBiDiMode;
+    property ParentDoubleBuffered;
     property ParentShowHint;
     property PopupMenu;
     property ReadOnly;
-    property ScrollListDataset: Boolean read FScrollListDataset write FScrollListDataset default False;
+    property ScrollListDataset: Boolean read GetScrollListDataset write SetScrollListDataset default False;
     property ShowHint;
     property Sorted;
 //    property Style;
@@ -580,6 +597,7 @@ Type
     property Constraints;
     property DataField: string read GetDataField write SetDataField;
     property DataSource: TDataSource read GetDataSource write SetDataSource;
+    property DoubleBuffered;
     property DragCursor;
     property DragMode;
     property Enabled;
@@ -603,6 +621,7 @@ Type
     property OnStartDrag;
     property ParentBiDiMode;
     property ParentColor;
+    property ParentDoubleBuffered;
     property ParentFont;
     property ParentShowHint;
     property PopupMenu;
@@ -657,8 +676,10 @@ Type
     property BorderSpacing;
     property Caption;
     property Color;
+    property Constraints;
     property DataField: string read GetDataField write SetDataField;
     property DataSource: TDataSource read GetDataSource write SetDataSource;
+    property DoubleBuffered;
     property DragCursor;
     property DragKind;
     property DragMode;
@@ -683,6 +704,7 @@ Type
     property OnStartDrag;
     property ParentBiDiMode;
     property ParentColor;
+    property ParentDoubleBuffered;
     property ParentFont;
     property ParentShowHint;
     property PopupMenu;
@@ -701,6 +723,7 @@ Type
   TCustomDBComboBox = class(TCustomComboBox)
   private
     FDataLink: TFieldDataLink;
+    FDetectedEvents: Word;
     function GetDataField: string;
     function GetDataSource: TDataSource;
     function GetField: TField;
@@ -710,11 +733,22 @@ Type
     procedure SetReadOnly(const AValue: Boolean);
     procedure CMGetDataLink(var Message: TLMessage); message CM_GETDATALINK;
   protected
+    function DoEdit: boolean; virtual;
+    procedure DoOnCloseUp; virtual;
+    procedure DoOnSelect; virtual;
+    procedure DoOnChange; virtual;
+    procedure LMDeferredEdit(var Message: TLMessage); message LM_DEFERREDEDIT;
+    property DetectedEvents: Word read FDetectedEvents;
+  protected
     procedure CloseUp; override;
+    Procedure Select; override;
     procedure DataChange(Sender: TObject); virtual; abstract;
+    function  DoMouseWheel(Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint): Boolean; override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure Change; override;
+    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure UpdateData(Sender: TObject); virtual; abstract;
+    procedure UpdateRecord;
     procedure WndProc(var Message: TLMessage); override;
   public
     constructor Create(TheOwner: TComponent); override;
@@ -736,9 +770,7 @@ Type
   TDBComboBox = class(TCustomDBComboBox)
   protected
     procedure DataChange(Sender: TObject); override;
-    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure KeyPress(var Key: char); override;
-    procedure Select; override;
     procedure UpdateData(Sender: TObject); override;
   published
     property Align;
@@ -754,8 +786,10 @@ Type
     property BorderStyle;
     property CharCase;
     property Color;
+    property Constraints;
     property DataField;
     property DataSource;
+    property DoubleBuffered;
     property DragCursor;
     property DragKind;
     property DragMode;
@@ -795,6 +829,7 @@ Type
     property OnUTF8KeyPress;
     property ParentBiDiMode;
     property ParentColor;
+    property ParentDoubleBuffered;
     property ParentFont;
     property ParentShowHint;
     property PopupMenu;
@@ -811,9 +846,11 @@ Type
   { TDBLookupComboBox }
 
   TDBLookupComboBox = class(TCustomDBComboBox)
+  protected
+    function DoEdit: boolean; override;
+    function IsUnbound: boolean;
   private
     FLookup: TDBLookup;
-    FScrollListDataset: Boolean;
     procedure ActiveChange(Sender: TObject);
     function GetKeyField: string;
     function GetKeyValue: variant;
@@ -822,6 +859,7 @@ Type
     function GetListSource: TDataSource;
     function GetLookupCache: boolean;
     function GetNullValueKey: TShortCut;
+    function GetScrollListDataset: Boolean;
     procedure SetKeyField(const Value: string);
     procedure SetKeyValue(const AValue: variant);
     procedure SetListField(const Value: string);
@@ -829,9 +867,10 @@ Type
     procedure SetListSource(const Value: TDataSource);
     procedure SetLookupCache(const Value: boolean);
     procedure SetNullValueKey(const AValue: TShortCut);
+    procedure SetScrollListDataset(AValue: Boolean);
     procedure UpdateLookup;
+    procedure UpdateItemIndex;
   protected
-    procedure CloseUp; override;
     procedure InitializeWnd; override;
     procedure DestroyWnd; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
@@ -839,7 +878,7 @@ Type
     procedure Loaded; override;
     procedure UpdateData(Sender: TObject); override;
     procedure DataChange(Sender: TObject); override;
-    procedure Select; override;
+    procedure DoOnSelect; override;
   public
     constructor Create(AOwner: TComponent); override;
     property KeyValue: variant read GetKeyValue write SetKeyValue;
@@ -860,6 +899,7 @@ Type
     property Constraints;
     property DataField;
     property DataSource;
+    property DoubleBuffered;
     property DragCursor;
     property DragKind;
     property DragMode;
@@ -904,11 +944,12 @@ Type
     property OnUTF8KeyPress;
     property ParentBiDiMode;
     property ParentColor;
+    property ParentDoubleBuffered;
     property ParentFont;
     property ParentShowHint;
     property PopupMenu;
     property ReadOnly;
-    property ScrollListDataset: Boolean read FScrollListDataset write FScrollListDataset default False;
+    property ScrollListDataset: Boolean read GetScrollListDataset write SetScrollListDataset default False;
     property ShowHint;
     property Sorted;
     property Style;
@@ -964,6 +1005,7 @@ Type
     property Constraints;
     property DataField: string read GetDataField write SetDataField;
     property DataSource: TDataSource read GetDataSource write SetDataSource;
+    property DoubleBuffered;
     property DragCursor;
     property DragKind;
     property DragMode;
@@ -994,6 +1036,7 @@ Type
     property OnStartDrag;
     property OnUTF8KeyPress;
     property ParentBiDiMode;
+    property ParentDoubleBuffered;
     property ParentFont;
     property ParentShowHint;
     property PopupMenu;
@@ -1042,6 +1085,7 @@ Type
     property Cursor;
     property DataField: string read GetDataField write SetDataField;
     property DataSource: TDataSource read GetDataSource write SetDataSource;
+    property DoubleBuffered;
     property DragCursor;
     property DragKind;
     property DragMode;
@@ -1070,6 +1114,7 @@ Type
     property OnUTF8KeyPress;
     property ParentBiDiMode;
     property ParentColor;
+    property ParentDoubleBuffered;
     property ParentFont;
     property ParentShowHint;
     property PopupMenu;
@@ -1109,8 +1154,8 @@ Type
     procedure DataChange(Sender: TObject);
     procedure UpdateData(Sender: TObject); virtual;
     procedure PictureChanged(Sender: TObject); override;
-    procedure LoadPicture; virtual;
     class procedure WSRegisterClass; override;
+    procedure DoCopyToClipboard;
   public
     constructor Create(TheOwner: TComponent); override;
     destructor Destroy; override;
@@ -1118,6 +1163,12 @@ Type
     function UpdateAction(AAction: TBasicAction): Boolean; override;
     property Field: TField read GetField;
     procedure Change; virtual;
+
+    procedure LoadPicture; virtual;
+    procedure CopyToClipboard;
+    procedure CutToClipboard;
+    procedure PasteFromClipboard;
+    property PictureLoaded : boolean read FPictureLoaded;
   published
     property Align;
     property Anchors;
@@ -1197,6 +1248,7 @@ Type
     property Field: TField read GetField;
   published
     property BorderSpacing;
+    property Constraints;
     property DataField: string read GetDataField write SetDataField;
     property DataSource: TDataSource read GetDataSource write SetDataSource;
 
@@ -1204,8 +1256,10 @@ Type
     property ReadOnly: Boolean read GetReadOnly write SetReadOnly default False;
 
     property DisplaySettings stored False;
+    property DoubleBuffered;
     property DragCursor;
     property DragMode;
+    property ParentDoubleBuffered;
     property Visible;
     property OnClick;
     property OnDragDrop;
@@ -1389,9 +1443,11 @@ type
     property ClientHeight;
     property ClientWidth;
     property Color default clBackground;
+    property Constraints;
     property ConfirmDelete;
     property DataSource;
     property Direction;
+    property DoubleBuffered;
     property DragCursor;
     property DragMode;
     property Enabled;
@@ -1418,6 +1474,7 @@ type
     property Options;
     property ParentBidiMode;
     property ParentColor;
+    property ParentDoubleBuffered;
     property ParentFont;
     property ParentShowHint;
     property PopupMenu;
@@ -1439,7 +1496,7 @@ implementation
 {$R lcl_dbnav_images.res}
 
 uses
-  InterfaceBase;
+  InterfaceBase, Clipbrd;
 
 var
   FieldClasses: TFpList;
@@ -1590,6 +1647,11 @@ begin
     UpdateField;
 end;
 
+procedure TFieldDataLink.ResetEditingSource;
+begin
+  FEditingSource := false;
+  FEditingSourceSet := false;
+end;
 
 {TFieldDataLink  Protected Methods}
 
@@ -1650,7 +1712,10 @@ begin
   begin
     FEditing := RealEditState;
     if not FEditing then
+    begin
       IsModified := False;
+      ResetEditingSource;
+    end;
     if Assigned(FOnEditingChange) then
       FOnEditingChange(Self);
   end;
@@ -1770,11 +1835,22 @@ end;
   better please fix.
 }
 function TFieldDataLink.Edit: Boolean;
+var
+  editingSrc: Boolean;
 begin
+  editingSrc := (not FEditing) and (Dataset<>nil) and not(Dataset.State in dsEditModes);
+
   if (not FEditing) and CanModify then
     inherited Edit;
 
   Result := FEditing;
+
+  if not FEditingSourceSet then
+  begin
+    // should be triggered one time only if editing succeeded
+    FEditingSource := FEditing and editingSrc;
+    FEditingSourceSet := true;
+  end;
 end;
 
 { Delphi Help ->
@@ -1817,7 +1893,14 @@ begin
     FOnDataChange(Self);
 
   IsModified := False;
+  ResetEditingSource;
 end;
+
+CONST
+  DBCBEVENT_CHANGE   = 1;   // CustomDBCombobox Detected change event
+  DBCBEVENT_SELECT   = 2;   // CustomDBCombobox Detected select event
+  DBCBEVENT_CLOSEUP  = 4;   // CustomDBCombobox Detected closeup event
+  DBCBEVENT_WHEEL    = 8;   // CustomDBCombobox Detected mousewheel event
 
 {$Include dblookup.inc}
 {$Include dbedit.inc}

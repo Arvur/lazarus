@@ -33,9 +33,33 @@ begin
     ItemIndex := Items.IndexOf(Text);
   i := ItemIndex;
   if i <> -1 then
-    FLookup.UpdateData(i, FScrollListDataset)
+    FLookup.UpdateData(i)
   else
-    Text := '';
+  if FDatalink.EditingSource then
+    FDatalink.Dataset.Cancel
+  else
+    UpdateLookup;
+end;
+
+function TDBLookupComboBox.DoEdit: boolean;
+begin
+  if IsUnbound then begin
+    if FDetectedEvents and DBCBEVENT_CHANGE <> 0 then
+      DoOnChange;
+    if DetectedEvents and DBCBEVENT_SELECT <>0 then begin
+      UpdateData(self);
+      DoOnSelect;
+    end;
+    if DetectedEvents and DBCBEVENT_CLOSEUP <>0 then
+      DoOnCloseUp;
+  end
+  else
+    Result := inherited DoEdit;
+end;
+
+function TDBLookupComboBox.IsUnbound: boolean;
+begin
+  result := (FDataLink.DataSource=nil) or (DataField='');
 end;
 
 procedure TDBLookupComboBox.ActiveChange(Sender: TObject);
@@ -45,16 +69,15 @@ begin
 end;
 
 procedure TDBLookupComboBox.DataChange(Sender: TObject);
-var
-  i: Integer;
 begin
-  if FDatalink.Active then
-    i := FLookup.GetKeyIndex
-  else
-    i := -1;
-  ItemIndex := i;
-  if i = -1 then
-    Text := '';
+  UpdateItemIndex;
+end;
+
+procedure TDBLookupComboBox.DoOnSelect;
+begin
+  if Style=csDropDownList then
+    UpdateRecord;
+  inherited DoOnSelect;
 end;
 
 procedure TDBLookupComboBox.DestroyWnd;
@@ -62,32 +85,6 @@ begin
   inherited;
   //after handle destroy Items address changes
   FLookup.ControlItems := Items;
-end;
-
-procedure TDBLookupComboBox.Select;
-begin
-  FDataLink.OnDataChange := nil;
-  try
-    if FDataLink.Edit then
-    begin
-       FDataLink.Modified;
-       FDataLink.UpdateData;
-       inherited Select;
-    end
-    else
-    begin
-       // if cannot modify, let it reset
-       if ReadOnly then begin
-         FDatalink.Reset;
-         DataChange(Self);
-       end else begin
-         FDataLink.Modified;
-         inherited Select;
-       end;
-    end;
-  finally
-    FDataLink.OnDataChange := @DataChange;
-  end;
 end;
 
 procedure TDBLookupComboBox.KeyDown(var Key: Word; Shift: TShiftState);
@@ -103,7 +100,7 @@ end;
 
 procedure TDBLookupComboBox.UTF8KeyPress(var UTF8Key: TUTF8Char);
 begin
-  if not FDataLink.CanModify then
+  if (not IsUnbound) and (not FDataLink.CanModify) then
     UTF8Key := '';
   inherited UTF8KeyPress(UTF8Key);
 end;
@@ -156,6 +153,11 @@ begin
   result := FLookup.NullValueKey;
 end;
 
+function TDBLookupComboBox.GetScrollListDataset: Boolean;
+begin
+  Result := FLookup.ScrollListDataset;
+end;
+
 procedure TDBLookupComboBox.SetKeyField(const Value: string);
 begin
   FLookup.KeyField := Value;
@@ -196,24 +198,27 @@ begin
   FLookup.NullValueKey := AValue;
 end;
 
+procedure TDBLookupComboBox.SetScrollListDataset(AValue: Boolean);
+begin
+  FLookup.ScrollListDataset := AValue;
+end;
+
 procedure TDBLookupComboBox.UpdateLookup;
-var
-  i: Integer;
 begin
   if ([csLoading, csDestroying] * ComponentState) = [] then
   begin
     FLookup.Initialize(FDataLink, Items);
-    i := FLookup.GetKeyIndex;
-    ItemIndex := i;
-    if i = -1 then
-      Text := '';
+    UpdateItemIndex;
   end;
 end;
 
-procedure TDBLookupComboBox.CloseUp;
+procedure TDBLookupComboBox.UpdateItemIndex;
+var
+  i: Integer;
 begin
-  if Style = csDropDownList then
-    FDataLink.UpdateRecord;
-  inherited CloseUp;
+  i := FLookup.GetKeyIndex;
+  ItemIndex := i;
+  if i = -1 then
+    Text := '';
 end;
 

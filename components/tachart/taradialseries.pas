@@ -17,7 +17,7 @@ interface
 
 uses
   Classes, Graphics, SysUtils, Types,
-  TAChartUtils, TACustomSeries, TADrawUtils, TALegend;
+  TAChartUtils, TACustomSeries, TADrawUtils, TALegend, TAStyles;
 
 type
 
@@ -47,62 +47,109 @@ type
 
   TPieSlice = object
     FBase: TPoint;
+    FFlags: Integer;  // 1: 1st part, 2: 2nd part of diviced slice
     FLabel: TLabelParams;
     FOrigIndex: Integer;
-    FPrevAngle, FNextAngle: Double;
+    FPrevAngle, FNextAngle: Double; // in CCW direction
+                                    // FNextAngle may become < FPrevAngle when crossing 360°
     FVisible: Boolean;
     function Angle: Double; inline;
     function CenterAngle: Double; inline;
+    function FixedNextAngle: Double; inline;
   end;
 
   TPieMarkPositions = (pmpAround, pmpInside, pmpLeftRight);
 
   { TCustomPieSeries }
 
+  TCustomPieSeries = class;
+  TSliceArray = array of TPieSlice;
+  TPieOrientation = (poNormal, poHorizontal, poVertical);
+  TSlicePart = (spTop, spOuterArcSide, spInnerArcSide, spStartSide, spEndSide);
+  TCustomDrawPieEvent = procedure(ASeries: TCustomPieSeries; ADrawer: IChartDrawer;
+    ASlice: TPieSlice; APart: TSlicePart; const APoints: TPointArray) of object;
+
   TCustomPieSeries = class(TChartSeries)
   private
+    FAspectRatio: Double;
     FCenter: TPoint;
+    FMarkDistancePercent: Boolean;
+    FMarkPositionCentered: Boolean;
     FMarkPositions: TPieMarkPositions;
+    FOrientation: TPieOrientation;
     FRadius: Integer;
+    FInnerRadiusPercent: Integer;
     FSlices: array of TPieSlice;
-  private
+    FStartAngle: Integer;
+    FAngleRange: Integer;
     FEdgePen: TPen;
     FExploded: Boolean;
     FFixedRadius: TChartDistance;
     FRotateLabels: Boolean;
+    FOnCustomDrawPie: TCustomDrawPieEvent;
+    function FixAspectRatio(P: TPoint): TPoint;
+    function GetViewAngle: Integer;
     procedure Measure(ADrawer: IChartDrawer);
+    procedure SetAngleRange(AValue: Integer);
     procedure SetEdgePen(AValue: TPen);
     procedure SetExploded(AValue: Boolean);
     procedure SetFixedRadius(AValue: TChartDistance);
+    procedure SetInnerRadiusPercent(AValue: Integer);
+    procedure SetMarkDistancePercent(AValue: Boolean);
+    procedure SetMarkPositionCentered(AValue: Boolean);
     procedure SetMarkPositions(AValue: TPieMarkPositions);
+    procedure SetOnCustomDrawPie(AValue: TCustomDrawPieEvent);
+    procedure SetOrientation(AValue: TPieOrientation);
     procedure SetRotateLabels(AValue: Boolean);
-    function SliceColor(AIndex: Integer): TColor;
+    procedure SetStartAngle(AValue: Integer);
+    procedure SetViewAngle(AValue: Integer);
+    function SliceExploded(ASlice: TPieSlice): Boolean; inline;
     function TryRadius(ADrawer: IChartDrawer): TRect;
   protected
     procedure GetLegendItems(AItems: TChartLegendItems); override;
+    procedure SortSlices(out ASlices: TSliceArray);
+    property InnerRadiusPercent: Integer
+      read FInnerRadiusPercent write SetInnerRadiusPercent default 0;
+    property MarkPositionCentered: Boolean
+      read FMarkPositionCentered write SetMarkPositionCentered default false;
+    property Orientation: TPieOrientation
+      read FOrientation write SetOrientation default poNormal;
     property Radius: Integer read FRadius;
+    property StartAngle: Integer
+      read FStartAngle write SetStartAngle default 0;
+    property AngleRange: Integer
+      read FAngleRange write SetAngleRange default 360;
+    property ViewAngle: Integer
+      read GetViewAngle write SetViewAngle default 60;
+    property OnCustomDrawPie: TCustomDrawPieEvent
+      read FOnCustomDrawPie write SetOnCustomDrawPie;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
   public
     function AddPie(AValue: Double; AText: String; AColor: TColor): Integer;
     procedure Assign(ASource: TPersistent); override;
+    function CalcBorderPoint(ASlice: TPieSlice; ARadius, AAngle: Double): TPoint; inline;
+    function CalcInnerRadius: Integer; inline;
     procedure Draw(ADrawer: IChartDrawer); override;
     function FindContainingSlice(const APoint: TPoint): Integer;
     function GetNearestPoint(const AParams: TNearestPointParams;
       out AResults: TNearestPointResults): Boolean; override;
     procedure MovePointEx(var AIndex: Integer; AXIndex, AYIndex: Integer;
       const ANewPos: TDoublePoint); override;
+    function SliceColor(AIndex: Integer): TColor;
 
     property EdgePen: TPen read FEdgePen write SetEdgePen;
-    // Offset slices away from center based on X value.
     property Exploded: Boolean read FExploded write SetExploded default false;
     property FixedRadius: TChartDistance
       read FFixedRadius write SetFixedRadius default 0;
+    property MarkDistancePercent: Boolean
+      read FMarkDistancePercent write SetMarkDistancePercent default false;
     property MarkPositions: TPieMarkPositions
       read FMarkPositions write SetMarkPositions default pmpAround;
     property RotateLabels: Boolean
       read FRotateLabels write SetRotateLabels default false;
+
   end;
 
   TSinCos = record
@@ -131,12 +178,15 @@ type
     procedure SetShowPoints(AValue: Boolean);
   strict private
     FAngleCache: array of TSinCos;
-    function GraphPoint(AIndex: Integer): TDoublePoint;
+    function GraphPoint(AIndex, AYIndex: Integer): TDoublePoint;
     procedure PrepareAngleCache;
-    procedure PrepareGraphPoints;
+    procedure PrepareGraphPoints(AYIndex: Integer);
   protected
+    function GetLabelDataPoint(AIndex, AYIndex: Integer): TDoublePoint; override;
     procedure GetLegendItems(AItems: TChartLegendItems); override;
     procedure SourceChanged(ASender: TObject); override;
+    procedure UpdateLabelDirectionReferenceLevel(AIndex, AYIndex: Integer;
+      var ALevel: Double); override;
   public
     procedure Assign(ASource: TPersistent); override;
     constructor Create(AOwner: TComponent); override;
@@ -155,11 +205,14 @@ type
     property CloseCircle: Boolean read FCloseCircle write SetCloseCircle default false;
     property Filled: Boolean read FFilled write SetFilled default false;
     property LinePen: TPen read FLinePen write SetLinePen;
+    property MarkPositions;
+    property Marks;
     property OriginX: Double read FOriginX write SetOriginX stored IsOriginXStored;
     property OriginY: Double read FOriginY write SetOriginY stored IsOriginYStored;
     property Pointer;
     property ShowPoints: Boolean read FShowPoints write SetShowPoints;
     property Source;
+    property Styles;
     property OnCustomDrawPointer;
     property OnGetPointerStyle;
   end;
@@ -170,17 +223,42 @@ uses
   Math,
   TAChartStrConsts, TATypes, TACustomSource, TAGeometry, TAGraph;
 
+const
+  TWO_PI = 2 * pi;
+  PI_1_2 = pi / 2;
+  PI_3_2 = (3 / 2) * pi;
+  PI_1_4 = pi / 4;
+  PI_3_4 = (3 / 4) * pi;
+  PI_5_4 = (5 / 4) * pi;
+  PI_7_4 = (7 / 4) * pi;
+
 { TPieSlice }
 
 function TPieSlice.Angle: Double;
 begin
-  Result := FNextAngle - FPrevAngle;
+  if FNextAngle < FPrevAngle then
+    Result := TWO_PI + FNextAngle - FPrevAngle
+  else
+    Result := FNextAngle - FPrevAngle;
 end;
 
 function TPieSlice.CenterAngle: Double;
 begin
-  Result := (FNextAngle + FPrevAngle) / 2;
+  if FNextAngle <= FPrevAngle then
+    Result := NormalizeAngle((TWO_PI + FNextAngle + FPrevAngle) * 0.5)
+  else
+    Result := NormalizeAngle((FNextAngle + FPrevAngle) * 0.5);
 end;
+
+{ FixedNextAngle is guaranteed to be greater than FPrevAngle }
+function TPieSlice.FixedNextAngle: Double;
+begin
+  if FPrevAngle > FNextAngle then
+    Result := FNextAngle + TWO_PI
+  else
+    Result := FNextAngle;
+end;
+
 
 { TLegendItemPieS }
 
@@ -204,6 +282,7 @@ procedure TLegendItemPie.SetColors(AIndex: Integer; AValue: TChartColor);
 begin
   FColors[AIndex] := AValue;
 end;
+
 
 { TLegendItemPieSlice }
 
@@ -230,18 +309,40 @@ procedure TCustomPieSeries.Assign(ASource: TPersistent);
 begin
   if ASource is TCustomPieSeries then
     with TCustomPieSeries(ASource) do begin
+      Self.FAspectRatio := FAspectRatio;
       Self.FExploded := FExploded;
       Self.FFixedRadius := FFixedRadius;
+      Self.FInnerRadiusPercent := FInnerRadiusPercent;
+      Self.FMarkDistancePercent := FMarkDistancePercent;
+      Self.FMarkPositionCentered := FMarkPositionCentered;
+      Self.FOrientation := FOrientation;
       Self.FRotateLabels := FRotateLabels;
+      Self.FStartAngle := FStartAngle;
     end;
   inherited Assign(ASource);
+end;
+
+function TCustomPieSeries.CalcBorderPoint(ASlice: TPieSlice;
+  ARadius, AAngle: Double): TPoint;
+begin
+  result := ASlice.FBase + FixAspectRatio(RotatePointX(ARadius, -AAngle));
+end;
+
+function TCustomPieSeries.CalcInnerRadius: Integer;
+begin
+  Result := Round(0.01 * FRadius * FInnerRadiusPercent);
 end;
 
 constructor TCustomPieSeries.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  ViewAngle := 60;
+  FAngleRange := 360;
   FEdgePen := TPen.Create;
   FEdgePen.OnChange := @StyleChanged;
+
+  // Tell DataPointTool that data points are not at their regular x/y coordinates
+  FSpecialPointPos := True;
 end;
 
 destructor TCustomPieSeries.Destroy;
@@ -254,52 +355,304 @@ procedure TCustomPieSeries.Draw(ADrawer: IChartDrawer);
 const
   STEP = 4;
 var
+  scaled_depth: Integer;
+  innerRadius: Integer;
+  drawslices: array of TPieSlice;
+
+  function PrevSlice(ASlice: TPieSlice): TPieSlice;
+  var
+    slice: TPieSlice;
+  begin
+    for slice in drawSlices do
+      if slice.FNextAngle = ASlice.FPrevAngle then begin
+        Result := slice;
+        exit;
+      end;
+  end;
+
+  function NextSlice(ASlice: TPieSlice): TPieSlice;
+  var
+    slice: TPieSlice;
+  begin
+    for slice in drawSlices do
+      if slice.FPrevAngle = ASlice.FNextAngle then begin
+        Result := slice;
+        exit;
+      end;
+  end;
+
+  function StartEdgeVisible(ASlice: TPieSlice): Boolean;
+  var
+    prev: TPieSlice;
+  begin
+    case FOrientation of
+      poNormal:
+        Result := InRange(ASlice.FPrevAngle, PI_1_4, PI_5_4);
+      poHorizontal:
+        Result := not InRange(ASlice.FPrevAngle, PI_1_2, PI_3_2);
+      poVertical:
+        Result := InRange(ASlice.FPrevAngle, 0, pi);
+    end;
+    if Result then begin
+      prev := PrevSlice(ASlice);
+      Result := SliceExploded(ASlice) or SliceExploded(prev) or not prev.FVisible;
+    end;
+  end;
+
+  function EndEdgeVisible(ASlice: TPieSlice): Boolean;
+  var
+    next: TPieSlice;
+  begin
+    case FOrientation of
+      poNormal:
+        Result := not InRange(ASlice.FNextAngle, PI_1_4, PI_5_4);
+      poHorizontal:
+        Result := InRange(ASlice.FNextAngle, PI_1_2, PI_3_2);
+      poVertical:
+        Result := InRange(ASlice.FNextAngle, pi, TWO_PI);
+    end;
+    if Result then begin
+      next := NextSlice(ASlice);
+      Result := SliceExploded(ASlice) or SliceExploded(next) or not next.FVisible;
+    end;
+  end;
+
+  procedure CalcArcPoints(ASlice: TPieSlice; Angle1, Angle2, ARadius: Double;
+    var APoints: TPointArray);
+  var
+    a: Double;
+    i, j, dj, n: Integer;
+    isInnerArc: Boolean;
+  begin
+    isInnerArc := Length(APoints) > 0;
+    if (innerRadius = 0) and isInnerArc then begin
+      SetLength(APoints, Length(APoints) + 1);
+      APoints[High(APoints)] := ASlice.FBase;
+      exit;
+    end;
+
+    n := Max(Round(TWO_PI * (Angle2 - Angle1) * ARadius / STEP), 2);
+    SetLength(APoints, Length(APoints) + n);
+    if isInnerArc then begin
+      j := Length(APoints) - 1;
+      dj := -1;
+    end else begin
+      j := 0;
+      dj := 1;
+    end;
+    for i := 0 to n - 1 do begin
+      a := WeightedAverage(Angle1, Angle2, i / (n - 1));
+      APoints[j] := CalcBorderpoint(ASlice, ARadius, a);
+      inc(j, dj);
+    end;
+  end;
+
+  procedure CalcSlicePoints(ASlice: TPieSlice; out APoints: TPointArray);
+  var
+    next_angle: Double;
+  begin
+    SetLength(APoints, 0);
+    next_angle := ASlice.FixedNextAngle;
+    CalcArcPoints(ASlice, ASlice.FPrevAngle, next_angle, FRadius, APoints);
+    CalcArcPoints(ASlice, ASlice.FPrevAngle, next_angle, innerRadius, APoints);
+  end;
+
+  function Displacement: TPoint;
+  begin
+    case FOrientation of
+      poNormal: Result := Point(scaled_depth, -scaled_depth);
+      poHorizontal: Result := Point(0, scaled_depth);
+      poVertical: Result := Point(scaled_depth, 0);
+    end;
+  end;
+
+  { Draws the arc of a 3D slice }
+  procedure DrawArc3D(ASlice: TPieSlice; AInside: Boolean);
+  var
+    i, numSteps: Integer;
+    p: Array of TPoint;
+    angle1, angle2: Double;
+    clr: TColor;
+    r: Integer;
+    isVisible: Boolean;
+    ofs: TPoint;
+  begin
+    if AInside and (FInnerRadiusPercent = 0) then
+      exit;
+
+    if ASlice.Angle >= pi then
+      isVisible := true        // this case should not happen with drawslices
+    else
+    if AInside then
+      case FOrientation of
+        poNormal:
+          isVisible := InRange(ASlice.FPrevAngle, PI_3_4, PI_7_4) or
+                       InRange(ASlice.FNextAngle, PI_3_4, PI_7_4);
+        poHorizontal:
+          isVisible := InRange(ASlice.FPrevAngle, 0, pi) or
+                       InRange(ASlice.FNextAngle, 0, pi);
+        poVertical:
+          isVisible := InRange(ASlice.FPrevAngle, PI_1_2, PI_3_2) or
+                       InRange(ASlice.FNextAngle, PI_1_2, PI_3_2);
+      end
+    else
+      case FOrientation of
+        poNormal:
+          isVisible := (ASlice.FPrevAngle >= PI_7_4) or (ASlice.FPrevAngle <= PI_3_4) or
+                       (ASlice.FNextAngle >= PI_7_4) or (ASlice.FNextAngle <= PI_3_4);
+        poHorizontal:
+          isVisible := InRange(ASlice.FPrevAngle, pi, TWO_PI) or
+                       InRange(ASlice.FNextAngle, pi, TWO_PI);
+        poVertical:
+          isVisible := (ASlice.FPrevAngle >= PI_3_2) or (ASlice.FPrevAngle <= PI_1_2) or
+                       (ASlice.FNextAngle >= PI_3_2) or (ASlice.FNextAngle <= PI_1_2);
+      end;
+    if not isVisible then
+      exit;
+
+    if AInside then begin
+      r := innerRadius;
+      case FOrientation of
+        poNormal:
+          begin
+            angle1 := IfThen(InRange(ASlice.FPrevAngle, PI_3_4, PI_7_4), ASlice.FPrevAngle, PI_3_4);
+            angle2 := IfThen(InRange(ASlice.FNextAngle, PI_3_4, PI_7_4), ASlice.FNextAngle, PI_7_4);
+          end;
+        poHorizontal:
+          begin
+            angle1 := IfThen(InRange(ASlice.FPrevAngle, 0, pi), ASlice.FPrevAngle, 0);
+            angle2 := IfThen(InRange(ASlice.FNextAngle, 0, pi), ASlice.FNextAngle, pi);
+          end;
+        poVertical:
+          begin
+            angle1 := IfThen(InRange(ASlice.FPrevAngle, PI_1_2, PI_3_2), ASlice.FPrevAngle, PI_1_2);
+            angle2 := IfThen(InRange(ASlice.FNextAngle, PI_1_2, PI_3_2), ASlice.FNextAngle, PI_3_2);
+          end;
+      end;
+    end else begin
+      r := FRadius;
+      case FOrientation of
+        poNormal:
+          begin
+            angle1 := IfThen(InRange(ASlice.FPrevAngle, PI_3_4, PI_7_4), PI_7_4, ASlice.FPrevAngle);
+            angle2 := IfThen(InRange(ASlice.FNextAngle, PI_3_4, PI_7_4), PI_3_4, ASlice.FNextAngle);
+          end;
+        poHorizontal:
+          begin
+            angle1 := IfThen(InRange(ASlice.FPrevAngle, 0, pi), pi, ASlice.FPrevAngle);
+            angle2 := Ifthen(InRange(ASlice.FNextAngle, 0, pi), TWO_PI, ASlice.FNextAngle);
+          end;
+        poVertical:
+          begin
+            angle1 := IfThen(InRange(ASlice.FPrevAngle, PI_1_2, PI_3_2), PI_3_2, ASlice.FPrevAngle);
+            angle2 := IfThen(InRange(ASlice.FNextAngle, PI_1_2, PI_3_2), PI_1_2, ASlice.FNextAngle);
+          end;
+      end;
+    end;
+    if angle2 < angle1 then angle2 += TWO_PI;
+
+    SetLength(p, 0);
+    CalcArcPoints(ASlice, angle1, angle2, r, p);
+    numSteps := Length(p);
+    ofs := Displacement;
+
+    SetLength(p, numSteps * 2 + 1);
+    for i:=0 to numSteps - 1 do
+      p[High(p) - i - 1] := p[i] + ofs;
+    p[High(p)] := p[0];
+
+    // Fill the polygon first...
+    clr := GetDepthColor(SliceColor(ASlice.FOrigIndex));
+    ADrawer.SetBrushParams(bsSolid, clr);
+    ADrawer.SetPenParams(psSolid, clr);
+    if Assigned(FOnCustomDrawPie) then
+      case AInside of
+        false: FOnCustomDrawPie(Self, ADrawer, ASlice, spOuterArcSide, p);
+        true: FOnCustomDrawPie(self, ADrawer, ASlice, spInnerArcSide, p);
+      end
+    else
+      ADrawer.Polygon(p, 0, Length(p));
+    // then draw the border separately to suppress the lines of divided slices.
+    ADrawer.SetPen(EdgePen);
+    case ASlice.FFlags of
+      0: ADrawer.PolyLine(p, numSteps-1, numSteps+2);  // not divided
+      1: ADrawer.Polyline(p, numSteps, numSteps);      // 1st part of divided slice
+      2: ADrawer.PolyLine(p, numSteps-1, numsteps+1);  // 2nd part of divided slice
+    end;
+  end;
+
+  { Draws the radial edge of a 3D slice }
+  procedure DrawEdge3D(ASlice: TPieSlice; Angle: Double; APart: TSlicePart);
+  var
+    P1, P2, ofs: TPoint;
+    p: TPointArray;
+  begin
+    ADrawer.SetBrushParams(
+      bsSolid, GetDepthColor(SliceColor(ASlice.FOrigIndex)));
+    P1 := ASlice.FBase + FixAspectRatio(RotatePointX(innerRadius, -Angle));
+    P2 := ASlice.FBase + FixAspectRatio(RotatePointX(FRadius, -Angle));
+    ofs := Displacement;
+    if Assigned(FOnCustomDrawPie) then begin
+      SetLength(p, 4);
+      p[0] := P1;
+      p[1] := P1 + ofs;
+      p[2] := P2 + ofs;
+      P[3] := P2;
+      FOnCustomDrawPie(Self, ADrawer, ASlice, APart, p)
+    end else
+      ADrawer.Polygon([P1, P1 + ofs, P2 + ofs, P2], 0, 4);
+  end;
+
+  { Draws the 3D parts of the slice: the radial edges and the arc }
+  procedure DrawSlice3D(ASlice: TPieSlice);
+  begin
+    if EndEdgeVisible(ASlice) then
+      DrawEdge3D(ASlice, ASlice.FNextAngle, spEndSide);
+    if ASlice.FVisible then begin
+      DrawArc3D(ASlice, false);
+      DrawArc3D(ASlice, true);
+    end;
+    if StartEdgeVisible(ASlice) then
+      DrawEdge3D(ASlice, ASlice.FPrevAngle, spStartSide);
+  end;
+
+  { Draws the top part of the slice which is visible also in 2D mode. }
+  procedure DrawSlice(ASlice: TPieSlice);
+  var
+    p: TPointArray;
+  begin
+    CalcSlicePoints(ASlice, p);
+    if Assigned(FOnCustomDrawPie) then
+      FOnCustomDrawPie(Self, ADrawer, ASlice, spTop, p)
+    else
+      ADrawer.Polygon(p, 0, Length(p));
+  end;
+
+var
   prevLabelPoly: TPointArray = nil;
   ps: TPieSlice;
-  i, numSteps: Integer;
-  p: array of TPoint;
-  a: Double;
-  scaled_depth: Integer;
 begin
-  if IsEmpty then exit;
+  if IsEmpty or (not Active) then exit;
 
   Marks.SetAdditionalAngle(0);
   Measure(ADrawer);
+  innerRadius := CalcInnerRadius;
 
-  ADrawer.SetPen(EdgePen);
   if Depth > 0 then begin
     scaled_depth := ADrawer.Scale(Depth);
-    for ps in FSlices do begin
-      if not ps.FVisible then continue;
-      ADrawer.SetBrushParams(bsSolid, SliceColor(ps.FOrigIndex));
-      if not InRange(ps.FNextAngle, Pi / 4, 5 * Pi / 4) then
-        ADrawer.DrawLineDepth(
-          ps.FBase, ps.FBase + RotatePointX(FRadius, -ps.FNextAngle), scaled_depth);
-      if InRange(ps.FPrevAngle, Pi / 4, 5 * Pi / 4) then
-        ADrawer.DrawLineDepth(
-          ps.FBase, ps.FBase + RotatePointX(FRadius, -ps.FPrevAngle), scaled_depth);
-    end;
-    for ps in FSlices do begin
-      if not ps.FVisible then continue;
-      ADrawer.SetBrushParams(bsSolid, SliceColor(ps.FOrigIndex));
-      numSteps := Max(Round(2 * Pi * ps.Angle * FRadius / STEP), 2);
-      SetLength(p, 2 * numSteps);
-      for i := 0 to numSteps - 1 do begin
-        a := WeightedAverage(ps.FPrevAngle, ps.FNextAngle, i / (numSteps - 1));
-        p[i] := ps.FBase + RotatePointX(FRadius, -a);
-        p[High(p) - i] := p[i] + Point(scaled_depth, -scaled_depth);
-      end;
-      ADrawer.Polygon(p, 0, Length(p));
-    end;
+    SortSlices(drawSlices);
+    ADrawer.SetPen(EdgePen);
+    for ps in drawSlices do
+      DrawSlice3D(ps);
   end;
-  for ps in FSlices do begin
-    if not ps.FVisible then continue;
-    ADrawer.SetBrushParams(bsSolid, SliceColor(ps.FOrigIndex));
-    ADrawer.RadialPie(
-      ps.FBase.X - FRadius, ps.FBase.Y - FRadius,
-      ps.FBase.X + FRadius, ps.FBase.Y + FRadius,
-      RadToDeg16(ps.FPrevAngle), RadToDeg16(ps.Angle));
-  end;
+
+  ADrawer.SetPen(EdgePen);
+  for ps in FSlices do
+    if ps.FVisible then begin
+      ADrawer.SetBrushParams(bsSolid, SliceColor(ps.FOrigIndex));
+      DrawSlice(ps);
+    end;
+
   if not Marks.IsMarkLabelsVisible then exit;
   for ps in FSlices do begin
     if not ps.FVisible then continue;
@@ -313,24 +666,66 @@ begin
 end;
 
 function TCustomPieSeries.FindContainingSlice(const APoint: TPoint): Integer;
+const
+  Neighbors: array[0..7] of TPoint = (
+    (x:-1; y:-1), (x:0; y:-1), (x:1; y:-1),
+    (x:-1; y:0),               (x:1; y:0),
+    (x:-1; y:1),  (x:0; y:1),  (x:1; y:1)
+  );
 var
   c: TPoint;
   pointAngle: Double;
+  minAngle, maxAngle: Double;
   ps: TPieSlice;
+  innerRadius: Integer;
+  neighbor: TPoint;
 begin
+  innerRadius := CalcInnerRadius;
   for ps in FSlices do begin
     if not ps.FVisible then continue;
     c := APoint - ps.FBase;
-    pointAngle := ArcTan2(-c.Y, c.X);
-    if pointAngle < 0 then
-      pointAngle += 2 * Pi;
-    if
-      InRange(pointAngle, ps.FPrevAngle, ps.FNextAngle) and
-      (Sqr(c.X) + Sqr(c.Y) <= Sqr(FRadius))
-    then
-      exit(ps.FOrigIndex);
+    if (FDepth > 0) then
+      case FOrientation of
+        poNormal: ;
+        poHorizontal: c.Y := round(c.Y / FAspectRatio);
+        poVertical: c.X := round(c.X / FAspectRatio);
+      end;
+    if not InRange(sqr(c.X) + sqr(c.Y), sqr(innerRadius), sqr(FRadius)) then
+      continue;
+    pointAngle := NormalizeAngle(ArcTan2(-c.Y, c.X));
+    if ps.FNextAngle = ps.FPrevAngle then begin
+      minAngle := pointAngle;
+      maxAngle := pointAngle;
+      for neighbor in Neighbors do begin
+        pointAngle := NormalizeAngle(ArcTan2(-c.Y + neighbor.Y, c.X + neighbor.X));
+        minAngle := Min(minAngle, pointAngle);
+        maxAngle := Max(maxAngle, pointAngle);
+      end;
+      if InRange(ps.FPrevAngle, minAngle, maxAngle) then
+        exit(ps.FOrigIndex);
+    end else
+    if ps.FNextAngle < ps.FPrevAngle then begin
+      if InRange(pointAngle, ps.FPrevAngle - TWO_PI, ps.FNextAngle) or
+         InRange(pointAngle, ps.FPrevAngle, ps.FNextAngle + TWO_PI)
+      then
+        exit(ps.FOrigIndex);
+    end else begin
+      if InRange(pointAngle, ps.FPrevAngle, ps.FNextAngle) then
+        exit(ps.FOrigIndex);
+    end;
   end;
   Result := -1;
+end;
+
+function TCustomPieSeries.FixAspectRatio(P: TPoint): TPoint;
+begin
+  Result := P;
+  if FDepth > 0 then
+    case FOrientation of
+      poNormal: ;
+      poVertical: Result.X := round(P.X * FAspectRatio);
+      poHorizontal: Result.Y := round(P.Y * FAspectRatio);
+    end;
 end;
 
 procedure TCustomPieSeries.GetLegendItems(AItems: TChartLegendItems);
@@ -375,6 +770,11 @@ begin
   end;
 end;
 
+function TCustomPieSeries.GetViewAngle: Integer;
+begin
+  Result := round(arccos(FAspectRatio) / pi * 180);
+end;
+
 procedure TCustomPieSeries.Measure(ADrawer: IChartDrawer);
 const
   MIN_RADIUS = 5;
@@ -403,30 +803,20 @@ end;
 
 procedure TCustomPieSeries.MovePointEx(var AIndex: Integer;
   AXIndex, AYIndex: Integer; const ANewPos: TDoublePoint);
-const
-  SENS = 25;  // empirical sensitivity factor for dragging
 var
   idx: Integer;
   p: TPoint;
-  vslice, vdrag: TDoublePoint;
-  phi, dist: Double;
+  r1, r2, dist: Double;
 begin
   Unused(AIndex, AXIndex, AYIndex);
 
   if FExploded then begin
-    p := ParentChart.GraphToImage(ANewPos);
-    idx := FindContainingSlice(p);
+    idx := FindContainingSlice(FDragOrigin);
     if idx > -1 then begin
-      // Center angle of slice (runs in counter-clockwise direction)
-      phi := FSlices[idx].CenterAngle;
-      // Radial slice vector (unit length)
-      vslice := DoublePoint(cos(phi), sin(phi));
-      // Direction vector of dragging
-      vdrag := ANewPos - ParentChart.ImageToGraph(FDragOrigin);
-      // Projection of dragging vector onto slice vector (length)
-      dist := DotProduct(vdrag, vslice);
-      // Add to distance parameter in source (x)
-      dist := Source.Item[idx]^.X + DotProduct(vdrag, vslice) / SENS;
+      p := ParentChart.GraphToImage(ANewPos);
+      r1 := sqrt(PointDist(FDragOrigin, FCenter));
+      r2 := sqrt(PointDist(p, FCenter));
+      dist := Source.Item[idx]^.X + (r2 - r1) / FRadius;
       if dist < 0 then dist := 0;  // Don't let value go negative
       ListSource.BeginUpdate;
       try
@@ -434,8 +824,19 @@ begin
       finally
         ListSource.EndUpdate;
       end;
+      FDragOrigin := p;
     end;
   end;
+end;
+
+procedure TCustomPieSeries.SetAngleRange(AValue: Integer);
+begin
+  if FAngleRange = AValue then exit;
+  if AValue = 0 then
+    FAngleRange := 360
+  else
+    FAngleRange := EnsureRange(AValue, 1, 360);
+  UpdateParentChart;
 end;
 
 procedure TCustomPieSeries.SetEdgePen(AValue: TPen);
@@ -458,6 +859,21 @@ begin
   UpdateParentChart;
 end;
 
+procedure TCustomPieSeries.SetInnerRadiusPercent(AValue: Integer);
+begin
+  AValue := EnsureRange(AValue, 0, 100);
+  if FInnerRadiusPercent = AValue then exit;
+  FInnerRadiusPercent := AValue;
+  UpdateParentChart;
+end;
+
+procedure TCustomPieSeries.SetMarkPositionCentered(AValue: Boolean);
+begin
+  if FMarkPositionCentered = AValue then exit;
+  FMarkPositionCentered := AValue;
+  UpdateParentChart;
+end;
+
 procedure TCustomPieSeries.SetMarkPositions(AValue: TPieMarkPositions);
 begin
   if FMarkPositions = AValue then exit;
@@ -465,10 +881,45 @@ begin
   UpdateParentChart;
 end;
 
+procedure TCustomPieSeries.SetMarkDistancePercent(AValue: Boolean);
+begin
+  if FMarkDistancePercent = AValue then exit;
+  FMarkDistancePercent := AVAlue;
+  UpdateParentChart;
+end;
+
+procedure TCustomPieSeries.SetOnCustomDrawPie(AValue: TCustomDrawPieEvent);
+begin
+  if TMethod(FOnCustomDrawPie) = TMethod(AValue) then exit;
+  FOnCustomDrawPie := AValue;
+  UpdateParentChart;
+end;
+
+procedure TCustomPieSeries.SetOrientation(AValue: TPieOrientation);
+begin
+  if FOrientation = AValue then exit;
+  FOrientation := AValue;
+  UpdateParentChart;
+end;
+
 procedure TCustomPieSeries.SetRotateLabels(AValue: Boolean);
 begin
   if FRotateLabels = AValue then exit;
   FRotateLabels := AValue;
+  UpdateParentChart;
+end;
+
+procedure TCustomPieSeries.SetStartAngle(AValue: Integer);
+begin
+  if FStartAngle = AValue then exit;
+  FStartAngle := AValue mod 360;
+  UpdateParentChart;
+end;
+
+procedure TCustomPieSeries.SetViewAngle(AValue: Integer);
+begin
+  if GetViewAngle = AValue then exit;
+  FAspectRatio := cos(pi * EnsureRange(AValue, 0, 89) / 180);
   UpdateParentChart;
 end;
 
@@ -485,11 +936,135 @@ begin
   Result := ColorDef(Result, SLICE_COLORS[AIndex mod Length(SLICE_COLORS)]);
 end;
 
+function TCustomPieSeries.SliceExploded(ASlice: TPieSlice): Boolean;
+begin
+  Result := ASlice.FBase <> FCenter;
+end;
+
+type
+  TAngleFunc = function (ASlice: TPieSlice): Double;
+
+function GetAngleForSortingNormal(ASlice: TPieSlice): Double;
+var
+  next_angle: Double;
+begin
+  next_angle := ASlice.FixedNextAngle;
+  if ((ASlice.FPrevAngle >= PI_5_4) or (ASlice.FPrevAngle <= PI_1_4)) and
+     InRange(ASlice.FNextAngle, PI_1_4, PI_5_4)
+  then
+    // Slice crossing the 45° point --> must be last slice to draw
+    Result := 0
+  else
+  if InRange(ASlice.FPrevAngle, PI_1_4, PI_5_4) and InRange(next_angle, PI_5_4, TWO_PI + PI_1_4)
+  then
+    // Slice crossing the 225° point --> must be first slice to draw
+    Result := pi
+  else
+    Result := IfThen(InRange(ASlice.FPrevAngle, PI_1_4, PI_5_4), ASlice.FPrevAngle, next_angle) - PI_1_4;
+end;
+
+function GetAngleForSortingHoriz(ASlice: TPieSlice): Double;
+begin
+  if (InRange(ASlice.FPrevAngle, 0, PI_1_2) or InRange(ASlice.FPrevAngle, PI_3_2, TWO_pi)) and
+     InRange(ASlice.FNextAngle, PI_1_2, PI_3_2)
+  then
+    // Most backward slice --> must be first to draw
+    Result := pi
+  else
+  if InRange(ASlice.FPrevAngle, PI_1_2, PI_3_2) and
+     (InRange(ASlice.FNextAngle, PI_3_2, TWO_PI) or InRange(ASlice.FNextAngle, 0, PI_1_2))
+  then
+    // Most foremost slice --> must be the last to draw
+    Result := 0
+  else
+    Result := IfThen(InRange(ASlice.FPrevAngle, PI_3_2, TWO_PI) or InRange(ASlice.FPrevAngle, 0, PI_1_2),
+      ASlice.FPrevAngle, ASlice.FNextAngle) - PI_3_2
+end;
+
+function GetAngleForSortingVert(ASlice: TPieSlice): Double;
+var
+  next_angle: Double;
+begin
+  next_angle := ASlice.FixedNextAngle;
+  if (ASlice.FPrevAngle <= pi) and (ASlice.FNextAngle > pi) then
+    // Slice crossing the 180° point, most backward slice --> first to draw
+    Result := pi
+  else
+  if (ASlice.FPrevAngle >= pi) and (ASlice.FNextAngle < pi) then
+    // Slice crossing the 0° point, most foreward slice --> last to draw
+    Result := 0
+  else
+    Result :=IfThen(ASlice.FPrevAngle > pi, ASlice.FPrevAngle, next_angle);
+end;
+
+procedure TCustomPieSeries.SortSlices(out ASlices: TSliceArray);
+
+  function CompareSlices(ASlice1, ASlice2: TPieSlice; AngleFunc: TAngleFunc): Integer;
+  var
+    angle1, angle2: Double;
+  begin
+    angle1 := AngleFunc(ASlice1);
+    angle2 := AngleFunc(ASlice2);
+    Result := CompareValue(cos(angle1), cos(angle2));
+  end;
+
+  procedure QuickSort(const L, R: Integer; AngleFunc: TAngleFunc);
+  var
+    i, j, m: Integer;
+    ps: TPieSlice;
+  begin
+    i := L;
+    j := R;
+    m := (L + R) div 2;
+    while (i <= j) do begin
+      while CompareSlices(ASlices[i], ASlices[m], AngleFunc) < 0 do inc(i);
+      while CompareSlices(ASlices[j], ASlices[m], AngleFunc) > 0 do dec(j);
+      if i <= j then begin
+        ps := ASlices[i];
+        ASlices[i] := ASlices[j];
+        ASlices[j] := ps;
+        inc(i);
+        dec(j);
+      end;
+      if L < j then QuickSort(L, j, AngleFunc);
+      if i < R then QuickSort(i, R, AngleFunc);
+    end;
+  end;
+
+var
+  i, j: Integer;
+  compareFunc: TAngleFunc;
+begin
+  SetLength(ASlices, Length(FSlices) + 1);
+  j := 0;
+  for i:=0 to High(FSlices) do begin
+    if FSlices[i].Angle >= pi then begin
+      ASlices[j] := FSlices[i];
+      ASlices[j].FNextAngle := FSlices[i].CenterAngle;
+      ASlices[j].FFlags := 1;    // 1st piece of divided slice
+      ASlices[j+1] := FSlices[i];
+      ASlices[j+1].FPrevAngle := ASlices[j].FNextAngle;
+      ASlices[j+1].FFlags := 2;   // 2nd piece of divided slice
+      inc(j, 2);
+    end else begin
+      ASlices[j] := FSlices[i];
+      inc(j);
+    end;
+  end;
+  case FOrientation of
+    poNormal: compareFunc := @GetAngleForSortingNormal;
+    poHorizontal: compareFunc := @GetAngleForSortingHoriz;
+    poVertical: compareFunc := @GetAngleForSortingVert;
+  end;
+  SetLength(ASlices, j);
+  QuickSort(0, High(ASlices), compareFunc);
+end;
+
 function TCustomPieSeries.TryRadius(ADrawer: IChartDrawer): TRect;
 
   function EndPoint(AAngle, ARadius: Double): TPoint;
   begin
-    Result := RotatePointX(ARadius, -AAngle);
+    Result := FixAspectRatio(RotatePointX(ARadius, -AAngle));
   end;
 
   function LabelExtraDist(APoly: TPointArray; AAngle: Double): Double;
@@ -534,7 +1109,7 @@ function TCustomPieSeries.TryRadius(ADrawer: IChartDrawer): TRect;
     var
       d: Double;
     begin
-      d := Marks.Distance;
+      d := IfThen(FMarkDistancePercent, Marks.Distance * FRadius / 100, Marks.Distance);
       if not Marks.DistanceToCenter then
         d += LabelExtraDist(p, AAngle);
       Result := EndPoint(AAngle, d);
@@ -544,7 +1119,7 @@ function TCustomPieSeries.TryRadius(ADrawer: IChartDrawer): TRect;
     with ALabel do begin
       FCenter := FAttachment;
       if not Marks.IsMarkLabelsVisible then exit;
-        FText := FormattedMark(AIndex);
+      FText := FormattedMark(AIndex);
       if FText = '' then exit;
       if RotateLabels then
         Marks.SetAdditionalAngle(AAngle);
@@ -555,7 +1130,7 @@ function TCustomPieSeries.TryRadius(ADrawer: IChartDrawer): TRect;
         pmpInside:
           FCenter -= Ofs(AAngle);
         pmpLeftRight:
-          FCenter += Ofs(IfThen(InRange(AAngle, Pi / 2, 3 * Pi / 2), Pi, 0));
+          FCenter += Ofs(IfThen(InRange(AAngle, PI_1_2, PI_3_2), pi, 0));
       end;
       for i := 0 to High(p) do
         ExpandRect(Result, p[i] + FCenter);
@@ -567,13 +1142,16 @@ const
 var
   i, j: Integer;
   di: PChartDataItem;
-  prevAngle: Double = 0;
+  prevAngle: Double;
   a, total: Double;
   scaled_depth: Integer;
+  start_angle: Double;
+  next_angle: Double;
 begin
   Result.TopLeft := FCenter;
   Result.BottomRight := FCenter;
   scaled_depth := ADrawer.Scale(Depth);
+  start_angle := NormalizeAngle((FStartAngle mod 360) / 180 * pi);
   SetLength(FSlices, Count);
   j := 0;
   // This is a workaround for db source invalidating the cache due to
@@ -581,34 +1159,41 @@ begin
   total := Source.ValuesTotal;
   if total = 0 then
     exit;
+  total := total * 360 / FAngleRange;
+  prevAngle := start_angle;
   for i := 0 to Count - 1 do begin
     di := Source[i];
     if IsNan(di^.Y) then continue;
     with FSlices[j] do begin
       FOrigIndex := i;
       FPrevAngle := prevAngle;
-      FNextAngle := FPrevAngle + CycleToRad(di^.Y / total);
+      next_angle := FPrevAngle + CycleToRad(di^.Y / total);
+      FNextAngle := NormalizeAngle(next_angle);
       FVisible := not IsNan(di^.X);
       if FVisible then begin
         FBase := FCenter;
         a := CenterAngle;
         if Exploded and (di^.X > 0) then
           FBase += EndPoint(a, FRadius * di^.X);
-        ExpandRect(Result, FBase, FRadius, -FPrevAngle, -FNextAngle);
+        ExpandRect(Result, FBase, FRadius, -FPrevAngle, -next_angle);
         if Depth > 0 then
           ExpandRect(
             Result, FBase + Point(scaled_depth, -scaled_depth),
-            FRadius, -FPrevAngle, -FNextAngle);
-        FLabel.FAttachment := EndPoint(a, FRadius) + FBase;
+            FRadius, -FPrevAngle, -next_angle);
+        if FMarkPositionCentered  then
+          FLabel.FAttachment := EndPoint(a, (CalcInnerRadius + FRadius) div 2) + FBase
+        else
+          FLabel.FAttachment := EndPoint(a, FRadius) + FBase;
         PrepareLabel(FLabel, i, a);
       end;
       prevAngle := FNextAngle;
     end;
-    j += 1;
+    inc(j);
   end;
   SetLength(FSlices, j);
   InflateRect(Result, MARGIN, MARGIN);
 end;
+
 
 { TPolarSeries }
 
@@ -649,81 +1234,137 @@ end;
 
 procedure TPolarSeries.Draw(ADrawer: IChartDrawer);
 var
-  i: Integer;
-  cnt: Integer = 0;
-  pts: TPointArray;
-  gp: TDoublePoint;
-  firstPoint, lastPoint: TPoint;
-  firstPointSet: Boolean = false;
   originPt: TPoint;
   fill: Boolean;
+  pts: Array of TPoint;
 
-  procedure DoDraw;
-  begin
-    if cnt = 0 then
-      exit;
-    if fill then begin
-      pts[cnt] := originPt;
+  procedure DrawYLevel(AYIndex: Integer);
+  var
+    i: Integer;
+    gp: TDoublepoint;
+    cnt: Integer;
+    firstPoint, lastPoint: TPoint;
+    firstPointSet: Boolean;
+
+    procedure DrawPart;
+    begin
+      if cnt = 0 then
+        exit;
+
       ADrawer.Brush := FBrush;
-      ADrawer.SetPenParams(psClear, clBlack);
-      ADrawer.Polygon(pts, 0, cnt + 1);
+      if Styles <> nil then
+        Styles.Apply(ADrawer, AYIndex);
+      if fill then begin
+        pts[cnt] := originPt;
+        ADrawer.SetPenParams(psClear, clBlack);
+        ADrawer.Polygon(pts, 0, cnt + 1);
+      end;
+
+      ADrawer.Pen := LinePen;
+      ADrawer.SetBrushParams(bsClear, clTAColor);
+      if Styles <> nil then
+        Styles.Apply(ADrawer, AYIndex, true);
+        // "true" avoids painting the gaps of non-solid lines in the brush color
+      ADrawer.PolyLine(pts, 0, cnt);
     end;
-    ADrawer.Pen := LinePen;
-    ADrawer.PolyLine(pts, 0, cnt);
+
+  begin
+    firstPointSet := false;
+    cnt := 0;
+    for i := 0 to Count - 1 do begin
+      gp := GraphPoint(i, AYIndex);
+      if IsNaN(gp) then begin
+        DrawPart;
+        cnt := 0;
+      end else begin
+        if IsRotated then Exchange(gp.X, gp.Y);
+        lastPoint := FChart.GraphToImage(gp);
+        pts[cnt] := lastPoint;
+        cnt += 1;
+        if not firstPointSet then begin
+          firstPoint := lastPoint;
+          firstPointSet := true;
+        end;
+      end;
+    end;
+    DrawPart;
+    if firstPointSet and CloseCircle then begin
+      SetLength(pts, 3);
+      pts[0] := lastPoint;
+      pts[1] := firstPoint;
+      cnt := 2;
+      DrawPart;
+    end;
   end;
 
+var
+  j: Integer;
 begin
-  PrepareGraphPoints;
+  if IsEmpty or (not Active) then exit;
   originPt := ParentChart.GraphToImage(DoublePoint(OriginX, OriginY));
   fill := FFilled and (FBrush.Style <> bsClear);
   SetLength(pts, Count + 1);  // +1 for origin
-  for i := 0 to Count - 1 do begin
-    gp := GraphPoint(i);
-    if IsNaN(gp) then begin
-      DoDraw;
-      cnt := 0;
-    end else begin
-      lastPoint := FChart.GraphToImage(gp);
-      pts[cnt] := lastPoint;
-      cnt += 1;
-      if not firstPointSet then begin
-        firstPoint := lastPoint;
-        firstPointSet := true;
-      end;
-    end;
+  for j := 0 to Source.YCount-1 do
+    DrawYLevel(j);
+  for j := 0 to Source.YCount-1 do begin
+    PrepareGraphPoints(j);
+    DrawLabels(ADrawer, j);
+    DrawPointers(ADrawer, j, true);
   end;
-  DoDraw;
-  if firstPointSet and CloseCircle then begin
-    SetLength(pts, 3);
-    pts[0] := lastPoint;
-    pts[1] := firstPoint;
-    cnt := 2;
-    DoDraw;
-  end;
-
-  DrawPointers(ADrawer);
 end;
 
 function TPolarSeries.Extent: TDoubleRect;
 var
-  i: Integer;
+  i, j: Integer;
 begin
-  FindExtentInterval(DoubleRect(0, 0, 0, 0), false);
+  //FindExtentInterval(DoubleRect(0, 0, 0, 0), false);
   PrepareAngleCache;
   Result := EmptyExtent;
   for i := 0 to Count - 1 do
-    ExpandRect(Result, GraphPoint(i));
+    for j := 0 to Source.YCount-1 do
+      ExpandRect(Result, GraphPoint(i, j));
+end;
+
+function TPolarSeries.GetLabelDataPoint(AIndex, AYIndex: Integer): TDoublePoint;
+begin
+  Result := GraphPoint(AIndex, AYIndex);
+  if IsRotated then Exchange(Result.X, Result.Y);
 end;
 
 procedure TPolarSeries.GetLegendItems(AItems: TChartLegendItems);
 var
   p: TSeriesPointer;
+  li: TLegendItemLinePointer;
+  s: TChartStyle;
+  i: Integer;
+  lBrush: TBrush;
 begin
   if ShowPoints then
     p := Pointer
   else
     p := nil;
-  AItems.Add(TLegendItemLinePointer.Create(LinePen, p, LegendTextSingle));
+
+  case Legend.Multiplicity of
+    lmSingle:
+      AItems.Add(TLegendItemLinePointer.Create(LinePen, p, LegendTextSingle));
+    lmPoint:
+      for i := 0 to Count - 1 do begin
+        li := TLegendItemLinePointer.Create(LinePen, p, LegendTextPoint(i));
+        li.Color := GetColor(i);
+        AItems.Add(li);
+      end;
+    lmStyle:
+      if Styles <> nil then begin
+        if Assigned(p) then lBrush := p.Brush else lBrush := nil;
+        for s in Styles.Styles do
+          AItems.Add(TLegendItemLinePointer.CreateWithBrush(
+            IfThen((LinePen <> nil) and s.UsePen, s.Pen, LinePen) as TPen,
+            IfThen(s.UseBrush, s.Brush, lBrush) as TBrush,
+            p,
+            LegendTextStyle(s)
+          ));
+        end;
+  end;
 end;
 
 function TPolarSeries.GetNearestPoint(const AParams: TNearestPointParams;
@@ -743,7 +1384,7 @@ begin
 
   dist := AResults.FDist;
   for i := 0 to Count - 1 do begin
-    gp := GraphPoint(i);
+    gp := GraphPoint(i, 0);
     if IsNan(gp) then
       continue;
     // Find nearest point of datapoint at (x, y)
@@ -763,10 +1404,13 @@ begin
   Result := AResults.FIndex >= 0;
 end;
 
-function TPolarSeries.GraphPoint(AIndex: Integer): TDoublePoint;
+function TPolarSeries.GraphPoint(AIndex, AYIndex: Integer): TDoublePoint;
+var
+  r: Double;
 begin
-  with Source[AIndex]^, FAngleCache[AIndex] do
-    Result := DoublePoint(Y * FCos + OriginX, Y * FSin + OriginY);
+  r := Source.Item[AIndex]^.GetY(AYIndex);
+  with FAngleCache[AIndex] do
+    Result := DoublePoint(r * FCos + OriginX, r * FSin + OriginY);
 end;
 
 function TPolarSeries.IsOriginXStored: Boolean;
@@ -812,19 +1456,24 @@ begin
   if Length(FAngleCache) = Count then exit;
   SetLength(FAngleCache, Count);
   for i := 0 to Count - 1 do begin
-    SinCos(Source[i]^.X, s, c);
+    if Source.XCount > 0 then
+      SinCos(Source[i]^.X, s, c)
+    else
+      SinCos(i, s, c);
     FAngleCache[i].FSin := s;
     FAngleCache[i].FCos := c;
   end;
 end;
 
-procedure TPolarSeries.PrepareGraphPoints;
+procedure TPolarSeries.PrepareGraphPoints(AYIndex: Integer);
 var
   i: Integer;
 begin
   SetLength(FGraphPoints, Count);
-  for i := 0 to Count - 1 do
-    FGraphPoints[i] := GraphPoint(i);
+  for i := 0 to Count - 1 do begin
+    FGraphPoints[i] := GraphPoint(i, AYIndex);
+    if IsRotated then Exchange(FGraphPoints[i].X, FGraphPoints[i].Y);
+  end;
 end;
 
 procedure TPolarSeries.SetBrush(AValue: TBrush);
@@ -881,6 +1530,15 @@ procedure TPolarSeries.SourceChanged(ASender: TObject);
 begin
   FAngleCache := nil;
   inherited;
+end;
+
+procedure TPolarSeries.UpdateLabelDirectionReferenceLevel(AIndex, AYIndex: Integer;
+  var ALevel: Double);
+begin
+  Unused(AYIndex);
+  // Level is constant, we only need to calculate it once.
+  if AIndex = 0 then
+    ALevel := AxisToGraphY(OriginY);
 end;
 
 

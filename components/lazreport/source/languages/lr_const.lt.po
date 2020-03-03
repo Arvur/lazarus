@@ -250,6 +250,7 @@ msgid "0"
 msgstr "0"
 
 #: lr_const.sclassobjectnotfound
+#, object-pascal-format
 msgid "Class Object \"%s\" not found"
 msgstr "Nerastas klasės objektas „%s“"
 
@@ -476,6 +477,10 @@ msgstr "FORMATTEXT(<Kaukė>, <Tekstas>)/Grąžina pagal duotą <Kaukė> kaukę f
 #: lr_const.sdescriptionfrac
 msgid "FRAC(<Value>)/Returns the fractional part of floating point <Value>."
 msgstr "FRAC(<Verė>)/Grąžiną slankaus kablelio skaičiaus <Vertė> trupmeninę dalį."
+
+#: lr_const.sdescriptionif
+msgid "IF(<expression>, <Value1>, <Value2>)/Returns <Value1>, if <expression> is true; otherwise returns <Value2>."
+msgstr ""
 
 #: lr_const.sdescriptioninc
 msgid "INC(<Value>)/Increment <Value>."
@@ -736,6 +741,7 @@ msgid "Version"
 msgstr "Versija"
 
 #: lr_const.sduplicatedobjectname
+#, object-pascal-format
 msgid "An object named \"%s\" already exists"
 msgstr "Jau yra objektas tokiu pavadinimu „%s“"
 
@@ -1713,6 +1719,7 @@ msgid "Invalid report format"
 msgstr "Klaidingas ataskaitos formatas"
 
 #: lr_const.sinvalidvariablename
+#, object-pascal-format
 msgid "\"%s\" is not a valid variable name."
 msgstr "Tekstas „%s“ nėra tinkamas kintamojo pavadinimui."
 
@@ -1770,6 +1777,7 @@ msgid "Object inspector"
 msgstr "Objektų inspektorius"
 
 #: lr_const.sobjectnotfound
+#, object-pascal-format
 msgid "Object \"%s\" not found"
 msgstr "Objektas „%s“ nerastas"
 
@@ -2512,10 +2520,12 @@ msgid "Report file"
 msgstr "Pranešimo failas"
 
 #: lr_const.sreportcorruptoldknowversion
+#, object-pascal-format
 msgid "This report is corrupt, it probably needs \"LRE_OLDV%d_FRF_READ\"=true"
 msgstr "Ši ataskaita sugadinta, jai ko gero reikia \"LRE_OLDV%d_FRF_READ\"=true"
 
 #: lr_const.sreportcorruptunknownversion
+#, object-pascal-format
 msgid "This report is corrupt, frVersion=%d"
 msgstr "Ši ataskaita sugadinta, frVersion=%d"
 

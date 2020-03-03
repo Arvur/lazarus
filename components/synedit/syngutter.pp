@@ -106,10 +106,11 @@ type
     function GetTextBounds: TRect;
   protected
     procedure DoPaint(ACanvas: TCanvas; AClip: TRect); override;
+    procedure SetTextArea(const ATextArea: TLazSynTextArea); virtual;
   public
     procedure InvalidateLines(FirstTextLine, LastTextLine: TLineIdx); override;
     procedure Assign(Src: TLazSynSurface); override;
-    property TextArea: TLazSynTextArea read FTextArea write FTextArea;
+    property TextArea: TLazSynTextArea read FTextArea write SetTextArea;
     property Gutter: TSynGutter read FGutter write FGutter;
     property TextBounds: TRect read GetTextBounds;
   end;
@@ -157,6 +158,11 @@ begin
   {$ENDIF}
   if (rcInval.Top < rcInval.Bottom) and (rcInval.Left < rcInval.Right) then
     InvalidateRect(Handle, @rcInval, FALSE);
+end;
+
+procedure TLazSynGutterArea.SetTextArea(const ATextArea: TLazSynTextArea);
+begin
+  FTextArea := ATextArea;
 end;
 
 procedure TLazSynGutterArea.Assign(Src: TLazSynSurface);
@@ -266,7 +272,7 @@ begin
      TextDrawer.ExtTextOut(Left, Top, ETO_OPAQUE, AClip, nil, 0);
   TextDrawer.EndDrawing;
 
-  AClip.Left := Surface.Left;
+  AClip.Left := Surface.Left + LeftOffset;
   AClip.Top  := Surface.TextBounds.Top + FirstLine * TCustomSynEdit(SynEdit).LineHeight;
 
   rcLine := AClip;

@@ -9,10 +9,9 @@ object ComponentListForm: TComponentListForm
   KeyPreview = True
   OnActivate = FormActivate
   OnClose = FormClose
-  OnCreate = FormCreate
   OnKeyDown = FormKeyDown
   OnShow = FormShow
-  LCLVersion = '1.7'
+  LCLVersion = '1.9.0.0'
   object PageControl: TPageControl
     Left = 0
     Height = 397
@@ -44,8 +43,6 @@ object ComponentListForm: TComponentListForm
           Top = 2
           Width = 288
           Align = alClient
-          DefaultItemHeight = 24
-          Images = imListPalette
           Indent = 25
           ReadOnly = True
           RowSelect = True
@@ -82,8 +79,6 @@ object ComponentListForm: TComponentListForm
           Top = 5
           Width = 282
           Align = alClient
-          DefaultItemHeight = 24
-          Images = imListPalette
           PopupMenu = pmCollapseExpand
           ReadOnly = True
           RightClickSelect = True
@@ -119,8 +114,6 @@ object ComponentListForm: TComponentListForm
           Top = 5
           Width = 282
           Align = alClient
-          DefaultItemHeight = 24
-          Images = imListPalette
           Indent = 20
           PopupMenu = pmCollapseExpand
           ReadOnly = True
@@ -147,10 +140,27 @@ object ComponentListForm: TComponentListForm
     ClientHeight = 27
     ClientWidth = 300
     TabOrder = 0
-    object LabelSearch: TLabel
+    object SelectionToolButton: TSpeedButton
       AnchorSideLeft.Control = FilterPanel
       AnchorSideTop.Control = FilterPanel
-      Left = 6
+      AnchorSideBottom.Control = FilterPanel
+      AnchorSideBottom.Side = asrBottom
+      Left = 0
+      Height = 27
+      Top = 0
+      Width = 32
+      AllowAllUp = True
+      Anchors = [akTop, akLeft, akBottom]
+      Down = True
+      Flat = True
+      GroupIndex = 1
+      OnClick = SelectionToolButtonClick
+    end
+    object LabelSearch: TLabel
+      AnchorSideLeft.Control = SelectionToolButton
+      AnchorSideLeft.Side = asrBottom
+      AnchorSideTop.Control = FilterPanel
+      Left = 38
       Height = 15
       Top = 6
       Width = 63
@@ -169,9 +179,9 @@ object ComponentListForm: TComponentListForm
       Width = 221
       OnAfterFilter = TreeFilterEdAfterFilter
       ButtonWidth = 23
-      NumGlyphs = 1
       Anchors = [akTop, akLeft, akRight]
       BorderSpacing.Left = 5
+      NumGlyphs = 1
       MaxLength = 0
       TabOrder = 0
       FilteredTreeview = ListTree
@@ -210,12 +220,6 @@ object ComponentListForm: TComponentListForm
       TabOrder = 1
     end
   end
-  object imListPalette: TImageList
-    Height = 24
-    Width = 24
-    Left = 56
-    Top = 112
-  end
   object pmCollapseExpand: TPopupMenu
     OnPopup = pmCollapseExpandPopup
     Left = 160
@@ -239,12 +243,6 @@ object ComponentListForm: TComponentListForm
       Caption = 'Collapse All'
       OnClick = miCollapseAllClick
     end
-  end
-  object imInheritance: TImageList
-    Height = 24
-    Width = 24
-    Left = 56
-    Top = 168
   end
   object tmDeselect: TTimer
     Enabled = False

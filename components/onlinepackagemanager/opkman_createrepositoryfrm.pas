@@ -28,7 +28,7 @@ unit opkman_createrepositoryfrm;
 interface
 
 uses
-  Classes, SysUtils, FileUtil, fpjson, VirtualTrees,
+  Classes, SysUtils, FileUtil, fpjson, laz.VirtualTrees,
   // LCL
   Forms, Controls, Graphics, Dialogs, ExtCtrls,
   StdCtrls, Buttons, Menus,
@@ -37,7 +37,7 @@ uses
   // LazUtils
   LazFileUtils, LazUTF8,
   // OpkMan
-  opkman_serializablepackages;
+  opkman_serializablepackages, opkman_maindm;
 
 type
 
@@ -58,7 +58,6 @@ type
     bDelete: TBitBtn;
     bOpen: TButton;
     bCreate: TButton;
-    imTree: TImageList;
     miRepDetails: TMenuItem;
     ODRep: TOpenDialog;
     pnButtons: TPanel;
@@ -79,8 +78,8 @@ type
     procedure pnButtonsResize(Sender: TObject);
     procedure tmWaitTimer(Sender: TObject);
   private
-    FVSTPackages: TVirtualStringTree;
-    FVSTDetails: TVirtualStringTree;
+    FVSTPackages: TLazVirtualStringTree;
+    FVSTDetails: TLazVirtualStringTree;
     FRepository: TRepository;
     FSortDirection: TSortDirection;
     FSerializablePackages: TSerializablePackages;
@@ -156,6 +155,7 @@ type
     FHomePageURL: String;
     FDownloadURL: String;
     FSVNURL: String;
+    FCommunityDescription: String;
   end;
 
 procedure TCreateRepositoryFrm.FormCreate(Sender: TObject);
@@ -167,8 +167,12 @@ begin
   bOpen.Hint := rsCreateRepositoryFrm_bOpen_Hint;
   bAdd.Caption := rsCreateRepositoryFrm_bAdd_Caption;
   bAdd.Hint := rsCreateRepositoryFrm_bAdd_Hint;
+  bAdd.Images := MainDM.Images;
+  bAdd.ImageIndex := IMG_PKG_PLUS;
   bDelete.Caption := rsCreateRepositoryFrm_bDelete_Caption;
   bDelete.Hint := rsCreateRepositoryFrm_bDelete_Hint;
+  bDelete.Images := MainDM.Images;
+  bDelete.ImageIndex := IMG_PKG_MINUS;
   bCancel.Caption := rsCreateRepositoryFrm_bCancel_Caption;
   bCancel.Hint := rsCreateRepositoryFrm_bCancel_Hint;
   miRepDetails.Caption := rsCreateRepositoryFrm_miRepDetails_Caption;
@@ -177,25 +181,25 @@ begin
   ShowHideControls(0);
 
   FSerializablePackages := TSerializablePackages.Create;
-  FVSTPackages := TVirtualStringTree.Create(nil);
+  FVSTPackages := TLazVirtualStringTree.Create(nil);
   with FVSTPackages do
   begin
     NodeDataSize := SizeOf(TData);
     Parent := pnPackages;
     Align := alClient;
-    Images := imTree;
+    Images := MainDM.Images;
     if not Options.UseDefaultTheme then
       Color := clBtnFace;
-    DefaultNodeHeight := 25;
-    Indent := 15;
+    DefaultNodeHeight := Scale96ToForm(25);
+    Indent := Scale96ToForm(15);
     TabOrder := 1;
     DefaultText := '';
     Header.AutoSizeIndex := 0;
-    Header.Height := 25;
+    Header.Height := Scale96ToForm(25);
     Colors.BorderColor := clBlack;
     with Header.Columns.Add do begin
       Position := 0;
-      Width := 300;
+      Width := Scale96ToForm(300);
       Text := rsCreateRepositoryFrm_VSTPackages_Column0;
     end;
     Header.Options := [hoAutoResize, hoColumnResize, hoRestrictDrag, hoVisible, hoAutoSpring];
@@ -205,6 +209,10 @@ begin
     TreeOptions.PaintOptions := [toHideFocusRect, toPopupMode, toShowButtons, toShowDropmark, toShowRoot, toThemeAware, toUseBlendedImages];
     TreeOptions.SelectionOptions := [toRightClickSelect];
     TreeOptions.AutoOptions := [toAutoTristateTracking];
+    IncrementalSearch := isAll;
+    IncrementalSearchDirection := sdForward;
+    IncrementalSearchStart := ssAlwaysStartOver;
+    IncrementalSearchTimeout := 1500;
     PopupMenu := pm;
     OnGetText := @VSTPackagesGetText;
     OnGetImageIndex := @VSTPackagesGetImageIndex;
@@ -214,30 +222,30 @@ begin
     OnFreeNode := @VSTPackagesFreeNode;
   end;
 
-  FVSTDetails := TVirtualStringTree.Create(nil);
+  FVSTDetails := TLazVirtualStringTree.Create(nil);
   with FVSTDetails do
   begin
     NodeDataSize := SizeOf(TData);
     Parent := pnDetails;
     Align := alClient;
-    Images := imTree;
+    Images := MainDM.Images;
     if not Options.UseDefaultTheme then
       Color := clBtnFace;
-    DefaultNodeHeight := 25;
-    Indent := 15;
+    DefaultNodeHeight := Scale96ToForm(25);
+    Indent := Scale96ToForm(15);
     TabOrder := 0;
     DefaultText := '';
     Header.AutoSizeIndex := 1;
-    Header.Height := 25;
+    Header.Height := Scale96ToForm(25);
     Colors.BorderColor := clBlack;
     with Header.Columns.Add do begin
       Position := 0;
-      Width := 200;
+      Width := Scale96ToForm(200);
       Text := rsCreateRepositoryFrm_VSTDetails_Column0;
     end;
     with Header.Columns.Add do begin
       Position := 1;
-      Width := 250;
+      Width := Scale96ToForm(250);
       Text := rsCreateRepositoryFrm_VSTDetails_Column1;
     end;
     Header.Options := [hoAutoResize, hoColumnResize, hoRestrictDrag, hoVisible, hoAutoSpring];
@@ -691,6 +699,7 @@ begin
       Data^.FRepositoryDate := MetaPackage.RepositoryDate;
       Data^.FHomePageURL := MetaPackage.HomePageURL;
       Data^.FDownloadURL := MetaPackage.DownloadURL;
+      Data^.FCommunityDescription := MetaPackage.CommunityDescription;
       Data^.FDataType := 1;
       for J := 0 to MetaPackage.LazarusPackages.Count - 1 do
       begin
@@ -816,14 +825,14 @@ begin
       if (SortColumn = NoColumn) or (SortColumn <> HitInfo.Column) then
       begin
         SortColumn    := HitInfo.Column;
-        SortDirection := VirtualTrees.sdAscending;
+        SortDirection := laz.VirtualTrees.sdAscending;
       end
       else
       begin
-        if SortDirection = VirtualTrees.sdAscending then
-          SortDirection := VirtualTrees.sdDescending
+        if SortDirection = laz.VirtualTrees.sdAscending then
+          SortDirection := laz.VirtualTrees.sdDescending
         else
-          SortDirection := VirtualTrees.sdAscending;
+          SortDirection := laz.VirtualTrees.sdAscending;
       end;
       SortTree(SortColumn, SortDirection, False);
       FSortDirection := SortDirection;
@@ -912,6 +921,11 @@ begin
          DetailData := FVSTDetails.GetNodeData(DetailNode);
          DetailData^.FDownloadURL := Data^.FDownloadURL;
          DetailData^.FDataType := 18;
+         //add CommunityDescription(DataType = 19)
+         DetailNode := FVSTDetails.AddChild(nil);
+         DetailData := FVSTDetails.GetNodeData(DetailNode);
+         DetailData^.FCommunityDescription := Data^.FCommunityDescription;
+         DetailData^.FDataType := 19;
        end;
     2: begin
          //add description(DataType = 2)
@@ -1034,6 +1048,10 @@ begin
                  CellText := rsCreateRepositoryFrm_VSTText_DownloadURL
                else
                  CellText := DetailData^.FDownloadURL;
+          19:  if Column = 0 then
+                  CellText := rsMainFrm_VSTText_CommunityDescription
+                else
+                  CellText := DetailData^.FCommunityDescription;
          end;
        end;
     2: begin

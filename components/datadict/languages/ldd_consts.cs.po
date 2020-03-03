@@ -119,25 +119,35 @@ msgid "Applications|*"
 msgstr "Aplikace|*"
 
 #: ldd_consts.sapplyingddtodataset
+#, object-pascal-format
 msgid "Applying data dictionary to dataset %s"
 msgstr "Aplikuji datový slovník na dataset %s"
 
 #: ldd_consts.sapplyingddtofield
+#, object-pascal-format
 msgid "Applying data dictionary to field %s"
 msgstr "Aplikuji datový slovník na pole %s"
 
 #: ldd_consts.serrnodatadesktopdoselect
+#, fuzzy
+#| msgid ""
+#| "Could not locate the database desktop application.\n"
+#| "Would you like to select it ?\n"
 msgid ""
 "Could not locate the database desktop application.\n"
-"Would you like to select it ?\n"
+"Would you like to select it ?"
 msgstr ""
 "Nemohu lokalizovat databázovou dekstop apliaci.\n"
 "Přejete si zvolit ji?\n"
 
 #: ldd_consts.serrnodatadictactive
+#, fuzzy
+#| msgid ""
+#| "No datadictionary active.\n"
+#| "Please set a data dictionary for the project\n"
 msgid ""
 "No datadictionary active.\n"
-"Please set a data dictionary for the project\n"
+"Please set a data dictionary for the project"
 msgstr ""
 "Žádný datový slovník není aktivní.\n"
 "vProsím nastavte datový slovník pro projekt\n"
@@ -203,10 +213,12 @@ msgid "Not yet implemented"
 msgstr "Není zatím iplementováno"
 
 #: ldd_consts.swarningnoddforfield
+#, object-pascal-format
 msgid "Warning: No definition in data dictionary for field %s"
 msgstr "Varování: Žádná definice v datovém slovníku pro pole %s"
 
 #: ldd_consts.swrongselection
+#, object-pascal-format
 msgid "Wrong selection count : %d"
 msgstr "Špatný výběr: %d"
 

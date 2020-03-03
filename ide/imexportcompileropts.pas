@@ -32,9 +32,15 @@ unit ImExportCompilerOpts;
 interface
 
 uses
-  SysUtils, Forms, Controls, Dialogs, StdCtrls, Buttons, ExtCtrls, ButtonPanel,
-  IDEProcs, FileUtil, LazFileUtils, Laz2_XMLCfg, LCLType, LazarusIDEStrConsts,
-  IDEOptionsIntf, IDEImagesIntf, InputHistory, Project, CompilerOptions;
+  SysUtils,
+  // LCL
+  LCLType, Forms, Controls, Dialogs, StdCtrls, Buttons, ExtCtrls, ButtonPanel,
+  // LazUtils
+  FileUtil, LazFileUtils, Laz2_XMLCfg,
+  // IdeIntf
+  IDEOptEditorIntf, IDEImagesIntf,
+  // IDE
+  IDEProcs, LazarusIDEStrConsts, InputHistory, Project, CompilerOptions;
 
 type
   { TImExportCompOptsDlg }
@@ -256,7 +262,7 @@ function TOptsImExport.DoExportBuildModes(const Filename: string): TModalResult;
 begin
   Result := OpenXML(Filename);
   if Result <> mrOK then Exit;
-  Project1.BuildModes.SaveProjOptsToXMLConfig(fXMLConfig, '', False);
+  Project1.BuildModes.SaveProjOptsToXMLConfig(fXMLConfig, '', False, True);
   fXMLConfig.Flush;
   ShowMessageFmt(lisSuccessfullyExportedBuildModes, [Project1.BuildModes.Count, Filename]);
 end;
@@ -287,7 +293,7 @@ begin
     OKButton.Caption:=lisIECOLoadFromFile;
     OKButton.LoadGlyphFromStock(idButtonOpen);
     if OKButton.Glyph.Empty then
-      TIDEImages.AssignImage(OKButton.Glyph, 'laz_open');
+      IDEImages.AssignImage(OKButton, 'laz_open');
     OKButton.Enabled:=False;
     OKButton.OnClick:=@OpenButtonCLICK;
   end;
@@ -308,7 +314,7 @@ begin
     OKButton.Caption:=lisIECOSaveToFile;
     OKButton.LoadGlyphFromStock(idButtonSave);
     if OKButton.Glyph.Empty then
-      TIDEImages.AssignImage(OKButton.Glyph, 'laz_save');
+      IDEImages.AssignImage(OKButton, 'laz_save');
     OKButton.Enabled:=False;
     OKButton.OnClick:=@SaveButtonCLICK;
   end;

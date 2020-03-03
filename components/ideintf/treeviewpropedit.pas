@@ -55,7 +55,7 @@ type
     TreeView1: TTreeView;
     procedure BtnNewItemClick(Sender: TObject);
     procedure Edit1Change(Sender: TObject);
-    procedure FormClose(Sender: TObject; var CloseAction: TCloseAction);
+    procedure FormClose(Sender: TObject; var {%H-}CloseAction: TCloseAction);
     procedure FormCreate(Sender: TObject);
     procedure MoveUpBtnClick(Sender: TObject);
     procedure MoveDownBtnClick(Sender: TObject);
@@ -123,8 +123,8 @@ begin
   BtnLoad.Caption := sccsTrEdtLoad;
   BtnSave.Caption := sccsTrEdtSave;
   BtnApply.Caption := sccsTrEdtApply;
-  TIDEImages.AssignImage(MoveUpBtn.Glyph, 'arrow_up');
-  TIDEImages.AssignImage(MoveDownBtn.Glyph, 'arrow_down');
+  IDEImages.AssignImage(MoveUpBtn, 'arrow_up');
+  IDEImages.AssignImage(MoveDownBtn, 'arrow_down');
   MoveUpBtn.Hint:=rscdMoveUp;
   MoveDownBtn.Hint:=rscdMoveDown;
 

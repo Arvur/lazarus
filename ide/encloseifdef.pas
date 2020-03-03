@@ -54,7 +54,7 @@ interface
 uses
   Classes, SysUtils, Controls, Forms, StdCtrls, Buttons, ButtonPanel,
   LCLProc, LCLType, LazConf, LazFileUtils, Laz2_XMLCfg, LazFileCache,
-  IDEHelpIntf, IDEImagesIntf, LazarusIDEStrConsts;
+  IDEHelpIntf, IDEImagesIntf, LazarusIDEStrConsts, EnvironmentOpts;
 
 type
 
@@ -232,11 +232,11 @@ begin
   FirstLabel.Caption := lisFirstTest;
   SecondLabel.Caption := lisSecondTest;
   AddBtn.Caption := lisBtnAdd;
-  TIDEImages.AssignImage(AddBtn.Glyph, 'laz_add');
+  IDEImages.AssignImage(AddBtn, 'laz_add');
   AddInverse.Caption := rsAddInverse;
-  TIDEImages.AssignImage(AddInverse.Glyph, 'pkg_issues');
+  IDEImages.AssignImage(AddInverse, 'pkg_issues');
   RemoveBtn.Caption := lisBtnRemove;
-  TIDEImages.AssignImage(RemoveBtn.Glyph, 'laz_delete');
+  IDEImages.AssignImage(RemoveBtn, 'laz_delete');
   ButtonPanel1.CloseButton.Caption := lisSave;
   ButtonPanel1.OKButton.Caption := lisOk;
   //ButtonPanel1.CloseButton.LoadGlyphFromStock(idButtonSave);
@@ -266,6 +266,8 @@ begin
     end else
       ItemIndex := i;
   end;
+  FirstTest.DropDownCount := EnvironmentOptions.DropDownCount;
+  SecondTest.DropDownCount := EnvironmentOptions.DropDownCount;
 end;
 
 procedure TEncloseIfDefForm.FormShow(Sender: TObject);

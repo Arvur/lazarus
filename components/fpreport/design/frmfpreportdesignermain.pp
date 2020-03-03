@@ -19,9 +19,9 @@ unit frmfpreportdesignermain;
 interface
 
 uses
-  Classes, SysUtils, FileUtil, Forms, Controls, Graphics, Dialogs, StdCtrls,
-  Menus, ActnList, ComCtrls, ExtCtrls, IniPropStorage, Types, fpreport, fpreportdesignctrl,
-  fraReportObjectInspector, fpreportdesignreportdata, frafpreportdata, fpreportdb;
+  Classes, SysUtils, FileUtil, Forms, Controls, Graphics, Dialogs, StdCtrls, fpreportdata,
+  Menus, ActnList, ComCtrls, ExtCtrls, IniPropStorage, fpreport, fpreportdesignctrl, contnrs,
+  fraReportObjectInspector, fpreportdesignreportdata, frafpreportdata, mrumanager;
 
 type
   // If you add something here, do not forget to add to AllReportDesignOptions.
@@ -33,9 +33,19 @@ type
                            rdoAllowPageAdd,    // Allow user to add pages
                            rdoAllowNew,        // Allow user to start new report
                            rdoAllowPreview,    // Allow user to ask report preview
-                           rdoAllowBands      // Allow user to add/remove bands
+                           rdoAllowBands,      // Allow user to add/remove bands
+                           rdoAllowFileDrop,   // Allow user to drop files on designer, so they will be loaded.
+                           rdoAllowImport      // Allow import of other formats (needs rdoAllowLoad as well)
                            );
   TFPReportDesignOptions = set of TFPReportDesignOption;
+
+  // What to do when selection contains a report page
+  TPageCopyAction = (pcaNone,pcaAbort,pcaReplace,pcaAdd);
+  TPageCopyActions = set of TPageCopyAction;
+
+  // What to do when selection contains a band that cannot be correctly added to the current page.
+  TBandCopyAction = (bcaNone,bcaAbort,bcaConvertToChild);
+  TBandCopyActions = Set of TBandCopyAction;
 
   { TPageTabSheet }
 
@@ -74,6 +84,18 @@ type
     AAlignVCenter: TAction;
     AAlignBottom: TAction;
     AAlign: TAction;
+    ACopy: TAction;
+    ABringToFront: TAction;
+    AImportLazreport: TAction;
+    ASendToBack: TAction;
+    AEditElement: TAction;
+    AFileOpenNewWindow: TAction;
+    ANewNewWindow: TAction;
+    ACut: TAction;
+    APaste: TAction;
+    AResizeBandToFit: TAction;
+    AFileSaveAs: TAction;
+    ARecent: TAction;
     AReportData: TAction;
     APreview: TAction;
     AReportVariables: TAction;
@@ -98,7 +120,31 @@ type
     ILReport: TImageList;
     MenuItem1: TMenuItem;
     MenuItem2: TMenuItem;
+    MenuItem3: TMenuItem;
+    MenuItem4: TMenuItem;
+    MIImportLazReport: TMenuItem;
+    MIBringToFront: TMenuItem;
+    MISendToBack: TMenuItem;
+    MIEditElement: TMenuItem;
+    MenuItem5: TMenuItem;
+    MINewNewWindow: TMenuItem;
+    MIFileOpenNewWindow: TMenuItem;
+    MICopy: TMenuItem;
+    MICut: TMenuItem;
+    MIPaste: TMenuItem;
+    MISaveAs: TMenuItem;
+    MIPreview: TMenuItem;
+    MIframeBottom: TMenuItem;
+    MIFrameTop: TMenuItem;
+    MIFrameRight: TMenuItem;
+    MIFrameLeft: TMenuItem;
+    MIFrameClear: TMenuItem;
+    MIFrameAll: TMenuItem;
+    MFrames: TMenuItem;
+    MIRecent: TMenuItem;
     MIAddPage: TMenuItem;
+    ODImport: TOpenDialog;
+    PMRecent: TPopupMenu;
     PSDesign: TIniPropStorage;
     MIAlign: TMenuItem;
     MIAddColumnHeader: TMenuItem;
@@ -209,28 +255,54 @@ type
     TBResizeHLargest: TToolButton;
     TSDesign: TTabSheet;
     procedure AAddCheckBoxExecute(Sender: TObject);
+    procedure AAddElementUpdate(Sender: TObject);
     procedure AAddImageExecute(Sender: TObject);
     procedure AAddMemoExecute(Sender: TObject);
     procedure AAddPageExecute(Sender: TObject);
     procedure AAddBandExecute(Sender: TObject);
     procedure AAddBandUpdate(Sender: TObject);
+    procedure AAddPageUpdate(Sender: TObject);
     procedure AAddShapeExecute(Sender: TObject);
     procedure AAlignExecute(Sender: TObject);
     procedure AAlignUpdate(Sender: TObject);
+    procedure ABringToFrontExecute(Sender: TObject);
+    procedure ACopyExecute(Sender: TObject);
+    procedure ACopyUpdate(Sender: TObject);
+    procedure ACutExecute(Sender: TObject);
+    procedure ACutUpdate(Sender: TObject);
     procedure ADeleteExecute(Sender: TObject);
     procedure ADeleteUpdate(Sender: TObject);
+    procedure AEditElementExecute(Sender: TObject);
+    procedure AEditElementUpdate(Sender: TObject);
+    procedure AFileOpenNewWindowExecute(Sender: TObject);
+    procedure AFileSaveAsExecute(Sender: TObject);
+    procedure AFileSaveAsUpdate(Sender: TObject);
+    procedure AFileSaveUpdate(Sender: TObject);
     procedure AFrameExecute(Sender: TObject);
     procedure AFrameUpdate(Sender: TObject);
+    procedure AImportLazreportExecute(Sender: TObject);
+    procedure AImportLazreportUpdate(Sender: TObject);
     procedure ANewExecute(Sender: TObject);
+    procedure ANewNewWindowExecute(Sender: TObject);
+    procedure APasteExecute(Sender: TObject);
+    procedure APasteUpdate(Sender: TObject);
     procedure APreviewExecute(Sender: TObject);
     procedure APreviewUpdate(Sender: TObject);
     procedure AReportDataExecute(Sender: TObject);
     procedure AReportDataUpdate(Sender: TObject);
     procedure AReportPropertiesExecute(Sender: TObject);
+    procedure AReportPropertiesUpdate(Sender: TObject);
     procedure AReportVariablesExecute(Sender: TObject);
+    procedure AReportVariablesUpdate(Sender: TObject);
+    procedure AResizeBandToFitExecute(Sender: TObject);
+    procedure AResizeBandToFitUpdate(Sender: TObject);
     procedure AResizeExecute(Sender: TObject);
+    procedure ASendToBackExecute(Sender: TObject);
+    procedure ASendToBackFrontUpdate(Sender: TObject);
+    procedure FormClose(Sender: TObject; var CloseAction: TCloseAction);
     procedure FormCloseQuery(Sender: TObject; var CanClose: boolean);
     procedure FormDestroy(Sender: TObject);
+    procedure FormDropFiles(Sender: TObject; const FileNames: array of String);
     procedure FormShow(Sender: TObject);
     procedure PCReportChange(Sender: TObject);
     procedure VResizeAllow(Sender: TObject);
@@ -248,6 +320,11 @@ type
     procedure VAlignExecute(Sender: TObject);
     procedure VResizeExecute(Sender: TObject);
   private
+    FCustomStartIndex : Integer;
+    FInitialFileName: String;
+    FLoadModified : Boolean;
+    FStopDesigning: Boolean;
+    MRUMenuManager1: TMRUMenuManager;
     FAutoSaveOnClose: Boolean;
     FDesignOptions: TFPReportDesignOptions;
     FFileName: String;
@@ -255,7 +332,8 @@ type
     FOnNewReport: TNotifyEvent;
     FOnOpenReport: TNotifyEvent;
     FOnSaveReport: TNotifyEvent;
-    FReportDesignData : TDesignReportDataCollection;
+    FReportDesignData : TDesignReportDataManager;
+    FImportForm: TForm;
 {$IFDEF USEDEMOREPORT}
     lReportData : TFPReportUserData;
     sl: TStringList;
@@ -270,17 +348,42 @@ type
     procedure GetReportDataNames(Sender: TObject; List: TStrings);
     procedure InitialiseData;
 {$ENDIF}
+    procedure AddCustomElementExecute(Sender: TObject);
+    procedure AddCustomElements;
+    procedure CheckLoadInitialFile;
+    function CreateDesignPopupMenu(aOWner: TComponent): TPopupMenu;
+    function CreateNewPage: TFPReportCustomPage;
+    procedure DoImportLog(Sender: TOBject; const Msg: String);
+    procedure DoPaste(Sender: TObject);
+    procedure DoReportChangedByDesigner(Sender: TObject);
     procedure DoSelectionModifiedByOI(Sender: TObject);
+    procedure DoStructureChange(Sender: TObject);
+    procedure ExecutePaste(aControl: TFPReportDesignerControl);
+    procedure GetCopyActions(aControl: TFPReportDesignerControl; L: TFPObjectList; out PCA: TPageCopyAction; out
+      BCA: TBandCopyAction);
     function GetModified: boolean;
     procedure ActivateDesignerForElement(AElement: TFPReportElement);
+    function GetPageCopyAction(aCount: Integer): TPageCopyAction;
+    function GetBandCopyAction(aCount: Integer): TBandCopyAction;
+    procedure ImportLazReport;
+    procedure MaybeAddFirstPage;
+    procedure OpenInNewWindow(aFileName: string);
+    procedure PasteBand(aControl: TFPReportDesignerControl; aAction: TBandCopyAction; var aBand: TFPReportCustomBand);
+    procedure PasteElement(aControl: TFPReportDesignerControl; aBand: TFPReportCustomBand; aElement: TFPReportElement);
+    procedure PasteList(aControl: TFPReportDesignerControl; L: TFPObjectList);
+    function PastePage(aAction: TPageCopyAction; aPage: TFPReportCustomPage): TFPReportDesignerControl;
+    procedure ResetReport;
     procedure SetBandActionTags;
     procedure SetDesignOptions(AValue: TFPReportDesignOptions);
     procedure SetFileCaption(const AFileName: String);
     procedure SetModified(AValue: Boolean);
+    procedure SetModifiedStatus;
+    procedure SetPageCaption(ASheet: TTabSheet);
   Protected
+    procedure MRUMenuManager1RecentFile(Sender: TObject; const AFileName: String);
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure ApplyDesignOptions; virtual;
-    function AddPageDesign(aPageNo: Integer; APage: TFPReportCustomPage): TTabSheet;
+    function AddPageDesign(APage: TFPReportCustomPage): TTabSheet;
     Function FindTabForReportPage(APage : TFPReportCustomPage) : TPageTabSheet;
     procedure DoSelectComponent(Sender: TObject; Selected: TComponent); virtual;
     procedure DoSelectionChanged(Sender: TObject); virtual;
@@ -291,34 +394,40 @@ type
     procedure LoadDesignFromFile(const AFilename: string); virtual;
     procedure SaveDesignToFile(AFileName: string); virtual;
     procedure CreateReportData; virtual;
-    procedure CreateReportDataSets; virtual;
+    procedure CreateReportDataSets(Errors : TStrings); virtual;
     procedure SetReport(AValue: TFPReport); virtual;
     procedure ShowReportData; virtual;
     Function DesignerCount : Integer;
     function PageDesigner(Aindex : Integer) : TFPReportDesignerControl;
     Property Modified : Boolean Read GetModified Write SetModified;
   public
+  Public
+    procedure ResetModified; virtual;
     procedure DesignReport; virtual;
     procedure StopDesigning; virtual;
     procedure PreviewReport; virtual;
+    procedure LoadReportFromFile(const AFileName: String);
     function NewReport: Boolean; virtual;
     Function SaveReport : Boolean; virtual;
     function OpenReport: Boolean; virtual;
+    function ValidateReport: Boolean;
     procedure DoElementCreated(Sender: TObject; AElement: TFPReportElement);
     Property Report : TFPReport Read FReport Write SetReport;
     Property FileName : String Read FFileName Write FFileName;
-    Property ReportDesignData : TDesignReportDataCollection Read FReportDesignData;
+    Property ReportDesignData : TDesignReportDataManager Read FReportDesignData;
     Property DesignOptions : TFPReportDesignOptions Read FDesignOptions Write SetDesignOptions;
-    // If these are set, they override the default handling.
+    // If these are set, they override the default handling. You must set the modified
     Property OnSaveReport : TNotifyEvent Read FOnSaveReport Write FOnSaveReport;
     Property OnNewReport : TNotifyEvent Read FOnNewReport Write FOnNewReport;
     Property OnOpenReport : TNotifyEvent Read FOnOpenReport Write FOnOpenReport;
     Property AutoSaveOnClose : Boolean Read FAutoSaveOnClose Write FAutoSaveOnClose;
+    Property InitialFileName : String Read FInitialFileName Write FInitialFileName;
   end;
+  TFPReportDesignerFormClass = Class of TFPReportDesignerForm;
 
 Const
   AllReportDesignOptions = [rdoManageData,rdoManageVariables,rdoAllowLoad,rdoAllowSave,rdoAllowProperties,
-                            rdoAllowPageAdd,rdoAllowNew, rdoAllowPreview, rdoAllowBands];
+                            rdoAllowPageAdd,rdoAllowNew, rdoAllowPreview, rdoAllowBands,rdoAllowFileDrop,rdoAllowImport];
 
 
 implementation
@@ -330,6 +439,8 @@ uses
   fpttf,
   fpreportstreamer,
   fpjson,
+  fplazreport,
+  Clipbrd,
   jsonparser;
 
 {$R *.lfm}
@@ -345,6 +456,34 @@ ResourceString
   SOpenReport = 'open other report';
   SCloseDesigner = 'close designer';
   SNoSelection = 'No selection';
+  SStatusModified = 'Modified';
+  SErrAccessingData = 'Error accessing data for report';
+  SErrAccessingDataDetails = 'One or more report data sources failed to open:'+
+                             sLineBreak+'%s'+sLineBreak+
+                             'You will need to fix these errors before proceeding.';
+  SErrInvalidReport = 'Invalid report design';
+  SErrFixErrors = 'The report design contains %d errors:'+sLineBreak+'%s'+sLineBreak+
+                  'You will need to fix these errors before proceeding.';
+  SErrCannotCopyClipboardFormat = 'Clipboard contents cannot be pasted into report.';
+  SCopyingPage = 'Pasting report page';
+  SCopyingPageWhat = 'The selection contains a complete report page.'+sLineBreak+
+                     'What do you want to do with this page?';
+  SCopyingPages = 'Pasting multiple report pages';
+  SCopyingPagesWhat = 'The selection contains multiple complete report pages.'+sLineBreak+
+                     'What do you want to do with these pages?';
+  SCopyingBand = 'Pasting conflicting band';
+  SCopyingBandWhat = 'The selection contains a band which cannot be logically placed on the current page.'+sLineBreak+
+                     'What do you want to do with this band?';
+  SCopyingBands = 'Pasting multiple conflicting bands';
+  SCopyingBandsWhat = 'The selection contains multiple bands which cannot be logically placed on the current page.'+sLineBreak+
+                      'What do you want to do with these bands?';
+  SNoCopy = 'Do not copy';
+  SPageAdd = 'Add as new page';
+  SPageReplace = 'Replace current page';
+  SAbortCopy = 'Abort copy';
+  sBandConvert = 'Convert to child band';
+  sBandConverts = 'Convert to child bands';
+  SErrNoBandToPaste = 'No band to paste elements on';
 
 Const
   StateNames : Array[TDesignerState] of string = ('','Resetting',
@@ -372,7 +511,7 @@ begin
   S(AAddReportSummary,btReportSummary);
   S(AAddColumnHeader,btColumnHeader);
   S(AAddColumnFooter,btColumnFooter);
-  S(AAddChildBand,btColumnFooter);
+  S(AAddChildBand,btChild);
   S(AAddDataHeader,btDataHeader);
   S(AAddDataFooter,btDataFooter);
   S(AAddDataBand,btDataband);
@@ -380,6 +519,9 @@ end;
 
 procedure TFPReportDesignerForm.FormCreate(Sender: TObject);
 
+var
+  F : Text;
+  i : Integer;
 
 begin
   DesignOptions:=AllReportDesignOptions;
@@ -396,10 +538,19 @@ begin
     end;
   if (gTTFontCache.Count=0) then
     gTTFontCache.ReadStandardFonts;
+  {$IFNDEF WINDOWS}
+  AssignFile(F,'/tmp/fonts.txt');
+  Rewrite(F);
+  For I:=0 to gTTFontCache.Count-1 do
+     Writeln(F,I,' ',gTTFontCache.Items[i].PostScriptName,' : ',gTTFontCache.Items[i].FamilyName,' : ',gTTFontCache.Items[i].HumanFriendlyName);
+  CloseFile(F);
+  {$ENDIF}
   FDataParent:=TComponent.Create(nil);
   FreeAndNil(TSDesign); // Remove design-time added page
-  FReportDesignData:=TDesignReportDataCollection.Create(TDesignReportData);
+  FReportDesignData:=TDesignReportDataManager.Create(Self);
   SetBandActionTags;
+  FCustomStartIndex:=Madd.Count;
+  AddCustomElements;
   // DEMO
 {$IFDEF USEDEMOREPORT}
   CreateDemoReport;
@@ -409,11 +560,95 @@ begin
   SetFileCaption('');
   FOI.OnSelectElement:=@DoSelectComponent;
   FOI.OnModified:=@DoSelectionModifiedByOI;
+  MRUMenuManager1 := TMRUMenuManager.Create(self);
+  with MRUMenuManager1 do
+    begin
+    IniFileName := ChangeFileExt(ParamStr(0), '.ini');
+    MenuItem := MIRecent;
+    PopupMenu := PMRecent;
+    MaxItemLength := 80;
+    MenuCaptionMask := '(%d) %s';
+    OnRecentFile := @MRUMenuManager1RecentFile;
+    LoadRecentFilesFromIni;
+    maxRecent := 15;
+    end;
+end;
+
+Type
+  { TAddElementAction }
+
+  TAddElementAction  = Class(TAction)
+  private
+    FClass: TFPReportElementClass;
+  published
+    Property AClass : TFPReportElementClass Read FClass Write FClass;
+  end;
+
+procedure TFPReportDesignerForm.AddCustomElements;
+
+  Function AllowClass(M : TFPReportClassMapping) : Boolean;
+
+  begin
+    Result:= not M.ReportElementClass.InheritsFrom(TFPReportCustomBand)
+             and not M.ReportElementClass.InheritsFrom(TFPReportCustomPage);
+    if Result then
+      Result:=Not M.Standard;
+  end;
+
+Var
+  I : Integer;
+  M : TFPReportClassMapping;
+  MI : TMenuItem;
+  A : TAddElementAction;
+  Img : TPortableNetworkGraphic;
+  S : TMemoryStream;
+
+begin
+  for I:=0 to gElementFactory.MappingCount-1 do
+    begin
+    M:=gElementFactory.Mappings[i];
+    if AllowClass(M) then
+      begin
+      A:=TAddElementAction.Create(Self);
+      A.Caption:=M.MappingName;
+      A.AClass:=M.ReportElementClass;
+      A.OnUpdate:=@AAddElementUpdate;
+      A.OnExecute:=@AddCustomElementExecute;
+      A.Category:='Add';
+      A.ActionList:=ALReport;
+      if (Length(M.IconData)>0) then
+        begin
+        Img:=Nil;
+        S:=TMemoryStream.Create;
+        try
+          S.WriteBuffer(M.IconData[0],Length(M.IConData));
+          S.Position:=0;
+          Img:=TPortableNetworkGraphic.Create;
+          Img.LoadFromStream(S);
+          A.ImageIndex:=ILReport.Add(Img,Nil);
+        Finally
+          S.Free;
+          Img.Free;
+        end;
+        end;
+      MI:=TMenuItem.Create(Self);
+      MI.Action:=A;
+      MAdd.Add(MI);
+      end;
+    end;
+end;
+
+procedure TFPReportDesignerForm.AddCustomElementExecute(Sender: TObject);
+
+begin
+  if (Sender is TAddElementAction) then
+    CurrentDesigner.AddElement((Sender as TAddElementAction).AClass);
 end;
 
 procedure TFPReportDesignerForm.FormCloseQuery(Sender: TObject;
   var CanClose: boolean);
 begin
+  MRUMenuManager1.SaveRecentFilesToIni;
   if FAutoSaveOnClose then
     begin
     SaveReport;
@@ -434,12 +669,62 @@ begin
   FreeAndNil(FReportDesignData);
 end;
 
-procedure TFPReportDesignerForm.FormShow(Sender: TObject);
+procedure TFPReportDesignerForm.FormDropFiles(Sender: TObject; const FileNames: array of String);
+
+Var
+  I : Integer;
+
 begin
-  if Assigned(Report) then
-    DesignReport;
-  SBReport.Visible:=False;
-  SBReport.Visible:=True;
+  if not (rdoAllowFileDrop in DesignOptions) then exit;
+  if Length(FileNames)<1 then exit;
+  if not CheckSaved(SOpenReport) then
+    exit;
+  StopDesigning;
+  LoadReportFromFile(FileNames[0]);
+  DesignReport;
+
+  For I:=1 to Length(FileNames)-1 do
+    OpenInNewWindow(Filenames[i]);
+end;
+
+procedure TFPReportDesignerForm.OpenInNewWindow(aFileName : string);
+
+Var
+  C : TFPReportDesignerFormClass;
+  F : TFPReportDesignerForm;
+
+begin
+  C:=TFPReportDesignerFormClass(Self.Classtype);
+  F:=C.Create(Application);
+  F.InitialFileName:=aFileName;
+  F.Show;
+end;
+
+procedure TFPReportDesignerForm.FormShow(Sender: TObject);
+
+begin
+  if rdoAllowFileDrop in DesignOptions then
+    AllowDropFiles:=True;
+  CheckLoadInitialFile;
+  SBReport.Refresh;
+end;
+
+procedure TFPReportDesignerForm.CheckLoadInitialFile;
+
+Var
+  FN : String;
+
+begin
+  if (InitialFileName<>'') then
+    begin
+    FN:=InitialFileName;
+    InitialFileName:='';
+    if FileExists(FN) then
+      begin
+      LoadReportFromFile(FN);
+      DesignReport;
+      end;
+    end;
 end;
 
 procedure TFPReportDesignerForm.DesignReport;
@@ -448,10 +733,19 @@ Var
   I : Integer;
 
 begin
+  MaybeAddFirstPage;
+  Report.StartDesigning;
   For I:=0 to Report.PageCount-1 do
-    AddPageDesign(I+1,Report.Pages[I]);
+    AddPageDesign(Report.Pages[I]);
   ShowReportData;
   ResetObjectInspector;
+  if FLoadModified then
+    begin
+    Modified:=True;
+    FLoadModified:=false;
+    end
+  else
+    Modified:=False;
 end;
 
 procedure TFPReportDesignerForm.CreateReportData;
@@ -547,7 +841,7 @@ begin
     FOI.UpdateSelection
   else
     FOI.SelectControls(D.Objects);
-  if D.Objects.SelectionCount>0 then
+  if D.Objects.HaveSelection then
     S:=D.Objects.GetSelectionRect.AsString
   else
     S:=SNoSelection;
@@ -561,22 +855,42 @@ begin
   SBreport.Panels[2].text:=StateNames[CurrentDesigner.DesignerState];
 end;
 
-function TFPReportDesignerForm.AddPageDesign(aPageNo: Integer;
-  APage: TFPReportCustomPage): TTabSheet;
+Procedure TFPReportDesignerForm.SetPageCaption(ASheet : TTabSheet);
 
 Var
   TS : TPageTabSheet;
+  PageNo : Integer;
+
+begin
+  if Not (Asheet is TPageTabSheet) then
+    exit;
+  TS:=ASheet as TPageTabSheet;
+  PageNo:=TS.TabIndex+1;
+  if (TS.Page.Name<>'') then
+    TS.Caption:=Format('Page %d (%s)',[PageNo,TS.Page.Name])
+  else
+    TS.Caption:=Format('Page %d',[PageNo]);
+end;
+
+
+function TFPReportDesignerForm.AddPageDesign(APage: TFPReportCustomPage): TTabSheet;
+
+Var
+  TS : TPageTabSheet;
+  SB : TScrollBox;
   D : TFPReportDesignerControl;
 
 begin
   TS:=TPageTabSheet.Create(Self);
   TS.FPage:=APage;
   TS.Parent:=PCReport;
-  //    TS.AutoScroll:=True;
-  TS.Caption:=Format('Page %d',[aPageNo]);
+  SetPageCaption(TS);
   D:=TFPReportDesignerControl.Create(Self);
+  SB:=TScrollBox.Create(TS);
+  SB.Parent:=TS;
+  SB.Align:=alClient;
   TS.FDesigner:=D;
-  D.Parent:=TS;
+  D.Parent:=SB;
   //  FDesign.Align:=alClient;
   //  fdesign.SetBounds(0,0,ClientWidth,ClientHeight);
   D.Top:=0;
@@ -585,17 +899,64 @@ begin
   D.OnElementCreated:=@DoElementCreated;
   D.OnSelectionChanged:=@DoSelectionChanged;
   D.OnStateChange:=@DoStateChange;
+  D.OnReportChanged:=@DoReportChangedByDesigner;
+  D.Objects.OnStructureChange:=@DoStructureChange;
+  D.OnPaste:=@DoPaste;
   D.Objects[0].Selected:=True;
+  D.PopupMenu:=CreateDesignPopupMenu(D);
   Result:=TS;
+end;
+
+Function TFPReportDesignerForm.CreateDesignPopupMenu(aOWner : TComponent) : TPopupMenu;
+
+Var
+  PM : TPopupMenu;
+
+  Function AddAction(A : TAction) : TMenuItem;
+
+  begin
+    Result:=TMenuItem.Create(PM);
+    Result.Action:=A;
+    PM.Items.Add(Result);
+  end;
+
+  Function AddSep : TMenuItem;
+
+  begin
+    Result:=TMenuItem.Create(PM);
+    Result.Caption:='-';
+    PM.Items.Add(Result);
+  end;
+
+begin
+  PM:=TPopupMenu.Create(aOwner);
+  AddAction(AEditElement);
+  AddSep;
+  AddAction(ACopy);
+  AddAction(ACut);
+  AddAction(APaste);
+  AddSep;
+  AddAction(ABringToFront);
+  AddAction(ASendToBack);
+  AddSep;
+  AddAction(AResize);
+  AddAction(AAlign);
+  Result:=PM;
 end;
 
 procedure TFPReportDesignerForm.SetFileCaption(const AFileName: String);
 
+Var
+  S : String;
+
 begin
   if AFileName='' then
-    Caption:=SCaption+' [new file]'
+    S:=SCaption+' [new file]'
   else
-    Caption:=SCaption+' ['+AFileName+']'
+    S:=SCaption+' ['+AFileName+']';
+  if Modified then
+    S:='*'+S;
+  Caption:=S;
 end;
 
 procedure TFPReportDesignerForm.SetModified(AValue: Boolean);
@@ -607,7 +968,36 @@ begin
   FModified:=AVAlue;
   if not Avalue then
     For I:=0 to DesignerCount-1 do
-       PageDesigner(i).Objects.Modified:=False;
+       PageDesigner(i).Objects.ResetModified;
+  SetModifiedStatus;
+end;
+
+procedure TFPReportDesignerForm.SetModifiedStatus;
+
+begin
+  SetFileCaption(FileName);
+  if GetModified then
+    SBReport.Panels[0].Text:=SStatusModified
+  else
+    SBReport.Panels[0].Text:='';
+end;
+
+procedure TFPReportDesignerForm.MRUMenuManager1RecentFile(Sender: TObject;
+  const AFileName: String);
+begin
+  if Not CheckSaved(SOpenReport) then
+    Exit;
+  if Assigned(OnOpenReport) then
+    begin
+    StopDesigning;
+    OnOpenReport(Self)
+    end
+  else
+    begin
+      LoadDesignFromFile(AFileName);
+      SetFileCaption(AFileName);
+    end;
+  DesignReport;
 end;
 
 procedure TFPReportDesignerForm.Notification(AComponent: TComponent;
@@ -655,9 +1045,304 @@ begin
     Result:=Nil;
 end;
 
+procedure TFPReportDesignerForm.ResetModified;
+begin
+  Modified:=False;
+end;
+
 procedure TFPReportDesignerForm.AAddMemoExecute(Sender: TObject);
 begin
   CurrentDesigner.AddElement(TFPReportMemo);
+end;
+
+Function TFPReportDesignerForm.CreateNewPage: TFPReportCustomPage;
+
+begin
+  Result:=gElementFactory.PageClass.Create(FReport);
+  Result.PageSize.PaperName := 'A4';
+  { page margins }
+  Result.Margins.Left := 30;
+  Result.Margins.Top := 20;
+  Result.Margins.Right := 30;
+  Result.Margins.Bottom := 20;
+  Result.StartDesigning;
+end;
+
+procedure TFPReportDesignerForm.DoImportLog(Sender: TOBject; const Msg: String);
+begin
+  if not Assigned(FImportForm) and Assigned(ReportImportFormClass) then
+     begin
+     FImportForm:=ReportImportFormClass.Create(Self);
+     FImportForm.Show;
+     end;
+  if Assigned(FImportForm) and (FImportForm is TBaseImportReportForm)  then
+    TBaseImportReportForm(FImportForm).Log(Msg);
+end;
+
+Function TFPReportDesignerForm.GetPageCopyAction(aCount : Integer) : TPageCopyAction;
+
+Var
+  MR : TModalResult;
+
+begin
+  if aCount=1 then
+    MR:=QuestionDlg(SCopyingPage,SCopyingPageWhat,mtWarning,[
+         mrIgnore,SNoCopy,
+         mrYes,SPageAdd,
+         mrRetry,sPageReplace,
+         mrAbort,sAbortCopy],'')
+  else
+    MR:=QuestionDlg(SCopyingPages,SCopyingPagesWhat,mtWarning,[
+         mrIgnore,SNoCopy,
+         mrYes,SPageAdd,
+         mrAbort,sAbortCopy],'');
+  case MR of
+     mrIgnore : Result:=pcaNone;
+     mrYes: Result:=pcaAdd;
+     mrRetry : Result:=pcaReplace;
+     mrAbort :Result:=pcaAbort;
+   else
+     Result := pcaAbort
+   end;
+end;
+
+function TFPReportDesignerForm.GetBandCopyAction(aCount: Integer): TBandCopyAction;
+
+Var
+  MR : TModalResult;
+  BC,C,M : String;
+
+begin
+  if aCount=1 then
+    begin
+    C:=SCopyingBand;
+    M:=SCopyingBandWhat;
+    BC:=sBandConvert;
+    end
+  else
+    begin
+    C:=SCopyingBands;
+    M:=SCopyingBandsWhat;
+    BC:=sBandConverts;
+    end;
+  MR:=QuestionDlg(C,M,mtWarning,[
+       mrIgnore,SNoCopy,
+       mrYes,BC,
+       mrAbort,sAbortCopy],'');
+  case MR of
+     mrIgnore : Result:=bcaNone;
+     mrYes: Result:=bcaConvertToChild;
+     mrAbort :Result:=bcaAbort;
+   else
+     Result := bcaAbort
+   end;
+end;
+
+
+
+procedure TFPReportDesignerForm.ExecutePaste(aControl : TFPReportDesignerControl);
+
+Var
+  L : TFPObjectList;
+  S : TMemoryStream;
+
+begin
+  aControl.CheckClipBoardFormat;
+  if Not ClipBoard.HasFormat(ClipBoardFormat) then
+     Raise EReportError.Create(SErrCannotCopyClipboardFormat);
+  L:=Nil;
+  S:=Nil;
+  try
+    S:=TMemoryStream.Create;
+    ClipBoard.GetFormat(ClipBoardFormat,S);
+    S.Position:=0;
+    L:=FReport.StreamToReportElements(S);
+    PasteList(aControl,L);
+  finally
+    FreeAndNil(L);
+    FreeAndNil(S);
+  end;
+end;
+
+procedure TFPReportDesignerForm.GetCopyActions(aControl : TFPReportDesignerControl; L : TFPObjectList;
+                                               Out PCA : TPageCopyAction;
+                                               out  BCA : TBandCopyAction);
+
+Var
+  i,pCount : Integer;
+
+begin
+  PCA:=pcaNone;
+  bca:=bcaNone;
+  pCount:=0;
+  for I:=0 to L.Count-1 do
+    if L[i] is TFPReportCustomPage then
+      inc(pCount);
+  if pCount>0 then
+    PCA:=GetPageCopyAction(pCount);
+  if (PCA=pcaAbort) then
+    exit;
+  pCount:=0;
+  for I:=0 to L.Count-1 do
+    if L[i] is TFPReportCustomBand then
+      if Not aControl.Page.CheckBandMultiplicity(TFPReportCustomBand(L[i])) then
+        Inc(pCount);
+  if pCount>0 then
+    BCA:=GetBandCopyAction(pCount)
+end;
+
+procedure TFPReportDesignerForm.PasteList(aControl : TFPReportDesignerControl; L : TFPObjectList);
+
+Var
+  L2 : TFPList;
+  i : Integer;
+  PCA : TPageCopyAction;
+  BCA : TBandCopyAction;
+  E : TFPReportElement;
+  B : TFPReportCustomBand;
+  cControl : TFPReportDesignerControl;
+  NeedReorder : Boolean;
+
+begin
+  GetCopyActions(aControl,l,PCA,BCA);
+  if (PCA=pcaAbort) or (BCA=bcaAbort) then
+    exit;
+  cControl:=aControl;
+  // First the pages (current page may be changed by this)
+  For I:=0 to L.Count-1 do
+    if L[I] is TFPReportCustomPage then
+      begin
+      E:=TFPReportCustomPage(L.Extract(L[i]));
+      cControl:=PastePage(PCA,(E as TFPReportCustomPage));
+      end;
+  if L.Count=0 then
+    exit;
+  // .. and paste the rest.
+  NeedReorder:=False;
+  L2:=TFPList.Create; // List to contain pasted elements
+  try
+    B:=aControl.GetBandForPaste;
+    While (L.Count>0) do
+      begin
+      E:=TFPReportElement(L.Extract(L[0]));
+      if E is TFPReportCustomBand then
+        begin
+        PasteBand(cControl,BCA,TFPReportCustomBand(E));
+        NeedReorder:=NeedReorder or Assigned(E);
+        // If there was not a band, use the just pasted one, if there is one.
+        if B=Nil then
+          B:=aControl.GetBandForPaste;
+        end
+      else if (E is TFPReportElement) then
+        PasteElement(cControl,B,E)
+      else
+        FreeAndNil(E);
+      if Assigned(E) then
+        L2.Add(E);
+      end;
+    // Set selection to pasted objects. Pages will not be selected by this
+    cControl.Objects.ClearSelection;
+    For I:=0 to L2.Count-1 do
+      cControl.Objects.SelectElement(TFPReportElement(L2[i]));
+    if NeedReorder then
+      cControl.Objects.OrderBands(cControl.Canvas,CurrentDesigner.CurrentDPI);
+    DoStructureChange(Self);
+  finally
+    FreeAndNil(L2);
+  end;
+end;
+
+
+Function TFPReportDesignerForm.PastePage(aAction : TPageCopyAction; aPage : TFPReportCustomPage) : TFPReportDesignerControl;
+
+Var
+  Idx : Integer;
+  oldPage : TFPReportCustomPage;
+
+begin
+  Idx:=CurrentDesigner.Page.PageIndex;
+  FReport.AddPage(aPage);
+  Case aAction of
+  pcaAdd:
+    begin
+    Result:=TPageTabSheet(AddPageDesign(aPage)).Designer;
+    end;
+  pcaReplace:
+    begin
+    oldPage:=CurrentDesigner.Page;
+    idx:=OldPage.PageIndex;
+    CurrentDesigner.Page:=aPage;
+    FReport.RemovePage(oldPage);
+    aPage.PageIndex:=idx;
+    end;
+  end;
+end;
+
+Procedure TFPReportDesignerForm.PasteBand(aControl : TFPReportDesignerControl; aAction : TBandCopyAction; var aBand : TFPReportCustomBand);
+
+Var
+  C : TFPReportCustomChildBand;
+  I : Integer;
+  N : String;
+
+begin
+  if Not aControl.Page.CheckBandMultiplicity(aBand) then
+    Case aAction of
+      bcaNone : FreeAndNil(aBand);
+      bcaConvertToChild :
+        begin
+        C:=TFPReportCustomChildBand(gElementFactory.CreateInstance('ChildBand',aControl.Page.Report));
+        N:=aBand.Name;
+        // Copy properties
+        aBand.ChildBand:=Nil;
+        C.Assign(aBand);
+        // Copy elements
+        For I:=aBand.ChildCount-1 downto 0 do
+          aBand.Child[i].Parent:=C;
+        // Replace
+        FreeAndNil(aBand);
+        aBand:=C;
+        aBand.Name:=N;
+        end;
+    end;
+  // Paste into page.
+  if Assigned(aBand) then
+    begin
+    aBand.Parent:=aControl.Page;
+    aControl.Objects.AddBand(aBand);
+    end;
+end;
+
+Procedure TFPReportDesignerForm.PasteElement(aControl : TFPReportDesignerControl; aBand : TFPReportCustomBand; aElement : TFPReportElement);
+
+Const
+  xShift = 2.0;
+  yShift = 2.0;
+
+begin
+  if (ABand=Nil) then
+    Raise EReportError.Create(SErrNoBandToPaste);
+  aElement.Parent:=aBand;
+  aElement.Layout.Left:=aElement.Layout.Left+xShift;
+  if aElement.Layout.Left>aBand.Layout.Width then
+    begin
+    aElement.Layout.Left:=aBand.Layout.Width-aElement.Layout.Width;
+    if aElement.Layout.Left<0 then
+      aElement.Layout.Left:=0;
+    end;
+  aElement.Layout.Top:=aElement.Layout.Top+yShift;
+  if aElement.Layout.top>aBand.Layout.Height then
+    begin
+    aElement.Layout.top:=aBand.Layout.Height-aElement.Layout.Height;
+    if aElement.Layout.top<0 then
+      aElement.Layout.top:=0;
+    end;
+  aControl.Objects.AddElement(aElement);
+end;
+
+procedure TFPReportDesignerForm.DoPaste(Sender: TObject);
+begin
+  ExecutePaste(Sender as TFPReportDesignerControl);
 end;
 
 procedure TFPReportDesignerForm.AAddPageExecute(Sender: TObject);
@@ -666,16 +1351,12 @@ Var
   P : TFPReportCustomPage;
 
 begin
-  P:=gBandFactory.PageClass.Create(FReport);
-  P.PageSize.PaperName := 'A4';
-  { page margins }
-  P.Margins.Left := 30;
-  P.Margins.Top := 20;
-  P.Margins.Right := 30;
-  P.Margins.Bottom := 20;
+  P:=CreateNewPage;
   FReport.AddPage(P);
+  P.Name:='Page'+IntToStr(FReport.PageCount);
   FOI.RefreshReportTree;
-  PCReport.ActivePage:=AddPageDesign(FReport.PageCount,P);
+  PCReport.ActivePage:=AddPageDesign(P);
+  Modified:=True;
 end;
 
 procedure TFPReportDesignerForm.AAddBandExecute(Sender: TObject);
@@ -689,7 +1370,7 @@ begin
     exit;
   if (CurrentDesigner=Nil) then
     Exit;
-  CurrentDesigner.AddBand(gBandFactory.BandClasses[TFPReportBandType(T)]);
+  CurrentDesigner.AddBand(gElementFactory.BandClasses[TFPReportBandType(T)]);
 end;
 
 procedure TFPReportDesignerForm.AAddBandUpdate(Sender: TObject);
@@ -697,16 +1378,27 @@ Var
   T : Integer;
   TOK : Boolean;
 begin
+
   T:=(sender as Taction).Tag;
   // Check valid tag
-  TOK:=Not ((T<0) or (T>Ord(High(TFPReportBandType))));
+  TOK:=Assigned(CurrentDesigner) and Not ((T<0) or (T>Ord(High(TFPReportBandType)))) ;
   // need to improve this to check that the type of band is actually allowed.
   (Sender as TAction).Enabled:=(rdoAllowBands in DesignOptions) and TOK;
+end;
+
+procedure TFPReportDesignerForm.AAddPageUpdate(Sender: TObject);
+begin
+  (Sender as Taction).Enabled:=Assigned(FReport);
 end;
 
 procedure TFPReportDesignerForm.AAddCheckBoxExecute(Sender: TObject);
 begin
   CurrentDesigner.AddElement(TFPReportCheckbox);
+end;
+
+procedure TFPReportDesignerForm.AAddElementUpdate(Sender: TObject);
+begin
+  (Sender as Taction).Enabled:=Assigned(Freport) and Assigned(CurrentDesigner)
 end;
 
 procedure TFPReportDesignerForm.AAddImageExecute(Sender: TObject);
@@ -739,7 +1431,39 @@ end;
 procedure TFPReportDesignerForm.AAlignUpdate(Sender: TObject);
 
 begin
-  (Sender as TAction).Enabled:=Assigned(CurrentDesigner) and CurrentDesigner.Objects.IsMultiSelect;
+  (Sender as TAction).Enabled:=Assigned(ReportAlignFormClass)
+                               and Assigned(CurrentDesigner)
+                               and CurrentDesigner.Objects.HaveSelection
+end;
+
+procedure TFPReportDesignerForm.ABringToFrontExecute(Sender: TObject);
+begin
+  CurrentDesigner.Objects.BringToFront;
+end;
+
+procedure TFPReportDesignerForm.ACopyExecute(Sender: TObject);
+begin
+  if Assigned(CurrentDesigner) then
+    CurrentDesigner.CopySelectionToClipBoard;
+end;
+
+procedure TFPReportDesignerForm.ACopyUpdate(Sender: TObject);
+begin
+  (Sender As Taction).Enabled:=Assigned(CurrentDesigner) and CurrentDesigner.Objects.HaveSelection;
+end;
+
+procedure TFPReportDesignerForm.ACutExecute(Sender: TObject);
+begin
+  if Assigned(CurrentDesigner) then
+    begin
+    CurrentDesigner.CopySelectionToClipBoard;
+    CurrentDesigner.Objects.DeleteSelection;
+    end;
+end;
+
+procedure TFPReportDesignerForm.ACutUpdate(Sender: TObject);
+begin
+  (Sender As Taction).Enabled:=Assigned(CurrentDesigner) and CurrentDesigner.Objects.HaveSelection;
 end;
 
 procedure TFPReportDesignerForm.ADeleteExecute(Sender: TObject);
@@ -756,7 +1480,62 @@ end;
 
 procedure TFPReportDesignerForm.ADeleteUpdate(Sender: TObject);
 begin
-  (Sender as TAction).Enabled:=Assigned(CurrentDesigner) and (CurrentDesigner.Objects.SelectionCount>0);
+  (Sender as TAction).Enabled:=Assigned(CurrentDesigner) and CurrentDesigner.Objects.HaveSelection;
+end;
+
+procedure TFPReportDesignerForm.AEditElementExecute(Sender: TObject);
+begin
+  CurrentDesigner.ShowEditorForElement(CurrentDesigner.Objects.GetSelection[0].Element);
+end;
+
+procedure TFPReportDesignerForm.AEditElementUpdate(Sender: TObject);
+begin
+  (Sender as Taction).Enabled:=Assigned(CurrentDesigner)
+                               and (CurrentDesigner.Objects.SelectionCount=1)
+                               and (CurrentDesigner.Objects.GetSelection[0].IsPlainElement);
+end;
+
+procedure TFPReportDesignerForm.AFileOpenNewWindowExecute(Sender: TObject);
+
+Var
+  O : TOpenOptions;
+  I : integer;
+
+begin
+  With ODReport do
+    try
+      O:=Options;
+      Include(O,ofAllowMultiSelect);
+      Options:=O;
+      If Execute then
+        For I:=0 to ODReport.Files.Count-1 do
+          OpenInNewWindow(ODReport.Files[i]);
+    finally
+      Exclude(O,ofAllowMultiSelect);
+      Options:=O;
+    end;
+end;
+
+procedure TFPReportDesignerForm.AFileSaveAsExecute(Sender: TObject);
+
+Var
+  FN : String;
+
+begin
+  FN:=FileName;
+  FileName:='';
+  if Not SaveReport then
+    FileName:=FN;
+end;
+
+procedure TFPReportDesignerForm.AFileSaveAsUpdate(Sender: TObject);
+begin
+  (Sender as TAction).Enabled:=Assigned(Report);
+end;
+
+procedure TFPReportDesignerForm.AFileSaveUpdate(Sender: TObject);
+begin
+  (Sender as TAction).Enabled:=Assigned(Report) and Modified;
 end;
 
 procedure TFPReportDesignerForm.AFrameExecute(Sender: TObject);
@@ -771,7 +1550,60 @@ end;
 
 procedure TFPReportDesignerForm.AFrameUpdate(Sender: TObject);
 begin
-  (Sender as TAction).Enabled:=Assigned(CurrentDesigner) and (CurrentDesigner.Objects.SelectionCount>0);
+  (Sender as TAction).Enabled:=Assigned(CurrentDesigner) and CurrentDesigner.Objects.HaveSelection;
+end;
+
+procedure TFPReportDesignerForm.AImportLazreportExecute(Sender: TObject);
+begin
+  if CheckSaved('import lazreport') then
+    ImportLazReport;
+end;
+
+procedure TFPReportDesignerForm.AImportLazreportUpdate(Sender: TObject);
+
+Const
+   Ops = [rdoAllowImport,rdoAllowLoad];
+
+begin
+  (Sender as TAction).Enabled:=(Ops * DesignOptions)=Ops;
+end;
+
+Procedure TFPReportDesignerForm.ImportLazReport;
+
+Var
+  FN,OFN : String;
+  R : TFPLazReport;
+  S : TFPReportJSONStreamer;
+  J : TJSONStringType;
+
+begin
+  With ODImport do
+    If Execute then
+      FN:=FileName
+    else
+      exit;
+  OFN:=ChangeFileExt(FN,'.json');
+  R:=TFPLazReport.Create(Self);
+  try
+    // Reset.
+    FImportForm:=Nil;
+    R.OnLog:=@DoImportLog;
+    R.LoadFromFile(FN);
+    S:=TFPReportJSONStreamer.Create(Self);
+    R.WriteElement(S,Nil);
+    S.JSON.Add('DesignData',TJSONObject.Create);
+    J:=S.JSON.FormatJSON( );
+    With TFileStream.Create(OFN,fmCreate) do
+      try
+        WriteBuffer(J[1],Length(J));
+      finally
+        Free;
+      end;
+  finally
+    R.Free;
+  end;
+  LoadReportFromFile(OFN);
+  DesignReport;
 end;
 
 function TFPReportDesignerForm.GetModified: boolean;
@@ -794,23 +1626,45 @@ begin
 end;
 
 procedure TFPReportDesignerForm.DoSelectionModifiedByOI(Sender: TObject);
+
+Var
+  Sel : TReportObjectArray;
+
 begin
   if Assigned(CurrentDesigner) then
     begin
-    if (FOI.ObjectList.Count=1) and
-       (FOI.ObjectList.Elements[0]=CurrentDesigner.Page) then
+    if (FOI.ObjectList.SelectionCount=1) then
       begin
-      CurrentDesigner.UpdatePageParams;
-      CurrentDesigner.Reset;
-      CurrentDesigner.Objects.SelectElement(CurrentDesigner.Page)
-      end
-    else
-      CurrentDesigner.Invalidate;
+      Sel:=FOI.ObjectList.GetSelection;
+      if (Sel[0].IsPage) and (Sel[0].AsPage=CurrentDesigner.Page) then
+        begin
+        CurrentDesigner.UpdatePageParams;
+        CurrentDesigner.Reset;
+        CurrentDesigner.Objects.SelectElement(CurrentDesigner.Page);
+        SetPageCaption(PCReport.ActivePage);
+        end
+      else
+        CurrentDesigner.Invalidate;
+      end;
     end;
+  Modified:=True;
+end;
+
+procedure TFPReportDesignerForm.DoStructureChange(Sender: TObject);
+begin
+  FOI.RefreshReportTree;
+end;
+
+procedure TFPReportDesignerForm.DoReportChangedByDesigner(Sender: TObject);
+begin
+  FOI.RefreshOI;
+  Modified:=True;
 end;
 
 function TFPReportDesignerForm.SaveReport: Boolean;
 begin
+  if Assigned(FReport) and FReport.Prepared then
+    FReport.ClearPreparedReport;
   Result:=Assigned(OnSaveReport);
   if result then
     OnSaveReport(Self)
@@ -824,7 +1678,14 @@ begin
         Result:=(FileName<>'');
         end;
     if Result then
+      begin
       SaveDesignToFile(FileName);
+      if Assigned(MRUMenuManager1) then
+        begin
+        MRUMenuManager1.AddToRecent(FileName);
+        MRUMenuManager1.SaveRecentFilesToIni;
+        end;
+      end;
     end;
 end;
 
@@ -852,10 +1713,49 @@ begin
     DesignReport;
 end;
 
-function TFPReportDesignerForm.NewReport: Boolean;
+procedure TFPReportDesignerForm.ANewNewWindowExecute(Sender: TObject);
+
+Var
+  C : TFPReportDesignerFormClass;
+  F : TFPReportDesignerForm;
+
+begin
+  C:=TFPReportDesignerFormClass(Self.Classtype);
+  F:=C.Create(Application);
+  if F.NewReport then
+    begin
+    F.DesignReport;
+    F.Show;
+    end;
+end;
+
+procedure TFPReportDesignerForm.APasteExecute(Sender: TObject);
+begin
+  DoPaste(CurrentDesigner);
+end;
+
+procedure TFPReportDesignerForm.APasteUpdate(Sender: TObject);
+begin
+  TFPReportDesignerControl.CheckClipBoardFormat;
+  (Sender as TAction).Enabled:=ClipBoard.HasFormat(ClipBoardFormat);
+end;
+
+Procedure TFPReportDesignerForm.MaybeAddFirstPage;
 
 Var
   P : TFPReportCustomPage;
+
+begin
+  if (FReport.PageCount=0) then
+    begin
+    p:=CreateNewPage;
+    FReport.AddPage(P);
+    P.Name:='Page'+IntToStr(FReport.PageCount);
+    end;
+end;
+
+function TFPReportDesignerForm.NewReport: Boolean;
+
 
 begin
   result:=Assigned(OnNewReport);
@@ -863,23 +1763,37 @@ begin
     OnNewReport(Self)
   else
     begin
-    FreeAndNil(FReport);
-    Report:=TFPReport.Create(Self);
-    p:=gBandFactory.PageClass.Create(FReport);
-    p.PageSize.PaperName := 'A4';
-    p.Margins.Left := 20;
-    p.Margins.Top := 20;
-    p.Margins.Right := 20;
-    p.Margins.Bottom := 20;
-    FReport.AddPage(P);
+    StopDesigning;
+    ResetReport;
+    MaybeAddFirstPage;
+    Report.StartDesigning;
     FOI.RefreshReportTree;
-    Result:=True
+    Result:=True;
     end;
+  if Result then
+    FFileName:='';
 end;
 
 procedure TFPReportDesignerForm.APreviewExecute(Sender: TObject);
 begin
   PreviewReport;
+end;
+
+Function TFPReportDesignerForm.ValidateReport : Boolean;
+
+Var
+  errs : TStrings;
+
+begin
+  errs:=TStringList.Create;
+  try
+    Report.Validate(errs);
+    Result:=Errs.Count=0;
+    if Not Result then
+      MessageDlg(SErrInvalidReport,Format(SErrFixErrors,[Errs.Count,Errs.Text]),mtError,[mbOK],'');
+  finally
+    errs.Free;
+  end;
 end;
 
 procedure TFPReportDesignerForm.PreviewReport;
@@ -888,9 +1802,17 @@ Var
   F : TFPreportPreviewExport;
 
 begin
-  FReport.RunReport;
-  F:=TFPreportPreviewExport.Create(Self);
-  FReport.RenderReport(F);
+  if not ValidateReport then
+    exit;
+  FReportDesignData.StartRender;
+  try
+    FReport.RunReport;
+    F:=TFPreportPreviewExport.Create(Self);
+    FReport.RenderReport(F);
+    FReport.ClearPreparedReport;
+  finally
+    FReportDesignData.EndRender;
+  end;
 end;
 
 procedure TFPReportDesignerForm.APreviewUpdate(Sender: TObject);
@@ -906,15 +1828,18 @@ Var
 begin
   if not Assigned(ReportDataFormClass) then
     exit;
+  Self.Report.SaveDataToNames;
   F:=ReportDataFormClass.Create(Self);
   try
+
     F.Report:=Self.Report;
-    F.Data:=FReportDesignData;
+    F.Data:=FReportDesignData.DataDefinitions;
     if F.ShowModal=mrOK then
       begin
-      FReportDesignData.Assign(F.Data);
-      CreateReportDataSets;
-      FModified:=True;
+      FReportDesignData.RemoveFromReport(FReport);
+      FReportDesignData.DataDefinitions:=F.Data;
+      CreateReportDataSets(Nil);
+      Modified:=True;
       end;
   finally
      F.Free;
@@ -926,30 +1851,14 @@ begin
   (Sender as TAction).Enabled:=Assigned(FReport);
 end;
 
-procedure TFPReportDesignerForm.CreateReportDataSets;
+procedure TFPReportDesignerForm.CreateReportDataSets(Errors: TStrings);
 
-Var
-  I : Integer;
-  ReportD : TFPReportDataItem;
-  DesignD : TDesignReportData;
-  DatasetD : TFPReportDatasetData;
 
 begin
-  While FDataParent.ComponentCount>0 do
-    FDataParent.Components[FDataParent.ComponentCount-1].Free;
-  FReport.SaveDataToNames;
-  FReport.ReportData.Clear;
-  For I:=0 to FReportDesignData.Count-1 do
-    begin
-    DesignD:=FReportDesignData[i];
-    DatasetD:=TFPReportDatasetData.Create(FDataParent);
-    DatasetD.Dataset:=DesignD.CreateDataSet(DatasetD);
-    DatasetD.InitFieldDefs;
-    DatasetD.Name:=DesignD.Name;
-    DatasetD.Dataset.Name:=DesignD.Name;
-    ReportD:=FReport.ReportData.AddReportData(DatasetD);
-    end;
+  if (rdoManageData in DesignOptions) then
+    FReportDesignData.ApplyToReport(FReport,Errors);
   FReport.RestoreDataFromNames;
+  FReportData.Report:=FReport;
   FReportData.RefreshData;
 end;
 
@@ -964,36 +1873,55 @@ begin
   try
     F.Report:=FReport;
     If (F.ShowModal=mrOK) then
-      FModified:=True;
+      Modified:=True;
   finally
      F.Free;
   end;
+end;
+
+procedure TFPReportDesignerForm.AReportPropertiesUpdate(Sender: TObject);
+begin
+  (Sender as Taction).Enabled:=Assigned(Report) and (rdoAllowProperties in DesignOptions);
 end;
 
 procedure TFPReportDesignerForm.AReportVariablesExecute(Sender: TObject);
 
 Var
   F : TBaseReportVariablesForm;
-  S : String;
+
 
 begin
   if ReportVariablesFormClass=nil then
     exit;
-  S:=ReportVariablesFormClass.ClassName;
   F:=ReportVariablesFormClass.Create(Self);
-
   try
     F.Report:=Self.Report;
     F.Variables:=FReport.Variables;
     if (F.ShowModal=mrOK) then
       begin
-      FModified:=True;
+      Modified:=True;
       FReport.Variables:=F.Variables;
       FReportData.RefreshVariables;
       end;
   finally
      F.Free;
   end;
+end;
+
+procedure TFPReportDesignerForm.AReportVariablesUpdate(Sender: TObject);
+begin
+  (Sender as Taction).Enabled:=Assigned(Report) and (rdoManageVariables in DesignOptions);
+end;
+
+procedure TFPReportDesignerForm.AResizeBandToFitExecute(Sender: TObject);
+begin
+  If Assigned(CurrentDesigner) then
+   CurrentDesigner.Objects.AdjustSelectedBandsToContent;
+end;
+
+procedure TFPReportDesignerForm.AResizeBandToFitUpdate(Sender: TObject);
+begin
+  (Sender as TAction).Enabled:=Assigned(CurrentDesigner) and (CurrentDesigner.Objects.HaveSelection);
 end;
 
 procedure TFPReportDesignerForm.AResizeExecute(Sender: TObject);
@@ -1008,16 +1936,36 @@ begin
   try
     F.Report:=Self.Report;
     if F.ShowModal=mrOK then
-      CurrentDesigner.Objects.ResizeSelection(F.Horizontal,F.HorizontalSize,F.Vertical,F.VerticalSize);
+      CurrentDesigner.Objects.ResizeSelection(F.Vertical,F.VerticalSize,F.Horizontal,F.HorizontalSize);
   finally
     F.Free;
   end;
 end;
 
+procedure TFPReportDesignerForm.ASendToBackExecute(Sender: TObject);
+begin
+  CurrentDesigner.Objects.SendToBack;
+end;
+
+procedure TFPReportDesignerForm.ASendToBackFrontUpdate(Sender: TObject);
+begin
+  (Sender as TAction).Enabled:=Assigned(CurrentDesigner)
+                               and (CurrentDesigner.Objects.SelectionCount=1)
+                               and (CurrentDesigner.Objects.GetSelection[0].IsPlainElement);
+end;
+
+procedure TFPReportDesignerForm.FormClose(Sender: TObject; var CloseAction: TCloseAction);
+begin
+  if Not (fsModal in FFormState) then
+    CloseAction:=caFree;
+
+end;
+
 
 procedure TFPReportDesignerForm.PCReportChange(Sender: TObject);
 begin
-  ResetObjectInspector;
+  if not FStopDesigning then
+    ResetObjectInspector;
 end;
 
 procedure TFPReportDesignerForm.ResetObjectInspector;
@@ -1037,13 +1985,13 @@ end;
 
 procedure TFPReportDesignerForm.HResizeExecute(Sender: TObject);
 begin
-  CurrentDesigner.Objects.ResizeSelection(TSizeAdjust((Sender as TACtion).Tag),0.0,saNone,0.0);
+  CurrentDesigner.Objects.ResizeSelection(saNone,0.0,TSizeAdjust((Sender as TACtion).Tag),0.0);
 end;
 
 procedure TFPReportDesignerForm.AResizeUpdate(Sender: TObject);
 
 begin
-  (Sender as TAction).Enabled:=Assigned(ReportResizeFormClass) and Assigned(CurrentDesigner) and CurrentDesigner.Objects.IsMultiSelect;
+  (Sender as TAction).Enabled:=Assigned(ReportResizeFormClass) and Assigned(CurrentDesigner) and (CurrentDesigner.Objects.Haveselection) ;
 end;
 
 procedure TFPReportDesignerForm.HResizeAllow(Sender: TObject);
@@ -1074,7 +2022,7 @@ procedure TFPReportDesignerForm.SaveDesignToFile(AFileName : string);
 
 Var
   WS: TFPReportJSONStreamer;
-  S : String;
+  S : UTF8String;
   FS : TFileStream;
   DD : TJSONObject;
 
@@ -1085,17 +2033,20 @@ begin
     // Write report
     WS.JSON:=TJSONObject.Create;
     FReport.WriteElement(WS);
-    // Add design data
-    DD:=TJSONObject.Create;
-    WS.JSon.Add('DesignData',DD);
-    FReportDesignData.SaveToJSON(DD);
+    if rdoManageData in DesignOptions then
+      begin
+      // Add design data
+      DD:=TJSONObject.Create;
+      WS.JSon.Add('DesignData',DD);
+      FReportDesignData.SaveToJSON(DD);
+      end;
     // Now save to file
     fs:=TFileStream.Create(AFilename, fmCreate);
     S:=WS.JSON.FormatJSON();
     fs.WriteBuffer(S[1],Length(S));
     // Housekeeping
     SetFileCaption(AFileName);
-    FModified:=False;
+    Modified:=False;
   finally
     FreeAndNil(fs);
     FreeAndNil(ws);
@@ -1134,6 +2085,7 @@ end;
 function TFPReportDesignerForm.OpenReport: Boolean;
 
 begin
+  FLoadModified:=False;
   Result:=Assigned(OnOpenReport);
   if Result then
     begin
@@ -1146,14 +2098,22 @@ begin
       ODReport.FileName:=Self.FileName;
     Result:=ODReport.Execute;
     if Result then
-      begin
-      StopDesigning;
-      LoadDesignFromFile(ODReport.FileName);
-      SetFileCaption(ODReport.FileName);
-      end;
+      LoadReportFromFile(ODReport.FileName);
     end;
   If Result then
     DesignReport;
+end;
+
+Procedure TFPReportDesignerForm.LoadReportFromFile(Const AFileName : String);
+
+begin
+  LoadDesignFromFile(AFileName);
+  SetFileCaption(AFileName);
+  if Assigned(MRUMenuManager1) then
+    begin
+    MRUMenuManager1.AddToRecent(AFileName);
+    MRUMenuManager1.SaveRecentFilesToIni;
+    end;
 end;
 
 procedure TFPReportDesignerForm.StopDesigning;
@@ -1162,17 +2122,31 @@ Var
   I : integer;
 
 begin
-  For I:=ComponentCount-1 downto 0 do
-    if Components[I] is TFPReportDesignerControl then
-       Components[I].Free;
-  While PCReport.ControlCount>0 do
-    PCReport.Controls[PCReport.ControlCount-1].Free;
-  // Give LCL time to clean up.
-  Application.ProcessMessages;
-  FReportData.Report:=Nil;
-  FReportDesignData.Clear;
-  FOI.Report:=Nil;
-  FOI.SelectControls(Nil);
+  I:=FReportDesignData.DataDefinitions.Count;
+  FStopDesigning:=True;
+  try
+    if Assigned(FReport) then
+      Report.EndDesigning;
+    For I:=ComponentCount-1 downto 0 do
+      if Components[I] is TFPReportDesignerControl then
+         Components[I].Free;
+
+    While PCReport.ControlCount>0 do
+      PCReport.Controls[PCReport.ControlCount-1].Free;
+    // Give LCL time to clean up.
+    Application.ProcessMessages;
+    FReportData.Report:=Nil;
+    if (rdoManageData in DesignOptions) then
+      begin
+      if Assigned(FReport) then
+        FReportDesignData.RemoveFromReport(FReport);
+      FReportDesignData.DataDefinitions.Clear;
+      end;
+    FOI.Report:=Nil;
+    FOI.SelectControls(Nil);
+  Finally
+    FStopDesigning:=False;
+  end;
 end;
 
 procedure TFPReportDesignerForm.VAlignExecute(Sender: TObject);
@@ -1185,41 +2159,78 @@ end;
 
 procedure TFPReportDesignerForm.VResizeExecute(Sender: TObject);
 begin
-  CurrentDesigner.Objects.ResizeSelection(saNone,0.0,TSizeAdjust((Sender as TACtion).Tag),0.0);
+  CurrentDesigner.Objects.ResizeSelection(TSizeAdjust((Sender as TACtion).Tag),0.0,saNone,0.0);
+end;
+
+procedure TFPReportDesignerForm.ResetReport;
+
+begin
+  if Assigned(FReport) then
+    begin
+    if (FReport.Owner=Self) then
+      begin
+      FreeAndNil(FReport);
+      FReport := TFPReport.Create(Self);
+      end
+    else
+      FReport.Clear(rdoManageData in DesignOptions);
+    end
+  else
+    FReport := TFPReport.Create(Self);
 end;
 
 procedure TFPReportDesignerForm.LoadDesignFromFile(const AFilename: string);
+
 var
   rs: TFPReportJSONStreamer;
-  fs: TFileStream;
+  ms : TMemoryStream;
+  uts : UTF8String;
   DD,lJSON: TJSONObject;
+  Errs : TStrings;
+  OldName : TComponentName;
+
 begin
   if AFilename = '' then
     Exit;
   if not FileExists(AFilename) then
     raise Exception.CreateFmt('The file "%s" can not be found', [AFilename]);
 
-  fs := TFileStream.Create(AFilename, fmOpenRead or fmShareDenyNone);
+  ms := TMemoryStream.Create();
   try
-    lJSON := TJSONObject(GetJSON(fs));
+    ms.LoadFromFile(AFilename);
+    ms.Position := 0;
+    SetLength(uts,ms.Size);
+    Move(ms.Memory^,uts[Low(uts)],Length(uts));
   finally
-    FreeAndNil(fs);
+    FreeAndNil(ms);
   end;
-
-  FreeAndNil(FReport);
-  FReport := TFPReport.Create(nil);
-
+  lJSON := TJSONObject(GetJSON(uts));
+  StopDesigning;
+  ResetReport;
+  OldName:=FReport.Name;
+  errs:=nil;
   rs := TFPReportJSONStreamer.Create(nil);
   rs.JSON := lJSON; // rs takes ownership of lJSON
   try
-    DD:=lJSON.Get('DesignData',TJSONObject(Nil));
-    if Assigned(DD) then
-      FReportDesignData.LoadFromJSON(DD);
+    if rdoManageData in DesignOptions then
+      begin
+      DD:=lJSON.Get('DesignData',TJSONObject(Nil));
+      if Assigned(DD) then
+        FReportDesignData.DataDefinitions.LoadFromJSON(DD);
+      end;
     // We must do this before the report is loaded, so the pages/bands can find their data
-    CreateReportDataSets;
+    Errs:=TStringList.Create;
+    CreateReportDataSets(Errs);
     FReport.ReadElement(rs);
+    if (FReport.Owner<>Self) and (OldName<>'') then
+      FReport.Name:=OldName;
+    FFilename:=AFileName;
+    if Assigned(errs) and (Errs.Count>0) then
+      MessageDlg(SErrAccessingData,Format(SErrAccessingDataDetails,[Errs.Text]),mtWarning,[mbOK],'');
+    FLoadModified:=rs.IsModified;
   finally
     FreeAndNil(rs);
+    FreeAndNil(Errs);
   end;
 end;
 
@@ -1259,10 +2270,12 @@ begin
   EnableAction(AReportData,rdoManageData);
   EnableAction(AReportVariables,rdoManageVariables);
   EnableAction(AFileOpen,rdoAllowLoad);
+  EnableAction(AFileOpenNewWindow,rdoAllowLoad);
   EnableAction(AFileSave,rdoAllowSave);
   EnableAction(AReportProperties,rdoAllowProperties);
   EnableAction(AAddPage,rdoAllowPageAdd);
   EnableAction(ANew,rdoAllowNew);
+  EnableAction(ANewNewWindow,rdoAllowNew);
   EnableAction(APreview,rdoAllowPreview);
   EnableActions([AAddChildBand,AAddGroupHeader,AAddGroupFooter,AAddPageHeader,
                  AAddPageFooter,AAddReportTitle,AAddReportSummary,AAddColumnHeader,
@@ -1283,12 +2296,15 @@ end;
 procedure TFPReportDesignerForm.DoElementCreated(Sender: TObject;
   AElement: TFPReportElement);
 begin
+  AElement.StartDesigning;
+  if AElement.Name='' then
+    AElement.Name:=AElement.AllocateName;
   If AElement is TFPReportCustomMemo then
     begin
-    TFPReportMemo(AElement).Font.Name := 'LiberationSans';
     if TFPReportMemo(AElement).Text='' then
       TFPReportMemo(AElement).Text:='New memo';
     end;
+  FOI.RefreshReportTree;
 end;
 
 {$IFDEF USEDEMOREPORT}

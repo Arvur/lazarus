@@ -1431,10 +1431,10 @@ begin
   // if no preferred size is valid use the class defaults
   if not IsPrefWidthValid then
     PreferredSize[asboHorizontal]:=
-      Control.Constraints.MinMaxWidth(Control.GetControlClassDefaultSize.CX);
+      Control.Constraints.MinMaxWidth(Control.Scale96ToFont(Control.GetControlClassDefaultSize.CX));
   if not IsPrefHeightValid then
     PreferredSize[asboVertical]:=
-      Control.Constraints.MinMaxHeight(Control.GetControlClassDefaultSize.CX);
+      Control.Constraints.MinMaxHeight(Control.Scale96ToFont(Control.GetControlClassDefaultSize.CY));
 
   //DebugLn(['TAutoSizeBox.SetControl ',DbgSName(Control),' ',PreferredSize[asboHorizontal]]);
   Control.BorderSpacing.GetSpaceAround(Border);
@@ -2528,6 +2528,20 @@ begin
       AlignList.Insert(X, Control);
     end;
   end;
+end;
+
+procedure TWinControl.UpdateAlignIndex(aChild: TControl);
+// Move child control to position 0 of FAlignOrder
+var
+  i: Integer;
+begin
+  if FAlignOrder=nil then
+    FAlignOrder:=TFPList.Create;
+  i:=FAlignOrder.IndexOf(aChild);
+  if i<0 then
+    FAlignOrder.Insert(0,aChild)
+  else
+    FAlignOrder.Move(i,0);
 end;
 
 {------------------------------------------------------------------------------
@@ -3831,6 +3845,11 @@ begin
   Exclude(FWinControlFlags,wcfAdjustedLogicalClientRectValid);
 end;
 
+function TWinControl.DoubleBufferedIsStored: Boolean;
+begin
+  Result := not FParentDoubleBuffered;
+end;
+
 {------------------------------------------------------------------------------
   TWinControl EnableAlign
 ------------------------------------------------------------------------------}
@@ -4313,7 +4332,7 @@ begin
       SizeType := 6; // force realign
       if (FWidth  < Low(Word)) or (FWidth  > High(Word))
       or (FHeight < Low(Word)) or (FHeight > High(Word)) then
-        raise Exception.CreateFmt('Size range overflow in %s.SendMoveSizeMessages:'
+        raise ELayoutException.CreateFmt('Size range overflow in %s.SendMoveSizeMessages:'
                                  +' Width=%d, Height=%d.', [Name, FWidth, FHeight]);
       Width := FWidth;
       Height := FHeight;
@@ -4333,7 +4352,7 @@ begin
       MoveType:= 1;
       if (FLeft < Low(Smallint)) or (FLeft > High(Smallint))
       or (FTop  < Low(Smallint)) or (FTop  > High(Smallint)) then
-        raise Exception.CreateFmt('Position range overflow in %s.SendMoveSizeMessages:'
+        raise ELayoutException.CreateFmt('Position range overflow in %s.SendMoveSizeMessages:'
                                  +' Left=%d, Top=%d.', [Name, FLeft, FTop]);
       XPos := FLeft;
       YPos := FTop;
@@ -4597,6 +4616,23 @@ begin
   end;
 end;
 
+procedure TWinControl.FixDesignFontsPPIWithChildren(const ADesignTimePPI: Integer);
+  procedure FixChildren(const AParent: TWinControl);
+  var
+    I: Integer;
+  begin
+    for I := 0 to AParent.ControlCount-1 do
+    begin
+      AParent.Controls[I].FixDesignFontsPPI(ADesignTimePPI);
+      if AParent.Controls[I] is TWinControl then
+        FixChildren(TWinControl(AParent.Controls[I]));
+    end;
+  end;
+begin
+  FixDesignFontsPPI(ADesignTimePPI);
+  FixChildren(Self);
+end;
+
 procedure TWinControl.SelectFirst;
 var
   Form : TCustomForm;
@@ -4690,15 +4726,7 @@ begin
   else
   begin
     // do query wincontrol children, in case they overlap
-    Control := ControlAtPos(SmallPointToPoint(MouseMessage.Pos),
-                            [capfAllowWinControls]);
-    if Control is TWinControl then
-    begin
-      // there is a TWinControl child at this position
-      // TWinControl children get their own messages
-      // => ignore here
-      Control := nil;
-    end;
+    Control := ControlAtPos(SmallPointToPoint(MouseMessage.Pos), []);
   end;
 
   //DebugLn(['TWinControl.IsControlMouseMsg B ',DbgSName(Self),' Control=',DbgSName(Control),' Msg=',TheMessage.Msg]);
@@ -4913,8 +4941,9 @@ begin
       if not (TempControl is TWinControl) then begin
         //DebugLn('TWinControl.PaintControls B Self=',Self.Name,':',Self.ClassName,' Control=',TempControl.Name,':',TempControl.ClassName,' ',TempControl.Left,',',TempControl.Top,',',TempControl.Width,',',TempControl.Height);
         with TempControl do
-          if IsVisible
-          and RectVisible(DC, TempControl.BoundsRect) then
+          if ((WidgetSet.GetLCLCapability(lcCanDrawHidden) = LCL_CAPABILITY_YES) and isControlVisible)
+            or (IsVisible and RectVisible(DC, TempControl.BoundsRect))
+          then
           begin
             if csPaintCopy in Self.ControlState then
               Include(FControlState, csPaintCopy);
@@ -5132,21 +5161,15 @@ var
   function GetControlAtPos(AControl: TControl): Boolean;
   var
     ControlPos: TPoint;
-    ControlClientBounds: TRect;
   begin
     with AControl do
     begin
-      // MG: Delphi checks for PtInRect(ClientRect,P). But the client area is
-      //     not always at 0,0, so I guess this is a bug in the VCL.
-
       ControlPos := Point(P.X - Left, P.Y - Top);
       Result := (ControlPos.X >= 0) and (ControlPos.Y >= 0) and
                 (ControlPos.X < Width) and (ControlPos.Y < Height);
+
       if Result and (capfOnlyClientAreas in Flags) then
-      begin
-        ControlClientBounds := GetChildrenRect(false);
-        Result:=PtInRect(ControlClientBounds, ControlPos);
-      end;
+        Result := PtInRect(ClientRect, ControlPos);
 
       Result := Result
         and (
@@ -6317,13 +6340,15 @@ begin
     AControl.ValidateContainer(Self);
     Perform(CM_CONTROLLISTCHANGE, WParam(AControl), LParam(True));
     Insert(AControl,Index);
-    AControl.UpdateAlignIndex;
+    Assert(AControl.Parent = Self, 'TWinControl.InsertControl: AControl.Parent <> Self');
+    UpdateAlignIndex(AControl);
     if not (csReading in AControl.ComponentState) then
     begin
       AControl.Perform(CM_PARENTCOLORCHANGED, 0, 0);
       AControl.Perform(CM_PARENTSHOWHINTCHANGED, 0, 0);
       AControl.Perform(CM_PARENTBIDIMODECHANGED, 0, 0);
       AControl.Perform(CM_PARENTFONTCHANGED, 0, 0);
+      AControl.Perform(CM_PARENTDOUBLEBUFFEREDCHANGED, 0, 0);
       AControl.UpdateBaseBounds(false,true,false);
       if AControl is TWinControl then
         TWinControl(AControl).UpdateControlState
@@ -6527,6 +6552,16 @@ begin
   Invalidate;
 end;
 
+procedure TWinControl.SetParentDoubleBuffered(Value: Boolean);
+begin
+  if FParentDoubleBuffered <> Value then
+  begin
+    FParentDoubleBuffered := Value;
+    if Assigned(FParent) and not (csReading in ComponentState) then
+      Perform(CM_PARENTDOUBLEBUFFEREDCHANGED, 0, 0);
+  end;
+end;
+
 {------------------------------------------------------------------------------
   Method: TWinControl.Create
   Params:  None
@@ -6541,6 +6576,7 @@ begin
   // use property that bsNone is zero
   //FBorderStyle := bsNone;
   inherited Create(TheOwner);
+  FParentDoubleBuffered := True;
   FCompStyle := csWinControl;
   FChildSizing:=TControlChildSizing.Create(Self);
   FChildSizing.OnChange:=@DoChildSizingChange;
@@ -6726,6 +6762,12 @@ begin
   Invalidate;
 end;
 
+procedure TWinControl.CMDoubleBufferedChanged(var Message: TLMessage);
+begin
+  NotifyControls(CM_PARENTDOUBLEBUFFEREDCHANGED);
+  Invalidate;
+end;
+
 {------------------------------------------------------------------------------
   Method: TWinControl.WMSetFocus
   Params: Message
@@ -6793,7 +6835,7 @@ begin
 
   //if Name='GroupBox1' then
   //  debugln(['TWinControl.WMPaint ',DbgSName(Self),' DoubleBuffered=',DoubleBuffered,' Msg.DC=',dbgs(Msg.DC),' csCustomPaint=',csCustomPaint in ControlState,' ControlCount=',ControlCount,' ClientRect=',dbgs(ClientRect)]);
-  if (Msg.DC <> 0) or not DoubleBuffered then
+  if (Msg.DC <> 0) or not TWSWinControlClass(WidgetSetClass).GetDoubleBuffered(Self) then
   begin
     if not (csCustomPaint in ControlState) and (ControlCount = 0) then
       begin
@@ -6884,7 +6926,7 @@ var
 
   procedure RaiseLoop;
   begin
-    raise Exception.Create('TWinControl.WMMove loop detected: '+DbgSName(Self)+' BoundsRealized='+dbgs(FBoundsRealized)+' NewBoundsRealized='+dbgs(NewBoundsRealized));
+    raise ELayoutException.Create('TWinControl.WMMove loop detected: '+DbgSName(Self)+' BoundsRealized='+dbgs(FBoundsRealized)+' NewBoundsRealized='+dbgs(NewBoundsRealized));
   end;
 
 begin
@@ -6931,10 +6973,7 @@ begin
       exit;
     end;
   end;
-  if Assigned(Parent) then
-    SetBoundsKeepBase(Message.XPos, Message.YPos, NewWidth, NewHeight)
-  else
-    SetBounds(Message.XPos, Message.YPos, NewWidth, NewHeight);
+  SetBounds(Message.XPos, Message.YPos, NewWidth, NewHeight);
 end;
 
 {------------------------------------------------------------------------------
@@ -6964,7 +7003,7 @@ var
       or (OldClientSize.cy<>NewClientSize.cy)
     then
       s:=s+' OldClientSize='+dbgs(OldClientSize)+' NewClientSize='+dbgs(NewClientSize);
-    raise Exception.Create(s);
+    raise ELayoutException.Create(s);
   end;
 
 begin
@@ -7089,7 +7128,7 @@ var
 
   procedure RaiseLoop;
   begin
-    raise Exception.Create('TWinControl.WMWindowPosChanged loop detected: '+DbgSName(Self)+' BoundsRealized='+dbgs(FBoundsRealized)+' NewBoundsRealized='+dbgs(NewBoundsRealized));
+    raise ELayoutException.Create('TWinControl.WMWindowPosChanged loop detected: '+DbgSName(Self)+' BoundsRealized='+dbgs(FBoundsRealized)+' NewBoundsRealized='+dbgs(NewBoundsRealized));
   end;
 
 begin
@@ -7238,8 +7277,7 @@ begin
   //debugln('TWinControl.CNChar B ',DbgSName(Self),' ',dbgs(Message.CharCode),' ',dbgs(IntfSendsUTF8KeyPress));
   if Widgetset.GetLCLCapability(lcSendsUTF8KeyPress) = LCL_CAPABILITY_NO then
   begin
-    // current interface does not (yet) send UTF8 key press notifications
-    // -> emulate
+    // current interface does not (yet) send UTF8 key press notifications -> emulate
     if (Message.CharCode < %11000000) then
     begin
       c:=chr(Message.CharCode);
@@ -7844,6 +7882,8 @@ begin
       // again. To propely initialize control after we need to restore color
       // and font. Request update.
       FWinControlFlags := FWinControlFlags + [wcfColorChanged, wcfFontChanged];
+      if (CaptureControl=Self) then
+        SetCaptureControl(nil);
     finally
       EnableAutoSizing{$IFDEF DebugDisableAutoSizing}('TWinControl.DestroyWnd'){$ENDIF};
     end;
@@ -7910,7 +7950,8 @@ end;
 procedure TWinControl.EndUpdateBounds;
 begin
   if FBoundsLockCount <= 0 then
-    raise EInvalidOperation.CreateFmt('TWinControl.EndUpdateBounds %s too many calls.', [DbgSName(Self)]);
+    raise ELayoutException.CreateFmt('TWinControl.EndUpdateBounds %s too many calls.',
+                                     [DbgSName(Self)]);
   dec(FBoundsLockCount);
   if FBoundsLockCount = 0 then
     SetBounds(Left, Top, Width, Height);
@@ -8013,6 +8054,17 @@ begin
   end;
 end;
 
+procedure TWinControl.SetDoubleBuffered(Value: Boolean);
+var
+  AChanged: Boolean;
+begin
+  AChanged := FDoubleBuffered <> Value;
+  FDoubleBuffered := Value;
+  FParentDoubleBuffered := False;
+  if AChanged then
+    Perform(CM_DOUBLEBUFFEREDCHANGED, 0, 0);
+end;
+
 function TWinControl.DoDockClientMsg(DragDockObject: TDragDockObject;
   aPosition: TPoint): boolean;
 var
@@ -8062,9 +8114,11 @@ procedure TWinControl.SetBounds(ALeft, ATop, AWidth, AHeight: integer);
     if FRealizeBoundsLockCount > 0 then Exit;
     // the user changed the bounds
     if AWidth < 0 then
-      raise EInvalidOperation.CreateFmt('TWinControl.SetBounds (%s): Negative width %d not allowed.', [DbgSName(Self), AWidth]);
+      raise ELayoutException.CreateFmt('TWinControl.SetBounds (%s): Negative width %d not allowed.',
+                                       [DbgSName(Self), AWidth]);
     if AHeight < 0 then
-      raise EInvalidOperation.CreateFmt('TWinControl.SetBounds (%s): Negative height %d not allowed.', [DbgSName(Self), AHeight]);
+      raise ELayoutException.CreateFmt('TWinControl.SetBounds (%s): Negative height %d not allowed.',
+                                       [DbgSName(Self), AHeight]);
   end;
 
 var
@@ -8352,6 +8406,16 @@ begin
   DoExit;
 end;
 
+procedure TWinControl.CMParentDoubleBufferedChanged(var Message: TLMessage);
+begin
+  if FParentDoubleBuffered then
+  begin
+    if Assigned(FParent) then
+      DoubleBuffered := FParent.DoubleBuffered; // call CM_DOUBLEBUFFEREDCHANGED
+    FParentDoubleBuffered := True;
+  end;
+end;
+
 procedure TWinControl.WMContextMenu(var Message: TLMContextMenu);
 var
   Child: TControl;
@@ -8366,7 +8430,7 @@ begin
   begin
     // don't allow disabled and don't search wincontrols - they receive their
     // message themself
-    Child := ControlAtPos(ScreenToClient(SmallPointToPoint(Message.Pos)), [capfHasScrollOffset]);
+    Child := ControlAtPos(ScreenToClient(SmallPointToPoint(Message.Pos)), []);
     if Assigned(Child) then
       with Message do
       begin

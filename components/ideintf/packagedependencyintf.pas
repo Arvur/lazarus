@@ -7,9 +7,7 @@ interface
 uses
   Classes, SysUtils,
   // LazUtils
-  LazFileUtils,
-  // IdeIntf
-  IDEUtils;
+  LazFileUtils, LazStringUtils;
 
 type
 
@@ -101,9 +99,9 @@ type
     property Removed: boolean read FRemoved write FRemoved;
   end;
 
-  function IsValidUnitName(AUnitName: String): Boolean; inline;
-  function IsValidPkgName(APkgName: String): Boolean; inline;
-  function PackageFileNameIsValid(const AFilename: string): boolean;
+function IsValidUnitName(AUnitName: String): Boolean; inline;
+function IsValidPkgName(APkgName: String): Boolean; inline;
+function PackageFileNameIsValid(const AFilename: string): boolean;
 
 
 implementation

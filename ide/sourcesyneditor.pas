@@ -48,7 +48,7 @@ uses
   {$ENDIF}
   Classes, SysUtils,
   // LCL
-  Controls, LCLProc, LCLType, Graphics, Menus,
+  Controls, LCLProc, LCLType, Graphics, Menus, ImgList,
   // synedit
   SynEdit, SynEditMiscClasses, SynGutter, SynGutterBase, SynEditMarks,
   SynEditTypes, SynGutterLineNumber, SynGutterCodeFolding, SynGutterMarks,
@@ -92,8 +92,11 @@ type
   { TSourceLazSynSurfaceGutter }
 
   TSourceLazSynSurfaceGutter = class(TLazSynGutterArea)
+  private
+    procedure TextSizeChanged(Sender: TObject);
   protected
     procedure DoPaint(ACanvas: TCanvas; AClip: TRect); override;
+    procedure SetTextArea(const ATextArea: TLazSynTextArea); override;
   end;
 
   { TSourceLazSynSurfaceManager }
@@ -212,11 +215,32 @@ type
     property IfDefTree;
   end;
 
+  TSynMarkupIdentComplWindow = class // don't inherit from TSynEditMarkup, no regular markup
+  private
+    FBackgroundSelectedColor: TColor;
+    FBorderColor: TColor;
+    FHighlightColor: TColor;
+    FTextColor: TColor;
+    FTextSelectedColor: TColor;
+    FWindowColor: TColor;
+  public
+    constructor Create;
+  public
+    property WindowColor: TColor read FWindowColor write FWindowColor;
+    property TextColor: TColor read FTextColor write FTextColor;
+    property BorderColor: TColor read FBorderColor write FBorderColor;
+    property HighlightColor: TColor read FHighlightColor write FHighlightColor;
+    property TextSelectedColor: TColor read FTextSelectedColor write FTextSelectedColor;
+    property BackgroundSelectedColor: TColor read FBackgroundSelectedColor write FBackgroundSelectedColor;
+  end;
+
   { TIDESynEditor }
 
   TIDESynEditor = class(TSynEdit)
   private
+    FCaretColor: TColor;
     FCaretStamp: Int64;
+    FMarkupIdentComplWindow: TSynMarkupIdentComplWindow;
     FShowTopInfo: boolean;
     FTopInfoNestList: TLazSynEditNestedFoldsList;
     FSyncroEdit: TSynPluginSyncroEdit;
@@ -243,6 +267,7 @@ type
     function GetOnMultiCaretBeforeCommand: TSynMultiCaretBeforeCommand;
     procedure GetTopInfoMarkupForLine(Sender: TObject; {%H-}Line: integer; var Special: boolean;
       aMarkup: TSynSelectedColor);
+    procedure SetCaretColor(AValue: TColor);
     procedure SetHighlightUserWordCount(AValue: Integer);
     procedure SetOnMultiCaretBeforeCommand(AValue: TSynMultiCaretBeforeCommand);
     procedure SetShowTopInfo(AValue: boolean);
@@ -281,10 +306,12 @@ type
     procedure SetIfdefNodeState(ALinePos, AstartPos: Integer; AState: TSynMarkupIfdefNodeState);
     property  OnIfdefNodeStateRequest: TSynMarkupIfdefStateRequest read FOnIfdefNodeStateRequest write FOnIfdefNodeStateRequest;
     property  MarkupIfDef: TSourceSynEditMarkupIfDef read FMarkupIfDef;
+    property  MarkupIdentComplWindow: TSynMarkupIdentComplWindow read FMarkupIdentComplWindow;
     property  IsInMultiCaretMainExecution: Boolean read GetIsInMultiCaretMainExecution;
     property  IsInMultiCaretRepeatExecution: Boolean read GetIsInMultiCaretRepeatExecution;
     property  OnMultiCaretBeforeCommand: TSynMultiCaretBeforeCommand read GetOnMultiCaretBeforeCommand write SetOnMultiCaretBeforeCommand;
     property CaretStamp: Int64 read FCaretStamp;
+    property CaretColor: TColor read FCaretColor write SetCaretColor;
   end;
 
   TIDESynHighlighterPasRangeList = class(TSynHighlighterPasRangeList)
@@ -414,7 +441,10 @@ type
   protected
     procedure CheckTextBuffer;       // Todo: Add a notification, when TextBuffer Changes
     Procedure PaintLine(aScreenLine: Integer; Canvas : TCanvas; AClip : TRect); override;
-    function PreferedWidth: Integer; override;
+    function PreferedWidthAtCurrentPPI: Integer; override;
+
+    function GetImgListRes(const ACanvas: TCanvas;
+      const AImages: TCustomImageList): TScaledImageListResolution; override;
   public
     destructor Destroy; override;
     procedure BeginSetDebugMarks;
@@ -472,6 +502,20 @@ type
 implementation
 
 uses SourceMarks;
+
+{ TSynMarkupIdentComplWindow }
+
+constructor TSynMarkupIdentComplWindow.Create;
+begin
+  inherited Create;
+
+  FBackgroundSelectedColor := clNone;
+  FBorderColor := clNone;
+  FHighlightColor := clNone;
+  FTextColor := clNone;
+  FTextSelectedColor := clNone;
+  FWindowColor := clNone;
+end;
 
 { TSourceSynSearchTermDict }
 
@@ -1206,6 +1250,18 @@ begin
   Gutter.Paint(ACanvas, Self, AClip, 0, -1);
 end;
 
+procedure TSourceLazSynSurfaceGutter.SetTextArea(
+  const ATextArea: TLazSynTextArea);
+begin
+  inherited SetTextArea(ATextArea);
+  ATextArea.AddTextSizeChangeHandler(@TextSizeChanged);
+end;
+
+procedure TSourceLazSynSurfaceGutter.TextSizeChanged(Sender: TObject);
+begin
+  Gutter.DoAutoSize;
+end;
+
 { TSourceLazSynSurfaceManager }
 
 procedure TSourceLazSynSurfaceManager.SetTopLineCount(AValue: Integer);
@@ -1510,6 +1566,27 @@ begin
   aMarkup.Assign(FTopInfoMarkup);
 end;
 
+procedure TIDESynEditor.SetCaretColor(AValue: TColor);
+begin
+  if FCaretColor = AValue then Exit;
+  FCaretColor := AValue;
+  if (AValue = clDefault) or (AValue = clNone) then begin
+    FScreenCaretPainterClass{%H-} := TSynEditScreenCaretPainterSystem;
+    if ScreenCaret.Painter.ClassType <> TSynEditScreenCaretPainterSystem then begin
+      MultiCaret.ActiveMode := mcmNoCarets; // clear all carets, before changing the caret class
+      ScreenCaret.ChangePainter(TSynEditScreenCaretPainterSystem);
+  end;
+  end
+  else begin
+    FScreenCaretPainterClass{%H-} := TSynEditScreenCaretPainterInternal;
+    if ScreenCaret.Painter.ClassType <> TSynEditScreenCaretPainterInternal then begin
+      MultiCaret.ActiveMode := mcmNoCarets; // clear all carets, before changing the caret class
+      ScreenCaret.ChangePainter(TSynEditScreenCaretPainterInternal);
+    end;
+    TSynEditScreenCaretPainterInternal(ScreenCaret.Painter).Color := AValue;
+  end;
+end;
+
 procedure TIDESynEditor.SetHighlightUserWordCount(AValue: Integer);
 var
   m: TSourceSynEditMarkupHighlightAllMulti;
@@ -1631,29 +1708,34 @@ begin
     exit
   end;
 
-  FMarkupIfDef.Highlighter := nil;
-
-  inherited SetHighlighter(Value);
-
-//TSynEditMarkupFoldColors(MarkupByClass[TSynEditMarkupFoldColors]).Highlighter := Highlighter; // XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-  if Highlighter is TSynPasSyn then
-    FMarkupIfDef.Highlighter := TSynPasSyn(Highlighter)
-  else
+  IncPaintLock;
+  try
     FMarkupIfDef.Highlighter := nil;
 
-  if Highlighter is TSynCustomFoldHighlighter then
-    FTopInfoNestList.Highlighter := TSynCustomFoldHighlighter(Highlighter)
-  else
-    FTopInfoNestList.Highlighter := nil;
+    inherited SetHighlighter(Value);
 
-  if FUserWordsList = nil then
-    exit;
-  if Highlighter <> nil then
-    for i := 0 to FUserWordsList.Count - 1 do
-      HighlightUserWords[i].WordBreakChars := Highlighter.WordBreakChars + TSynWhiteChars
-  else
-    for i := 0 to FUserWordsList.Count - 1 do
-      HighlightUserWords[i].ResetWordBreaks;
+    //TSynEditMarkupFoldColors(MarkupByClass[TSynEditMarkupFoldColors]).Highlighter := Highlighter; // XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+    if Highlighter is TSynPasSyn then
+      FMarkupIfDef.Highlighter := TSynPasSyn(Highlighter)
+    else
+      FMarkupIfDef.Highlighter := nil;
+
+    if Highlighter is TSynCustomFoldHighlighter then
+      FTopInfoNestList.Highlighter := TSynCustomFoldHighlighter(Highlighter)
+    else
+      FTopInfoNestList.Highlighter := nil;
+
+    if FUserWordsList = nil then
+      exit;
+    if Highlighter <> nil then
+      for i := 0 to FUserWordsList.Count - 1 do
+        HighlightUserWords[i].WordBreakChars := Highlighter.WordBreakChars + TSynWhiteChars
+    else
+      for i := 0 to FUserWordsList.Count - 1 do
+        HighlightUserWords[i].ResetWordBreaks;
+  finally
+    DecPaintLock;
+  end;
 end;
 
 constructor TIDESynEditor.Create(AOwner: TComponent);
@@ -1661,6 +1743,7 @@ var
   MarkupFoldColors: TSynEditMarkupFoldColors;
 begin
   inherited Create(AOwner);
+  FCaretColor := clNone;
   FUserWordsList := TFPList.Create;
   FTemplateEdit:=TSynPluginTemplateEdit.Create(Self);
   FSyncroEdit := TSynPluginSyncroEdit.Create(Self);
@@ -1682,6 +1765,8 @@ begin
   FMarkupIfDef.FoldView := TSynEditFoldedView(FoldedTextBuffer);
   //FMarkupIfDef.OnNodeStateRequest := @DoIfDefNodeStateRequest;
   TSynEditMarkupManager(MarkupMgr).AddMarkUp(FMarkupIfDef);
+
+  FMarkupIdentComplWindow := TSynMarkupIdentComplWindow.Create;
 
   FPaintArea := TSourceLazSynSurfaceManager.Create(Self, FPaintArea);
   GetCaretObj.AddChangeHandler(@SrcSynCaretChanged);
@@ -1729,6 +1814,7 @@ begin
   FreeAndNil(FExtraMarkupMgr);
   FreeAndNil(FTopInfoMarkup);
   FreeAndNil(FTopInfoNestList);
+  FreeAndNil(FMarkupIdentComplWindow);
   inherited Destroy;
 end;
 
@@ -2127,47 +2213,52 @@ end;
 
 procedure TIDESynGutter.CreateDefaultGutterParts;
 begin
-  if Side = gsLeft then begin
-    with TIDESynGutterMarks.Create(Parts) do
-      Name := 'SynGutterMarks1';
-    with TSynGutterLineNumber.Create(Parts) do
-      Name := 'SynGutterLineNumber1';
-    with TSynGutterChanges.Create(Parts) do
-      Name := 'SynGutterChanges1';
-    with TSynGutterSeparator.Create(Parts) do
-      Name := 'SynGutterSeparator1';
-    with TIDESynGutterCodeFolding.Create(Parts) do
-      Name := 'SynGutterCodeFolding1';
-  end
-  else begin
-    {$IFDEF WithSynDebugGutter}
-    with TSynGutterSeparator.Create(Parts) do
-      Name := 'SynGutterSeparatorR1';
-    DebugGutter := TIDESynGutterDebugHL.Create(Parts);
-    with DebugGutter do
-      Name := 'TIDESynGutterDebugHL';
-    {$ENDIF}
-    with TSynGutterSeparator.Create(Parts) do
-      Name := 'SynGutterSeparatorR2';
-    with TSynGutterLineOverview.Create(Parts) do begin
-      Name := 'SynGutterLineOverview1';
-      with TIDESynGutterLOvProviderIDEMarks.Create(Providers) do
-        Priority := 20;
-      with TSynGutterLOvProviderModifiedLines.Create(Providers) do
-        Priority := 9;
-      with TSynGutterLOvProviderCurrentPage.Create(Providers) do begin
-        Priority := 1;
-        FoldedTextBuffer := TSynEditFoldedView(TIDESynEditor(Self.SynEdit).FoldedTextBuffer);
+  IncChangeLock;
+  try
+    if Side = gsLeft then begin
+      with TIDESynGutterMarks.Create(Parts) do
+        Name := 'SynGutterMarks1';
+      with TSynGutterLineNumber.Create(Parts) do
+        Name := 'SynGutterLineNumber1';
+      with TSynGutterChanges.Create(Parts) do
+        Name := 'SynGutterChanges1';
+      with TSynGutterSeparator.Create(Parts) do
+        Name := 'SynGutterSeparator1';
+      with TIDESynGutterCodeFolding.Create(Parts) do
+        Name := 'SynGutterCodeFolding1';
+    end
+    else begin
+      {$IFDEF WithSynDebugGutter}
+      with TSynGutterSeparator.Create(Parts) do
+        Name := 'SynGutterSeparatorR1';
+      DebugGutter := TIDESynGutterDebugHL.Create(Parts);
+      with DebugGutter do
+        Name := 'TIDESynGutterDebugHL';
+      {$ENDIF}
+      with TSynGutterSeparator.Create(Parts) do
+        Name := 'SynGutterSeparatorR2';
+      with TSynGutterLineOverview.Create(Parts) do begin
+        Name := 'SynGutterLineOverview1';
+        with TIDESynGutterLOvProviderIDEMarks.Create(Providers) do
+          Priority := 20;
+        with TSynGutterLOvProviderModifiedLines.Create(Providers) do
+          Priority := 9;
+        with TSynGutterLOvProviderCurrentPage.Create(Providers) do begin
+          Priority := 1;
+          FoldedTextBuffer := TSynEditFoldedView(TIDESynEditor(Self.SynEdit).FoldedTextBuffer);
+        end;
+        with TIDESynGutterLOvProviderPascal.Create(Providers) do
+          Priority := 0;
       end;
-      with TIDESynGutterLOvProviderPascal.Create(Providers) do
-        Priority := 0;
+      with TSynGutterSeparator.Create(Parts) do begin
+        Name := 'SynGutterSeparatorR3';
+        AutoSize := False;
+        Width := 1;
+        LineWidth := 0;
+      end;
     end;
-    with TSynGutterSeparator.Create(Parts) do begin
-      Name := 'SynGutterSeparatorR3';
-      AutoSize := False;
-      Width := 1;
-      LineWidth := 0;
-    end;
+  finally
+    DecChangeLock;
   end;
 end;
 
@@ -2194,6 +2285,7 @@ var
   var
     itop : Longint;
     LineHeight: LongInt;
+    img: TScaledImageListResolution;
   begin
     if Line < 0 then Exit;
     if Assigned(FBookMarkOpt.BookmarkImages) and
@@ -2201,12 +2293,13 @@ var
        (DebugMarksImageIndex >= 0) then
     begin
       LineHeight := TSynEdit(SynEdit).LineHeight;
+      img := GetImgListRes(Canvas, FBookMarkOpt.BookmarkImages);
       iTop := 0;
-      if LineHeight > FBookMarkOpt.BookmarkImages.Height then
-        iTop := (LineHeight - FBookMarkOpt.BookmarkImages.Height) div 2;
+      if LineHeight > img.Height then
+        iTop := (LineHeight - img.Height) div 2;
 
-      FBookMarkOpt.BookmarkImages.Draw
-        (Canvas, AClip.Left + FBookMarkOpt.LeftMargin + aGutterOffs * ColumnWidth,
+      img.Draw
+        (Canvas, AClip.Left + LeftMarginAtCurrentPPI + aGutterOffs * ColumnWidth,
          AClip.Top + iTop, DebugMarksImageIndex, True);
     end
   end;
@@ -2224,12 +2317,17 @@ begin
     DrawDebugMark(aScreenLine);
 end;
 
-function TIDESynGutterMarks.PreferedWidth: Integer;
+function TIDESynGutterMarks.PreferedWidthAtCurrentPPI: Integer;
+var
+  img: TScaledImageListResolution;
 begin
   if Assigned(SourceEditorMarks) and Assigned(SourceEditorMarks.ImgList) then
-    Result := SourceEditorMarks.ImgList.Width * 2 + FBookMarkOpt.LeftMargin
-  else
-    Result := inherited PreferedWidth;
+  begin
+    img := GetImgListRes(nil, SourceEditorMarks.ImgList);
+    // + 1 => right margin
+    Result := img.Width * 2 + LeftMarginAtCurrentPPI + Scale96ToFont(1);
+  end else
+    Result := inherited PreferedWidthAtCurrentPPI;
 end;
 
 destructor TIDESynGutterMarks.Destroy;
@@ -2258,6 +2356,56 @@ end;
 procedure TIDESynGutterMarks.EndSetDebugMarks;
 begin
   TSynEdit(SynEdit).InvalidateGutter;
+end;
+
+function TIDESynGutterMarks.GetImgListRes(const ACanvas: TCanvas;
+  const AImages: TCustomImageList): TScaledImageListResolution;
+const
+  AllowedHeights: array[0..7] of Integer = (5, 7, 9, 11, 16, 22, 33, 44);
+var
+  Scale: Double;
+  PPI, LineHeight, I, ImageHeight: Integer;
+begin
+  // image height must be equal to width
+  if AImages.Width<>AImages.Height then
+    raise Exception.Create('Internal error: AImages.Width<>AImages.Height');
+
+  Scale := 1;
+  PPI := 96;
+  if SynEdit is TSynEdit then
+  begin
+    LineHeight := TSynEdit(SynEdit).LineHeight;
+    if LineHeight - Max(0, TSynEdit(SynEdit).ExtraLineSpacing) > 11 then
+      LineHeight := LineHeight - Max(0, TSynEdit(SynEdit).ExtraLineSpacing);
+    if LineHeight > 22 then
+      I := LineHeight div 8
+    else
+      I := 1;
+    If LineHeight - I >= 11 then
+      LineHeight := LineHeight - I;
+    if LineHeight < 11 then begin
+      LineHeight := TSynEdit(SynEdit).LineHeight;
+      if LineHeight > 11 then
+        LineHeight := LineHeight - 1;
+    end;
+    ImageHeight := AllowedHeights[0];
+    for I := High(AllowedHeights) downto Low(AllowedHeights) do
+      if AllowedHeights[I] <= LineHeight then
+      begin
+        ImageHeight := AllowedHeights[I];
+        break;
+      end;
+    // don't set PPI here -> we don't want to scale the image anymore
+  end else
+  begin
+    ImageHeight := AImages.Height;
+    if ACanvas is TControlCanvas then
+      PPI := TControlCanvas(ACanvas).Control.Font.PixelsPerInch;
+  end;
+
+  if ACanvas is TControlCanvas then
+    Scale := TControlCanvas(ACanvas).Control.GetCanvasScaleFactor;
+  Result := AImages.ResolutionForPPI[ImageHeight, PPI, Scale];
 end;
 
 procedure TIDESynGutterMarks.SetDebugMarks(AFirstLinePos, ALastLinePos: Integer);

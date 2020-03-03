@@ -85,8 +85,10 @@ const
   ecLineTextStart   = 18;   // Move cursor to the first none whitespace in the line
   ecWordEndLeft     = 19;   // Move cursor left one word (to end of word)
   ecWordEndRight    = 20;   // Move cursor right one word (to end of word)
-  ecHalfWordLeft    = 21;    // Move cursor left to word-begin/end or case change lower to uppper
-  ecHalfWordRight   = 22;    // Move cursor right to word-begin/end or case change lower to uppper
+  ecHalfWordLeft    = 21;   // Move cursor left to word-begin/end or case change lower to uppper
+  ecHalfWordRight   = 22;   // Move cursor right to word-begin/end or case change lower to uppper
+  ecSmartWordLeft   = 23;   // Move cursor left one word with smart boundaries (either start of current word or end of previous word)
+  ecSmartWordRight  = 24;   // Move cursor right one word with smart boundaries (either end of current word or start of next word)
 
   // Allow selecting with any movement
   ecStickySelection     = 95;
@@ -124,6 +126,8 @@ const
   ecSelWordEndRight = ecWordEndRight + ecSelection;
   ecSelHalfWordLeft = ecHalfWordLeft + ecSelection;
   ecSelHalfWordRight= ecHalfWordRight + ecSelection;
+  ecSelSmartWordLeft= ecSmartWordLeft + ecSelection;
+  ecSelSmartWordRight=ecSmartWordRight + ecSelection;
 
   ecSelCmdRangeStart = ecLeft + ecSelection;
   ecSelCmdRangeEnd   = ecLeft + ecSelection + 49;
@@ -245,6 +249,7 @@ const
   ecInsertLine      = 510;  // Break line at current position, leave caret
   ecChar            = 511;  // Insert a character at current position
   ecSmartUnindent   = 512;  // NOT regocniced as command, used for group-undo, set by beautifier
+  ecDeleteCharNoCrLf= 513;  // Delete char at cursor (i.e. delete key), but do not join lines
 
   ecImeStr          = 550;  // Insert character(s) from IME
 
@@ -253,10 +258,17 @@ const
   ecCut             = 603;  // Cut selection to clipboard
   ecPaste           = 604;  // Paste clipboard to current position
 
-  ecBlockIndent     = 610;  // Indent selection
-  ecBlockUnindent   = 611;  // Unindent selection
-  ecTab             = 612;  // Tab key
-  ecShiftTab        = 613;  // Shift+Tab key
+  ecCopyAdd            = 605; // add selection to existing clipboard (space separated, unless whitespace exists)
+  ecCutAdd             = 606; //
+  ecCopyCurrentLine    = 607; // copy current line (or all covered at least partly by selection) to clipboard
+  ecCopyAddCurrentLine = 608; // add to existing clipboard
+  ecCutCurrentLine     = 609; //
+  ecCutAddCurrentLine  = 610; //
+
+  ecBlockIndent     = 615;  // Indent selection
+  ecBlockUnindent   = 616;  // Unindent selection
+  ecTab             = 617;  // Tab key
+  ecShiftTab        = 618;  // Shift+Tab key
 
   ecUpperCase       = 620; // apply to the current or previous word
   ecLowerCase       = 621;
@@ -266,7 +278,18 @@ const
   ecLowerCaseBlock  = 626;
   ecToggleCaseBlock = 627;
 
-  ecString          = 630;  //Insert a whole string
+  ecMoveLineUp      = 630; // Moves current line (or selection) one line up
+  ecMoveLineDown    = 631; // Moves current line (or selection) one line down
+  ecDuplicateLine   = 632; // Line or selection (full lines)
+
+  ecMoveSelectUp      = 633; // Moves selection one line up
+  ecMoveSelectDown    = 634; // Moves selection one line down
+  ecMoveSelectLeft    = 635; // Moves selection one line up
+  ecMoveSelectRight   = 636; // Moves selection one line down
+  ecDuplicateSelection= 637;
+
+
+  ecString          = 640;  //Insert a whole string
 
   ecAutoCompletion  = 650;
 
@@ -490,7 +513,7 @@ end;
 { Command mapping routines }
 
 const
-  EditorCommandStrs: array[0..153] of TIdentMapEntry = (
+  EditorCommandStrs: array[0..171] of TIdentMapEntry = (
     (Value: ecNone; Name: 'ecNone'),
     (Value: ecLeft; Name: 'ecLeft'),
     (Value: ecRight; Name: 'ecRight'),
@@ -502,6 +525,8 @@ const
     (Value: ecWordEndRight; Name: 'ecWordEndRight'),
     (Value: ecHalfWordLeft; Name: 'ecHalfWordLeft'),
     (Value: ecHalfWordRight; Name: 'ecHalfWordRight'),
+    (Value: ecSmartWordLeft; Name: 'ecSmartWordLeft'),
+    (Value: ecSmartWordRight; Name: 'ecSmartWordRight'),
     (Value: ecLineStart; Name: 'ecLineStart'),
     (Value: ecLineEnd; Name: 'ecLineEnd'),
     (Value: ecPageUp; Name: 'ecPageUp'),
@@ -528,6 +553,8 @@ const
     (Value: ecSelWordEndRight; Name: 'ecSelWordEndRight'),
     (Value: ecSelHalfWordLeft; Name: 'ecSelHalfWordLeft'),
     (Value: ecSelHalfWordRight; Name: 'ecSelHalfWordRight'),
+    (Value: ecSelSmartWordLeft; Name: 'ecSelSmartWordLeft'),
+    (Value: ecSelSmartWordRight; Name: 'ecSelSmartWordRight'),
     (Value: ecSelLineStart; Name: 'ecSelLineStart'),
     (Value: ecSelLineEnd; Name: 'ecSelLineEnd'),
     (Value: ecSelPageUp; Name: 'ecSelPageUp'),
@@ -575,6 +602,20 @@ const
     (Value: ecCut; Name: 'ecCut'),
     (Value: ecCopy; Name: 'ecCopy'),
     (Value: ecPaste; Name: 'ecPaste'),
+    (Value: ecCopyAdd; Name: 'ecCopyAdd'),
+    (Value: ecCutAdd; Name: 'ecCutAdd'),
+    (Value: ecCopyCurrentLine; Name: 'ecCopyCurrentLine'),
+    (Value: ecCopyAddCurrentLine; Name: 'ecCopyAddCurrentLine'),
+    (Value: ecCutCurrentLine; Name: 'ecCutCurrentLine'),
+    (Value: ecCutAddCurrentLine; Name: 'ecCutAddCurrentLine'),
+    (Value: ecMoveLineUp; Name: 'ecMoveLineUp'),
+    (Value: ecMoveLineDown; Name: 'ecMoveLineDown'),
+    (Value: ecMoveSelectUp; Name: 'ecMoveSelectUp'),
+    (Value: ecMoveSelectDown; Name: 'ecMoveSelectDown'),
+    (Value: ecMoveSelectLeft; Name: 'ecMoveSelectLeft'),
+    (Value: ecMoveSelectRight; Name: 'ecMoveSelectRight'),
+    (Value: ecDuplicateLine; Name: 'ecDuplicateLine'),
+    (Value: ecDuplicateSelection; Name: 'ecDuplicateSelection'),
     (Value: ecScrollUp; Name: 'ecScrollUp'),
     (Value: ecScrollDown; Name: 'ecScrollDown'),
     (Value: ecScrollLeft; Name: 'ecScrollLeft'),

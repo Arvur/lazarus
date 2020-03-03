@@ -27,32 +27,85 @@ interface
 {$ENDIF}
 
 uses
-  Classes, SysUtils, Forms, Controls, Dialogs, LResources, Printers, OsPrinters;
+  Classes, SysUtils, Forms, Controls, Dialogs,
+  LResources,
+  Printers, OsPrinters;
 
 type
+  TPageMeasureUnits = (
+    pmDefault,
+    pmMillimeters,
+    pmInches
+    );
 
-  TMeasureUnits = (unMM,unInch);
-  { Type for compatibility with delphi }
-  
+type
+  TPageSetupDialogOption = (
+    psoDefaultMinMargins,
+    psoDisableMargins,
+    psoDisableOrientation,
+    psoDisablePagePainting,
+    psoDisablePaper,
+    psoDisablePrinter,
+    psoMargins,
+    psoMinMargins,
+    psoShowHelp,
+    psoWarning,
+    psoNoNetworkButton
+    );
+
+  TPageSetupDialogOptions = set of TPageSetupDialogOption;
+
+const
+  cDefaultPageSetupDialogOptions = [psoDefaultMinMargins];
+  cDefaultPageSetupMargin = 0;
+  cDefaultPageSetupMinMargin = 400; //400: in mm it's 4mm, in inches it's ~10mm
+
+type
   { TPageSetupDialog }
   
   TPageSetupDialog = class(TCustomPrinterSetupDialog)
   private
-   fMargins : TRect;
-   fUnits : TMeasureUnits;
+    FPageWidth: integer;
+    FPageHeight: integer;
+    FMarginLeft: integer;
+    FMarginTop: integer;
+    FMarginRight: integer;
+    FMarginBottom: integer;
+    FMinMarginLeft: integer;
+    FMinMarginTop: integer;
+    FMinMarginRight: integer;
+    FMinMarginBottom: integer;
+    FUnits: TPageMeasureUnits;
+    FOptions: TPageSetupDialogOptions;
   protected
     function DoExecute: Boolean; override;
   public
     constructor Create(TheOwner: TComponent); override;
-    property Margins : TRect read fMargins write fMargins;
-    property Units : TMeasureUnits read fUnits;
+    property OnDialogResult;
+    property AttachTo;
+  published
+    property PageWidth: integer read FPageWidth write FPageWidth default 0;
+    property PageHeight: integer read FPageHeight write FPageHeight default 0;
+    property MarginLeft: integer read FMarginLeft write FMarginLeft default cDefaultPageSetupMargin;
+    property MarginTop: integer read FMarginTop write FMarginTop default cDefaultPageSetupMargin;
+    property MarginRight: integer read FMarginRight write FMarginRight default cDefaultPageSetupMargin;
+    property MarginBottom: integer read FMarginBottom write FMarginBottom default cDefaultPageSetupMargin;
+    property MinMarginLeft: integer read FMinMarginLeft write FMinMarginLeft default cDefaultPageSetupMinMargin;
+    property MinMarginTop: integer read FMinMarginTop write FMinMarginTop default cDefaultPageSetupMinMargin;
+    property MinMarginRight: integer read FMinMarginRight write FMinMarginRight default cDefaultPageSetupMinMargin;
+    property MinMarginBottom: integer read FMinMarginBottom write FMinMarginBottom default cDefaultPageSetupMinMargin;
+    property Options: TPageSetupDialogOptions read FOptions write FOptions default cDefaultPageSetupDialogOptions;
+    property Units: TPageMeasureUnits read FUnits write FUnits default pmDefault;
   end;
-
-  { TPrinterDialog }
   
+  { TPrinterSetupDialog }
+
   TPrinterSetupDialog = class(TCustomPrinterSetupDialog)
   protected
     function DoExecute: Boolean; override;
+  public
+    property OnDialogResult;
+    property AttachTo;
   end;
 
   { TPrintDialog }
@@ -60,6 +113,9 @@ type
   TPrintDialog = class(TCustomPrintDialog)
   protected
     function DoExecute: Boolean; override;
+  public
+    property OnDialogResult;
+    property AttachTo;
   published
     property Collate;
     property Copies;
@@ -84,7 +140,8 @@ implementation
     {$IFDEF LCLCarbon}
       {$IFNDEF NativePrint}
         // add units as needed for carbon, for the moment use cups ones.
-        uses udlgSelectPrinter, udlgPropertiesPrinter, udlgPageSetup, FileUtil;
+        uses udlgSelectPrinter, udlgPropertiesPrinter, udlgPageSetup,
+          Printer4LazStrConst, FileUtil;
         {$I cupsprndialogs.inc}
       {$ELSE}
         uses Math, CarbonProc, MacOSAll, LCLProc;
@@ -92,7 +149,7 @@ implementation
       {$ENDIF}
     {$ENDIF}
     {$IFDEF LCLCocoa}
-      uses Math, CocoaAll, MacOSAll, LCLProc;
+      uses Math, CocoaAll, MacOSAll, LCLProc, cocoaprndelegate;
       {$I cocoaprndialogs.inc}
     {$ENDIF}
     {$IFDEF LCLQt}
@@ -104,7 +161,7 @@ implementation
       {$I qtprndialogs.inc}
     {$ENDIF}    
     {$IFDEF LCLGtk2}
-      uses udlgSelectPrinter, udlgPropertiesPrinter, udlgPageSetup;
+      uses udlgSelectPrinter, udlgPropertiesPrinter, udlgPageSetup, Printer4LazStrConst;
       {$I cupsprndialogs.inc}
     {$ENDIF}
   {$ELSE}
@@ -116,7 +173,7 @@ implementation
       uses qtobjects, qt5, qtint, LazUTF8;
       {$I qtprndialogs.inc}
     {$ELSE}    
-      uses udlgSelectPrinter, udlgPropertiesPrinter, udlgPageSetup;
+      uses udlgSelectPrinter, udlgPropertiesPrinter, udlgPageSetup, Printer4LazStrConst;
       {$I cupsprndialogs.inc}
     {$ENDIF}
     {$ENDIF}    
@@ -143,11 +200,19 @@ implementation
 
 constructor TPageSetupDialog.Create(TheOwner: TComponent);
 begin
- inherited Create(TheOwner);
- fMargins.Bottom := 0;
- fMargins.Left := 0;
- fMargins.Right := 0;
- fMargins.Top := 0;
+  inherited Create(TheOwner);
+  FPageWidth:= 0;
+  FPageHeight:= 0;
+  FMarginLeft:= cDefaultPageSetupMargin;
+  FMarginTop:= cDefaultPageSetupMargin;
+  FMarginRight:= cDefaultPageSetupMargin;
+  FMarginBottom:= cDefaultPageSetupMargin;
+  FMinMarginLeft:= cDefaultPageSetupMinMargin;
+  FMinMarginTop:= cDefaultPageSetupMinMargin;
+  FMinMarginRight:= cDefaultPageSetupMinMargin;
+  FMinMarginBottom:= cDefaultPageSetupMinMargin;
+  FOptions:= cDefaultPageSetupDialogOptions;
+  FUnits:= pmDefault;
 end;
 
 procedure Register;

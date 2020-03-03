@@ -54,12 +54,28 @@ msgctxt "opkman_const.rscategoriesfrm_byes_caption"
 msgid "OK"
 msgstr "Tvarka"
 
-#: opkman_const.rscategoriesfrm_caption
+#: opkman_const.rscategoriesfrm_caption1
+#, fuzzy
+msgctxt "opkman_const.rscategoriesfrm_caption1"
 msgid "List with categories"
 msgstr "Sąrašas su kategorijomis"
 
+#: opkman_const.rscategoriesfrm_caption2
+msgid "List with Lazarus versions"
+msgstr ""
+
+#: opkman_const.rscategoriesfrm_caption3
+msgid "List with FPC versions"
+msgstr ""
+
+#: opkman_const.rscategoriesfrm_caption4
+msgid "List with supported widgetsets"
+msgstr ""
+
 #: opkman_const.rscategoriesfrm_lbmessage_caption
-msgid "Please select (check) one or more categories"
+#, fuzzy
+#| msgid "Please select (check) one or more categories"
+msgid "Please select (check) one or more items"
 msgstr "Parinkite (pažymėkite) vieną ar kelias kategorijas"
 
 #: opkman_const.rscolors_caption
@@ -197,23 +213,27 @@ msgid "Create/Edit private repository"
 msgstr ""
 
 #: opkman_const.rscreaterepositoryfrm_conf1
+#, object-pascal-format
 msgid "Are you sure you wish to delete package: \"%s\"?"
 msgstr ""
 
 #: opkman_const.rscreaterepositoryfrm_conf2
+#, object-pascal-format
 msgid "The following file: \"%s\" already exists in the current repository. Overwrite?"
 msgstr ""
 
 #: opkman_const.rscreaterepositoryfrm_error1
+#, object-pascal-format
 msgid ""
 "Cannot open private repository: \"%s\". Error message: \n"
-"\"%s\"\n"
+"\"%s\""
 msgstr ""
 
 #: opkman_const.rscreaterepositoryfrm_error3
+#, object-pascal-format
 msgid ""
 "Cannot save private repository: \"%s\". Error message: \n"
-"\"%s\"\n"
+"\"%s\""
 msgstr ""
 
 #: opkman_const.rscreaterepositoryfrm_error4
@@ -221,25 +241,29 @@ msgid "Cannot add package to repository!"
 msgstr ""
 
 #: opkman_const.rscreaterepositoryfrm_error5
+#, object-pascal-format
 msgid "Cannot delete package: \"%s\"!"
 msgstr ""
 
 #: opkman_const.rscreaterepositoryfrm_info1
+#, object-pascal-format
 msgid ""
 "The following directory: \"%s\" is not empty.\n"
-"It's recommended to save the repository to an empty directory. Continue?\n"
+"It's recommended to save the repository to an empty directory. Continue?"
 msgstr ""
 
 #: opkman_const.rscreaterepositoryfrm_info3
+#, object-pascal-format
 msgid ""
 "The following package: \"%s\" is already in the current repository.\n"
-"Each repository and Lazarus package must be unique!\n"
+"Each repository and Lazarus package must be unique!"
 msgstr ""
 
 #: opkman_const.rscreaterepositoryfrm_info5
+#, object-pascal-format
 msgid ""
 "The following Lazarus package: \"%s\" is already in the current repository.\n"
-"Each repository and Lazarus package must be unique!\n"
+"Each repository and Lazarus package must be unique!"
 msgstr ""
 
 #: opkman_const.rscreaterepositoryfrm_info7
@@ -470,6 +494,7 @@ msgid "Cannot create JSON file:"
 msgstr "Nepavyko sukurti „JSON“ failo:"
 
 #: opkman_const.rscreaterepositorypackagefrm_error3
+#, object-pascal-format
 msgid "Cannot send file: \"%s\""
 msgstr "Nepavyksta siųsti failą: %s"
 
@@ -549,13 +574,18 @@ msgid "Repository package successfully created."
 msgstr "Sėkmingai sukurtas saugyklos paketas."
 
 #: opkman_const.rscreaterepositorypackagefrm_message8
+#, object-pascal-format
 msgid "Sending files (\"%s\"). Please wait..."
 msgstr "Siunčiami failai („%s“). Luktelėkite…"
 
 #: opkman_const.rscreaterepositorypackagefrm_message9
+#, fuzzy
+#| msgid ""
+#| "Files successfully sent. Thank you for submitting packages!\n"
+#| "Your request will be processed in 24 hours.\n"
 msgid ""
 "Files successfully sent. Thank you for submitting packages!\n"
-"Your request will be processed in 24 hours.\n"
+"Your request will be processed in 24 hours."
 msgstr ""
 "Failai nusiųsti sėkmingai. Dėkojame už pateiktus paketus!\n"
 "Jūsų užklausa bus apdorota 24-ių valandų bėgyje.\n"
@@ -593,6 +623,10 @@ msgstr "Parinkite paketo aplanką"
 #: opkman_const.rslazaruspackagemanager
 msgid "Online Package Manager"
 msgstr "Internetinė paketų tvarkytuvė"
+
+#: opkman_const.rsmainfrm_breturn_caption
+msgid "Return"
+msgstr ""
 
 #: opkman_const.rsmainfrm_cball_caption
 msgid "All/None"
@@ -648,6 +682,14 @@ msgstr "Kurti saugyklos paketą"
 msgid "Descendent"
 msgstr "Mažejantis"
 
+#: opkman_const.rsmainfrm_mifromexternalsource
+msgid "From third party repository"
+msgstr ""
+
+#: opkman_const.rsmainfrm_mifromrepository
+msgid "From official repository"
+msgstr ""
+
 #: opkman_const.rsmainfrm_mijsonhide
 msgid "Hide JSON"
 msgstr "Slėpti „JSON“"
@@ -660,17 +702,27 @@ msgstr "Rodyti „JSON“"
 msgid "Sort"
 msgstr "Rikiuoti"
 
-#: opkman_const.rsmainfrm_miloadchecks
-msgid "Load checked packages"
-msgstr "Įkelti pažymėtus paketus"
+#: opkman_const.rsmainfrm_miload
+msgid "Load packages"
+msgstr ""
+
+#: opkman_const.rsmainfrm_miloadinstalled
+#, fuzzy
+msgctxt "opkman_const.rsmainfrm_miloadinstalled"
+msgid "Installed"
+msgstr "Įdiegta"
 
 #: opkman_const.rsmainfrm_miresetrating
 msgid "Reset rating"
 msgstr "Nustatyti pradinį reitingą"
 
-#: opkman_const.rsmainfrm_misavechecks
-msgid "Save checked packages"
-msgstr "Pažymėtus paketus įrašyti"
+#: opkman_const.rsmainfrm_misave
+msgid "Save packages"
+msgstr ""
+
+#: opkman_const.rsmainfrm_misavechecked
+msgid "Checked"
+msgstr ""
 
 #: opkman_const.rsmainfrm_misavetofile
 msgid "Save to file"
@@ -684,35 +736,52 @@ msgstr "Tokie saugyklos paketai jau yra tikslo aplanke. Tęsti?"
 msgid "The following packages are already installed. Continue anyway?"
 msgstr "Tokie saugyklos paketai jau įdiegti. Vis tiek tęsti?"
 
+#: opkman_const.rsmainfrm_packageincompatible
+msgid "The following packages are not tested and the install might fail. Continue anyway?"
+msgstr ""
+
 #: opkman_const.rsmainfrm_packagenamealreadyexists
 msgid "A package with the same name already exists!"
 msgstr "Jau yra paketas tokiu pat pavadinimu!"
 
 #: opkman_const.rsmainfrm_packageupdate0
-msgid "The following repository packages are not installed or don't have a valid external download link. The packages will be skipped. Continue?"
+#, fuzzy
+#| msgid "The following repository packages are not installed or don't have a valid external download link. The packages will be skipped. Continue?"
+msgid "The following repository packages are not available externally. The packages will be skipped. Continue?"
 msgstr "Šie saugyklos paketai nėra įdiegti arba jie neturi tinkamų parsisiuntimo saitų. Paketai bus praleisti. Tęsti?"
 
 #: opkman_const.rsmainfrm_packageupdate1
-msgid "None of the checked repository packages is installed or has a valid external download link."
+#, fuzzy
+#| msgid "None of the checked repository packages is installed or has a valid external download link."
+msgid ""
+"None of the checked repository packages are available externally. Please make sure that package updates are enabled by default:\n"
+"Options->General->Check for package updates."
 msgstr "Nė vienas iš pažymėtų saugyklos paketų nėra įdiegti arba jie neturi tinkamų parsisiuntimo saitų."
 
 #: opkman_const.rsmainfrm_packageupdatewarning
+#, fuzzy
+#| msgid ""
+#| "Updating packages from external link is not without a risk!\n"
+#| "Only update if you trust the package maintainer. Continue?\n"
 msgid ""
-"Updating packages from external link is not without a risk!\n"
-"Only update if you trust the package maintainer. Continue?\n"
+"Installing packages from external link is not without a risk!\n"
+"Only install if you trust the package maintainer. Continue?"
 msgstr ""
 "Paketo naujinimas pagal išorinį saitą yra rizikingas!\n"
 "Naujinkite tik jei pasitikite paketo plėtotoju. Tęsti?\n"
 
 #: opkman_const.rsmainfrm_resmessagechecksloaded
+#, object-pascal-format
 msgid "%s packages successfully loaded from file!"
 msgstr "%s paketų sėkmingai įkelta iš failo!"
 
 #: opkman_const.rsmainfrm_resmessagecheckssaved
+#, object-pascal-format
 msgid "%s packages successfully saved to file!"
 msgstr "%s paketų sėkmingai įrašyta į failą!"
 
 #: opkman_const.rsmainfrm_rsdestdirerror
+#, object-pascal-format
 msgid "Cannot create directory \"%s\". Operation aborted."
 msgstr ""
 
@@ -741,9 +810,13 @@ msgid "No packages to show."
 msgstr "Nėra rodytinų paketų."
 
 #: opkman_const.rsmainfrm_rsmessagenorepository0
+#, fuzzy
+#| msgid ""
+#| "Remote package repository not configured.\n"
+#| "Do you wish to configure it now?\n"
 msgid ""
 "Remote package repository not configured.\n"
-"Do you wish to configure it now?\n"
+"Do you wish to configure it now?"
 msgstr ""
 "Nuotolinė paketų saugykla nėra suderinta.\n"
 "Derinti dabar?\n"
@@ -751,6 +824,10 @@ msgstr ""
 #: opkman_const.rsmainfrm_rsmessagenothingchacked
 msgid "Please check at least one package!"
 msgstr "Pažymėkite bent vieną paketo failą!"
+
+#: opkman_const.rsmainfrm_rsmessagenothinginstalled
+msgid "No packages are installed. Please install at least one package first."
+msgstr ""
 
 #: opkman_const.rsmainfrm_rsmessageparsingjson
 msgid "Parsing JSON. Please wait..."
@@ -761,6 +838,7 @@ msgid "Please check one or more packages!"
 msgstr "Pažymėkite vieną ar kelius paketus!"
 
 #: opkman_const.rsmainfrm_rspackagedependency0
+#, object-pascal-format
 msgid "Package \"%s\" depends on package \"%s\". Resolve dependency?"
 msgstr "Paketas „%s“ yra priklausomas nuo paketo „%s“. Išspręsti priklausomybę?"
 
@@ -770,7 +848,13 @@ msgstr "Paketas „%s“ yra priklausomas nuo paketo „%s“. Išspręsti prikl
 msgid "Not resolving dependencies might lead to install failure! Continue?"
 msgstr "Neišsprendus priklausomybes gali nepavykti diegimas!"
 
+#: opkman_const.rsmainfrm_rspackageinformation
+#, object-pascal-format
+msgid "Quick package information for \"%s\""
+msgstr ""
+
 #: opkman_const.rsmainfrm_rspackagerating
+#, object-pascal-format
 msgid "Your vote for package \"%s\" is: %s. Thank you for voting!"
 msgstr "Tavo balsas už paketą „%s“ yra: %s. Ačių kad balsavote!"
 
@@ -779,18 +863,24 @@ msgid "This will delete all non-installed packages from local repository. Contin
 msgstr "Šitai iš vietinės saugyklos pašalins visus neįdiegtus paketus. Tęsti?"
 
 #: opkman_const.rsmainfrm_rsrepositorycleanup1
+#, object-pascal-format
 msgid "%s packages deleted!"
 msgstr "%s paketų pašalinta!"
 
 #: opkman_const.rsmainfrm_rsuninstall
+#, object-pascal-format, fuzzy
+#| msgid ""
+#| "%sAre you sure you wish to uninstall the checked packages?\n"
+#| "Please note: in order for the changes to take effect you must rebuid the IDE.\n"
 msgid ""
 "%sAre you sure you wish to uninstall the checked packages?\n"
-"Please note: in order for the changes to take effect you must rebuid the IDE.\n"
+"Please note: in order for the changes to take effect you must rebuid the IDE."
 msgstr ""
 "%sAr tikrai išdiegti pažymėtus paketus?\n"
 "Pastaba: kad pokyčiai įsigaliotų būtina iš naujo daryti IKA.\n"
 
 #: opkman_const.rsmainfrm_rsuninstall_error
+#, object-pascal-format
 msgid "Cannot uninstall package \"%s\"!"
 msgstr "Nepavyksta įdiegti paketo „%s“!"
 
@@ -845,7 +935,7 @@ msgstr "Diegti paketus"
 
 #: opkman_const.rsmainfrm_tbopenrepo_caption
 msgctxt "opkman_const.rsmainfrm_tbopenrepo_caption"
-msgid "Open"
+msgid "Local repo"
 msgstr ""
 
 #: opkman_const.rsmainfrm_tbopenrepo_hint
@@ -917,14 +1007,26 @@ msgid "Rating"
 msgstr "Reitingas"
 
 #: opkman_const.rsmainfrm_vstheadercolumn_repository
+#, fuzzy
+#| msgid "Repository"
 msgctxt "opkman_const.rsmainfrm_vstheadercolumn_repository"
-msgid "Repository"
+msgid "OPM repository"
 msgstr "Saugykla"
 
+#: opkman_const.rsmainfrm_vstheadercolumn_repository_hint
+msgid "Packages available in the OPM repository (https://packages.lazarus-ide.org/)"
+msgstr ""
+
 #: opkman_const.rsmainfrm_vstheadercolumn_update
+#, fuzzy
+#| msgid "Update"
 msgctxt "opkman_const.rsmainfrm_vstheadercolumn_update"
-msgid "Update"
+msgid "External repository"
 msgstr "Naujinti"
+
+#: opkman_const.rsmainfrm_vstheadercolumn_update_hint
+msgid "Packages available at the developer's webpage (see node \"External link (JSON)\" for more details)"
+msgstr ""
 
 #: opkman_const.rsmainfrm_vsttext_author
 msgctxt "opkman_const.rsmainfrm_vsttext_author"
@@ -935,6 +1037,14 @@ msgstr "Autorius"
 msgctxt "opkman_const.rsmainfrm_vsttext_category"
 msgid "Category"
 msgstr "Kategorija"
+
+#: opkman_const.rsmainfrm_vsttext_comdesc
+msgid "Community description for metapackage"
+msgstr ""
+
+#: opkman_const.rsmainfrm_vsttext_communitydescription
+msgid "Community description"
+msgstr ""
 
 #: opkman_const.rsmainfrm_vsttext_dependecies
 msgctxt "opkman_const.rsmainfrm_vsttext_dependecies"
@@ -951,8 +1061,10 @@ msgid "Description"
 msgstr "Aprašas"
 
 #: opkman_const.rsmainfrm_vsttext_downloadurl
+#, fuzzy
+#| msgid "Update link (JSON)"
 msgctxt "opkman_const.rsmainfrm_vsttext_downloadurl"
-msgid "Update link (JSON)"
+msgid "External link (JSON)"
 msgstr "Naujinti saitą (JSON)"
 
 #: opkman_const.rsmainfrm_vsttext_fpccompatibility
@@ -1135,15 +1247,16 @@ msgstr "Įdiegta"
 msgid "Up to date"
 msgstr "Naujausias"
 
-#: opkman_const.rsmainfrm_vsttext_packagestate5
-msgctxt "opkman_const.rsmainfrm_vsttext_packagestate5"
-msgid "New version available (repository)"
-msgstr "Prieinama naujesnė laida (saugykla)"
-
 #: opkman_const.rsmainfrm_vsttext_packagestate6
+#, fuzzy
+#| msgid "New updates available"
 msgctxt "opkman_const.rsmainfrm_vsttext_packagestate6"
-msgid "New updates available"
+msgid "New version available"
 msgstr "Prieinami naujiniai"
+
+#: opkman_const.rsmainfrm_vsttext_packagestate7
+msgid "Ahead of OPM"
+msgstr ""
 
 #: opkman_const.rsmainfrm_vsttext_packagestatus
 msgid "Package status"
@@ -1208,6 +1321,34 @@ msgstr "„SVN“"
 msgctxt "opkman_const.rsmainfrm_vsttext_version"
 msgid "Version"
 msgstr "Laida"
+
+#: opkman_const.rsopensslfrm_bp_cancelbutton_caption
+#, fuzzy
+msgctxt "opkman_const.rsopensslfrm_bp_cancelbutton_caption"
+msgid "No"
+msgstr "Ne"
+
+#: opkman_const.rsopensslfrm_bp_okbutton_caption
+#, fuzzy
+msgctxt "opkman_const.rsopensslfrm_bp_okbutton_caption"
+msgid "Yes"
+msgstr "Taip"
+
+#: opkman_const.rsopensslfrm_caption
+msgid "Download OpenSSL libraries"
+msgstr ""
+
+#: opkman_const.rsopensslfrm_chpermanent_caption
+msgid "Do not ask this question again"
+msgstr ""
+
+#: opkman_const.rsopensslfrm_lbmessage1_caption
+msgid "In order to work properly, OPM needs the OpenSSL libraries: \"libeay32.dll\" and \"ssleay32.dll\""
+msgstr ""
+
+#: opkman_const.rsopensslfrm_lbmessage2_caption
+msgid "Download these files from \"https://packages.lazarus-ide.org/\"?"
+msgstr ""
 
 #: opkman_const.rsopminterfacerebuildconf
 msgid "In order for the changes to take effect you must rebuild the IDE. Rebuild now?"
@@ -1296,6 +1437,14 @@ msgstr "Visada priverstinai parsisiųsti ir išplėsti"
 msgid "If this option is checked the packages are always re-downloaded/extracted before install"
 msgstr "Kai ši parinktis pažymėta prieš diegimą paketai bus atsiųsti iš naujo ir išplėsti"
 
+#: opkman_const.rsoptions_cbloadjsonlocally_caption
+msgid "If available, parse the JSON from local source"
+msgstr ""
+
+#: opkman_const.rsoptions_cbloadjsonlocally_hint
+msgid "If this option is checked the JSON is parsed from a local source (useful if the internet connection is slow). After 25 local parses, OPM will attempt a live update."
+msgstr ""
+
 #: opkman_const.rsoptions_cbproxy_caption
 msgid "Use proxy"
 msgstr "Naudoti įgaliotąjį serverį"
@@ -1348,10 +1497,12 @@ msgid "Add new exclusion"
 msgstr "Pridėti naują išbraukimą"
 
 #: opkman_const.rsoptions_inputbox_conf0
+#, object-pascal-format
 msgid "Delete selected extension (\"%s\")?"
 msgstr "Šalinti pažymėtą plėtinį („%s“)?"
 
 #: opkman_const.rsoptions_inputbox_conf1
+#, object-pascal-format
 msgid "Delete selected folder (\"%s\")?"
 msgstr "Šalinti pažymėtą aplanką („%s“)?"
 
@@ -1478,6 +1629,18 @@ msgstr ""
 msgid "Off"
 msgstr ""
 
+#: opkman_const.rsoptions_rbopenssl_item0
+msgid "Automatically download files from \"https://packages.lazarus-ide.org/\""
+msgstr ""
+
+#: opkman_const.rsoptions_rbopenssl_item1
+msgid "Show confirmation dialog before download"
+msgstr ""
+
+#: opkman_const.rsoptions_rbopenssl_item2
+msgid "Never download files"
+msgstr ""
+
 #: opkman_const.rsoptions_remoterepository_information
 msgid "Please enter the remote repository address!"
 msgstr "Įveskite nuotolinės saugyklos adresą!"
@@ -1501,6 +1664,22 @@ msgstr "Profiliai"
 #: opkman_const.rsoptions_tsproxy_caption
 msgid "Proxy"
 msgstr "Įgaliotasis serveris"
+
+#: opkman_const.rsoption_cbcbalreadyinstalledpackages_caption
+msgid "Warn me about already installed packages"
+msgstr ""
+
+#: opkman_const.rsoption_cbcbalreadyinstalledpackages_hint
+msgid "If a package is already installed, OPM will show a warning message"
+msgstr ""
+
+#: opkman_const.rsoption_cbincompatiblepackage_caption
+msgid "Warn me about incompatible/untested packages"
+msgstr ""
+
+#: opkman_const.rsoption_cbincompatiblepackage_hint
+msgid "If a package is not compatible with the current widgetset or Lazarus/FPC version, OPM will show a warning message"
+msgstr ""
 
 #: opkman_const.rspackagelistfrm_bno_caption
 msgctxt "opkman_const.rspackagelistfrm_bno_caption"
@@ -1529,8 +1708,44 @@ msgstr "Atsisiųstų paketų sąrašas"
 msgid "Update package list"
 msgstr "Naujinti paketų sąrašą"
 
+#: opkman_const.rspackagelistfrm_caption3
+msgid "Incompatible package list"
+msgstr ""
+
+#: opkman_const.rspackagelistfrm_curfpcver
+msgid "Current FPC version: "
+msgstr ""
+
+#: opkman_const.rspackagelistfrm_curlazver
+msgid "Current Lazarus version: "
+msgstr ""
+
+#: opkman_const.rspackagelistfrm_curws
+msgid "Current widgetset: "
+msgstr ""
+
+#: opkman_const.rspackagelistfrm_incompatible
+msgid "Not tested"
+msgstr ""
+
+#: opkman_const.rspackagelistfrm_lbhint_caption
+msgid "Hint: for more details move the mouse over the problematic column."
+msgstr ""
+
+#: opkman_const.rspackagelistfrm_supfpcvers
+msgid "Supported FPC versions: "
+msgstr ""
+
+#: opkman_const.rspackagelistfrm_suplazvers
+msgid "Supported Lazarus versions: "
+msgstr ""
+
+#: opkman_const.rspackagelistfrm_supwss
+msgid "Supported widgetsets: "
+msgstr ""
+
 #: opkman_const.rspackagesfound
-#, fuzzy,badformat
+#, object-pascal-format, fuzzy, badformat
 #| msgid "(%s packages found)"
 msgid "(%s repository packages found, containing %s lpk files, total size %s)"
 msgstr "(rasta paketų: %s)"
@@ -1588,6 +1803,7 @@ msgid "Cannot install package:"
 msgstr "Nepavyko įdiegti paketo:"
 
 #: opkman_const.rsprogressfrm_error4
+#, object-pascal-format
 msgctxt "opkman_const.rsprogressfrm_error4"
 msgid "Dependency \"%s\" not found!"
 msgstr "Priklausinys „%s“ nerastas!"
@@ -1624,6 +1840,7 @@ msgid "Success."
 msgstr "Sėkmingai."
 
 #: opkman_const.rsprogressfrm_info2
+#, object-pascal-format
 msgid "Contacting download site for \"%s\" (%s)"
 msgstr "Susisiekiama su atsisiuntimo tinklapiu dėl „%s“ (%s)"
 
@@ -1710,10 +1927,12 @@ msgid "Repositories"
 msgstr "Saugyklos"
 
 #: opkman_const.rsrepositories_confirmation0
+#, object-pascal-format
 msgid "Delete selected repository \"%s\"?"
 msgstr "Šalinti parinktą saugyklą „%s“?"
 
 #: opkman_const.rsrepositories_info1
+#, object-pascal-format
 msgid "The following repository: \"%s\" is already in the list."
 msgstr ""
 

@@ -43,6 +43,7 @@ type
   published
     class function CreateHandle(const AWinControl: TWinControl;
           const AParams: TCreateParams): HWND; override;
+    class function GetDoubleBuffered(const AWinControl: TWinControl): Boolean; override;
     class procedure SetParams(const AScrollBar: TCustomScrollBar); override;
   end;
 
@@ -77,6 +78,7 @@ type
           const AParams: TCreateParams): HWND; override;
     class procedure AdaptBounds(const AWinControl: TWinControl;
           var Left, Top, Width, Height: integer; var SuppressMove: boolean); override;
+    class function GetDoubleBuffered(const AWinControl: TWinControl): Boolean; override;
     class procedure GetPreferredSize(const AWinControl: TWinControl;
       var PreferredWidth, PreferredHeight: integer; WithThemeSpace: Boolean); override;
     class function GetDroppedDown(const ACustomComboBox: TCustomComboBox): Boolean; override;
@@ -256,6 +258,7 @@ type
   published
     class function CreateHandle(const AWinControl: TWinControl;
           const AParams: TCreateParams): HWND; override;
+    class function GetDoubleBuffered(const AWinControl: TWinControl): Boolean; override;
     class procedure SetDefault(const AButton: TCustomButton; ADefault: Boolean); override;
     class procedure SetShortCut(const AButton: TCustomButton; const ShortCutK1, ShortCutK2: TShortCut); override;
   end;
@@ -266,6 +269,7 @@ type
   published
     class function CreateHandle(const AWinControl: TWinControl;
           const AParams: TCreateParams): HWND; override;
+    class function GetDoubleBuffered(const AWinControl: TWinControl): Boolean; override;
     class procedure GetPreferredSize(const AWinControl: TWinControl;
           var PreferredWidth, PreferredHeight: integer;
           WithThemeSpace: Boolean); override;
@@ -400,7 +404,7 @@ begin
     WM_ERASEBKGND:
       begin
         WindowInfo := GetWin32WindowInfo(Window);
-        if not WindowInfo^.WinControl.DoubleBuffered then
+        if not TWSWinControlClass(WindowInfo^.WinControl.WidgetSetClass).GetDoubleBuffered(WindowInfo^.WinControl) then
         begin
           LMessage.msg := Msg;
           LMessage.wParam := WParam;
@@ -439,7 +443,7 @@ begin
     WM_ERASEBKGND:
       begin
         Control := GetWin32WindowInfo(Window)^.WinControl;
-        if not Control.DoubleBuffered then
+        if not TWSWinControlClass(Control.WidgetSetClass).GetDoubleBuffered(Control) then
         begin
           LMessage.msg := Msg;
           LMessage.wParam := WParam;
@@ -473,6 +477,12 @@ begin
   Result := Params.Window;
 end;
 
+class function TWin32WSScrollBar.GetDoubleBuffered(
+  const AWinControl: TWinControl): Boolean;
+begin
+  Result := GetWin32NativeDoubleBuffered(AWinControl); // double buffered scrollbar flickers on mouse-in/mouse-out on Windows 10
+end;
+
 class procedure TWin32WSScrollBar.SetParams(const AScrollBar: TCustomScrollBar);
 var
   ScrollInfo: TScrollInfo;
@@ -480,9 +490,8 @@ var
 begin
   with AScrollBar do
   begin
-    AMax := Max - 1;
+    AMax := Max;
     if AMax < Min then AMax := Min;
-    if AMax < Max then AMax := Max;
 
     ScrollInfo.cbSize := SizeOf(TScrollInfo);
     ScrollInfo.fMask := SIF_POS or SIF_Range or SIF_PAGE;
@@ -491,7 +500,10 @@ begin
     ScrollInfo.nPage := PageSize;
     ScrollInfo.nPos := Position;
 
-    SendMessage(Handle, SBM_SETSCROLLINFO, WParam(True), LParam(@ScrollInfo));
+    { ~bk 2019.12.11
+       https://docs.microsoft.com/en-us/windows/win32/controls/sbm-setscrollinfo
+       says that "they should use the SetScrollInfo function".}
+    SetScrollInfo(Handle, SB_CTL, ScrollInfo, IsEnabled);
     case Kind of
       sbHorizontal:
         SetWindowLong(Handle, GWL_STYLE, GetWindowLong(Handle, GWL_STYLE) or SBS_HORZ);
@@ -538,7 +550,7 @@ begin
         begin
           Info := GetWin32WindowInfo(Window);
           if Assigned(Info) and (Info^.WinControl is TCustomGroupBox)
-          and not TCustomGroupBox(Info^.WinControl).Enabled then
+          and not Info^.WinControl.IsEnabled then
           begin
             GroupBox := TCustomGroupBox(Info^.WinControl);
             DC := Windows.GetDC(Window);
@@ -983,6 +995,12 @@ begin
       BuddyWindowInfo:=nil;
   end;
   Result := Params.Window;
+end;
+
+class function TWin32WSCustomComboBox.GetDoubleBuffered(
+  const AWinControl: TWinControl): Boolean;
+begin
+  Result := False; // force DoubleBuffered False, see #33831
 end;
 
 class procedure TWin32WSCustomComboBox.AdaptBounds(const AWinControl: TWinControl;
@@ -1774,7 +1792,7 @@ begin
     WM_ERASEBKGND:
       begin
         Control := GetWin32WindowInfo(Window)^.WinControl;
-        if not Control.DoubleBuffered then
+        if not TWSWinControlClass(Control.WidgetSetClass).GetDoubleBuffered(Control) then
         begin
           LMessage.msg := Msg;
           LMessage.wParam := WParam;
@@ -1811,6 +1829,12 @@ begin
   Result := Params.Window;
 end;
 
+class function TWin32WSButton.GetDoubleBuffered(
+  const AWinControl: TWinControl): Boolean;
+begin
+  Result := GetWin32NativeDoubleBuffered(AWinControl);
+end;
+
 class procedure TWin32WSButton.SetDefault(const AButton: TCustomButton; ADefault: Boolean);
 var
   WindowStyle: dword;
@@ -1845,11 +1869,18 @@ begin
   with Params do
   begin
     pClassName := @ButtonClsName[0];
+    SubClassWndProc := @ButtonWndProc;
     WindowTitle := StrCaption;
   end;
   // create window
   FinishCreateWindow(AWinControl, Params, false);
   Result := Params.Window;
+end;
+
+class function TWin32WSCustomCheckBox.GetDoubleBuffered(
+  const AWinControl: TWinControl): Boolean;
+begin
+  Result := GetWin32NativeDoubleBuffered(AWinControl);
 end;
 
 class procedure TWin32WSCustomCheckBox.GetPreferredSize(const AWinControl: TWinControl;
@@ -1957,6 +1988,7 @@ begin
   with Params do
   begin
     pClassName := @ButtonClsName[0];
+    SubClassWndProc := @ButtonWndProc;
     WindowTitle := StrCaption;
   end;
   // create window

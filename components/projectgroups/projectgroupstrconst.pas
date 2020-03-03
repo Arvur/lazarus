@@ -27,6 +27,9 @@ Resourcestring
 
   lisTargetAdd          = 'Add target';
   lisTargetRemove       = 'Remove target';
+  lisUndo = 'Undo';
+  lisRedo = 'Redo';
+  lisOptions = 'Options';
   lisTargetCompile      = 'Compile';
   lisProjectGroups = 'Project Groups';
   lisTargetCompileClean = 'Compile clean';
@@ -45,7 +48,7 @@ Resourcestring
   lisOpenRecentProjectGroup = 'Open Recent Project Group';
   lisSaveProjectGroup   = 'Save Project Group';
   lisSaveProjectGroupAs = 'Save Project Group As ...';
-  lisTargetCopyFilename = 'Copy file name';
+  lisTargetCopyFilename = 'Copy Filename';
 
   lisProjectGroup            = 'Project group %s';
   lisNodeTargets             = 'Targets';
@@ -62,8 +65,14 @@ Resourcestring
   lisProjectGroupSaveHint      = 'Save project group';
   lisProjectGroupSaveAsCaption = 'Save As ...';
   lisProjectGroupSaveAsHint    = 'Save project group with a new name';
-  lisProjectGroupAddExistingCaption = 'Add';
+  lisProjectGroupNewCaption = 'New';
+  lisProjectGroupNewHint    = 'New project group';
+  lisProjectGroupAddCaption = 'Add';
+  lisProjectGroupAddHint    = 'Add targets to project group';
+  lisProjectGroupAddExistingCaption = 'Add from file';
   lisProjectGroupAddExistingHint    = 'Add existing target to project group';
+  lisProjectGroupAddCurrentProjectCaption = 'Add current project';
+  lisProjectGroupAddCurrentProjectHint    = 'Add current project to project group';
   lisProjectGroupDeleteCaption = 'Remove';
   lisProjectGroupDeleteHint    = 'Remove target from project group';
   lisProjectGroupAddNewCaption = 'New';
@@ -88,6 +97,7 @@ Resourcestring
   lisTargetActivateHint        = 'Activate selected target';
   lisTargetOpenCaption         = 'Open';
   lisTargetOpenHint            = 'Open selected target';
+  lisTargetInfoCaption         = 'Info ...';
   lisInvalidFile = 'Invalid File';
   lisInvalidXmlFileName = 'Invalid XML file name "%s".';
   lisReadError = 'Read error';
@@ -113,15 +123,30 @@ Resourcestring
   lisPackageNotFound = 'Package not found';
   lisPackageNotFound2 = 'Package "%s" not found.';
   lisBuildMode2 = 'Build Mode "%s"';
+  lisLazarusSupportedInProjectGroups = 'Lazarus files (*.lpi;*.lpk;*.lpg;*.pas;*.pp;*.p)';
   lisLazarusProjectsLpi = 'Lazarus projects (*.lpi)';
   lisLazarusPackagesLpk = 'Lazarus packages (*.lpk)';
   lisLazarusProjectGroupsLpg = 'Lazarus project groups (*.lpg)';
   lisPascalFilePasPpP = 'Pascal files (*.pas;*.pp;*.p)';
-  lisNeedSave = 'Need save';
-  lisPleaseSaveYourChangesBeforeReloadingTheProjectGrou = 'Please save your changes before reloading the project group.';
+  lisChangesGetLostAtReload = 'There are unsaved changes that get lost if you reload the project group. '+
+    'Do you really want to reload?';
   lisProjectGroupReload = 'Reload';
   lisMore = 'More';
 
+  lisOpenLastGroupOnStart = 'Open last group on start';
+  lisOnIDEStartReopenLastOpenGroup = 'On IDE start reopen last open group.';
+  lisShowTargetPaths = 'Show target paths';
+  lisEnableToShowTargetFilenamesWithPaths = 'Enable to show target filenames '
+    +'with paths.';
+  lisCompileAndBuildCompileTarget = '"Compile" and "Build" compile target';
+  lisIDECommandsCompileAndBuildInvokeCompileBuildSelect = 'IDE commands "'
+    +'Compile" and "Build" invoke compile/build selected target in project '
+    +'group editor';
+
+  lisInfo = 'Info';
+  lisSourceDirectoriesOfProjectGroup = 'Source directories of project group:';
+
+  lisProjectGroupsSourcePaths = 'Project group''s source paths';
 
 implementation
 

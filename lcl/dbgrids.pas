@@ -32,9 +32,9 @@ unit DBGrids;
 interface
 
 uses
-  Classes, SysUtils, Math, FileUtil, DB,
-  LazUTF8, LazLoggerBase, LCLStrConsts, LCLIntf, LCLType, LMessages, LResources,
-  Controls, StdCtrls, Graphics, Grids, Dialogs, Themes, Variants, Clipbrd, Laz2_XMLCfg;
+  Classes, SysUtils, Math, FileUtil, DB, LazUTF8, LazLoggerBase, LCLStrConsts,
+  LCLIntf, LCLType, LMessages, LResources, Controls, StdCtrls, Graphics, Grids,
+  Dialogs, Themes, Variants, Clipbrd, ImgList, Laz2_XMLCfg;
 
 {$if FPC_FULLVERSION<20701}
   {$DEFINE noautomatedbookmark}
@@ -132,6 +132,33 @@ type
 
 type
 
+  TBookmarkList = class;
+  TBookmarkedRecordEnumeratorOptions = set of
+      (
+        breDisableDataset,
+        breStopOnInvalidBookmark,
+        breRestoreCurrent
+      );
+
+  { TBookmarkedRecordEnumerator }
+
+  TBookmarkedRecordEnumerator = class
+  private
+    fBookmarkList: TBookmarkList;
+    fBookmarkIndex: Integer;
+    fCurrent, fBook: TBookmark;
+    fDataset: TDataset;
+    fOptions: TBookmarkedRecordEnumeratorOptions;
+  public
+    constructor Create(bookList: TBookmarkList; aGrid: TCustomDbGrid;
+        anOptions: TBookmarkedRecordEnumeratorOptions);
+    destructor Destroy; override;
+    function MoveNext: boolean;
+    function GetEnumerator: TBookmarkedRecordEnumerator;
+    property Current: TBookmark read fCurrent;
+    property Options: TBookmarkedRecordEnumeratorOptions read fOptions write fOptions;
+  end;
+
   { TBookmarkList }
 
   TBookmarkList = class
@@ -155,6 +182,8 @@ type
     function  Find(const Item: TBookmark; var AIndex: Integer): boolean;
     function  IndexOf(const Item: TBookmark): Integer;
     function  Refresh: boolean;
+    function  GetEnumerator(opt: TBookmarkedRecordEnumeratorOptions =
+                [breDisableDataset, breRestoreCurrent]): TBookmarkedRecordEnumerator;
 
     property Count: integer read GetCount;
     property CurrentRowSelected: boolean
@@ -283,6 +312,8 @@ type
     procedure RemoveAutoColumns;
   public
     function  Add: TColumn;
+    function  ColumnByFieldname(const aFieldname: string): TColumn;
+    function  ColumnByTitle(const aTitle: string): TColumn;
     procedure LinkFields;
     procedure ResetColumnsOrder(ColumnOrder: TColumnOrder);
     property Items[Index: Integer]: TColumn read GetColumn write SetColumn; default;
@@ -441,8 +472,9 @@ type
     function  GetEditText(aCol, aRow: Longint): string; override;
     function  GetFieldFromGridColumn(Column: Integer): TField;
     function  GetGridColumnFromField(F: TField): Integer;
-    function  GetImageForCheckBox(const aCol,aRow: Integer;
-                                  CheckBoxView: TCheckBoxState): TBitmap; override;
+    procedure GetImageForCheckBox(const aCol, aRow: Integer;
+      CheckBoxView: TCheckBoxState; var ImageList: TCustomImageList;
+      var ImageIndex: TImageIndex; var Bitmap: TBitmap); override;
     function  GetIsCellSelected(aCol, aRow: Integer): boolean; override;
     function  GetIsCellTitle(aCol,aRow: Integer): boolean; override;
     procedure GetSelectedState(AState: TGridDrawState; out IsSelected:boolean); override;
@@ -473,7 +505,6 @@ type
     procedure SelectEditor; override;
     procedure SetEditText(ACol, ARow: Longint; const Value: string); override;
     procedure SetFixedCols(const AValue: Integer); override;
-    function  SelectCell(aCol, aRow: Integer): boolean; override;
     procedure UnprepareCellHints; override;
     procedure UpdateActive; virtual;
     procedure UpdateAutoSizeColumns;
@@ -485,7 +516,6 @@ type
     property Columns: TDBGridColumns read GetColumns write SetColumns;
     property GridStatus: TDBGridStatus read FGridStatus write FGridStatus;
     property Datalink: TComponentDataLink read FDatalink;
-    property DataSource: TDataSource read GetDataSource write SetDataSource;
     property Options: TDBGridOptions read FOptions write SetOptions default
               [dgColumnResize, dgColumnMove, dgTitles, dgIndicator, dgRowLines,
                dgColLines, dgConfirmDelete, dgCancelOnExit, dgTabs, dgEditing,
@@ -534,6 +564,7 @@ type
     property SelectedFieldRect: TRect read GetSelectedFieldRect;
     property LastColumn: TColumn read GetLastColumn;
     property FirstColumn: TColumn read GetFirstColumn;
+    property DataSource: TDataSource read GetDataSource write SetDataSource;
   end;
 
   TDBGrid=class(TCustomDBGrid)
@@ -570,6 +601,7 @@ type
     property DataSource;
     property DefaultDrawing;
     property DefaultRowHeight;
+    property DoubleBuffered;
     property DragCursor;
     //property DragKind;
     property DragMode;
@@ -588,6 +620,7 @@ type
     property OptionsExtra;
     property ParentBiDiMode;
     property ParentColor default false;
+    property ParentDoubleBuffered;
     property ParentFont;
     //property ParentShowHint;
     property PopupMenu;
@@ -638,6 +671,7 @@ type
     property OnStartDrag;
     property OnTitleClick;
     property OnUserCheckboxBitmap;
+    property OnUserCheckboxImage;
     property OnUserCheckboxState;
     property OnUTF8KeyPress;
   end;
@@ -752,6 +786,56 @@ begin
   end;
 end;
 
+{ TBookmarkedRecordEnumerator }
+
+constructor TBookmarkedRecordEnumerator.Create(bookList: TBookmarkList;
+  aGrid: TCustomDbGrid; anOptions: TBookmarkedRecordEnumeratorOptions);
+begin
+  inherited Create;
+  fBookmarkList := bookList;
+  fBookmarkIndex := -1;
+  fDataset := aGrid.Datasource.dataset;
+  fOptions := anOptions;
+end;
+
+destructor TBookmarkedRecordEnumerator.Destroy;
+begin
+  if breRestoreCurrent in fOptions then begin
+    if fDataset.BookmarkValid(fBook) then
+      fDataset.GotoBookmark(fBook);
+    fDataset.FreeBookmark(fBook);
+  end;
+  if breDisableDataset in fOptions then
+    fDataset.EnableControls;
+  inherited Destroy;
+end;
+
+function TBookmarkedRecordEnumerator.MoveNext: boolean;
+begin
+  inc(fBookmarkIndex);
+
+  if fBookmarkIndex=0 then begin
+    if breDisableDataset in fOptions then
+      fDataset.DisableControls;
+    if breRestoreCurrent in fOptions then
+      fBook := fDataset.GetBookmark;
+  end;
+
+  result := fBookmarkIndex<fBookmarkList.Count;
+  if result then begin
+    fCurrent := fBookmarkList[fBookmarkIndex];
+    if fDataset.BookmarkValid(fCurrent) then
+      fDataSet.GotoBookmark(fCurrent)
+    else if breStopOnInvalidBookmark in fOptions then
+      result := false;
+  end;
+end;
+
+function TBookmarkedRecordEnumerator.GetEnumerator: TBookmarkedRecordEnumerator;
+begin
+  result := self;
+end;
+
 { TCustomDBGrid }
 
 procedure TCustomDBGrid.OnRecordChanged(Field: TField);
@@ -767,9 +851,12 @@ begin
     UpdateActive
   else begin
     c := GetGridColumnFromField(Field);
-    if c>0 then
-      InvalidateCell(C, Row)
-    else
+    if c>0 then begin
+      if EditorMode and (Field=SelectedField) then
+        EditorDoSetValue
+      else
+        InvalidateCell(C, Row)
+    end else
       UpdateActive;
   end;
 end;
@@ -1373,6 +1460,8 @@ var
   end;
 
   function DsPos: boolean;
+  var
+    oldMaxPos: Integer;
   begin
     result := false;
     aPos := Message.Pos;
@@ -1380,12 +1469,22 @@ var
       result := true;
       exit;
     end;
-    if aPos>=MaxPos then
+    oldMaxPos := MaxPos;
+    if aPos>=oldMaxPos then
       dsGoto(False)
     else if aPos<=0 then
       dsGoto(True)
-    else if IsSeq then
-      FDatalink.DataSet.RecNo := aPos + 1
+    else if IsSeq then begin
+      FDatalink.DataSet.RecNo := aPos + 1;
+      {$IFDEF MSWINDOWS}
+      // Workaround for scrollbar range not being updated
+      // probably only needed under windows, issue 33799
+      if oldMaxPos<>MaxPos then begin
+        ScrollBarShow(SB_VERT, false);
+        ScrollBarShow(SB_VERT, true);
+      end;
+      {$ENDIF}
+    end
     else begin
       DeltaRec := Message.Pos - FOldPosition;
       if DeltaRec=0 then begin
@@ -1568,7 +1667,8 @@ begin
       Result := F.DisplayText
     else
       Result := '(blob)';
-  if Assigned(OnGetCellHint) then begin
+  // pass to OnGetCellHint() only if chpTruncOnly
+  if Assigned(OnGetCellHint) and (CellHintPriority = chpTruncOnly) then begin
     C := ColumnFromGridColumn(ACol) as TColumn;
     FOnGetCellHint(self, C, Result);
   end;
@@ -1603,12 +1703,13 @@ begin
   end;
 end;
 
-function TCustomDBGrid.GetImageForCheckBox(const aCol, aRow: Integer;
-  CheckBoxView: TCheckBoxState): TBitmap;
+procedure TCustomDBGrid.GetImageForCheckBox(const aCol, aRow: Integer;
+  CheckBoxView: TCheckBoxState; var ImageList: TCustomImageList;
+  var ImageIndex: TImageIndex; var Bitmap: TBitmap);
 begin
-  Result:=inherited GetImageForCheckBox(aCol, aRow, CheckBoxView);
+  inherited GetImageForCheckBox(aCol, aRow, CheckBoxView, ImageList, ImageIndex, Bitmap);
   if Assigned(OnUserCheckboxBitmap) then
-    OnUserCheckboxBitmap(Self, CheckBoxView, Result);
+    OnUserCheckboxBitmap(Self, CheckBoxView, Bitmap);
 end;
 
 // obtain the visible field index corresponding to the grid column index
@@ -2378,6 +2479,8 @@ var
   end;
 
   procedure MoveSel(AReset: boolean);
+  var
+    ACol: Integer;
   begin
     if (DeltaCol<>0) or (DeltaRow<>0) then begin
       if DeltaRow > 0 then begin
@@ -2395,7 +2498,16 @@ var
         else if Col + DeltaCol >= ColCount then
           Col := ColCount - 1
         else
-          Col := Col + DeltaCol;
+        begin
+          ACol := Col + DeltaCol;
+          if ColWidths[ACol] > 0 then
+            Col := ACol
+          else
+            if DeltaCol < 0 then
+              Col := GetFirstVisibleColumn
+            else
+              Col := GetLastVisibleColumn;
+        end;
       GridFlags := GridFlags - [gfEditingDone];
     end else
     if AReset then
@@ -2595,6 +2707,7 @@ procedure TCustomDBGrid.MouseDown(Button: TMouseButton; Shift: TShiftState; X,
 var
   Gz: TGridZone;
   P: TPoint;
+  aoe: Boolean;
   procedure doMouseDown;
   begin
     if not Focused and not(csNoFocus in ControlStyle) then
@@ -2654,7 +2767,18 @@ begin
   CacheMouseDown(X,Y);
   case Gz of
     gzInvalid:
-      doMouseDown;
+      begin
+        if (cursor=crHSplit) and (dgColumnResize in Options) then begin
+          // DBGrid normally doesn't allow outbound events and this is one of them
+          // make GCache.HotGridZone valid for inherited mousedown. Issue #0034032
+          aoe := AllowOutboundEvents;
+          AllowOutboundEvents := true;
+          inherited MouseMove(shift, x, y);
+          AllowOutBoundEvents := aoe;
+          doInherited;
+        end else
+          doMouseDown;
+      end;
 
     gzFixedCells, gzFixedCols:
       doInherited;
@@ -2718,9 +2842,11 @@ end;
 
 procedure TCustomDBGrid.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
-  if (fGridState=gsSelecting) and not Dragging then
-    exit
-  else
+  if (fGridState=gsSelecting) and not Dragging then begin
+    if Assigned(OnMouseMove) then
+      OnMouseMove(Self, Shift, x, y);
+    exit;
+  end else
     inherited MouseMove(Shift, X, Y);
 end;
 
@@ -2829,11 +2955,6 @@ begin
   if (FixedCols=AValue) or (AValue<FirstGridColumn) then
     exit;
   inherited SetFixedCols(AValue);
-end;
-
-function TCustomDBGrid.SelectCell(aCol, aRow: Integer): boolean;
-begin
-  Result:= (ColWidths[aCol] > 0) and (RowHeights[aRow] > 0);
 end;
 
 procedure TCustomDBGrid.BeginLayout;
@@ -3417,15 +3538,18 @@ begin
     else
       result := true;  // field is nil so it's readonly
 
-    EditingColumn(Col, not Result);
   end;
 end;
 
 procedure TCustomDBGrid.EditorTextChanged(const aCol, aRow: Integer;
   const aText: string);
+var
+  isReadOnly: Boolean;
 begin
-  if not EditorIsReadonly then
+  isReadOnly := EditorIsReadonly;
+  if not isReadOnly then
     SetEditText(aCol, aRow, aText);
+  EditingColumn(Col, not isReadOnly);
 end;
 
 procedure TCustomDBGrid.HeaderSized(IsColumn: Boolean; Index: Integer);
@@ -4149,6 +4273,23 @@ begin
   result := TColumn( inherited add );
 end;
 
+function TDBGridColumns.ColumnByFieldname(const aFieldname: string): TColumn;
+var
+  i: Integer;
+begin
+  result := nil;
+  for i:=0 to Count-1 do
+    if CompareText(Items[i].FieldName, aFieldname)=0 then begin
+      result := Items[i];
+      break;
+    end;
+end;
+
+function TDBGridColumns.ColumnByTitle(const aTitle: string): TColumn;
+begin
+  result := TColumn(inherited ColumnByTitle(aTitle));
+end;
+
 procedure TDBGridColumns.LinkFields;
 var
   i: Integer;
@@ -4541,7 +4682,13 @@ begin
   end;
 end;
 
-constructor TBookmarkList.Create(AGrid: TCustomDBGrid);
+function TBookmarkList.GetEnumerator(opt: TBookmarkedRecordEnumeratorOptions
+  ): TBookmarkedRecordEnumerator;
+begin
+  result := TBookmarkedRecordEnumerator.Create(self, fGrid, opt);
+end;
+
+constructor TBookmarkList.Create(AGrid: TCustomDbGrid);
 begin
   inherited Create;
   FGrid := AGrid;

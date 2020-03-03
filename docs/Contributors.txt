@@ -13,6 +13,7 @@ Andreas Hausladen
 Andreas Schneider
 Andrew Haines
 Andrew Johnson
+Andrey Zubarev
 Anton A. Panferov
 Anton Kavalenka
 Antônio Galvão
@@ -40,6 +41,7 @@ Chris Rorden
 Christian Budde
 Christian Iversen
 Christian Ulrich
+Christo Crause
 Christopher Kirkpatrick
 Cliff Baeseman
 Colin Western
@@ -58,10 +60,12 @@ Denis Golovan
 Denis Kozlov
 Denis Volodarsky
 Derit Agustin
+Dimitrios Chr. Ioannidis
 Diogo Piçarra
 Dirk Schiphorst
 Dmitry Boyarintsev
 Dominique Louis
+Don Siders
 Ere Maijala
 Eric Chapman
 Erivelton Silva
@@ -75,6 +79,7 @@ Felipe Monteiro de Carvalho
 Flávio Etrusco
 Florian Koeberle
 Francisco Manuel
+Gabor Boros
 Gerard Visent
 Gilles Vasseur - French translation
 Giuliano Colla
@@ -117,6 +122,7 @@ Júnior Gonçalves
 Justin Smyth
 Karl Brandt
 Keith Bowes
+Kevin Jesshope
 Khaled Shagrouni
 Kostas Michalopoulos
 Krzysztof Dibowski
@@ -135,10 +141,12 @@ Marc Fokker
 Marc Geldon
 Marc Weustink
 Marcelo Borges de Paula
+Marcin Wiązowski
 Mario Bonati
 Mario Ray Mahardhika
 Marius Ellen
 Mark Bravington
+Mark Morgan Lloyd
 Markus Muller
 Martin Friebe
 Martin Patik
@@ -233,5 +241,6 @@ Zdravko Gabrovski
 Zeljan Rikalo
 Zheng Jian Ping aka "robsean" - Simplified Chinese translation
 Žilvinas Ledas
+Zoë Peterson
 
 #and special thanks to the FPC team.

@@ -21,7 +21,7 @@ interface
 
 uses
   Classes, SysUtils, controls, fpreport, graphics, lmessages, fpreportlclexport, lcltype, menus,
-  fpreportdesignobjectlist, fpreportdrawruler, graphutil, types;
+  fpreportdesignobjectlist, fpreportdrawruler, graphutil, ClipBrd, types;
 
 Const
   clGrid  = TColor($E0E0E0);      // Default color for guide grid
@@ -52,6 +52,8 @@ Type
     FMinControlWidth: Integer;
     FObjects: TReportObjectList;
     FOnElementCreated: TOnElementCreatedEvent;
+    FOnPaste: TNotifyEvent;
+    FOnReportChanged: TNotifyEvent;
     FOnSelectionChanged: TNotifyEvent;
     FOnStateChange: TNotifyEvent;
     FPage: TFPReportCustomPage;
@@ -80,6 +82,7 @@ Type
     procedure DoneMoveSelection;
     procedure DoneResizeSelection;
     procedure DoneSelectRectangle(Extend: Boolean);
+    procedure DoPagesizeChange(Sender: TObject);
     procedure DoReportChanged(Sender: TObject);
     procedure ExtendAddRectangle;
     procedure ExtendSelectRectangle;
@@ -130,6 +133,7 @@ Type
     procedure PaintSelection;virtual;
     Procedure PaintRulers; virtual;
     procedure Paint; override;
+    Procedure Paste; virtual;
     Property VRuler : TDrawRuler Read FVRuler;
     Property HRuler : TDrawRuler Read FHRuler;
   public
@@ -138,6 +142,10 @@ Type
     procedure UpdatePageParams; virtual;
     procedure Reset;
     procedure CancelOperation;
+    Procedure CopySelectionToClipBoard;
+    Class Procedure CheckClipBoardFormat;
+    Function GetBandForPaste : TFPReportCustomBand;
+    function ShowEditorForElement(aElement: TFPReportElement): Boolean;
     Function AddBand(ABandClass : TFPReportBandClass) : TFPReportCustomBand;
     Procedure AddElement(AElementClass : TFPReportElementClass; Multi : Boolean = False);
     Function SelectObjectsInRectangle(ARect : TRect; ExtendSelection : Boolean) : TSelectResult;
@@ -159,11 +167,16 @@ Type
     Property Zoom : Single Read FZoom Write SetZoom;
     Property OnElementCreated : TOnElementCreatedEvent Read FOnElementCreated Write FOnElementCreated;
     Property OnSelectionChanged : TNotifyEvent Read FOnSelectionChanged Write FOnSelectionChanged;
+    Property OnReportChanged : TNotifyEvent Read FOnReportChanged Write FOnReportChanged;
     Property OnStateChange : TNotifyEvent Read FOnStateChange Write FOnStateChange;
+    Property OnPaste : TNotifyEvent Read FOnPaste Write FOnPaste;
   end;
 
 Const
   DefaultDesignerOptions  = [doGuideGrid,doShowRuler]; // Default for designer options
+
+Var
+  ClipBoardFormat : TClipboardFormat;
 
 implementation
 
@@ -171,9 +184,14 @@ uses
   lclintf,
   forms;
 
+Resourcestring
+  SErrFailedToCopyToClipboard = 'Failed to copy selection to clipboard.';
+
 const
   cMoveStepSmall = 1;
   cMoveStepLarge = 8;
+  ReportClipBoardFormatName = 'text/fpReport.Elements';
+
 
 { ---------------------------------------------------------------------
   TFPReportDesignerControl
@@ -190,6 +208,8 @@ begin
   Parent:= AOwner as TWinControl;
   Color:=clWhite;
   FSnapResolution := 8;
+  FMinControlHeight:=FSnapResolution*2;
+  FMinControlWidth:=FSnapResolution*2;
   FCanvasExport:=CreateExportCanvas;
   FCanvasExport.Canvas:=Self.Canvas;
   FCanvasExport.HDPI:=CurrentDPI;
@@ -317,6 +337,7 @@ procedure TFPReportDesignerControl.SetPage(AValue: TFPReportCustomPage);
 begin
   If AValue=FPage then exit;
   FPage:=AValue;
+  FPage.OnPageSizeChange:=@DoPagesizeChange;
   UpdatePageParams;
   FObjects.LoadFromPage(AValue);
   FObjects.OrderBands(Canvas,CurrentDPI);
@@ -365,8 +386,10 @@ Var
   C : String;
   R : TRect;
   S : TSize;
+  Opts : TMemoDragDropOptions;
 
 begin
+  Opts:=[];
   O:=FObjects.GetBandObjectAt(Point(X,Y),[goBandHandle]);
   if O=Nil then
     exit;
@@ -375,7 +398,7 @@ begin
     exit;
   if Source is TMemoDragDrop then
     begin
-    E:=TFPReportMemo.Create(ABand);
+    E:=TFPReportMemo.Create(ABand.Report);
     C:=(Source as TMemoDragDrop).Content;
     TFPReportMemo(E).Text:=C;
     R:=Default(TRect);
@@ -383,9 +406,12 @@ begin
     S:=Canvas.TextExtent(C);
     R.Width:=Round(S.Width*1.2);
     R.Height:=Round(S.Height*1.2);
+    Opts:=TMemoDragDrop(Source).Options;
     end;
   DoAddControl(ABand,E,R,False);
   FObjects.SelectElement(E);
+  if mddShowEditor in Opts then
+    ShowEditorForElement(E)
 end;
 
 procedure TFPReportDesignerControl.DDDragOver(Sender, Source: TObject; X,
@@ -497,6 +523,51 @@ begin
   DoDrawCurrentFocusRect(FDrawFocusRect);
 end;
 
+procedure TFPReportDesignerControl.Paste;
+begin
+  If Assigned(FOnPaste) then
+    FOnPaste(Self);
+end;
+
+Class procedure TFPReportDesignerControl.CheckClipBoardFormat;
+begin
+  If ClipBoardFormat=0 then
+    ClipBoardFormat:=RegisterClipboardFormat(ReportClipBoardFormatName);
+end;
+
+function TFPReportDesignerControl.GetBandForPaste: TFPReportCustomBand;
+
+Var
+  I : Integer;
+  A : TReportObjectArray;
+  O : TReportObject;
+  P : TPoint;
+
+begin
+  Result:=nil;
+  // First, check selection;
+  A:=Objects.GetSelection;
+  I:=0;
+  While (Result=Nil) and (I<Length(A)) do
+    begin
+    if A[i].IsBand then
+      Result:=A[i].AsBand;
+    Inc(I);
+    end;
+  If Assigned(Result) then
+    exit;
+  // Then, check band under cursor position
+  P:=ScreenToControl(Mouse.CursorPos);
+  O:=Objects.GetBandObjectAt(P,[goBandHandle]);
+  if Assigned(O) then
+    Result:=O.AsBand;
+  If Assigned(Result) then
+    Exit;
+  // Lastly, first band...
+  if Page.BandCount>0 then
+    Result:=Page.Bands[0];
+end;
+
 procedure TFPReportDesignerControl.WMEraseBkgnd(var Message: TLMEraseBkgnd);
 begin
   //do nothing to avoid flicker
@@ -579,9 +650,17 @@ end;
 
 function TFPReportDesignerControl.DoAddControl(ABand: TFPReportCustomBand; AElement : TFPReportElement;  ARect: TRect; IsMulti: Boolean) : TReportObject;
 
+  Function MinSize (aSize : Integer) : Integer;
+
+  begin
+    Result:=ASize; // Should be handled in calling routine, actually
+  end;
+
+
 Var
   ERect,BRect : TRect;
   RRect : TFPReportRect;
+  W,H : Integer;
 
 begin
   AElement.Parent:=ABand;
@@ -590,10 +669,12 @@ begin
   ERect.Top:=ARect.Top-BRect.Top;
   ERect.Right:=ARect.Right-BRect.Left;
   ERect.Bottom:=ARect.Bottom-BRect.Top;
+  W:=MinSize(ERect.Right-ERect.Left);
+  H:=MinSize(ERect.Bottom-ERect.Top);
   RRect.SetRect(PixelsToMM(ERect.Left,CurrentDPI),
                 PixelsToMM(ERect.Top,CurrentDPI),
-                PixelsToMM(ERect.Right-ERect.Left,CurrentDPI),
-                PixelsToMM(ERect.Bottom-ERect.Top,CurrentDPI));
+                PixelsToMM(W,CurrentDPI),
+                PixelsToMM(H,CurrentDPI));
 {$IFDEF DEBUGRD}  Writeln('Adding,',AElement.ClassName,' at absolute rect:',RectToStr(ARect),', band rect: ',RectToStr(BRect),' -> Relative rect ',RectToStr(ERect),' natural units: ',RRect.AsString);{$ENDIF}
   AElement.Layout.SetPosition(RRect);
   Result:=FObjects.AddElement(AElement);
@@ -607,7 +688,8 @@ function TFPReportDesignerControl.DoAddControl(ABand: TFPReportCustomBand;
   ARect: TRect; IsMulti: Boolean): TFPReportElement;
 
 begin
-  Result:=FAddClass.Create(ABand);
+  Result:=FAddClass.Create(Page.Report);
+  Result.Parent:=ABand;
   DoAddControl(ABand,Result,ARect,isMulti);
 end;
 
@@ -687,10 +769,28 @@ begin
 end;
 
 procedure TFPReportDesignerControl.KKeyUp(Sender: TObject; var Key: Word; Shift: TShiftState);
+
+Const
+{$IFDEF DARWIN}
+  CtrlKey = ssMeta;
+{$ELSE}
+  CtrlKey = ssCtrl;
+{$ENDIF}
+
+
 begin
   {$IFDEF DEBUGRD}    Writeln('Key up: ',Key,', Shifted: ',Shift<>[]);{$ENDIF}
   if (Key=VK_DELETE) then
-    FObjects.DeleteSelection;
+    begin
+    Key:=0;
+    if FObjects.DeleteSelection = odrBand then
+      FObjects.OrderBands(Self.Canvas,CurrentDPI);
+    end
+  else if (Key=VK_C) and (Shift=[Ctrlkey]) then
+    begin
+    Key:=0;
+    CopySelectionToClipBoard;
+    end;
 end;
 
 procedure TFPReportDesignerControl.SetDesignerOptions(AValue: TDesignerOptions);
@@ -868,6 +968,8 @@ Var
   RH : TResizeHandlePosition;
 
 begin
+  if (Button<>mbLeft) then
+    exit;
   SetFocus;
   FLastMouseDown:=Point(X,Y);
   Case DesignerState of
@@ -895,6 +997,8 @@ procedure TFPReportDesignerControl.MUp(Sender: TObject; Button: TMouseButton; Sh
   X, Y: Integer);
 
 begin
+  if (Button<>mbLeft) then
+    Exit;
   FLastMouseUp:=Point(X,Y);
 {$IFDEF DEBUGRD}  Writeln('Mouse up, desigerstate : ',DesignerState);{$ENDIF}
   Case DesignerState of
@@ -923,7 +1027,6 @@ procedure TFPReportDesignerControl.DoneAddControl(IsMulti : Boolean);
 Var
   CR : TRect;
   O : TReportObject;
-  B : TFPReportCustomBand;
 
 begin
   {$IFDEF DEBUGRD}  Writeln('DoneAddControl: ',isMulti);{$ENDIF}
@@ -1007,9 +1110,17 @@ begin
   SetDesignerState(dsNeutral);
 end;
 
+procedure TFPReportDesignerControl.DoPagesizeChange(Sender: TObject);
+begin
+  UpdatePageParams;
+  Invalidate;
+end;
+
 procedure TFPReportDesignerControl.DoReportChanged(Sender: TObject);
 begin
   Invalidate;
+  If Assigned(OnReportChanged) then
+    OnReportChanged(Sender);
 end;
 
 procedure TFPReportDesignerControl.DrawCurrentFocusRect(IsClear : Boolean);
@@ -1139,30 +1250,41 @@ begin
   Screen.Cursor:=DefaultCursors[aHandlePos];
 end;
 
-procedure TFPReportDesignerControl.DClick(Sender: TObject);
+
+Function TFPReportDesignerControl.ShowEditorForElement(aElement : TFPReportElement) : Boolean;
 
 Var
-  O : TReportObject;
   C : TFPReportElementEditorClass;
   E : TFPReportElementEditor;
 
 begin
+  C:=gElementFactory.FindEditorClassForInstance(AElement);
+  if Assigned(C) then
+    begin
+    E:=C.Create(Self);
+    try
+      E.Element:=AElement;
+      Result:=E.Execute;
+      if Result then
+        begin
+        Objects.ReportChanged;
+        Invalidate;
+        end;
+    finally
+      E.Free;
+    end;
+    end;
+end;
+
+procedure TFPReportDesignerControl.DClick(Sender: TObject);
+
+Var
+  O : TReportObject;
+
+begin
   O:=GetObjectAt(FLastMouseDown,[]);
   if Assigned(O) and O.IsPlainElement then
-    begin
-    C:=gElementFactory.FindEditorClassForInstance(O.Element);
-    if Assigned(C) then
-      begin
-      E:=C.Create(Self);
-      try
-        E.Element:=O.Element;
-        if E.Execute then
-          Invalidate;
-      finally
-        E.Free;
-      end;
-      end;
-    end;
+    ShowEditorForElement(O.Element);
 end;
 
 procedure TFPReportDesignerControl.CancelOperation;
@@ -1192,13 +1314,41 @@ begin
     end;
 end;
 
+procedure TFPReportDesignerControl.CopySelectionToClipBoard;
+
+Var
+  S : TMemoryStream;
+
+begin
+  CheckClipBoardFormat;
+  S:=TMemoryStream.Create;
+  try
+    FObjects.SaveSelectionToStream(S);
+    S.Position:=0;
+    if not ClipBrd.Clipboard.AddFormat(ClipBoardFormat,S) then
+      Raise EReportError.Create(SErrFailedToCopyToClipboard);
+  finally
+    S.Free;
+  end;
+end;
+
+
+
 function TFPReportDesignerControl.AddBand(ABandClass: TFPReportBandClass
   ): TFPReportCustomBand;
-begin
-  Result:=ABandClass.Create(Page);
-  Result.Layout.Height:=2;
-  FObjects.AddBand(Result);
 
+Var
+  O : TReportObject;
+
+begin
+  Result:=ABandClass.Create(Page.Report);
+  Result.Layout.Height:=PixelsToMM(FMinControlHeight,CurrentDPI);
+  Result.Parent:=Page;
+  O:=FObjects.AddBand(Result);
+  FObjects.OrderBands(Canvas,CurrentDPI);
+  If  Assigned(FOnElementCreated) then
+    FOnElementCreated(Self,Result);
+  FObjects.SelectElement(O.AsBand);
 end;
 
 procedure TFPReportDesignerControl.AddElement(

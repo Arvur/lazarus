@@ -18,10 +18,11 @@
  *                                                                         *
  ***************************************************************************
 
- Author: Mattias Gaertner
+ Author: Mattias Gaertner, Juha Manninen
 
  Abstract:
    Modal dialog for editing build modes: add, delete, reorder, rename, diff.
+   Global functions related to many build modes.
 }
 unit BuildModesManager;
 
@@ -31,11 +32,16 @@ interface
 
 uses
   Classes, SysUtils,
+  // LCL
   Forms, Controls, Dialogs, StdCtrls, Grids, Menus, ComCtrls, ButtonPanel, LCLProc,
-  IDEOptionsIntf, IDEDialogs,
-  TransferMacros, Project, CompilerOptions,
-  EnvironmentOpts, LazarusIDEStrConsts,
-  BaseBuildManager, Compiler_ModeMatrix, BuildModeDiffDlg;
+  // LazUtils
+  LazFileUtils, LazLoggerBase, UITypes,
+  // IdeIntf
+  IDEDialogs, CompOptsIntf, IDEOptionsIntf, LazIDEIntf,
+  // IDE
+  MainBase, BasePkgManager, PackageDefs, Project, CompilerOptions, EnvironmentOpts,
+  TransferMacros, BaseBuildManager, Compiler_ModeMatrix, BuildModeDiffDlg,
+  GenericCheckList, IDEProcs, LazarusIDEStrConsts;
 
 type
 
@@ -99,13 +105,37 @@ type
     property ShowSession: boolean read fShowSession write SetShowSession;
   end;
 
-var
-  OnLoadIDEOptionsHook: TOnLoadIDEOptions;
-  OnSaveIDEOptionsHook: TOnSaveIDEOptions;
+  { TBuildModesCheckList }
+
+  TBuildModesCheckList = class
+  private
+    FListForm: TGenericCheckListForm;
+    function IsSelected(AIndex: Integer): Boolean;
+    procedure SaveManyModesSelection;
+    procedure SelectFirst;
+    function Show: Boolean;
+  public
+    constructor Create(InfoCaption: String);
+    destructor Destroy; override;
+  end;
 
 function ShowBuildModesDlg(aShowSession: Boolean): TModalResult;
 procedure SwitchBuildMode(aBuildModeID: string);
 procedure UpdateBuildModeCombo(aCombo: TComboBox);
+
+// Functions dealing with many BuildModes. They depend on TBuildModesCheckList.
+function AddPathToBuildModes(aDir: string; IsIncludeFile: Boolean): Boolean;
+procedure RemovePathFromBuildModes(ObsoletePaths: String; pcos: TParsedCompilerOptString);
+function BuildManyModes: Boolean;
+
+// Check if UnitDirectory is part of the Unit Search Paths.
+//  If not, ask user if he wants to extend dependencies or the Unit Search Paths.
+// Not strictly for many BuildModes but it adds a path to them all.
+function CheckDirIsInSearchPath(UnitInfo: TUnitInfo; IsIncludeFile: Boolean): Boolean;
+
+var
+  OnLoadIDEOptionsHook: TOnLoadIDEOptions;
+  OnSaveIDEOptionsHook: TOnSaveIDEOptions;
 
 
 implementation
@@ -179,6 +209,194 @@ begin
   end;
 end;
 
+function AddPathToBuildModes(aDir: string; IsIncludeFile: Boolean): Boolean;
+var
+  DlgCapt, DlgMsg: String;
+  i: Integer;
+  Ok: Boolean;
+  BMList: TBuildModesCheckList;
+begin
+  Result:=True;
+  if IsIncludeFile then begin
+    DlgCapt:=lisAddToIncludeSearchPath;
+    DlgMsg:=lisTheNewIncludeFileIsNotYetInTheIncludeSearchPathAdd;
+  end
+  else begin
+    DlgCapt:=lisAddToUnitSearchPath;
+    DlgMsg:=lisTheNewUnitIsNotYetInTheUnitSearchPathAddDirectory;
+  end;
+  BMList:=TBuildModesCheckList.Create(DlgCapt);
+  try
+    if Project1.BuildModes.Count > 1 then
+      Ok:=BMList.Show
+    else begin
+      Ok:=IDEMessageDialog(DlgCapt, Format(DlgMsg,[LineEnding,aDir]),
+                           mtConfirmation,[mbYes,mbNo]) = mrYes;
+      BMList.SelectFirst; // The only (Default) build mode must be selected.
+    end;
+    if not Ok then Exit(False);
+    if not Project1.IsVirtual then
+      aDir:=CreateRelativePath(aDir, Project1.Directory);
+    for i:=0 to Project1.BuildModes.Count-1 do
+      if BMList.IsSelected(i) then
+        with Project1.BuildModes[i].CompilerOptions do
+          if IsIncludeFile then
+            MergeToIncludePaths(aDir)
+          else
+            MergeToUnitPaths(aDir);
+  finally
+    BMList.Free;
+  end;
+end;
+
+procedure RemovePathFromBuildModes(ObsoletePaths: String; pcos: TParsedCompilerOptString);
+var
+  bm: TProjectBuildMode;
+  DlgCapt, DlgMsg: String;
+  ProjPaths, CurDir, ResolvedDir, PrevResolvedDir: String;
+  i, p, OldP: Integer;
+  QRes: TModalResult;
+begin
+  if pcos=pcosUnitPath then begin
+    DlgCapt:=lisRemoveUnitPath;
+    DlgMsg:=lisTheDirectoryContainsNoProjectUnitsAnyMoreRemoveThi;
+  end
+  else begin    // pcos=pcosIncludePath
+    DlgCapt:=lisRemoveIncludePath;
+    DlgMsg:=lisTheDirectoryContainsNoProjectIncludeFilesAnyMoreRe;
+  end;
+  QRes:=mrNone;
+  i:=0;
+  // Iterate all build modes until the user chooses to cancel.
+  PrevResolvedDir:='';
+  while (i < Project1.BuildModes.Count) and (QRes in [mrNone,mrYes]) do
+  begin
+    bm:=Project1.BuildModes[i];
+    p:=1;
+    repeat
+      OldP:=p;
+      if pcos=pcosUnitPath then
+        ProjPaths:=bm.CompilerOptions.OtherUnitFiles
+      else
+        ProjPaths:=bm.CompilerOptions.IncludePath;
+      CurDir:=GetNextDirectoryInSearchPath(ProjPaths,p);
+      if CurDir='' then break;
+
+      // Find build modes that have unneeded search paths
+      ResolvedDir:=bm.CompilerOptions.ParsedOpts.DoParseOption(CurDir,pcos,false);
+      if (ResolvedDir<>'')
+      and (SearchDirectoryInSearchPath(ObsoletePaths,ResolvedDir)>0) then begin
+        // Ask confirmation once for each path.
+        // In fact there should be only one path after one source file is removed.
+        if (QRes=mrNone) or ((PrevResolvedDir<>'') and (PrevResolvedDir<>ResolvedDir)) then
+          QRes:=IDEQuestionDialog(DlgCapt,Format(DlgMsg,[CurDir]),
+                   mtConfirmation, [mrYes, lisRemove,
+                                    mrNo, lisKeep2], '');
+        if QRes=mrYes then begin
+          // remove
+          if pcos=pcosUnitPath then
+            bm.CompilerOptions.OtherUnitFiles:=RemoveSearchPaths(ProjPaths,CurDir)
+          else
+            bm.CompilerOptions.IncludePath:=RemoveSearchPaths(ProjPaths,CurDir);
+          p:=OldP;
+        end;
+        PrevResolvedDir:=ResolvedDir;
+      end;
+    until false;
+    Inc(i);
+  end;
+end;
+
+function BuildManyModes(): Boolean;
+var
+  ModeCnt: Integer;
+
+  function BuildOneMode(LastMode: boolean): Boolean;
+  begin
+    Inc(ModeCnt);
+    DebugLn('');
+    DebugLn(Format('Building mode %d: %s ...', [ModeCnt, Project1.ActiveBuildMode.Identifier]));
+    DebugLn('');
+    Result := MainIDE.DoBuildProject(crCompile, [], LastMode) = mrOK;
+  end;
+
+var
+  BMList: TBuildModesCheckList;
+  ModeList: TList;
+  md, ActiveMode: TProjectBuildMode;
+  BuildActiveMode: Boolean;
+  i: Integer;
+  LastMode: boolean;
+begin
+  Result := False;
+  ModeCnt := 0;
+  if PrepareForCompileWithMsg <> mrOk then exit;
+  BMList := TBuildModesCheckList.Create(lisCompileFollowingModes);
+  ModeList := TList.Create;
+  try
+    if not BMList.Show then Exit;
+    BMList.SaveManyModesSelection;      // Remember the selection for next time.
+    ActiveMode := Project1.ActiveBuildMode;
+    BuildActiveMode := False;
+    // Collect modes to be built.
+    for i := 0 to Project1.BuildModes.Count-1 do
+    begin
+      md := Project1.BuildModes[i];
+      if BMList.IsSelected(i) then
+        if md = ActiveMode then
+          BuildActiveMode := True
+        else
+          ModeList.Add(md);
+    end;
+    // Build first the active mode so we don't have to switch many times.
+    if BuildActiveMode then
+    begin
+      LastMode := (ModeList.Count=0);
+      if not BuildOneMode(LastMode) then Exit;
+    end
+    else if ModeList.Count=0 then
+    begin
+      IDEMessageDialog(lisExit, lisPleaseSelectAtLeastOneBuildMode,
+                       mtInformation, [mbOK]);
+      Exit(False);
+    end;
+    // Build rest of the modes.
+    for i := 0 to ModeList.Count-1 do
+    begin
+      LastMode := (i=(ModeList.Count-1));
+      Project1.ActiveBuildMode := TProjectBuildMode(ModeList[i]);
+      if not BuildOneMode(LastMode) then Exit;
+    end;
+    // Switch back to original mode.
+    Project1.ActiveBuildMode := ActiveMode;
+    LazarusIDE.DoSaveProject([]);
+    IDEMessageDialog(lisSuccess, Format(lisSelectedModesWereCompiled, [ModeCnt]),
+                     mtInformation, [mbOK]);
+    Result:=True;
+  finally
+    ModeList.Free;
+    BMList.Free;
+  end;
+end;
+
+function CheckDirIsInSearchPath(UnitInfo: TUnitInfo; IsIncludeFile: Boolean): Boolean;
+// Check if the given unit's path is on Unit- or Include-search path.
+// Returns true if it is OK to add the unit to current project.
+var
+  UnitDir, CurPath: String;
+begin
+  Result:=True;
+  if UnitInfo.IsVirtual then exit;
+  if IsIncludeFile then
+    CurPath:=Project1.CompilerOptions.GetIncludePath(false)
+  else
+    CurPath:=Project1.CompilerOptions.GetUnitPath(false);
+  UnitDir:=AppendPathDelim(UnitInfo.GetDirectory);
+  if SearchDirectoryInSearchPath(CurPath,UnitDir)<1 then
+    // unit is not in search path => extend it
+    Result:=AddPathToBuildModes(UnitDir,IsIncludeFile);
+end;
+
 { TBuildModesForm }
 
 constructor TBuildModesForm.Create(AOwner: TComponent);
@@ -227,19 +445,24 @@ end;
 procedure TBuildModesForm.RenameButtonClick(Sender: TObject);
 var
   CurMode: TProjectBuildMode;
-  Value: string;
+  Value, OldValue: string;
   i: Integer;
 begin
   i:=BuildModesStringGrid.Row-1;
-  if (i>=0) then
-    CurMode:=fBuildModes[i]
-  else
-    exit;
+  if (i<0) then exit;
+  CurMode:=fBuildModes[i];
   Value:=CurMode.Identifier;
+  OldValue:=Value;
   if InputQuery(lisRename, lisUIDName, Value) then
   begin
     CurMode.Identifier:=Value;
     FillBuildModesGrid;
+    // Rename in many BuildModes selection.
+    i:=fBuildModes.ManyBuildModes.IndexOf(OldValue);
+    if i>=0 then
+      fBuildModes.ManyBuildModes[i]:=Value;
+    // Rename in the ModeMatrix settings frame.
+    ModeMatrixFrame.Grid.RenameMode(OldValue, Value);
   end;
 end;
 
@@ -613,6 +836,65 @@ begin
       Break;
     end;
   end;
+end;
+
+{ TBuildModesCheckList }
+
+constructor TBuildModesCheckList.Create(InfoCaption: String);
+var
+  i: Integer;
+  BM: String;
+  ManyBMs: TStringList;
+begin
+  FListForm:=TGenericCheckListForm.Create(Nil);
+  //lisApplyForBuildModes = 'Apply for build modes:';
+  FListForm.Caption:=lisAvailableProjectBuildModes;
+  FListForm.InfoLabel.Caption:=InfoCaption;
+  ManyBMs:=Project1.BuildModes.ManyBuildModes;
+  // Backwards compatibility. Many BuildModes value used to be in EnvironmentOptions.
+  if ManyBMs.Count=0 then
+    ManyBMs:=EnvironmentOptions.ManyBuildModesSelection;
+  // Add project build modes to a CheckListBox.
+  for i:=0 to Project1.BuildModes.Count-1 do begin
+    BM:=Project1.BuildModes[i].Identifier;
+    FListForm.CheckListBox1.Items.Add(BM);
+    if ManyBMs.IndexOf(BM) >= 0 then
+      FListForm.CheckListBox1.Checked[i]:=True;
+  end;
+end;
+
+destructor TBuildModesCheckList.Destroy;
+begin
+  FListForm.Free;
+  inherited Destroy;
+end;
+
+function TBuildModesCheckList.IsSelected(AIndex: Integer): Boolean;
+begin
+  Result := FListForm.CheckListBox1.Checked[AIndex];
+end;
+
+procedure TBuildModesCheckList.SaveManyModesSelection;
+var
+  i: Integer;
+begin
+  // Remember selected items.
+  Project1.BuildModes.ManyBuildModes.Clear;
+  for i:=0 to FListForm.CheckListBox1.Items.Count-1 do
+    if FListForm.CheckListBox1.Checked[i] then
+      Project1.BuildModes.ManyBuildModes.Add(FListForm.CheckListBox1.Items[i]);
+  Project1.Modified:=True;
+end;
+
+procedure TBuildModesCheckList.SelectFirst;
+begin
+  Assert(FListForm.CheckListBox1.Items.Count>0, 'TBuildModesCheckList.SelectFirst: Build modes count < 1');
+  FListForm.CheckListBox1.Checked[0] := True;
+end;
+
+function TBuildModesCheckList.Show: Boolean;
+begin
+  Result := FListForm.ShowModal=mrOK;
 end;
 
 end.

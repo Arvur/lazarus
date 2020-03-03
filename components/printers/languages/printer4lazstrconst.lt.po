@@ -16,9 +16,21 @@ msgstr ""
 msgid "Advanced"
 msgstr "Išsamiau"
 
+#: printer4lazstrconst.p4lrsallpages
+msgid "All"
+msgstr ""
+
 #: printer4lazstrconst.p4lrsbanners
 msgid "Banners"
 msgstr "Reklamjuostės"
+
+#: printer4lazstrconst.p4lrsbuttonlessarrow
+msgid "<< Less"
+msgstr ""
+
+#: printer4lazstrconst.p4lrsbuttonmorearrow
+msgid "More >>"
+msgstr ""
 
 #: printer4lazstrconst.p4lrscancel
 msgid "Cancel"
@@ -32,6 +44,26 @@ msgstr "Pabaiga"
 msgid "General"
 msgstr "Pagrindinis"
 
+#: printer4lazstrconst.p4lrsjobstateaccepting
+msgid "(Accepting jobs)"
+msgstr ""
+
+#: printer4lazstrconst.p4lrsjobstateprinting
+msgid "Printing"
+msgstr ""
+
+#: printer4lazstrconst.p4lrsjobstateready
+msgid "Ready"
+msgstr ""
+
+#: printer4lazstrconst.p4lrsjobstaterejecting
+msgid "(Rejecting jobs)"
+msgstr ""
+
+#: printer4lazstrconst.p4lrsjobstatestopped
+msgid "Stopped"
+msgstr ""
+
 #: printer4lazstrconst.p4lrslandscape
 msgid "Landscape"
 msgstr "Gulsčias"
@@ -40,6 +72,10 @@ msgstr "Gulsčias"
 msgid "Margins"
 msgstr "Ribos"
 
+#: printer4lazstrconst.p4lrsnodefaultprinter
+msgid "No default printer found."
+msgstr ""
+
 #: printer4lazstrconst.p4lrsok
 msgid "Ok"
 msgstr "Tvarka"
@@ -47,6 +83,14 @@ msgstr "Tvarka"
 #: printer4lazstrconst.p4lrsorientation
 msgid "Orientation"
 msgstr "Orientacija"
+
+#: printer4lazstrconst.p4lrspageeven
+msgid "Even"
+msgstr ""
+
+#: printer4lazstrconst.p4lrspageodd
+msgid "Odd"
+msgstr ""
 
 #: printer4lazstrconst.p4lrspagespersheet
 msgid "Pages per sheet"
@@ -83,6 +127,14 @@ msgstr "Apsuktas gulščias"
 #: printer4lazstrconst.p4lrsreverseportrait
 msgid "Reverse portrait"
 msgstr "Apsuktas stačias"
+
+#: printer4lazstrconst.p4lrsshortunitsinches
+msgid "(inches)"
+msgstr ""
+
+#: printer4lazstrconst.p4lrsshortunitsmm
+msgid "(mm)"
+msgstr ""
 
 #: printer4lazstrconst.p4lrsstart
 msgid "Start"

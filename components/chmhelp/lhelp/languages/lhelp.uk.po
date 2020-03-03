@@ -1,16 +1,16 @@
-# Olexandr Pylypchuk <pilipchukap@rambler.ru>, 2017.
+# Olexandr Pylypchuk <pilipchukap@rambler.ru>, 2017, 2019.
 msgid ""
 msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
-"Last-Translator: Olexandr Pylypchuk <pilipchukap@rambler.ru>\n"
-"PO-Revision-Date: 2017-05-16 11:14+0300\n"
+"Last-Translator: Olexandr Pylypchuk <lxlalexlxl@ukr.net>\n"
+"PO-Revision-Date: 2019-09-20 21:02+0200\n"
 "Project-Id-Version: \n"
 "Language-Team: Ukrainian <kde-i18n-doc@kde.org>\n"
 "Language: uk\n"
 "Content-Transfer-Encoding: 8bit\n"
 "MIME-Version: 1.0\n"
 "Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
-"X-Generator: Lokalize 1.5\n"
+"X-Generator: Lokalize 2.0\n"
 
 #: lhelpstrconsts.slhelp_about
 msgid "About"
@@ -21,10 +21,12 @@ msgid "&About ..."
 msgstr "&Про програму ..."
 
 #: lhelpstrconsts.slhelp_cannothandlethistypeofcontentforurl
+#, object-pascal-format
 msgid "Cannot handle this type of content. \"%s\" for url:%s%s"
 msgstr "Неможливо обробити вміст даного типу. \"%s\" для адреси:%s%s"
 
 #: lhelpstrconsts.slhelp_cannothandlethistypeofsubcontentforurl
+#, object-pascal-format
 msgid "Cannot handle this type of subcontent. \"%s\" for url:%s%s"
 msgstr "Неможливо обробити вміст даного типу. \"%s\" для адреси:%s%s"
 
@@ -81,6 +83,7 @@ msgid "Index Loading ..."
 msgstr "Завантаження покажчика ..."
 
 #: lhelpstrconsts.slhelp_ipcnamethenameoftheipcservertolistenonforprogramsw
+#, object-pascal-format
 msgid "    --ipcname  :  The name of the IPC server to listen on for%s              programs who wish to control the viewer"
 msgstr "    --ipcname  :  Назва відстежуваного сервера IPC для%s              програм, що керують даною програмою перегляду"
 
@@ -93,22 +96,26 @@ msgid "LHelp"
 msgstr "LHelp"
 
 #: lhelpstrconsts.slhelp_lhelp2
+#, object-pascal-format
 msgid "LHelp - %s"
 msgstr "LHelp - %s"
 
 #: lhelpstrconsts.slhelp_lhelpchmfileviewerversioncopyrightcandrewhaineslaz
+#, object-pascal-format
 msgid "LHelp (CHM file viewer)%sVersion %s%sCopyright (C) Andrew Haines, %sLazarus contributors"
-msgstr "LHelp (програма перегляду файлів CHM)%sВерсія %s%s(C) Andrew Haines, %sучасники проекту Lazarus"
+msgstr "LHelp (програма перегляду файлів CHM)%sВерсія %s%s(C) Andrew Haines, %sучасники проєкту Lazarus"
 
 #: lhelpstrconsts.slhelp_lhelpoptions
 msgid "  LHelp options:"
 msgstr "  Параметри LHelp:"
 
 #: lhelpstrconsts.slhelp_loadedinms
+#, object-pascal-format
 msgid "Loaded: %s in %sms"
 msgstr "Завантажено: %s за %s мс"
 
 #: lhelpstrconsts.slhelp_loading
+#, object-pascal-format
 msgid "Loading: %s"
 msgstr "Завантаження: %s"
 
@@ -117,6 +124,7 @@ msgid "No Results"
 msgstr "Результати відсутні"
 
 #: lhelpstrconsts.slhelp_notfound
+#, object-pascal-format
 msgid "%s not found!"
 msgstr "%s не знайдено!"
 
@@ -169,6 +177,7 @@ msgid "Show contents"
 msgstr "Показувати зміст"
 
 #: lhelpstrconsts.slhelp_supportedurltypes
+#, object-pascal-format
 msgid "Supported URL type(s): (%s)"
 msgstr "Підтримувані типи адрес: (%s)"
 

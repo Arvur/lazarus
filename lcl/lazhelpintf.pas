@@ -27,7 +27,7 @@ interface
 uses
   Classes, SysUtils,
   // LazUtils
-  FileUtil, LazFileUtils, LazUTF8, LazConfigStorage, Masks,
+  FileUtil, LazFileUtils, LazUtilities, LazUTF8, LazConfigStorage, Masks,
   // LCL
   LCLProc, LCLStrConsts, Dialogs, HelpIntfs;
 
@@ -643,12 +643,13 @@ var
   i: Integer;
 begin
   Result:=Filename;
+  {$push}
   {$warnings off}
   if PathDelim<>'/' then
     for i:=1 to length(Result) do
       if Result[i]=PathDelim then
         Result[i]:='/';
-  {$warnings on}
+  {$pop}
 end;
 
 function URLPathToFilename(const URLPath: string): string;
@@ -656,12 +657,13 @@ var
   i: Integer;
 begin
   Result:=URLPath;
+  {$push}
   {$warnings off}
   if PathDelim<>'/' then
     for i:=1 to length(Result) do
       if Result[i]='/' then
         Result[i]:=PathDelim;
-  {$warnings on}
+  {$pop}
 end;
 
 procedure SplitURL(const URL: string; out URLScheme, URLPath, URLParams: string);

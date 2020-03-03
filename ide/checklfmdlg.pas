@@ -31,19 +31,21 @@ unit CheckLFMDlg;
 interface
 
 uses
-  // FCL+LCL
+  // FCL
   Classes, SysUtils, Math, TypInfo, contnrs,
-  LCLProc, LResources, Forms, Controls,
-  Dialogs, Buttons, StdCtrls, ExtCtrls,
-  // components
-  SynHighlighterLFM, SynEdit, BasicCodeTools, CodeCache, CodeToolManager,
-  SynEditMiscClasses, LFMTrees,
+  // LCL
+  LCLProc, LResources, Forms, Controls, Dialogs, Buttons, StdCtrls, ExtCtrls,
+  // LazUtils
+  LazStringUtils,
+  // CodeTools
+  BasicCodeTools, CodeCache, CodeToolManager, LFMTrees,
+  // SynEdit
+  SynHighlighterLFM, SynEdit, SynEditMiscClasses,
   // IDEIntf
   IDEExternToolIntf, PackageIntf, IDEWindowIntf, PropEdits, PropEditUtils,
-  IDEMsgIntf, IDEDialogs, ComponentReg,
+  IDEMsgIntf, IDEImagesIntf, IDEDialogs, ComponentReg,
   // IDE
-  CustomFormEditor, LazarusIDEStrConsts, IDEImagesIntf,
-  IDEProcs, EditorOptions, SourceMarks, JITForms;
+  CustomFormEditor, LazarusIDEStrConsts, EditorOptions, SourceMarks, JITForms;
 
 type
 
@@ -613,7 +615,7 @@ var
   i: Integer;
 begin
   if StartPos>EndPos then
-    RaiseException('TCheckLFMDialog.AddReplaceMent StartPos>EndPos');
+    RaiseGDBException('TCheckLFMDialog.AddReplaceMent StartPos>EndPos');
   // check for intersection
   for i:=0 to LFMChangeList.Count-1 do begin
     Entry:=TLFMChangeEntry(LFMChangeList[i]);
@@ -625,7 +627,7 @@ begin
         EndPos:=Max(EndPos,Entry.EndPos);
       end else begin
         // not allowed
-        RaiseException('TCheckLFMDialog.AddReplaceMent invalid Intersection');
+        RaiseGDBException('TCheckLFMDialog.AddReplaceMent invalid Intersection');
       end;
     end;
   end;
@@ -749,7 +751,7 @@ begin
   ErrorsGroupBox.Caption:=lisErrors;
   LFMGroupBox.Caption:=lisLFMFile;
   RemoveAllButton.Caption:=lisRemoveAllInvalidProperties;
-  TIDEImages.AssignImage(RemoveAllButton.Glyph, 'laz_delete');
+  IDEImages.AssignImage(RemoveAllButton, 'laz_delete');
   CancelButton.Caption:=lisCancel;
   EditorOpts.GetHighlighterSettings(SynLFMSyn1);
   EditorOpts.GetSynEditSettings(LFMSynEdit);

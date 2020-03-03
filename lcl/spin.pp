@@ -24,12 +24,16 @@ unit Spin;
 interface
 
 uses
-  Types, Classes, Controls, SysUtils, LCLType, LCLProc, ClipBrd, StdCtrls;
+  Types, Classes, Controls, SysUtils, LCLType, LCLProc, StdCtrls, Math;
 
 type
   { TCustomFloatSpinEdit }
 
   TCustomFloatSpinEdit = class(TCustomEdit)
+  private const
+    DefIncrement = 1;
+    DefDecimals = 2;
+    DefMaxValue = 100;
   private
     FIncrement: Double;
     FDecimals: Integer;
@@ -41,6 +45,8 @@ type
     FValueChanged: Boolean;
     function GetValue: Double;
     procedure UpdateControl;
+    function MaxValueStored: Boolean;
+    function IncrementStored: Boolean;
   protected
     class procedure WSRegisterClass; override;
     function  RealGetText: TCaption; override;
@@ -63,10 +69,10 @@ type
     function ValueToStr(const AValue: Double): String; virtual;
     function StrToValue(const S: String): Double; virtual;
   public
-    property DecimalPlaces: Integer read FDecimals write SetDecimals default 2;
-    property Increment: Double read FIncrement write SetIncrement;
+    property DecimalPlaces: Integer read FDecimals write SetDecimals default DefDecimals;
+    property Increment: Double read FIncrement write SetIncrement stored IncrementStored nodefault;
     property MinValue: Double read FMinValue write SetMinValue;
-    property MaxValue: Double read FMaxValue write SetMaxValue;
+    property MaxValue: Double read FMaxValue write SetMaxValue stored MaxValueStored nodefault;
     property Value: Double read GetValue write SetValue;
     property ValueEmpty: Boolean read FValueEmpty write SetValueEmpty default False;
   end;
@@ -108,6 +114,9 @@ type
     property OnMouseWheel;
     property OnMouseWheelDown;
     property OnMouseWheelUp;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
     property OnResize;
     property OnUTF8KeyPress;
     property ParentColor;
@@ -138,6 +147,7 @@ type
     procedure SetValue(const AValue: integer); overload; virtual;
   public
     constructor Create(TheOwner: TComponent); override;
+    function GetLimitedValue(const AValue: Double): Double; override;
   public
     property Value: integer read GetValue write SetValue default 0;
     property MinValue: integer read GetMinValue write SetMinValue default 0;
@@ -182,6 +192,9 @@ type
     property OnMouseWheel;
     property OnMouseWheelDown;
     property OnMouseWheelUp;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
     property OnResize;
     property OnUTF8KeyPress;
     property ParentColor;

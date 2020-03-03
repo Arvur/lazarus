@@ -107,12 +107,13 @@ procedure GetIdentStartEndAtPosition(const Source:string; Position:integer;
     out IdentStart,IdentEnd:integer);
 function GetIdentStartPosition(const Source:string; Position:integer): integer;
 function GetIdentLen(Identifier: PChar): integer;
-function GetIdentifier(Identifier: PChar): string;
+function GetIdentifier(Identifier: PChar; const aSkipAmp: Boolean = True): string;
 function FindNextIdentifier(const Source: string; StartPos, MaxPos: integer): integer;
 function FindNextIdentifierSkipStrings(const Source: string;
     StartPos, MaxPos: integer): integer;
 function IsValidIdentPair(const NamePair: string): boolean;
 function IsValidIdentPair(const NamePair: string; out First, Second: string): boolean;
+function ExtractPasIdentifier(const Ident: string; AllowDots: Boolean): string;
 
 // line/code ends
 function SrcPosToLineCol(const s: string; Position: integer;
@@ -1942,6 +1943,8 @@ begin
   Result:=copy(Source,AtomStart,Position-AtomStart);
 end;
 
+{$IFOPT R+}{$DEFINE RangeChecking}{$ENDIF}
+{$R-}
 procedure ReadRawNextPascalAtom(const Source: string;
   var Position: integer; out AtomStart: integer; NestedComments: boolean;
   SkipDirectives: boolean);
@@ -1949,8 +1952,6 @@ var
   Len:integer;
   SrcPos, SrcStart, SrcAtomStart: PChar;
 begin
-  {$IFOPT R+}{$DEFINE RangeChecking}{$ENDIF}
-  {$R-}
   Len:=length(Source);
   if Position>Len then begin
     Position:=Len+1;
@@ -1962,8 +1963,8 @@ begin
   ReadRawNextPascalAtom(SrcPos,SrcAtomStart,SrcStart+len,NestedComments,SkipDirectives);
   Position:=SrcPos-SrcStart+1;
   AtomStart:=SrcAtomStart-SrcStart+1;
-  {$IFDEF RangeChecking}{$R+}{$UNDEF RangeChecking}{$ENDIF}
 end;
+{$IFDEF RangeChecking}{$R+}{$UNDEF RangeChecking}{$ENDIF}
 
 procedure ReadRawNextPascalAtom(var Position: PChar; out AtomStart: PChar;
   const SrcEnd: PChar; NestedComments: boolean; SkipDirectives: boolean);
@@ -3998,8 +3999,7 @@ function FindNextIncludeDirective(const ASource: string; StartPos: integer;
   NestedComments: boolean; out FilenameStartPos, FileNameEndPos,
   CommentStartPos, CommentEndPos: integer): integer;
 var
-  MaxPos: Integer;
-  Offset: Integer;
+  MaxPos, Offset: Integer;
 begin
   Result:=StartPos;
   MaxPos:=length(ASource);
@@ -4014,7 +4014,7 @@ begin
       Offset:=-1;
     if (Offset>0) then begin
       if ((UpChars[ASource[Result+Offset]]='I')
-           and (ASource[Result+Offset+1]=' '))
+              and (ASource[Result+Offset+1]=' '))
       or (CompareIdentifiers('include',@ASource[Result+Offset])=0) then begin
         CommentEndPos:=FindCommentEnd(ASource,Result,NestedComments);
         if ASource[Result]='{' then
@@ -4032,30 +4032,31 @@ begin
         and (IsSpaceChar[ASource[FilenameStartPos]]) do
           inc(FilenameStartPos);
         // find end of filename
-        FilenameEndPos:=FilenameStartPos;
-        if (FilenameEndPos<=CommentEndPos) and (ASource[FilenameEndPos]='''')
+        if (FilenameStartPos<=CommentEndPos) and (ASource[FilenameStartPos]='''')
         then begin
           // quoted filename
           inc(FilenameStartPos);
+          FilenameEndPos:=FilenameStartPos;
           while (FilenameEndPos<=CommentEndPos) do begin
             if (ASource[FilenameEndPos]<>'''') then
               inc(FilenameEndPos)
-            else begin
-              inc(FilenameEndPos);
+            else
               break;
-            end;
           end;
+          CommentStartPos:=FilenameEndPos+1;
         end else begin
           // normal filename
+          FilenameEndPos:=FilenameStartPos;
           while (FilenameEndPos<=CommentEndPos)
           and (not IsSpaceChar[ASource[FilenameEndPos]])
           and (not (ASource[FilenameEndPos] in ['*','}'])) do
             inc(FilenameEndPos);
+          CommentStartPos:=FilenameEndPos;
         end;
         // skip space behind filename
-        CommentStartPos:=FilenameEndPos;
         while (CommentStartPos<=CommentEndPos)
-        and (IsSpaceChar[ASource[CommentStartPos]]) do inc(CommentStartPos);
+        and (IsSpaceChar[ASource[CommentStartPos]]) do
+          inc(CommentStartPos);
         // success
         exit;
       end;
@@ -4718,17 +4719,22 @@ begin
          +'Actual:   '+dbgstr(Actual,1,d-1)+'|'+dbgstr(Actual,d,length(Actual));
 end;
 
-function GetIdentifier(Identifier: PChar): string;
+function GetIdentifier(Identifier: PChar; const aSkipAmp: Boolean): string;
 var len: integer;
 begin
   if (Identifier=nil) then begin
     Result:='';
     exit;
   end;
-  if (Identifier^='&') and (IsIdentChar[Identifier[1]]) then
-    inc(Identifier);
-  if IsIdentStartChar[Identifier^] then begin
+  if IsIdentStartChar[Identifier^] or ((Identifier^='&') and (IsIdentStartChar[Identifier[1]])) then begin
     len:=0;
+    if (Identifier^='&') then
+    begin
+      if aSkipAmp then
+        inc(Identifier)
+      else
+        inc(len);
+    end;
     while (IsIdentChar[Identifier[len]]) do inc(len);
     SetLength(Result,len);
     if len>0 then
@@ -4816,6 +4822,38 @@ begin
     end;
     if not IsIdentChar[NamePair[p]] then exit;
   until false;
+end;
+
+function ExtractPasIdentifier(const Ident: string; AllowDots: Boolean): string;
+var
+  p: Integer;
+begin
+  p:=1;
+  Result:=Ident;
+  while p<=length(Result) do begin
+    if Result[p] in ['a'..'z','A'..'Z','_'] then begin
+      inc(p);
+      while p<=length(Result) do begin
+        case Result[p] of
+        'a'..'z','A'..'Z','_','0'..'9': inc(p);
+        '.':
+          if AllowDots then
+            break
+          else
+            Delete(Result,p,1);
+        else
+          Delete(Result,p,1);
+        end;
+      end;
+      if p>length(Result) then exit;
+      // p is now on the '.'
+      inc(p);
+    end else
+      Delete(Result,p,1);
+  end;
+  p:=length(Result);
+  if (p>0) and (Result[p]='.') then
+    Delete(Result,p,1);
 end;
 
 function GetLineIndentWithTabs(const Source: string; Position: integer;
@@ -5873,11 +5911,9 @@ begin
   if not IsDottedIdentifier(UnitName) then exit;
   FileAndNameSpaceFits(UnitName, FileNameFits, NameSpaceFits);
   if FileNameFits then
-    AddToTreeOfUnitFiles(TreeOfUnitFiles,FileName,UnitName,
-                       KeepDoubles);
+    AddToTreeOfUnitFiles(TreeOfUnitFiles,FileName,UnitName,KeepDoubles);
   if NameSpaceFits then
-    AddToTreeOfNamespaces(TreeOfNamespaces,UnitName,NameSpacePath,
-                          KeepDoubles)
+    AddToTreeOfNamespaces(TreeOfNamespaces,UnitName,NameSpacePath,KeepDoubles)
 end;
 
 function GatherUnitFiles(const BaseDir, SearchPath, Extensions,

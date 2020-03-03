@@ -50,8 +50,8 @@ uses
   // IDE
   LazarusIDEStrConsts, EnvironmentOpts, EditorOptions, SourceEditor,
   // Designer
-  AlignCompsDlg, SizeCompsDlg, ScaleCompsDlg, DesignerProcs,
-  CustomFormEditor, AskCompNameDlg, ControlSelection, ChangeClassDialog;
+  AlignCompsDlg, SizeCompsDlg, ScaleCompsDlg, DesignerProcs, CustomFormEditor,
+  AskCompNameDlg, ControlSelection, ChangeClassDialog, ImgList;
 
 type
   TDesigner = class;
@@ -67,7 +67,7 @@ type
   TOnPersistentDeleted = procedure(Sender: TObject; APersistent: TPersistent)
     of object;
   TOnGetNonVisualCompIcon = procedure(Sender: TObject;
-    AComponent: TComponent; var Icon: TCustomBitmap) of object;
+    AComponent: TComponent; var ImageList: TCustomImageList; var ImageIndex: TImageIndex) of object;
   TOnRenameComponent = procedure(Designer: TDesigner; AComponent: TComponent;
     const NewName: string) of object;
   TOnProcessCommand = procedure(Sender: TObject; Command: word;
@@ -82,6 +82,7 @@ type
     dfDuringPaintControl,
     dfShowEditorHints,
     dfShowComponentCaptions,
+    dfShowNonVisualComponents,
     dfDestroyingForm,
     dfNeedPainting
     );
@@ -194,6 +195,8 @@ type
     procedure HandlePopupMenu(Sender: TControl; var Message: TLMContextMenu);
     procedure GetMouseMsgShift(TheMessage: TLMMouse; out Shift: TShiftState;
                                out Button: TMouseButton);
+    function GetShowNonVisualComponents: boolean; override;
+    procedure SetShowNonVisualComponents(AValue: boolean); override;
 
     // procedures for working with components and persistents
     function GetDesignControl(AControl: TControl): TControl;
@@ -256,6 +259,7 @@ type
     procedure OnSelectAllMenuClick(Sender: TObject);
     procedure OnChangeClassMenuClick(Sender: TObject);
     procedure OnChangeParentMenuClick(Sender: TObject);
+    procedure OnShowNonVisualComponentsMenuClick(Sender: TObject);
     procedure OnSnapToGridOptionMenuClick(Sender: TObject);
     procedure OnShowOptionsMenuItemClick(Sender: TObject);
     procedure OnSnapToGuideLinesOptionMenuClick(Sender: TObject);
@@ -301,7 +305,7 @@ type
     function Undo: Boolean; override;
     function Redo: Boolean; override;
     function AddUndoAction(const aPersistent: TPersistent; aOpType: TUndoOpType;
-      StartNewGroup: boolean; aFieldName: string; const aOldVal, aNewVal: variant): boolean; override;
+      StartNewGroup: boolean; aFieldName: string; const aOldVal, aNewVal: Variant): boolean; override;
     function IsUndoLocked: boolean; override;
     procedure ClearUndoItem(AIndex: Integer);
     procedure AddComponent(const NewRegisteredComponent: TRegisteredComponent;
@@ -394,6 +398,7 @@ type
     property ShowEditorHints: boolean read GetShowEditorHints write SetShowEditorHints;
     property ShowComponentCaptions: boolean read GetShowComponentCaptions
                                            write SetShowComponentCaptions;
+    property ShowNonVisualComponents: boolean read GetShowNonVisualComponents write SetShowNonVisualComponents;
     property SnapToGrid: boolean read GetSnapToGrid write SetSnapToGrid;
     property TheFormEditor: TCustomFormEditor read FTheFormEditor write FTheFormEditor;
     property DefaultFormBounds: TRect read FDefaultFormBounds write SetDefaultFormBounds;
@@ -428,6 +433,7 @@ var
   DesignerMenuSaveAsXML: TIDEMenuCommand;
   DesignerMenuCenterForm: TIDEMenuCommand;
 
+  DesignerMenuShowNonVisualComponents: TIDEMenuCommand;
   DesignerMenuSnapToGridOption: TIDEMenuCommand;
   DesignerMenuSnapToGuideLinesOption: TIDEMenuCommand;
   DesignerMenuShowOptions: TIDEMenuCommand;
@@ -456,6 +462,7 @@ type
     MinClass: TComponentClass;
     IgnoreHidden: boolean;
     OnlyNonVisual: boolean;
+    IgnoreNonVisual: boolean;
     Mediator: TDesignerMediator;
     Root: TComponent;
     procedure Gather(Child: TComponent);
@@ -497,9 +504,12 @@ begin
   else
     IsNonVisual := DesignerProcs.ComponentIsNonVisual(Child);
 
-  if IsNonVisual and Assigned(IDEComponentsMaster) then
-    if not IDEComponentsMaster.DrawNonVisualComponents(Root) then
+  if IsNonVisual then begin
+    if IgnoreNonVisual then exit;
+    if Assigned(IDEComponentsMaster)
+    and not IDEComponentsMaster.DrawNonVisualComponents(Root) then
       Exit;
+  end;
 
   if Child.InheritsFrom(MinClass) and (IsNonVisual or not OnlyNonVisual) then
   begin
@@ -624,6 +634,10 @@ begin
 
   // register options section
   DesignerMenuSectionOptions:=RegisterIDEMenuSection(DesignerMenuRoot,'Options section');
+    DesignerMenuShowNonVisualComponents:=RegisterIDEMenuCommand(DesignerMenuSectionMisc,
+                                                'Show non visual components',
+                                                  lisDsgShowNonVisualComponents);
+    DesignerMenuShowNonVisualComponents.ShowAlwaysCheckable:=true;
     DesignerMenuSnapToGridOption:=RegisterIDEMenuCommand(DesignerMenuSectionOptions,
                                             'Snap to grid',fdmSnapToGridOption);
     DesignerMenuSnapToGuideLinesOption:=RegisterIDEMenuCommand(DesignerMenuSectionOptions,
@@ -658,7 +672,7 @@ begin
     FLookupRoot := FForm;
 
   Selection := AControlSelection;
-  FFlags := [];
+  FFlags := [dfShowNonVisualComponents];
   FGridColor := clGray;
 
   FHintTimer := TTimer.Create(nil);
@@ -746,7 +760,7 @@ begin
 
   if EnvironmentOptions.CreateComponentFocusNameProperty then
     // ask user for name
-    NewComponent.Name:=ShowComponentNameDialog(LookupRoot,NewComponent);
+    ShowComponentNameDialog(LookupRoot,NewComponent);
 
   // tell IDE about the new component (e.g. add it to the source)
   NotifyPersistentAdded(NewComponent);
@@ -811,6 +825,7 @@ begin
   // was FinalizeFreeDesigner
   Include(FFlags, dfDestroyingForm);
   // free or hide the form
+  DebugLn(['TDesigner.PrepareFreeDesigner: TheFormEditor=', TheFormEditor, ', Designer=', Self]);
   TheFormEditor.DeleteComponent(FLookupRoot,AFreeComponent);
   DisconnectComponent;
   Free;
@@ -1274,7 +1289,7 @@ end;
 function TDesigner.DoInsertFromStream(s: TStream;
   PasteParent: TWinControl; PasteFlags: TComponentPasteSelectionFlags): Boolean;
 var
-  NewSelection: TControlSelection;
+  NewSelection: TPersistentSelectionList;
   NewComponents: TFPList;
 
   procedure FindUniquePosition(AComponent: TComponent);
@@ -1336,7 +1351,7 @@ begin
 
   //debugln('TDesigner.DoInsertFromStream B s.Size=',dbgs(s.Size),' S.Position=',dbgs(S.Position));
   if PasteParent=nil then PasteParent:=GetPasteParent;
-  NewSelection:=TControlSelection.Create;
+  NewSelection:=TPersistentSelectionList.Create;
   NewComponents:=TFPList.Create;
   try
     Form.DisableAutoSizing{$IFDEF DebugDisableAutoSizing}('TDesigner.DoInsertFromStream'){$ENDIF};
@@ -1373,7 +1388,7 @@ begin
   finally
     NewComponents.Free;
     if NewSelection.Count>0 then
-      Selection.Assign(NewSelection);
+      Selection.AssignSelection(NewSelection);
     NewSelection.Free;
   end;
   Result:=true;
@@ -1404,112 +1419,106 @@ begin
 end;
 
 procedure TDesigner.ExecuteUndoItem(IsActUndo: boolean);
+var
+  AValue: Variant;
+  ValueStr, tmpFieldN: string;
+  tmpObj: TComponent;
 
-  procedure SetPropVal(AVal: variant);
+  procedure SetPublished;         // published field
   var
-    tmpStr, str: string;
-    tmpCompName: TComponentName;
-    tmpObj: TObject;
-    tmpInt: integer;
     aPropType: PTypeInfo;
+    s: string;
+    i: integer;
   begin
-    tmpCompName := FUndoList[FUndoCurr].compName;
-    if FUndoList[FUndoCurr].fieldName = 'Name' then
-    begin
-      if IsActUndo then
-        tmpCompName := FUndoList[FUndoCurr].newVal
-      else
-        tmpCompName := FUndoList[FUndoCurr].oldVal;
-    end;
-
-    if FForm.Name <> tmpCompName then
-      tmpObj := TObject(FForm.FindComponent(tmpCompName))
-    else
-      tmpObj := TObject(FForm);
-
-    if VarIsError(AVal) or VarIsEmpty(AVal) or VarIsNull(AVal) then
-      ShowMessage('error: invalid var type');
-    tmpStr := VarToStr(AVal);
-
-    with FUndoList[FUndoCurr] do begin
-      if propInfo<>nil then
+    aPropType:=FUndoList[FUndoCurr].propInfo^.propType;
+    case aPropType^.Kind of
+      tkInteger, tkInt64:
       begin
-        aPropType:=propInfo^.propType;
-        case aPropType^.Kind of
-          tkInteger, tkInt64:
-          begin
-            if (aPropType^.Name = 'TColor') or
-               (aPropType^.Name = 'TGraphicsColor') then
-              SetOrdProp(tmpObj, fieldName, StringToColor(tmpStr))
-            else if aPropType^.Name = 'TCursor' then
-              SetOrdProp(tmpObj, fieldName, StringToCursor(tmpStr))
-            else
-              SetOrdProp(tmpObj, fieldName, StrToInt(tmpStr));
-          end;
-          tkChar, tkWChar, tkUChar:
-          begin
-            if Length(tmpStr) = 1 then
-              SetOrdProp(tmpObj, FUndoList[FUndoCurr].fieldName, Ord(tmpStr[1]))
-            else if (tmpStr[1] = '#') then
-            begin
-              str := Copy(tmpStr, 2, Length(tmpStr) - 1);
-              if TryStrToInt(str, tmpInt) and (tmpInt >= 0) and (tmpInt <= High(Byte)) then
-                SetOrdProp(tmpObj, FUndoList[FUndoCurr].fieldName, tmpInt);
-            end;
-          end;
-          tkEnumeration:
-            SetEnumProp(tmpObj, FUndoList[FUndoCurr].fieldName, tmpStr);
-          tkFloat:
-            SetFloatProp(tmpObj, fieldName, StrToFloat(tmpStr));
-          tkBool:
-            SetOrdProp(tmpObj, FUndoList[FUndoCurr].fieldName, Integer(StrToBoolOI(tmpStr)));
-          tkString, tkLString, tkAString, tkUString, tkWString:
-            SetStrProp(tmpObj, fieldName, tmpStr);
-          tkSet:
-            SetSetProp(tmpObj, FUndoList[FUndoCurr].fieldName, tmpStr);
-          tkVariant:
-            SetVariantProp(tmpObj, fieldName, AVal);
-          else
-            ShowMessage(Format('error: unknown TTypeKind(%d)', [Integer(aPropType^.Kind)]));
-        end;
-      end else begin
-        // field is not published
-        if tmpObj is TComponent then
+        if (aPropType^.Name = 'TColor') or
+           (aPropType^.Name = 'TGraphicsColor') then
+          SetOrdProp(tmpObj, tmpFieldN, StringToColor(ValueStr))
+        else if aPropType^.Name = 'TCursor' then
+          SetOrdProp(tmpObj, tmpFieldN, StringToCursor(ValueStr))
+        else
+          SetOrdProp(tmpObj, tmpFieldN, StrToInt(ValueStr));
+      end;
+      tkChar, tkWChar, tkUChar:
+      begin
+        if Length(ValueStr) = 1 then
+          SetOrdProp(tmpObj, tmpFieldN, Ord(ValueStr[1]))
+        else if (ValueStr[1] = '#') then
         begin
-          // special case: TComponent.Left,Top
-          if CompareText(fieldName,'Left')=0 then
-            SetDesignInfoLeft(TComponent(tmpObj),StrToInt(tmpStr))
-          else if CompareText(fieldName,'Top')=0 then
-            SetDesignInfoTop(TComponent(tmpObj),StrToInt(tmpStr));
+          s := Copy(ValueStr, 2, Length(ValueStr) - 1);
+          if TryStrToInt(s, i) and (i >= 0) and (i <= High(Byte)) then
+            SetOrdProp(tmpObj, tmpFieldN, i);
         end;
       end;
+      tkEnumeration:
+        SetEnumProp(tmpObj, tmpFieldN, ValueStr);
+      tkFloat:
+        SetFloatProp(tmpObj, tmpFieldN, StrToFloat(ValueStr));
+      tkBool:
+        SetOrdProp(tmpObj, tmpFieldN, Integer(StrToBoolOI(ValueStr)));
+      tkString, tkLString, tkAString, tkUString, tkWString:
+        SetStrProp(tmpObj, tmpFieldN, ValueStr);
+      tkSet:
+        SetSetProp(tmpObj, tmpFieldN, ValueStr);
+      tkVariant:
+        SetVariantProp(tmpObj, tmpFieldN, AValue);
+      else
+        ShowMessage(Format('error: unknown TTypeKind(%d)', [Integer(aPropType^.Kind)]));
     end;
-    PropertyEditorHook.Modified(tmpObj);
+  end;
+
+  procedure SetUnPublished;       // field is not published
+  var
+    NewParent: TComponent;
+  begin
+    if tmpObj is TControl then
+    begin
+      if CompareText(tmpFieldN,'Parent')=0 then  // Special treatment for Parent.
+      begin
+        if FForm.Name <> ValueStr then           // Find the parent by name.
+          NewParent := FForm.FindComponent(ValueStr)
+        else
+          NewParent := FForm;
+        Assert(NewParent is TWinControl, 'TDesigner.ExecuteUndoItem: New Parent "'
+                                         + DbgS(NewParent) + '" is not a TWinControl.');
+        TControl(tmpObj).Parent := TWinControl(NewParent);
+      end;
+    end;
   end;
 
 var
   CurTextCompStream: TMemoryStream;
   SaveControlSelection: TControlSelection;
+  CompN: TComponentName;
 begin
-  if (IsActUndo and (FUndoList[FUndoCurr].opType in [uopAdd])) or
-    (not IsActUndo and (FUndoList[FUndoCurr].opType in [uopDelete])) then
+  // Undo Add component
+  if (IsActUndo and (FUndoList[FUndoCurr].opType = uopAdd)) or
+    (not IsActUndo and (FUndoList[FUndoCurr].opType = uopDelete)) then
   begin
-    SaveControlSelection := TControlSelection.Create;
+    Selection.BeginUpdate;
     try
-      Inc(FUndoLock);
-      SaveControlSelection.Assign(Selection);
-      Selection.Clear;
-      Selection.Add(FForm.FindComponent(FUndoList[FUndoCurr].compName));
-      DeleteSelection;
+      SaveControlSelection := TControlSelection.Create;
+      try
+        Inc(FUndoLock);
+        SaveControlSelection.Assign(Selection);
+        Selection.AssignPersistent(FForm.FindComponent(FUndoList[FUndoCurr].compName));
+        DeleteSelection;
+      finally
+        Dec(FUndoLock);
+        Selection.Assign(SaveControlSelection);
+        SaveControlSelection.Free;
+      end;
     finally
-      Dec(FUndoLock);
-      Selection.Assign(SaveControlSelection);
-      SaveControlSelection.Free;
+      Selection.EndUpdate;
     end;
   end;
 
-  if (IsActUndo and (FUndoList[FUndoCurr].opType in [uopDelete])) or
-    (not IsActUndo and (FUndoList[FUndoCurr].opType in [uopAdd])) then
+  // Undo Delete component
+  if (IsActUndo and (FUndoList[FUndoCurr].opType = uopDelete)) or
+    (not IsActUndo and (FUndoList[FUndoCurr].opType = uopAdd)) then
   begin
     CurTextCompStream := TMemoryStream.Create;
     try
@@ -1524,14 +1533,42 @@ begin
     end;
   end;
 
+  // Undo Change properties of component
   if FUndoList[FUndoCurr].opType = uopChange then
   begin
     Inc(FUndoLock);
     try
-      if IsActUndo then
-        SetPropVal(FUndoList[FUndoCurr].oldVal)
+      tmpFieldN := FUndoList[FUndoCurr].fieldName;
+      if tmpFieldN = 'Name' then
+      begin
+        if IsActUndo then
+          CompN := FUndoList[FUndoCurr].newVal
+        else
+          CompN := FUndoList[FUndoCurr].oldVal;
+      end
       else
-        SetPropVal(FUndoList[FUndoCurr].newVal);
+        CompN := FUndoList[FUndoCurr].compName;
+
+      if FForm.Name <> CompN then
+        tmpObj := FForm.FindSubComponent(CompN)
+      else
+        tmpObj := FForm;
+
+      if IsActUndo then
+        AValue := FUndoList[FUndoCurr].oldVal
+      else
+        AValue := FUndoList[FUndoCurr].newVal;
+      if VarIsError(AValue) or VarIsEmpty(AValue) or VarIsNull(AValue) then
+        ShowMessage('error: invalid var type');
+      ValueStr := VarToStr(AValue);
+      //DebugLn(['TDesigner.ExecuteUndoItem: FForm=', FForm.Name, ', CompName=', CompN,
+      //  ', FieldName=', tmpFieldN, ', tmpObj=', tmpObj, ', tmpStr=', ValueStr, ', IsActUndo=', IsActUndo]);
+
+      if FUndoList[FUndoCurr].propInfo<>nil then
+        SetPublished
+      else
+        SetUnPublished;
+      PropertyEditorHook.Modified(tmpObj);
     finally
       Dec(FUndoLock);
     end;
@@ -1562,6 +1599,7 @@ procedure TDesigner.DoChangeZOrder(TheAction: Integer);
 var
   Control: TControl;
   Parent: TWinControl;
+  OI: TObjectInspectorDlg;
 begin
   if Selection.Count <> 1 then Exit;
   if not Selection[0].IsTControl then Exit;
@@ -1588,6 +1626,9 @@ begin
   SelectOnlyThisComponent(Control);
 
   Modified;
+  OI := FormEditingHook.GetCurrentObjectInspector;
+  if Assigned(OI) then
+    OI.ComponentTree.RebuildComponentNodes;
 end;
 
 procedure TDesigner.GiveComponentsNames;
@@ -1731,6 +1772,7 @@ begin
     ecDesignerMoveToBack   : DoChangeZOrder(1);
     ecDesignerForwardOne   : DoChangeZOrder(2);
     ecDesignerBackOne      : DoChangeZOrder(3);
+    ecDesignerToggleNonVisComps: ShowNonVisualComponents:=not ShowNonVisualComponents;
   else
     Exit;
   end;
@@ -1761,8 +1803,8 @@ begin
 end;
 
 function TDesigner.AddUndoAction(const aPersistent: TPersistent;
-  aOpType: TUndoOpType; StartNewGroup: boolean; aFieldName: string; const aOldVal,
-  aNewVal: variant): boolean;
+  aOpType: TUndoOpType; StartNewGroup: boolean; aFieldName: string;
+  const aOldVal, aNewVal: Variant): boolean;
 
   procedure ShiftUndoList;
   var
@@ -1779,6 +1821,7 @@ var
   SaveControlSelection: TControlSelection;
   AStream: TStringStream;
   APropInfo: PPropInfo;
+  Comp: TComponent;
 begin
   Result := (FUndoLock = 0);
   if not Result then Exit;
@@ -1803,21 +1846,25 @@ begin
 
     if (aOpType in [uopAdd, uopDelete]) and (FForm <> aPersistent) then
     begin
-      SaveControlSelection := TControlSelection.Create;
+      Selection.BeginUpdate;
       try
-        SaveControlSelection.Assign(Selection);
-        AStream := TStringStream.Create('');
+        SaveControlSelection := TControlSelection.Create;
         try
-          Selection.Clear;
-          Selection.Add(aPersistent);
-          CopySelectionToStream(AStream);
-          FUndoList[FUndoCurr].obj := AStream.DataString;
+          SaveControlSelection.Assign(Selection);
+          AStream := TStringStream.Create('');
+          try
+            Selection.AssignPersistent(aPersistent);
+            CopySelectionToStream(AStream);
+            FUndoList[FUndoCurr].obj := AStream.DataString;
+          finally
+            AStream.Free;
+          end;
         finally
-          AStream.Free;
+          Selection.Assign(SaveControlSelection);
+          SaveControlSelection.Free;
         end;
       finally
-        Selection.Assign(SaveControlSelection);
-        SaveControlSelection.Free;
+        Selection.EndUpdate;
       end;
     end;
 
@@ -1830,9 +1877,13 @@ begin
       compName := '';
       parentName := '';
       if aPersistent is TComponent then begin
-        compName := TComponent(aPersistent).Name;
-        if TComponent(aPersistent).HasParent then
-          parentName := TComponent(aPersistent).GetParentComponent.Name;
+        Comp := TComponent(aPersistent);
+        compName := Comp.Name;
+        // Add owner to the name of a subcomponent.
+        if Assigned(Comp.Owner) and (Comp.Owner <> LookupRoot) then
+          compName := Comp.Owner.Name + '.' + compName;
+        if Comp.HasParent then
+          parentName := Comp.GetParentComponent.Name;
       end;
       opType := aOpType;
       isValid := true;
@@ -1967,7 +2018,7 @@ begin
     if LastPaintSender=Sender then begin
       //writeln('NOTE: TDesigner.PaintControl E control painted twice: ',
       //  Sender.Name,':',Sender.ClassName,' DC=',DbgS(TheMessage.DC));
-      //RaiseException('');
+      //RaiseGDBException('');
     end;
     LastPaintSender:=Sender;
 
@@ -2759,7 +2810,7 @@ var
   Command: word;
   Handled: boolean;
   Current: TComponent;
-  NewName: String;
+  NameRes: TAskCompNameDialogResult;
   UTF8Char: TUTF8Char;
 
   procedure Nudge(x, y: integer);
@@ -2852,12 +2903,13 @@ begin
       VK_F2:
         if (Selection.Count=1) and Selection[0].IsTComponent then begin
           Current := TComponent(Selection[0].Persistent);
-          NewName := ShowComponentNameDialog(LookupRoot, Current);
-          if NewName <> Current.Name then begin
-            Current.Name:=NewName;
+          NameRes := ShowComponentNameDialog(LookupRoot, Current);
+          if NameRes.NameChanged then
             GlobalDesignHook.ComponentRenamed(Current);
+          if NameRes.TextChanged then
+            GlobalDesignHook.Modified(Current, NameRes.TextPropertyName);
+          if NameRes.Changed then
             Modified;
-          end;
         end; // don't forget the semicolon before else !!!
 
       else
@@ -2866,7 +2918,10 @@ begin
   end;
 
   if Handled then
+  begin
     TheMessage.CharCode := 0;
+    TheMessage.Result := 1;
+  end;
 end;
 
 
@@ -3310,6 +3365,11 @@ begin
     OnChangeParent(Self);
 end;
 
+procedure TDesigner.OnShowNonVisualComponentsMenuClick(Sender: TObject);
+begin
+  ShowNonVisualComponents:=not ShowNonVisualComponents;
+end;
+
 procedure TDesigner.OnSnapToGridOptionMenuClick(Sender: TObject);
 begin
   EnvironmentOptions.SnapToGrid := not EnvironmentOptions.SnapToGrid;
@@ -3391,6 +3451,11 @@ begin
   Result:=EnvironmentOptions.ShowGrid;
 end;
 
+function TDesigner.GetShowNonVisualComponents: boolean;
+begin
+  Result:=dfShowNonVisualComponents in FFlags;
+end;
+
 function TDesigner.GetGridSizeX: integer;
 begin
   Result:=EnvironmentOptions.GridSizeX;
@@ -3423,6 +3488,29 @@ begin
   if ShowGrid=AValue then exit;
   EnvironmentOptions.ShowGrid:=AValue;
   Form.Invalidate;
+end;
+
+procedure TDesigner.SetShowNonVisualComponents(AValue: boolean);
+var
+  i: Integer;
+begin
+  if ShowNonVisualComponents=AValue then exit;
+
+  if AValue then begin
+    Include(FFlags,dfShowNonVisualComponents);
+    Form.Invalidate;
+  end else begin
+    Exclude(FFlags,dfShowNonVisualComponents);
+    Selection.BeginUpdate;
+    try
+      for i:=Selection.Count-1 downto 0 do
+        if Selection[i].IsNonVisualComponent then
+          Selection.Delete(i);
+    finally
+      Selection.EndUpdate;
+      Form.Invalidate;
+    end;
+  end;
 end;
 
 procedure TDesigner.SetGridSizeX(const AValue: integer);
@@ -3465,13 +3553,17 @@ end;
 
 procedure TDesigner.DrawNonVisualComponent(AComponent: TComponent);
 var
-  Icon: TBitmap;
   ItemLeft, ItemTop, ItemRight, ItemBottom: integer;
   Diff, ItemLeftTop: TPoint;
   OwnerRect, IconRect, TextRect: TRect;
   TextSize: TSize;
   IsSelected: Boolean;
   RGN: HRGN;
+  IL: TCustomImageList;
+  II: TImageIndex;
+  Res: TScaledImageListResolution;
+  Icon: TBitmap;
+  ScaleFactor: Double;
 begin
   if (AComponent is TControl)
   and (csNoDesignVisible in TControl(AComponent).ControlStyle) then
@@ -3517,6 +3609,10 @@ begin
   Diff := FDDC.FormOrigin;
   //DebugLn(['FDDC.FormOrigin - ', Diff.X, ' : ' ,Diff.Y]);
   // non-visual component
+  if FDDC.Form<>nil then
+    ScaleFactor := FDDC.Form.GetCanvasScaleFactor
+  else
+    ScaleFactor := 1;
   ItemLeftTop := NonVisualComponentLeftTop(AComponent);
   ItemLeft := ItemLeftTop.X - Diff.X;
   ItemTop := ItemLeftTop.Y - Diff.Y;
@@ -3530,12 +3626,14 @@ begin
   if FSurface = nil then
   begin
     FSurface := TBitmap.Create;
-    FSurface.SetSize(NonVisualCompWidth, NonVisualCompWidth);
+    FSurface.SetSize(Round(NonVisualCompWidth*ScaleFactor),
+      Round(NonVisualCompWidth*ScaleFactor));
     FSurface.Canvas.Brush.Color := clBtnFace;
     FSurface.Canvas.Pen.Width := 1;
   end;
 
-  IconRect := Rect(0, 0, NonVisualCompWidth, NonVisualCompWidth);
+  IconRect := Rect(0, 0, Round(NonVisualCompWidth*ScaleFactor),
+    Round(NonVisualCompWidth*ScaleFactor));
   FSurface.Canvas.Frame3D(IconRect, 1, bvRaised);
   FSurface.Canvas.FillRect(IconRect);
 
@@ -3548,7 +3646,10 @@ begin
     // into account
     Icon := TBitmap.Create;
     try
-      TextSize := FDDC.Canvas.TextExtent(AComponent.Name);
+      Icon.Canvas.Font.Assign(FDDC.Canvas.Font);
+      Icon.Canvas.Font.PixelsPerInch := FDDC.Canvas.Font.PixelsPerInch;
+      Icon.Canvas.Font.Height := Round(GetFontData(FDDC.Canvas.Font.Reference.Handle).Height*ScaleFactor);
+      TextSize := Icon.Canvas.TextExtent(AComponent.Name);
       Icon.SetSize(TextSize.cx, TextSize.cy);
       TextRect := Rect(0, 0, TextSize.cx, TextSize.cy);
       if FDDC.Form <> nil then
@@ -3558,9 +3659,11 @@ begin
       Icon.Canvas.FillRect(TextRect);
       DrawText(Icon.Canvas.Handle, PChar(AComponent.Name), -1, TextRect,
         DT_CENTER or DT_VCENTER or DT_SINGLELINE or DT_NOCLIP);
-      FDDC.Canvas.Draw(
-        (ItemLeft + ItemRight - TextSize.cx) div 2,
-        ItemBottom + NonVisualCompBorder + 2, Icon);
+      TextRect.Left := (ItemLeft + ItemRight - LongInt(Round(TextSize.cx/ScaleFactor))) div 2;
+      TextRect.Top := (ItemBottom + NonVisualCompBorder + 2);
+      TextRect.Right := TextRect.Left + Round(TextSize.cx/ScaleFactor);
+      TextRect.Bottom := TextRect.Top + Round(TextSize.cy/ScaleFactor);
+      FDDC.Canvas.StretchDraw(TextRect, Icon);
     finally
       Icon.Free;
     end;
@@ -3569,16 +3672,17 @@ begin
   if Assigned(FOnGetNonVisualCompIcon) then
   begin
     Icon := nil;
-    FOnGetNonVisualCompIcon(Self, AComponent, Icon);
-    if Icon <> nil then
+    FOnGetNonVisualCompIcon(Self, AComponent, IL{%H-}, II{%H-});
+    if (IL<>nil) and (II>=0) then
     begin
+      Res := IL.ResolutionForPPI[0, FDDC.Canvas.Font.PixelsPerInch, ScaleFactor];
       InflateRect(IconRect,
-        - (IconRect.Right-IconRect.Left-Icon.Width) div 2,
-        - (IconRect.Bottom-IconRect.Top-Icon.Height) div 2);
-      FSurface.Canvas.StretchDraw(IconRect, Icon);
+        - (IconRect.Right-IconRect.Left-Res.Resolution.Width) div 2,
+        - (IconRect.Bottom-IconRect.Top-Res.Resolution.Height) div 2);
+      Res.StretchDraw(FSurface.Canvas, II, IconRect);
     end;
   end;
-  FDDC.Canvas.Draw(ItemLeft, ItemTop, FSurface);
+  FDDC.Canvas.StretchDraw(Rect(ItemLeft, ItemTop, ItemRight, ItemBottom), FSurface);
   if (Selection.Count > 1) and IsSelected then
     Selection.DrawMarkerAt(FDDC,
       ItemLeft, ItemTop, NonVisualCompWidth, NonVisualCompWidth);
@@ -3586,12 +3690,12 @@ end;
 
 procedure TDesigner.DrawNonVisualComponents(aDDC: TDesignerDeviceContext);
 begin
+  if not ShowNonVisualComponents then exit;
   FSurface := nil;
   FDDC := aDDC;
   DrawNonVisualComponent(FLookupRoot);
   FDDC := nil;
-  if FSurface <> nil then
-    FSurface.Free;
+  FreeAndNil(FSurface);
 end;
 
 procedure TDesigner.DrawDesignerItems(OnlyIfNeeded: boolean);
@@ -3736,6 +3840,7 @@ function TDesigner.NonVisualComponentAtPos(X, Y: integer): TComponent;
 var
   s: TComponentSearch;
 begin
+  // Note: Do not check ShowNonVisualComponents
   s := TComponentSearch.Create(nil);
   try
     s.MinClass := TComponent;
@@ -3772,7 +3877,8 @@ begin
 end;
 
 function TDesigner.ComponentClassAtPos(const AClass: TComponentClass;
-  const APos: TPoint; const UseRootAsDefault, IgnoreHidden: boolean): TComponent;
+  const APos: TPoint; const UseRootAsDefault, IgnoreHidden: boolean
+  ): TComponent;
 var
   s: TComponentSearch;
   MediatorFlags: TDMCompAtPosFlags;
@@ -3791,6 +3897,7 @@ begin
       s.AtPos := APos;
       s.MinClass := AClass;
       s.IgnoreHidden := IgnoreHidden;
+      s.IgnoreNonVisual := not ShowNonVisualComponents;
       s.Search(FLookupRoot);
       s.Mediator := Mediator;
       Result := s.Best;
@@ -3897,6 +4004,8 @@ begin
   DesignerMenuSaveAsXML.OnClick:=@OnSaveAsXMLMenuClick;
   DesignerMenuCenterForm.OnClick:=@OnCenterFormMenuClick;
 
+  DesignerMenuShowNonVisualComponents.OnClick:=@OnShowNonVisualComponentsMenuClick;
+  DesignerMenuShowNonVisualComponents.ShowAlwaysCheckable:=true;
   DesignerMenuSnapToGridOption.OnClick:=@OnSnapToGridOptionMenuClick;
   DesignerMenuSnapToGridOption.ShowAlwaysCheckable:=true;
   DesignerMenuSnapToGuideLinesOption.OnClick:=@OnSnapToGuideLinesOptionMenuClick;
@@ -3914,9 +4023,13 @@ var
   OneControlSelected: Boolean;
   SelectionVisible: Boolean;
   SrcFile: TLazProjectFile;
-  UnitIsVirtual, DesignerCanCopy, HasChangeParentCandidates: Boolean;
+  UnitIsVirtual, DesignerCanCopy, HasChangeParentCandidates,
+    HasAncestorComponent: Boolean;
   PersistentSelection: TPersistentSelectionList;
   ChangeParentCandidates: TFPList;
+  i: Integer;
+  Item: TSelectedControl;
+  AComponent, AncestorComponent: TComponent;
 begin
   SrcFile:=LazarusIDE.GetProjectFileWithDesigner(Self);
   ControlSelIsNotEmpty:=(Selection.Count>0)
@@ -3932,9 +4045,23 @@ begin
   PersistentSelection:=TPersistentSelectionList.Create;
   try
     Selection.GetSelection(PersistentSelection);
+
     ChangeParentCandidates:=GetChangeParentCandidates(GlobalDesignHook,PersistentSelection);
     HasChangeParentCandidates:=ChangeParentCandidates.Count>0;
     FreeAndNil(ChangeParentCandidates);
+
+    HasAncestorComponent:=false;
+    for i:=0 to Selection.Count-1 do
+    begin
+      Item:=Selection[i];
+      AComponent:=TComponent(Item.Persistent);
+      AncestorComponent:=TheFormEditor.GetAncestorInstance(AComponent);
+      if AncestorComponent<>nil then
+      begin
+        HasAncestorComponent:=true;
+        break;
+      end;
+    end;
   finally
     FreeAndNil(PersistentSelection);
   end;
@@ -3946,7 +4073,7 @@ begin
   DesignerMenuMirrorVertical.Enabled := MultiCompsAreSelected and not OnlyNonVisualsAreSelected;
   DesignerMenuScale.Enabled := CompsAreSelected and not OnlyNonVisualsAreSelected;
   DesignerMenuSize.Enabled := CompsAreSelected and not OnlyNonVisualsAreSelected;
-  DesignerMenuReset.Enabled := CompsAreSelected;
+  DesignerMenuReset.Enabled := HasAncestorComponent;
 
   DesignerMenuAnchorEditor.Enabled := (FLookupRoot is TWinControl) and (TWinControl(FLookupRoot).ControlCount > 0);
   DesignerMenuTabOrder.Enabled := (FLookupRoot is TWinControl) and (TWinControl(FLookupRoot).ControlCount > 0);
@@ -3967,6 +4094,7 @@ begin
   DesignerMenuViewLFM.Enabled := not UnitIsVirtual;
   DesignerMenuChangeParent.Enabled := HasChangeParentCandidates;
   DesignerMenuSnapToGridOption.Checked := EnvironmentOptions.SnapToGrid;
+  DesignerMenuShowNonVisualComponents.Checked := ShowNonVisualComponents;
   DesignerMenuSnapToGuideLinesOption.Checked := EnvironmentOptions.SnapToGuideLines;
 end;
 

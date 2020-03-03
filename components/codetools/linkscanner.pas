@@ -160,6 +160,21 @@ type
     cmISO,
     cmExtPas
     );
+const
+  // upper case
+  CompilerModeNames: array[TCompilerMode] of string=(
+    'FPC',
+    'DELPHI',
+    'DELPHIUNICODE',
+    'GPC',
+    'TP',
+    'OBJFPC',
+    'MACPAS',
+    'ISO',
+    'EXTPAS'
+    );
+type
+
   { TCompilerModeSwitch - see fpc/compiler/globtype.pas  tmodeswitch }
   TCompilerModeSwitch = (
     //cms_FPC,cms_ObjFPC,cms_Delphi,cms_TP7,cms_Mac,cms_ISO,cms_ExtPas,
@@ -198,14 +213,19 @@ type
                                 ansistring; similarly, char becomes unicodechar rather than ansichar }
     cmsTypeHelpers,        { allows the declaration of "type helper" (non-Delphi) or "record helper"
                                   (Delphi) for primitive types }
+    cmsClosures,           { Anonymous methods }
     cmsCBlocks,            { support for http://en.wikipedia.org/wiki/Blocks_(C_language_extension) }
     cmsISOlike_IO,         { I/O as it required by an ISO compatible compiler }
     cmsISOLike_Program_Para, { program parameters as it required by an ISO compatible compiler }
     cmsISOLike_Mod,        { mod operation as it is required by an iso compatible compiler }
+    cmsArrayOperators,     { use Delphi compatible array operators instead of custom ones ("+") }
+    // not yet in FPC, supported by pas2js:
     cmsPrefixedAttributes, { allow Delphi attributes, disable FPC [] proc modifier }
     cmsExternalClass,      { pas2js: allow  class external [pkgname] name [symbol] }
     cmsIgnoreAttributes,   { pas2js: ignore attributes }
-    cmsIgnoreInterfaces    { pas2js: ignore class interfaces }
+    cmsOmitRTTI,           { pas2js: treat class section 'published' as 'public' and typeinfo does not work on symbols declared with this switch }
+    msMultiHelpers,        { off=only one helper per type, on=all }
+    msImplicitFunctionSpecialization { infer types on calls of generic functions }
     );
   TCompilerModeSwitches = set of TCompilerModeSwitch;
 const
@@ -220,14 +240,14 @@ const
      cmsPointer_2_procedure,cmsAutoderef,cmsTp_procvar,cmsInitfinal,cmsDefault_ansistring,
      cmsOut,cmsDefault_para,cmsDuplicate_names,cmsHintdirective,
      cmsProperty,cmsDefault_inline,cmsExcept,cmsAdvancedRecords,
-     cmsPrefixedAttributes],
+     cmsClosures,cmsPrefixedAttributes,cmsArrayOperators],
     // cmDELPHIUNICODE
     [cmsClass,cmsObjpas,cmsResult,cmsString_pchar,
      cmsPointer_2_procedure,cmsAutoderef,cmsTp_procvar,cmsInitfinal,
      cmsOut,cmsDefault_para,cmsDuplicate_names,cmsHintdirective,
      cmsProperty,cmsDefault_inline,cmsExcept,cmsAdvancedRecords,
      cmsSystemcodepage,cmsDefault_unicodestring,
-     cmsPrefixedAttributes],
+     cmsClosures,cmsPrefixedAttributes,cmsArrayOperators],
     // cmGPC
     [cmsTp_procvar],
     // cmTP
@@ -237,8 +257,8 @@ const
      cmsRepeat_forward,cmsCvar_support,cmsInitfinal,cmsOut,cmsDefault_para,
      cmsHintdirective,cmsProperty,cmsDefault_inline,cmsExcept],
     // cmMacPas
-    [cmsCvar_support,cmsMac_procvar,cmsNestedProcVars,cmsNonLocalGoto,
-     cmsISOLike_unary_minus,cmsDefault_inline],
+    [cmsCvar_support,cmsMac_procvar,cmsNestedProcVars,
+     cmsNonLocalGoto,cmsISOLike_unary_minus,cmsDefault_inline],
     // cmISO
     [cmsTp_procvar,cmsDuplicate_names,cmsNestedProcVars,cmsNonLocalGoto,
      cmsISOLike_unary_minus],
@@ -249,6 +269,54 @@ const
      cmsISOLike_Mod]
     );
   cmAllModesWithGeneric = [cmDELPHI,cmDELPHIUNICODE,cmOBJFPC];
+
+  // upper case (see fpc/compiler/globtype.pas  modeswitchstr )
+  CompilerModeSwitchNames: array[TCompilerModeSwitch] of string=(
+    'POINTERARITHMETICS',
+    'CLASS',
+    'OBJPAS',
+    'RESULT',
+    'PCHARTOSTRING',
+    'CVAR',
+    'NESTEDCOMMENTS',
+    'CLASSICPROCVARS',
+    'MACPROCVARS',
+    'REPEATFORWARD',
+    'POINTERTOPROCVAR',
+    'AUTODEREF',
+    'INITFINAL',
+    'ANSISTRINGS',
+    'OUT',
+    'DEFAULTPARAMETERS',
+    'HINTDIRECTIVE',
+    'DUPLICATELOCALS',
+    'PROPERTIES',
+    'ALLOWINLINE',
+    'EXCEPTIONS',
+    'OBJECTIVEC1',
+    'OBJECTIVEC2',
+    'NESTEDPROCVARS',
+    'NONLOCALGOTO',
+    'ADVANCEDRECORDS',
+    'ISOUNARYMINUS',
+    'SYSTEMCODEPAGE',
+    'FINALFIELDS',
+    'UNICODESTRINGS',
+    'TYPEHELPERS',
+    'CLOSURES',
+    'CBLOCKS',
+    'ISOIO',
+    'ISOPROGRAMPARAS',
+    'ISOMOD',
+    'ARRAYOPERATORS',
+    'PREFIXEDATTRIBUTES',
+    'EXTERNALCLASS',
+    'IGNOREATTRIBUTES',
+    'OMITRTTI',
+    'MULTIHELPERS',
+    'IMPLICITFUNCTIONSPECIALIZATION'
+    );
+
 
 type
   // see fpcsrc/compiler/globtype.pas toptimizerswitch
@@ -282,7 +350,22 @@ type
     pcFPC,
     pcDelphi,
     pcPas2js);
-  
+const  
+  // upper case
+  PascalCompilerNames: array[TPascalCompiler] of string=(
+    'FPC', 'DELPHI', 'PAS2JS'
+    );
+  PascalCompilerUnitExt: array[TPascalCompiler] of string = (
+    'pp;pas;ppu', // + p  if TCompilerMode=cmMacPas
+    'pas;dcu',
+    'pas;pp;pcu;pju'
+    );
+  PascalCompilerSrcExt: array[TPascalCompiler] of string = (
+    'pp;pas', // + p  if TCompilerMode=cmMacPas
+    'pas',
+    'pas;pp'
+    );
+
 type
   TLSSkippingDirective = (
     lssdNone,
@@ -708,15 +791,16 @@ type
     function IgnoreErrorAfterValid: boolean;
     function CleanPosIsAfterIgnorePos(CleanPos: integer): boolean;
     function LoadSourceCaseLoUp(const AFilename: string; AllowVirtual: boolean = false): pointer;
+    class function GetPascalCompiler(Evals: TExpressionEvaluator): TPascalCompiler;
 
     function SearchIncludeFile(AFilename: string; out NewCode: Pointer;
                          var MissingIncludeFile: TMissingIncludeFile): boolean;
-
+    {$IFDEF GuessMisplacedIfdef}
     function GuessMisplacedIfdefEndif(StartCursorPos: integer;
                                       StartCode: pointer;
                                       out EndCursorPos: integer;
                                       out EndCode: Pointer): boolean;
-
+    {$ENDIF}
     function GetHiddenUsedUnits: string; // comma separated
 
     // global write lock
@@ -779,68 +863,6 @@ type
     procedure DisposePSourceChangeStep(Step: PSourceChangeStep);
     function NewPSourceChangeStep: PSourceChangeStep;
   end;
-
-const
-  // upper case
-  CompilerModeNames: array[TCompilerMode] of string=(
-    'FPC',
-    'DELPHI',
-    'DELPHIUNICODE',
-    'GPC',
-    'TP',
-    'OBJFPC',
-    'MACPAS',
-    'ISO',
-    'EXTPAS'
-    );
-
-  // upper case (see fpc/compiler/globtype.pas  modeswitchstr )
-  CompilerModeSwitchNames: array[TCompilerModeSwitch] of string=(
-    'POINTERARITHMETICS',
-    'CLASS',
-    'OBJPAS',
-    'RESULT',
-    'PCHARTOSTRING',
-    'CVAR',
-    'NESTEDCOMMENTS',
-    'CLASSICPROCVARS',
-    'MACPROCVARS',
-    'REPEATFORWARD',
-    'POINTERTOPROCVAR',
-    'AUTODEREF',
-    'INITFINAL',
-    'ANSISTRINGS',
-    'OUT',
-    'DEFAULTPARAMETERS',
-    'HINTDIRECTIVE',
-    'DUPLICATELOCALS',
-    'PROPERTIES',
-    'ALLOWINLINE',
-    'EXCEPTIONS',
-    'OBJECTIVEC1',
-    'OBJECTIVEC2',
-    'NESTEDPROCVARS',
-    'NONLOCALGOTO',
-    'ADVANCEDRECORDS',
-    'ISOUNARYMINUS',
-    'SYSTEMCODEPAGE',
-    'FINALFIELDS',
-    'UNICODESTRINGS',
-    'TYPEHELPERS',
-    'CBLOCKS',
-    'ISOIO',
-    'ISOPROGRAMPARAS',
-    'ISOMOD',
-    'PREFIXEDATTRIBUTES',
-    'EXTERNALCLASS',
-    'IGNOREATTRIBUTES',
-    'IGNOREINTERFACES'
-    );
-
-  // upper case
-  PascalCompilerNames: array[TPascalCompiler] of string=(
-    'FPC', 'DELPHI', 'PAS2JS'
-    );
 
 const
   DirectiveSequenceName: array [TSequenceDirective] of string =
@@ -1371,7 +1393,8 @@ begin
     FDirectivesSorted[i]:=@FDirectives[i];
   for i:=FDirectivesCount to FDirectivesCapacity-1 do
     FDirectivesSorted[i]:=nil;
-  MergeSort(PPointer(FDirectivesSorted),FDirectivesCount,@CompareLSDirectiveCodeSrcPosCleanPos);
+  MergeSortWithLen(PPointer(FDirectivesSorted),FDirectivesCount,
+                   @CompareLSDirectiveCodeSrcPosCleanPos);
 end;
 
 procedure TLinkScanner.AddLink(ASrcPos: integer; ACode: Pointer;
@@ -1798,6 +1821,8 @@ begin
   end;
 end;
 
+{$IFOPT R+}{$DEFINE RangeChecking}{$ENDIF}
+{$R-}
 procedure TLinkScanner.ReadNextToken;
 var
   c1: char;
@@ -1806,8 +1831,6 @@ var
   p: PChar;
 begin
   //DebugLn([' TLinkScanner.ReadNextToken SrcPos=',SrcPos,' SrcLen=',SrcLen,' "',dbgstr(Src,SrcPos,5),'"']);
-  {$IFOPT R+}{$DEFINE RangeChecking}{$ENDIF}
-  {$R-}
   if (SrcPos>SrcLen) and ReturnFromIncludeFileAndIsEnd then exit;
   //DebugLn([' TLinkScanner.ReadNextToken SrcPos=',SrcPos,' SrcLen=',SrcLen,' "',copy(Src,SrcPos,5),'"']);
   // Skip all spaces and comments
@@ -2012,15 +2035,13 @@ begin
     then inc(p);
     SrcPos:=p-PChar(Src)+1;
   end;
-  {$IFDEF RangeChecking}{$R+}{$UNDEF RangeChecking}{$ENDIF}
 end;
+{$IFDEF RangeChecking}{$R+}{$UNDEF RangeChecking}{$ENDIF}
 
 procedure TLinkScanner.Scan(Range: TLinkScannerRange; CheckFilesOnDisk: boolean);
 var
   LastTokenType: TLSTokenType;
   cm: TCompilerMode;
-  pc: TPascalCompiler;
-  s: string;
   LastProgressPos: integer;
   CheckForAbort: boolean;
   NewSrcLen: Integer;
@@ -2081,15 +2102,7 @@ begin
   Values.Assign(FInitValues);
 
   // compiler
-  s:=FInitValues.Variables[PascalCompilerDefine];
-  if s<>'' then begin
-    for pc:=Low(TPascalCompiler) to High(TPascalCompiler) do
-      if (s=PascalCompilerNames[pc]) then
-        PascalCompiler:=pc;
-  end else if InitialValues.IsDefined('pas2js') then
-    PascalCompiler:=pcPas2js
-  else if InitialValues.IsDefined('delphi') and not InitialValues.IsDefined('fpc') then
-    PascalCompiler:=pcDelphi;
+  PascalCompiler:=GetPascalCompiler(FInitValues);
 
   // compiler mode
   for cm:=Low(TCompilerMode) to High(TCompilerMode) do
@@ -2724,9 +2737,8 @@ end;
   Params: StartCursorPos: integer; StartCode: pointer;
           var EndCursorPos: integer; var EndCode: Pointer;
   Result: boolean;
-
-
 -------------------------------------------------------------------------------}
+{$IFDEF GuessMisplacedIfdef}
 function TLinkScanner.GuessMisplacedIfdefEndif(StartCursorPos: integer;
   StartCode: pointer;
   out EndCursorPos: integer; out EndCode: Pointer): boolean;
@@ -3113,6 +3125,7 @@ begin
     SearchedCodes.Free;
   end;
 end;
+{$ENDIF}
 
 function TLinkScanner.GetHiddenUsedUnits: string;
 var
@@ -4002,6 +4015,26 @@ begin
   end;
 end;
 
+class function TLinkScanner.GetPascalCompiler(Evals: TExpressionEvaluator
+  ): TPascalCompiler;
+var
+  s: String;
+  pc: TPascalCompiler;
+begin
+  s:=Evals.Variables[PascalCompilerDefine];
+  if s<>'' then begin
+    for pc:=Low(TPascalCompiler) to High(TPascalCompiler) do
+      if (s=PascalCompilerNames[pc]) then
+        exit(pc);
+  end;
+  if Evals.IsDefined('pas2js') then
+    exit(pcPas2js)
+  else if Evals.IsDefined('delphi') and not Evals.IsDefined('fpc') then
+    exit(pcDelphi)
+  else
+    Result:=pcFPC;
+end;
+
 function TLinkScanner.SearchIncludeFile(AFilename: string;
   out NewCode: Pointer; var MissingIncludeFile: TMissingIncludeFile): boolean;
 var
@@ -4184,6 +4217,7 @@ end;
 function TLinkScanner.IfOptDirective: boolean;
 // {$ifopt o+} or {$ifopt o-}
 var Option, c: char;
+  v: String;
 begin
   inc(IfLevel);
   if StoreDirectives then
@@ -4198,7 +4232,8 @@ begin
     if (SrcPos<=SrcLen) then begin
       c:=Src[SrcPos];
       if c in ['+','-'] then begin
-        if (c='-')<>(Values.Variables[CompilerSwitchesNames[Option]]='0') then
+        v:=Values.Variables[CompilerSwitchesNames[Option]];
+        if (c='-')<>((v='0') or (v='')) then
         begin
           SkipTillEndifElse(lssdTillElse);
           exit;

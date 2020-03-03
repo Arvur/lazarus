@@ -37,12 +37,21 @@ unit CodeContextForm;
 interface
 
 uses
-  Classes, SysUtils, Types, LCLProc, LResources, Forms, Controls,
-  Graphics, Dialogs, LCLType, LCLIntf, Themes, Buttons, SynEdit, SynEditKeyCmds,
+  Classes, SysUtils, Types,
+  // LCL
+  LCLProc, LCLType, LCLIntf, LResources, LMessages, Forms, Controls,
+  Graphics, Dialogs, Themes, Buttons,
+  // LazUtils
+  LazStringUtils,
+  // SynEdit
+  SynEdit, SynEditKeyCmds,
+  // CodeTools
   BasicCodeTools, KeywordFuncLists, LinkScanner, CodeCache, FindDeclarationTool,
   IdentCompletionTool, CodeTree, CodeAtom, PascalParserTool, CodeToolManager,
-  SrcEditorIntf, LazIDEIntf, IDEProcs, LazarusIDEStrConsts, IDEImagesIntf,
-  LMessages;
+  // IdeIntf
+  SrcEditorIntf, LazIDEIntf, IDEImagesIntf,
+  // IDE
+  LazarusIDEStrConsts;
 
 type
 
@@ -518,7 +527,7 @@ begin
       Btn.Name:='CopyAllSpeedButton'+IntToStr(i+1);
       Btn.OnClick:=@CopyAllBtnClick;
       Btn.Visible:=false;
-      TIDEImages.AssignImage(Btn.Glyph, 'laz_copy');
+      IDEImages.AssignImage(Btn, 'laz_copy');
       Btn.Flat:=true;
       Btn.Parent:=Self;
       FHints.Add(Item);

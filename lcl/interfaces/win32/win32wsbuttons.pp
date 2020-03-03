@@ -29,7 +29,7 @@ uses
 // uncomment only when needed for registration
 ////////////////////////////////////////////////////
   Windows, CommCtrl, Classes, Buttons, Graphics, GraphType, Controls,
-  LCLType, LCLMessageGlue, LMessages, LazUTF8, Themes,
+  LCLType, LCLMessageGlue, LMessages, LazUTF8, Themes, ImgList,
 ////////////////////////////////////////////////////
   WSProc, WSButtons, Win32WSControls, Win32WSImgList,
   UxTheme, Win32Themes;
@@ -134,6 +134,9 @@ var
   ButtonImageList: BUTTON_IMAGELIST;
   I: integer;
   ButtonCaptionW: widestring;
+  AIndex: Integer;
+  AImageRes: TScaledImageListResolution;
+  AEffect: TGraphicsDrawEffect;
 
   procedure DrawBitmap(AState: TButtonState; UseThemes, AlphaDraw: Boolean);
   const
@@ -151,8 +154,6 @@ var
     glyphWidth, glyphHeight: integer;
     OldBitmapHandle: HBITMAP; // Handle of the provious bitmap in hdcNewBitmap
     OldTextAlign: Integer;
-    AIndex: Integer;
-    AEffect: TGraphicsDrawEffect;
     TmpDC: HDC;
     PaintBuffer: HPAINTBUFFER;
     Options: DTTOpts;
@@ -201,13 +202,15 @@ var
     begin
       if (srcWidth <> 0) and (srcHeight <> 0) then
       begin
-        TBitBtnAceess(BitBtn).FButtonGlyph.GetImageIndexAndEffect(AState, AIndex, AEffect);
-        TWin32WSCustomImageList.DrawToDC(TBitBtnAceess(BitBtn).FButtonGlyph.Images, AIndex,
-          TmpDC, Rect(XDestBitmap, YDestBitmap, glyphWidth, glyphHeight),
-          TBitBtnAceess(BitBtn).FButtonGlyph.Images.BkColor,
-          TBitBtnAceess(BitBtn).FButtonGlyph.Images.BlendColor, AEffect,
-          TBitBtnAceess(BitBtn).FButtonGlyph.Images.DrawingStyle,
-          TBitBtnAceess(BitBtn).FButtonGlyph.Images.ImageType);
+        TBitBtnAceess(BitBtn).FButtonGlyph.GetImageIndexAndEffect(AState, BitBtn.Font.PixelsPerInch, 1,
+          AImageRes, AIndex, AEffect);
+        TWin32WSCustomImageListResolution.DrawToDC(
+          AImageRes.Resolution,
+          AIndex, TmpDC, Rect(XDestBitmap, YDestBitmap, glyphWidth, glyphHeight),
+          AImageRes.Resolution.ImageList.BkColor,
+          AImageRes.Resolution.ImageList.BlendColor, AEffect,
+          AImageRes.Resolution.ImageList.DrawingStyle,
+          AImageRes.Resolution.ImageList.ImageType);
       end;
     end else
     begin
@@ -217,7 +220,8 @@ var
 
       if (srcWidth <> 0) and (srcHeight <> 0) then
       begin
-        TBitBtnAceess(BitBtn).FButtonGlyph.GetImageIndexAndEffect(AState, AIndex, AEffect);
+        TBitBtnAceess(BitBtn).FButtonGlyph.GetImageIndexAndEffect(AState, BitBtn.Font.PixelsPerInch, 1,
+          AImageRes, AIndex, AEffect);
         if UseThemes and not AlphaDraw then
         begin
           // non-themed winapi wants white/other as background/picture-disabled colors
@@ -229,12 +233,13 @@ var
         if (AEffect = gdeDisabled) and not AlphaDraw then
           AEffect := gde1Bit;
 
-        TWin32WSCustomImageList.DrawToDC(TBitBtnAceess(BitBtn).FButtonGlyph.Images, AIndex,
-          TmpDC, Rect(XDestBitmap, YDestBitmap, glyphWidth, glyphHeight),
-          TBitBtnAceess(BitBtn).FButtonGlyph.Images.BkColor,
-          TBitBtnAceess(BitBtn).FButtonGlyph.Images.BlendColor, AEffect,
-          TBitBtnAceess(BitBtn).FButtonGlyph.Images.DrawingStyle,
-          TBitBtnAceess(BitBtn).FButtonGlyph.Images.ImageType);
+        TWin32WSCustomImageListResolution.DrawToDC(
+          AImageRes.Resolution,
+          AIndex, TmpDC, Rect(XDestBitmap, YDestBitmap, glyphWidth, glyphHeight),
+          AImageRes.Resolution.ImageList.BkColor,
+          AImageRes.Resolution.ImageList.BlendColor, AEffect,
+          AImageRes.Resolution.ImageList.DrawingStyle,
+          AImageRes.Resolution.ImageList.ImageType);
       end;
     end;
     if PaintBuffer = 0 then
@@ -286,28 +291,27 @@ var
   RGBA: PRGBAQuad;
   AlphaDraw: Boolean;
   ASpacing: Integer;
+  lMargin: Integer;
 begin
   // gather info about bitbtn
   BitBtnHandle := BitBtn.Handle;
   ASpacing := BitBtn.Spacing;
+  if BitBtn.Margin = -1 then lMargin := 0 else lMargin := BitBtn.Margin;
 
-  {set spacing to LCL's default if bitbtn does not have glyph.issue #23255}
-  if not BitBtn.CanShowGlyph then
-    ASpacing := 0;
-
-  if BitBtn.CanShowGlyph then
+  if BitBtn.CanShowGlyph(True) then
   begin
-    srcWidth := BitBtn.Glyph.Width;
-    srcHeight := BitBtn.Glyph.Height;
-    if BitBtn.NumGlyphs > 1 then
-      srcWidth := srcWidth div BitBtn.NumGlyphs;
-    if (srcWidth = 0) or (srcHeight = 0) then
-      ASpacing := 0;
+    TBitBtnAceess(BitBtn).FButtonGlyph.GetImageIndexAndEffect(Low(TButtonState), BitBtn.Font.PixelsPerInch, 1,
+      AImageRes, AIndex, AEffect);
+    srcWidth := AImageRes.Width;
+    srcHeight := AImageRes.Height;
   end else
   begin
     srcWidth := 0;
     srcHeight := 0;
   end;
+  {set spacing to LCL's default if bitbtn does not have glyph.issue #23255}
+  if (srcWidth = 0) or (srcHeight = 0) then
+    ASpacing := 0;
   newWidth := 0;
   newHeight := 0;
   BitBtnLayout := BidiAdjustButtonLayout(BitBtn.UseRightToLeftReading, BitBtn.Layout);
@@ -319,9 +323,9 @@ begin
     blGlyphLeft, blGlyphRight:
     begin
       if ASpacing = -1 then
-        newWidth := BitBtn.Width - 10
+        newWidth := BitBtn.Width
       else
-        newWidth := TextSize.cx + srcWidth + ASpacing;
+        newWidth := TextSize.cx + srcWidth + ASpacing + lMargin;
       newHeight := TextSize.cy;
       if newHeight < srcHeight then
         newHeight := srcHeight;
@@ -330,20 +334,28 @@ begin
       case BitBtnLayout of
         blGlyphLeft:
         begin
-          XDestBitmap := 0;
+          XDestBitmap := lMargin;
           XDestText := srcWidth;
-          if ASpacing = -1 then
-            inc(XDestText, (newWidth - srcWidth - TextSize.cx) div 2)
-          else
-            inc(XDestText, ASpacing);
+          if ASpacing = -1 then begin
+            if BitBtn.Margin = -1 then begin
+              XDestBitmap := (BitBtn.Width - (srcWidth + TextSize.cx)) div 3;
+              XDestText := 2*XDestBitmap + srcWidth;
+            end else
+              inc(XDestText, (newWidth - srcWidth - TextSize.cx + lMargin) div 2);
+          end else
+            inc(XDestText, ASpacing + lMargin);
         end;
         blGlyphRight:
         begin
-          XDestBitmap := newWidth - srcWidth;
+          XDestBitmap := newWidth - srcWidth - lMargin;
           XDestText := XDestBitmap - TextSize.cx;
-          if ASpacing = -1 then
-            dec(XDestText, (newWidth - srcWidth - TextSize.cx) div 2)
-          else
+          if ASpacing = -1 then begin
+            if BitBtn.Margin = -1 then begin
+              XDestText := (BitBtn.Width - (srcWidth + TextSize.cx)) div 3;
+              XDestBitmap := 2 * XDestText + TextSize.cx;
+            end else
+              dec(XDestText, (newWidth - srcWidth - TextSize.cx - lMargin) div 2)
+          end else
             dec(XDestText, ASpacing);
         end;
       end;
@@ -354,28 +366,36 @@ begin
       if newWidth < srcWidth then
         newWidth := srcWidth;
       if ASpacing = -1 then
-        newHeight := BitBtn.Height - 10
+        newHeight := BitBtn.Height
       else
-        newHeight := TextSize.cy + srcHeight + ASpacing;
+        newHeight := TextSize.cy + srcHeight + ASpacing + lMargin;
       XDestBitmap := (newWidth - srcWidth) shr 1;
       XDestText := (newWidth - TextSize.cx) shr 1;
       case BitBtnLayout of
         blGlyphTop:
         begin
-          YDestBitmap := 0;
+          YDestBitmap := lMargin;
           YDestText := srcHeight;
-          if ASpacing = -1 then
-            inc(YDestText, (newHeight - srcHeight - TextSize.cy) div 2)
-          else
-            inc(YDestText, ASpacing);
+          if ASpacing = -1 then begin
+            if BitBtn.Margin = -1 then begin
+              YDestBitmap := (BitBtn.Height - (srcHeight + TextSize.cy)) div 3;
+              YDestText := 2*YDestBitmap + srcHeight;
+            end else
+              inc(YDestText, (newHeight - srcHeight - TextSize.cy + lMargin) div 2)
+          end else
+            inc(YDestText, ASpacing + lMargin);
         end;
         blGlyphBottom:
         begin
-          YDestBitmap := newHeight - srcHeight;
+          YDestBitmap := newHeight - srcHeight - lMargin;
           YDestText := YDestBitmap - TextSize.cy;
-          if ASpacing = -1 then
-            dec(YDestText, (newHeight - srcHeight - TextSize.cy) div 2)
-          else
+          if ASpacing = -1 then begin
+            if BitBtn.Margin = -1 then begin
+              YDestText := (BitBtn.Height - (srcHeight + TextSize.cy)) div 3;
+              YDestBitmap := 2 * YDestText + TextSize.cy;
+            end else
+              dec(YDestText, (newHeight - srcHeight - TextSize.cy - lMargin) div 2)
+          end else
             dec(YDestText, ASpacing);
         end;
       end;
@@ -414,11 +434,14 @@ begin
           ButtonImageList.himl := ImageList_Create(newWidth, newHeight, ILC_COLORDDB or ILC_MASK, 5, 0)
       else
         ButtonImageList.himl := ImageList_Create(newWidth, newHeight, ILC_COLORDDB or ILC_MASK, 1, 0);
-      ButtonImageList.margin.left := 5;
-      ButtonImageList.margin.right := 5;
-      ButtonImageList.margin.top := 5;
-      ButtonImageList.margin.bottom := 5;
-      ButtonImageList.uAlign := BUTTON_IMAGELIST_ALIGN_CENTER;
+      ButtonImageList.margin.left := 0; //5;
+      ButtonImageList.margin.right := 0; //5;
+      ButtonImageList.margin.top := 0; //5;
+      ButtonImageList.margin.bottom := 0; //5;
+      if (BitBtn.Margin = -1) then
+        ButtonImageList.uAlign := BUTTON_IMAGELIST_ALIGN_CENTER
+      else
+        ButtonImageList.uAlign := ord(BitBtnLayout);
       // if themes are enabled then we need to fill all state bitmaps,
       // else fill only current state bitmap
       if ThemeServices.ThemesEnabled then
@@ -548,20 +571,18 @@ end;
 class procedure TWin32WSBitBtn.GetPreferredSize(const AWinControl: TWinControl;
   var PreferredWidth, PreferredHeight: integer; WithThemeSpace: Boolean);
 var
-  BitmapInfo: BITMAP; // Buffer for bitmap
   BitBtn: TBitBtn absolute AWinControl;
-  Glyph: TBitmap;
-  spacing, srcWidth: integer;
+  spacing, srcWidth, AIndex: integer;
+  AImageRes: TScaledImageListResolution;
+  AEffect: TGraphicsDrawEffect;
 begin
   if MeasureText(AWinControl, AWinControl.Caption, PreferredWidth, PreferredHeight) then
   begin
-    if BitBtn.CanShowGlyph then
+    if BitBtn.CanShowGlyph(True) then
     begin
-      Glyph := BitBtn.Glyph;
-      Windows.GetObject(Glyph.Handle, sizeof(BitmapInfo), @BitmapInfo);
-      srcWidth := BitmapInfo.bmWidth;
-      if BitBtn.NumGlyphs > 1 then
-        srcWidth := srcWidth div BitBtn.NumGlyphs;
+      TBitBtnAceess(BitBtn).FButtonGlyph.GetImageIndexAndEffect(Low(TButtonState), BitBtn.Font.PixelsPerInch, 1,
+        AImageRes, AIndex, AEffect);
+      srcWidth := AImageRes.Width;
       if BitBtn.Spacing = -1 then
         spacing := 8
       else
@@ -569,10 +590,10 @@ begin
       if BitBtn.Layout in [blGlyphLeft, blGlyphRight] then
       begin
         Inc(PreferredWidth, spacing + srcWidth);
-        if BitmapInfo.bmHeight > PreferredHeight then
-          PreferredHeight := BitmapInfo.bmHeight;
+        if AImageRes.Height > PreferredHeight then
+          PreferredHeight := AImageRes.Height;
       end else begin
-        Inc(PreferredHeight, spacing + BitmapInfo.bmHeight);
+        Inc(PreferredHeight, spacing + AImageRes.Height);
         if srcWidth > PreferredWidth then
           PreferredWidth := srcWidth;
       end;

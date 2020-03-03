@@ -1157,12 +1157,18 @@ end;
 procedure TBuildParseTree.RecogniseTypeHelper;
 begin
   PushNode(nClassType);
-  Recognise(ttType);
+  Recognise([ttType,ttRecord]);
   Recognise(ttHelper);
+  if fcTokenList.FirstSolidTokenType = ttOpenBracket then begin
+    Recognise(ttOpenBracket);
+    RecogniseIdentifier(False, idStrict);
+    Recognise(ttCloseBracket);
+  end;
   Recognise(ttFor);
   RecogniseIdentifier(False, idStrict);
   RecogniseClassBody;
   Recognise(ttEnd);
+  RecogniseHintDirectives;
   PopNode;
 end;
 
@@ -1198,7 +1204,7 @@ begin
   Recognise(ttEquals);
 
   //Recognise type helper (for fpc)
-  if (fcTokenList.FirstSolidTokenType = ttType) and
+  if (fcTokenList.FirstSolidTokenType in [ttType,ttRecord]) and
     (fcTokenList.SolidToken(2).TokenType=ttHelper) then
   begin
      RecogniseTypeHelper;
@@ -3262,7 +3268,7 @@ end;
 
 procedure TBuildParseTree.RecogniseCaseStmnt;
 begin
-  // CaseStmt -> CASE Expression OF CaseSelector/';'... [ELSE Statement] [';'] END
+  // CaseStmt -> CASE Expression OF CaseSelector/';'... [ELSE / OTHERWISE Statement] [';'] END
   PushNode(nCaseStatement);
 
   Recognise(ttCase);
@@ -3273,13 +3279,13 @@ begin
 
   Recognise(ttOf);
 
-  while not (fcTokenList.FirstSolidTokenType in [ttElse, ttEnd]) do
+  while not (fcTokenList.FirstSolidTokenType in [ttElse, ttOtherwise, ttEnd]) do
     RecogniseCaseSelector;
 
-  if fcTokenList.FirstSolidTokenType = ttElse then
+  if fcTokenList.FirstSolidTokenType in [ttElse, ttOtherwise] then
   begin
     PushNode(nElseCase);
-    Recognise(ttElse);
+    Recognise(fcTokenList.FirstSolidTokenType);
     RecogniseStatementList([ttEnd]);
     PopNode;
   end;

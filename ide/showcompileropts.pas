@@ -35,37 +35,46 @@ unit ShowCompilerOpts;
 interface
 
 uses
-  Classes, SysUtils,
+  Classes, SysUtils, contnrs,
   // LCL
   Forms, Controls, Buttons, StdCtrls, ComCtrls, ExtCtrls,
   // LazUtils
-  LazFileUtils, LazUTF8,
+  LazFileUtils, LazUTF8, LazStringUtils,
   // CodeTools
   CodeToolsCfgScript,
   // IdeIntf
-  LazIDEIntf, IDEImagesIntf, CompOptsIntf, ProjectIntf, PackageIntf,
+  BaseIDEIntf, LazIDEIntf, IDEImagesIntf, CompOptsIntf, ProjectIntf,
+  PackageIntf, MacroIntf,
   // IDE
-  LazarusIDEStrConsts, IDEProcs, Project, PackageDefs,
+  LazarusIDEStrConsts, Project, PackageDefs,
   CompilerOptions, ModeMatrixOpts, MiscOptions;
 
 type
+  TShowCompToolOpts = class
+    CompOpts: TCompilationToolOptions;
+    Sheet: TTabSheet;
+    Memo: TMemo;
+    MultiLineCheckBox: TCheckBox;
+  end;
 
   { TShowCompilerOptionsDlg }
 
   TShowCompilerOptionsDlg = class(TForm)
     CloseButton: TBitBtn;
-    CmdLineMemo: TMEMO;
+    CmdLineMemo: TMemo;
     CmdLineParamsTabSheet: TTabSheet;
     InheritedParamsTabSheet: TTabSheet;
     InhItemMemo: TMemo;
     InhSplitter: TSplitter;
     InhTreeView: TTreeView;
+    MultilineCheckBox: TCheckBox;
     PageControl1: TPageControl;
     RelativePathsCheckBox: TCheckBox;
     procedure FormClose(Sender: TObject; var {%H-}CloseAction: TCloseAction);
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure InhTreeViewSelectionChanged(Sender: TObject);
+    procedure MultilineCheckBoxChange(Sender: TObject);
     procedure RelativePathsCheckBoxChange(Sender: TObject);
   private
     FCompilerOpts: TBaseCompilerOptions;
@@ -73,10 +82,15 @@ type
     ImageIndexRequired: Integer;
     ImageIndexPackage: Integer;
     InheritedChildDatas: TFPList; // list of PInheritedNodeData
+    FToolOptions: TObjectList; // list of TShowCompToolOpts
+    FUpdatingMultiline: boolean;
     procedure ClearInheritedTree;
     procedure SetCompilerOpts(const AValue: TBaseCompilerOptions);
+    procedure FillMemo(Memo: TMemo; Params: string);
     procedure UpdateMemo;
     procedure UpdateInheritedTree;
+    procedure UpdateExecuteBeforeAfter;
+    procedure UpdateToolMemo(Opts: TShowCompToolOpts);
   public
     property CompilerOpts: TBaseCompilerOptions read FCompilerOpts write SetCompilerOpts;
   end;
@@ -166,8 +180,39 @@ begin
   end;
 end;
 
+procedure TShowCompilerOptionsDlg.MultilineCheckBoxChange(Sender: TObject);
+var
+  CheckBox: TCheckBox;
+  Checked: Boolean;
+  i: Integer;
+  Opts: TShowCompToolOpts;
+begin
+  if FUpdatingMultiline then exit;
+  CheckBox:=Sender as TCheckBox;
+  Checked:=CheckBox.Checked;
+
+  FUpdatingMultiline:=true;
+  try
+    MultilineCheckBox.Checked:=Checked;
+    UpdateMemo;
+
+    for i:=0 to FToolOptions.Count-1 do
+    begin
+      Opts:=TShowCompToolOpts(FToolOptions[i]);
+      if Opts.MultiLineCheckBox<>nil then begin
+        Opts.MultiLineCheckBox.Checked:=Checked;
+        UpdateToolMemo(Opts);
+      end;
+    end;
+  finally
+    FUpdatingMultiline:=false;
+  end;
+end;
+
 procedure TShowCompilerOptionsDlg.FormCreate(Sender: TObject);
 begin
+  FToolOptions:=TObjectList.Create(true);
+
   ImageIndexPackage := IDEImages.LoadImage('item_package');
   ImageIndexRequired := IDEImages.LoadImage('pkg_required');
   ImageIndexInherited := IDEImages.LoadImage('pkg_inherited');
@@ -178,6 +223,8 @@ begin
   CmdLineParamsTabSheet.Caption:=lisCommandLineParameters;
   RelativePathsCheckBox.Caption:=lisShowRelativePaths;
   RelativePathsCheckBox.Checked:=not MiscellaneousOptions.ShowCompOptFullFilenames;
+  MultilineCheckBox.Caption:=lisShowMultipleLines;
+  MultilineCheckBox.Checked:=MiscellaneousOptions.ShowCompOptMultiLine;
 
   InheritedParamsTabSheet.Caption:=lisInheritedParameters;
   InhTreeView.Images := IDEImages.Images_16;
@@ -190,7 +237,10 @@ procedure TShowCompilerOptionsDlg.FormClose(Sender: TObject;
   var CloseAction: TCloseAction);
 begin
   MiscellaneousOptions.ShowCompOptFullFilenames:=not RelativePathsCheckBox.Checked;
+  MiscellaneousOptions.ShowCompOptMultiLine:=MultilineCheckBox.Checked;
   MiscellaneousOptions.Save;
+
+  FreeAndNil(FToolOptions);
 end;
 
 procedure TShowCompilerOptionsDlg.FormDestroy(Sender: TObject);
@@ -205,19 +255,44 @@ begin
   FCompilerOpts:=AValue;
   UpdateMemo;
   UpdateInheritedTree;
+  UpdateExecuteBeforeAfter;
+end;
+
+procedure TShowCompilerOptionsDlg.FillMemo(Memo: TMemo; Params: string);
+var
+  ParamList: TStringList;
+begin
+  if Memo=nil then exit;
+  if MultilineCheckBox.Checked then begin
+    ParamList:=TStringList.Create;
+    try
+      SplitCmdLineParams(Params,ParamList);
+      Memo.Lines.Assign(ParamList);
+    finally
+      ParamList.Free;
+    end;
+    Memo.ScrollBars:=ssAutoBoth;
+  end else begin
+    Memo.ScrollBars:=ssAutoVertical;
+    Memo.Lines.Text:=Params;
+  end;
 end;
 
 procedure TShowCompilerOptionsDlg.UpdateMemo;
 var
   Flags: TCompilerCmdLineOptions;
-  CurOptions: String;
+  CurOptions, CompPath: String;
 begin
   if CompilerOpts=nil then exit;
+
   Flags:=CompilerOpts.DefaultMakeOptionsFlags;
   if not RelativePathsCheckBox.Checked then
     Include(Flags,ccloAbsolutePaths);
   CurOptions := CompilerOpts.MakeOptionsString(Flags);
-  CmdLineMemo.Lines.Text:=CurOptions;
+  CompPath:=CompilerOpts.ParsedOpts.GetParsedValue(pcosCompilerPath);
+  if Pos(' ',CompPath)>0 then
+    CompPath:=QuotedStr(CompPath);
+  FillMemo(CmdLineMemo,CompPath+' '+CurOptions);
 end;
 
 procedure TShowCompilerOptionsDlg.UpdateInheritedTree;
@@ -402,6 +477,102 @@ begin
   finally
     SkippedPkgList.Free;
   end;
+end;
+
+procedure TShowCompilerOptionsDlg.UpdateExecuteBeforeAfter;
+var
+  PgIndex, ToolIndex: integer;
+
+  procedure AddTool(CompOpts: TCompilationToolOptions; aCaption: string);
+  const
+    Space = 6;
+  var
+    ShowOpts: TShowCompToolOpts;
+    Sheet: TTabSheet;
+    Memo: TMemo;
+    CheckBox: TCheckBox;
+  begin
+    if ToolIndex>=FToolOptions.Count then begin
+      ShowOpts:=TShowCompToolOpts.Create;
+      ShowOpts.CompOpts:=CompOpts;
+      FToolOptions.Add(ShowOpts);
+    end else
+      ShowOpts:=TShowCompToolOpts(FToolOptions[ToolIndex]);
+    inc(ToolIndex);
+
+    if CompOpts.CompileReasons=[] then begin
+      // this tool is never called -> skip
+      if ShowOpts.Sheet<>nil then begin
+        ShowOpts.Sheet.Free;
+        ShowOpts.Sheet:=nil;
+      end;
+      exit;
+    end;
+
+    if ShowOpts.Sheet=nil then
+    begin
+      Sheet:=PageControl1.AddTabSheet;
+      ShowOpts.Sheet:=Sheet;
+      Sheet.Name:='TabSheet_Tool'+IntToStr(ToolIndex);
+    end else
+      Sheet:=ShowOpts.Sheet;
+    inc(PgIndex);
+    Sheet.Caption:=aCaption;
+
+    if ShowOpts.Memo=nil then begin
+      Memo:=TMemo.Create(Sheet);
+      ShowOpts.Memo:=Memo;
+      Memo.Name:='Memo_Tool'+IntToStr(ToolIndex);
+      Memo.Parent:=Sheet;
+    end else
+      Memo:=ShowOpts.Memo;
+
+    if ShowOpts.MultiLineCheckBox=nil then begin
+      CheckBox:=TCheckBox.Create(Sheet);
+      ShowOpts.MultiLineCheckBox:=CheckBox;
+      CheckBox.Name:='MulitlineCheckBox_Tool'+IntToStr(ToolIndex);
+      CheckBox.Parent:=Sheet;
+      CheckBox.Checked:=MultilineCheckBox.Checked;
+    end else
+      CheckBox:=ShowOpts.MultiLineCheckBox;
+
+    CheckBox.Left:=Space;
+    CheckBox.AnchorParallel(akBottom,Space,Sheet);
+    CheckBox.Anchors:=[akLeft,akBottom];
+    CheckBox.Caption:=MultilineCheckBox.Caption;
+    CheckBox.Checked:=MultilineCheckBox.Checked;
+    CheckBox.OnChange:=@MultilineCheckBoxChange;
+
+    Memo.WordWrap:=true;
+    Memo.Align:=alTop;
+    Memo.AnchorToNeighbour(akBottom,Space,CheckBox);
+
+    UpdateToolMemo(ShowOpts);
+  end;
+
+var
+  OldPageIndex: integer;
+begin
+  OldPageIndex:=PageControl1.PageIndex;
+  PgIndex:=2;
+  ToolIndex:=0;
+  DisableAutoSizing{$IFDEF DebugDisableAutoSizing}('TShowCompilerOptionsDlg.UpdateExecuteBeforeAfter'){$ENDIF};
+  try
+    AddTool(CompilerOpts.ExecuteBefore,'Execute Before');
+    AddTool(CompilerOpts.ExecuteAfter,'Execute After');
+    PageControl1.PageIndex:=OldPageIndex;
+  finally
+    EnableAutoSizing{$IFDEF DebugDisableAutoSizing}('TShowCompilerOptionsDlg.UpdateExecuteBeforeAfter'){$ENDIF};
+  end;
+end;
+
+procedure TShowCompilerOptionsDlg.UpdateToolMemo(Opts: TShowCompToolOpts);
+var
+  Params: String;
+begin
+  Params:=Opts.CompOpts.Command;
+  IDEMacros.SubstituteMacros(Params);
+  FillMemo(Opts.Memo,Params);
 end;
 
 end.

@@ -41,13 +41,14 @@ interface
 uses
   Classes, SysUtils, Laz_AVL_Tree,
   // LCL
-  Forms, LCLProc,
+  Forms,
   // LazUtils
-  Laz2_XMLCfg, LazFileCache, AvgLvlTree, LazUTF8Classes, LazFileUtils, FileUtil,
+  Laz2_XMLCfg, LazFileCache, LazUTF8Classes, LazFileUtils, FileUtil,
+  LazTracer, LazUtilities, AvgLvlTree,
   // Codetools
   FileProcs, CodeToolManager,
   // IdeIntf
-  MacroIntf, PackageDependencyIntf, PackageLinkIntf, PackageIntf,
+  PackageDependencyIntf, PackageLinkIntf, PackageIntf, MacroIntf,
   // IDE
   IDEProcs, EnvironmentOpts, LazConf, IDECmdLine, PackageDefs;
   
@@ -261,14 +262,14 @@ end;
 destructor TLazPackageLink.Destroy;
 begin
   //debugln('TPackageLink.Destroy ',IDAsString,' ',dbgs(Pointer(Self)));
-  //if Origin=ploGlobal then RaiseException('');
+  //if Origin=ploGlobal then RaiseGDBException('');
   inherited Destroy;
 end;
 
 function TLazPackageLink.GetEffectiveFilename: string;
 begin
   Result:=LPKFilename;
-  if not FilenameIsAbsolute(Result) then
+  if (Result<>'') and not FilenameIsAbsolute(Result) then
     Result:=TrimFilename(EnvironmentOptions.GetParsedLazarusDirectory+PathDelim+Result);
 end;
 
@@ -398,7 +399,7 @@ procedure TLazPackageLinks.UpdateGlobalLinks;
     or (not (Filename[StartPos] in ['a'..'z','A'..'Z'])) then exit;
     inc(StartPos);
     while (StartPos<=length(Filename))
-    and (Filename[StartPos] in ['a'..'z','A'..'Z','_','0'..'9']) do
+    and (Filename[StartPos] in ['.','a'..'z','A'..'Z','_','0'..'9']) do
       inc(StartPos);
     PkgName:=lowercase(copy(Filename,1,StartPos-1));
     // parse -
@@ -812,7 +813,7 @@ end;
 
 procedure TLazPackageLinks.EndUpdate;
 begin
-  if fUpdateLock<=0 then RaiseException('TPackageLinks.EndUpdate');
+  if fUpdateLock<=0 then RaiseGDBException('TPackageLinks.EndUpdate');
   dec(fUpdateLock);
   if (plsGlobalLinksNeedUpdate in FStates) then UpdateGlobalLinks;
   if (plsUserLinksNeedUpdate in FStates) then UpdateUserLinks;

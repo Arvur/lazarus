@@ -245,6 +245,31 @@ int QTextBlock_fragmentIndex(QTextBlockH handle)
 	return (int) ((QTextBlock *)handle)->fragmentIndex();
 }
 
+int QTextBlock_textFormatsCount(QTextBlockH handle)
+{
+  return ((QTextBlock *)handle)->textFormats().size();
+}
+
+int QTextBlock_textFormatsRanges(QTextBlockH handle, PTextRange ranges, int maxCount)
+{
+  QVector<QTextLayout::FormatRange> t_retval;
+  int res = 0;
+  int cnt = maxCount;
+  int sz;
+
+  t_retval = ((QTextBlock *)handle)->textFormats();
+  sz = t_retval.size();
+  if (sz > cnt) cnt = sz;
+
+  for (int i=0; i<sz; i++)
+  {
+    ranges[i].start = t_retval.at(i).start;
+    ranges[i].length = t_retval.at(i).length;
+  }
+  return res;
+}
+
+
 QTextFragmentH QTextFragment_Create()
 {
 	return (QTextFragmentH) new QTextFragment();

@@ -3,45 +3,46 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Project-Id-Version: \n"
 "POT-Creation-Date: 2015-04-14 07:54+0100\n"
-"PO-Revision-Date: 2017-09-22 10:10+0200\n"
+"PO-Revision-Date: 2019-02-07 09:11+0100\n"
 "Last-Translator: Vasseur Gilles <gillesvasseur58@gmail.com>\n"
 "Language-Team: http://lazarus.developpez.com/\n"
 "MIME-Version: 1.0\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Language: fr\n"
-"X-Generator: Poedit 2.0.4\n"
+"X-Generator: Poedit 2.2.1\n"
 
 #: anchordockstr.adrsafreesideofasplittermustnotbeanchorednodetypeancho
+#, object-pascal-format
 msgid "A free side of a splitter must not be anchored: Node=\"%s\" Type=%s Anchors[%s]=\"%s\""
 msgstr "Un côté libre du séparateur ne doit pas être ancré : Nœud = \"%s\" Type = %s Ancres[%s] = \"%s\""
 
-#: anchordockstr.adrsallfiles
-msgid "All files"
-msgstr "Tous les fichiers"
+#: anchordockstr.adrsallowdocksitestobeminimized
+msgid "Allow dock sites to be minimized"
+msgstr "Autoriser les sites d'ancrage à être réduits"
 
 #: anchordockstr.adrsamountofpixelthemousehastodragbeforedragstarts
 msgid "Amount of pixel the mouse has to drag before drag starts"
 msgstr "Nombre de pixels que la souris doit déplacer avant que le déplacement ne commence"
 
-#: anchordockstr.adrsanchordockinglayout
-msgid "Anchor Docking Layout"
-msgstr "Disposition de l'amarrage par ancre"
-
 #: anchordockstr.adrsanchorisnotsplitternodeanchors
+#, object-pascal-format
 msgid "Anchor is not splitter: Node=\"%s\" Anchors[%s]=\"%s\""
 msgstr "L'ancre n'est pas un séparateur : Nœud  = \"%s\" Ancres[%s] = \"%s\""
 
 #: anchordockstr.adrsanchornotfoundnodeanchors
+#, object-pascal-format
 msgid "Anchor not found: Node=\"%s\" Anchors[%s]=\"%s\""
 msgstr "Ancre introuvable : Nœud = \"%s\" Ancres[%s] = \"%s\""
 
 #: anchordockstr.adrsanchortowrongsideofsplitternodeanchors
+#, object-pascal-format
 msgid "Anchor to wrong side of splitter: Node=\"%s\" Anchors[%s]=\"%s\""
 msgstr "Ancre du mauvais côté du séparateur : Nœud = \"%s\" Ancres[%s] = \"%s\""
 
 #: anchordockstr.adrsapagemustnotbeanchorednodeparentparenttypeanchors
+#, object-pascal-format
 msgid "A page must not be anchored: Node=\"%s\" Parent=%s ParentType=%s Anchors[%s]=\"%s\""
-msgstr "Une page doit être ancrée : Nœud = \"%s\" Parent = %s Type du parent = %s  Ancres[%s] = \"%s\""
+msgstr "Une page ne doit pas être ancrée : Nœud = \"%s\" Parent = %s Type du parent = %s Ancres[%s] = \"%s\""
 
 #: anchordockstr.adrsautomatically
 msgid "Automatically"
@@ -60,6 +61,7 @@ msgid "control is already a docksite"
 msgstr "le contrôle est déjà une zone d'amarrage"
 
 #: anchordockstr.adrscustomdocksitecanhaveonlyonesite
+#, object-pascal-format
 msgid "Custom dock site \"%s\" can have only one site."
 msgstr "La zone d'amarrage \"%s\" ne peut contenir qu'une seule zone."
 
@@ -72,6 +74,7 @@ msgid "Docking options"
 msgstr "Options d'amarrage"
 
 #: anchordockstr.adrsdraganddockc
+#, object-pascal-format
 msgid "Use the mouse to drag and dock window \"%s\""
 msgstr "Utiliser la souris pour déplacer et amarrer la fenêtre \"%s\""
 
@@ -96,20 +99,9 @@ msgid "Enlarge"
 msgstr "Agrandir"
 
 #: anchordockstr.adrsenlargeside
+#, object-pascal-format
 msgid "Enlarge %s side"
 msgstr "Agrandir le côté %s"
-
-#: anchordockstr.adrserror
-msgid "Error"
-msgstr "Erreur"
-
-#: anchordockstr.adrserrorloadingwindowlayoutfromfile
-msgid "Error loading window layout from file \"%s\"%s%s"
-msgstr "Erreur à la lecture de la disposition dans le fichier \"%s\"%s%s"
-
-#: anchordockstr.adrserrorwritingwindowlayouttofile
-msgid "Error writing window layout to file \"%s\"%s%s"
-msgstr "Erreur à l'écriture de la disposition dans le fichier \"%s\"%s%s"
 
 #: anchordockstr.adrsfilledheaders
 msgid "Fill headers"
@@ -156,20 +148,12 @@ msgid "Highlight focused"
 msgstr "Mettre en évidence l'élément ciblé"
 
 #: anchordockstr.adrshighlightfocusedhint
-msgid "Highlight focused docked controls"
-msgstr "Mettre en évidence les contrôles ancrés et ciblés"
+msgid "Highlight header of focused docked control"
+msgstr "Mettre en évidence l'en-tête du contrôle ancré ciblé"
 
 #: anchordockstr.adrsleft
 msgid "left"
 msgstr "gauche"
-
-#: anchordockstr.adrsloadwindowlayoutfromfile
-msgid "Load window layout from file ..."
-msgstr "Charger la disposition depuis le fichier..."
-
-#: anchordockstr.adrsloadwindowlayoutfromfilexml
-msgid "Load window layout from file (*.xml)"
-msgstr "Charger la disposition depuis le fichier (\"*.xml\")"
 
 #: anchordockstr.adrslocked
 msgid "Locked"
@@ -178,6 +162,10 @@ msgstr "Verrouillé"
 #: anchordockstr.adrsmerge
 msgid "Merge"
 msgstr "Fusionner"
+
+#: anchordockstr.adrsminimize
+msgid "Minimize"
+msgstr "Réduire"
 
 #: anchordockstr.adrsmissingcontrolname
 msgid "missing control name"
@@ -216,40 +204,28 @@ msgid "No captions for floating sites"
 msgstr "Pas d'étiquettes pour les zones d'amarrage"
 
 #: anchordockstr.adrsnochildrenallowedfornodetype
+#, object-pascal-format
 msgid "No children allowed for Node=\"%s\" Type=%s"
 msgstr "Pas d'enfants autorisés pour le Nœud = \"%s\" Type = %s"
 
 #: anchordockstr.adrsnotsupportedhasparent
+#, object-pascal-format
 msgid "Not supported: %s has parent %s"
-msgstr "Non supporté : %s a comme parent %s"
+msgstr "Non pris en charge : %s a comme parent %s"
 
 #: anchordockstr.adrsquit
+#, object-pascal-format
 msgid "Quit %s"
 msgstr "Quitter %s"
 
 #: anchordockstr.adrsrequestedbutcreated
+#, object-pascal-format
 msgid "%s requested, but %s created"
 msgstr "%s demandé, mais %s créé"
-
-#: anchordockstr.adrsrestoredefaultlayout
-msgid "Restore default layout"
-msgstr "Revenir à la disposition par défaut"
 
 #: anchordockstr.adrsright
 msgid "right"
 msgstr "droite"
-
-#: anchordockstr.adrssavewindowlayoutasdefault
-msgid "Save window layout as default"
-msgstr "Enregistrer la disposition comme celle par défaut"
-
-#: anchordockstr.adrssavewindowlayouttofile
-msgid "Save window layout to file ..."
-msgstr "Enregistrer la disposition dans le fichier..."
-
-#: anchordockstr.adrssavewindowlayouttofilexml
-msgid "Save window layout to file (*.xml)"
-msgstr "Enregistrer la disposition dans le fichier (\"*.xml\")"
 
 #: anchordockstr.adrsscaleonresize
 msgid "Scale on resize"
@@ -284,6 +260,7 @@ msgid "Tab position"
 msgstr "Position d'onglet"
 
 #: anchordockstr.adrsthereisanotherdockmasterinstalledonlyonedockingpac
+#, object-pascal-format
 msgid "There is another dock master installed. Only one docking package can be installed at a time. Please uninstall the other dock master %s and restart the IDE"
 msgstr "Il y a un autre gestionnaire d'amarrage installé. Seul un paquet d'amarrage peut être installé à un moment donné. Veuillez désinstaller le gestionnaire d'amarrage %s et relancer l'EDI"
 
@@ -292,6 +269,7 @@ msgid "top"
 msgstr "sommet"
 
 #: anchordockstr.adrstouseanchordockingyoumustfirstuninstall
+#, object-pascal-format
 msgid "To use anchordocking you must first uninstall %s"
 msgstr "Pour utiliser l'amarrage par ancres vous devez tout d'abord désinstaller %s"
 

@@ -92,6 +92,20 @@ begin
   ApplyChanges;
 end;
 
+procedure TCustomTrackBar.ShouldAutoAdjust(var AWidth, AHeight: Boolean);
+begin
+  if Orientation = trHorizontal then
+    begin
+      AWidth := True;
+      AHeight := not AutoSize;
+    end
+  else
+    begin
+      AWidth := not AutoSize;
+      AHeight := True;
+    end
+end;
+
 {------------------------------------------------------------------------------
   Method: TCustomTrackBar.SetTick
   Params: Value : new tick
@@ -125,6 +139,7 @@ begin
     begin
       OldWidth:=Width;
       OldHeight:=Height;
+      Constraints.UpdateInterfaceConstraints;
       SetBounds(Left,Top,OldHeight,OldWidth);
       if HandleAllocated then
         TWSTrackBarClass(WidgetSetClass).SetOrientation(Self, FOrientation);
@@ -237,6 +252,10 @@ begin
   begin
     FTickStyle := Value;
     ApplyChanges;
+    Constraints.UpdateInterfaceConstraints;
+    DoAutoSize;
+    if HandleAllocated then
+      TWSTrackBarClass(WidgetSetClass).SetTickStyle(Self, FTickStyle);
   end;
 end;
 

@@ -39,13 +39,13 @@ uses
   {$EndIf}
   gdk2pixbuf, gtk2, gdk2, glib2, Pango,
   // LazUtils
-  LazFileUtils, LazUTF8, DynHashArray, Maps, IntegerList,
+  LazFileUtils, LazUTF8, DynHashArray, Maps, IntegerList, LazLoggerBase, LazStringUtils,
   // LCL
   Dialogs, Controls, Forms, LCLStrConsts,
   LMessages, LCLProc, LCLIntf, LCLType, GraphType, GraphMath,
-  Graphics, Menus, Themes, Buttons, StdCtrls, CheckLst, ComCtrls, Spin, ExtCtrls,
+  Graphics, Menus, Themes, Buttons, StdCtrls, CheckLst, ComCtrls, ExtCtrls,
   LCLPlatformDef, InterfaceBase,
-  WSLCLClasses,
+  WSLCLClasses, WSControls,
   Gtk2WinApiWindow, Gtk2Globals, Gtk2Proc, Gtk2Def, Gtk2FontCache, Gtk2Extra,
   Gtk2MsgQueue;
 
@@ -729,7 +729,7 @@ begin
   //Note: Assign/Clear is called inside CreateHandle before Handle is set
   if FOwner.HandleAllocated then
   begin
-    WidgetInfo := GetWidgetInfo({%H-}Pointer(FOwner.Handle), False);
+    WidgetInfo := GetWidgetInfo({%H-}Pointer(FOwner.Handle));
     Inc(WidgetInfo^.ChangeLock);
 
     gtk_list_store_clear(FGtkListStore);

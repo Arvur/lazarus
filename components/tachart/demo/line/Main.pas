@@ -19,12 +19,16 @@ type
     catOscillatorLinearAxisTransform1: TLinearAxisTransform;
     cb3D: TCheckBox;
     cbLineType: TComboBox;
+    cbColorEach: TComboBox;
     cbRotated: TCheckBox;
     cbSorted: TCheckBox;
     catOscillator: TChartAxisTransformations;
     Chart_CustomDrawPointer: TChart;
     ChartGetPointerStyleEvent: TChart;
+    Chart_ColorEach: TChart;
+    lsColorEach: TLineSeries;
     lsGetPointerStyle: TLineSeries;
+    pnlColorEach: TPanel;
     PointerImage: TImage;
     lsCustomDrawPointer: TLineSeries;
     cbBitmapPointer: TCheckBox;
@@ -50,6 +54,7 @@ type
     RandomChartSource1: TRandomChartSource;
     sePointerSize: TSpinEdit;
     edEveryNth: TSpinEdit;
+    tsColorEach: TTabSheet;
     tsCustomDrawPointer: TTabSheet;
     tsGetPointerStyle: TTabSheet;
     tsOwnerDrawnPointer: TTabSheet;
@@ -61,6 +66,7 @@ type
     procedure btnRefreshClick(Sender: TObject);
     procedure cb3DChange(Sender: TObject);
     procedure cbBitmapPointerChange(Sender: TObject);
+    procedure cbColorEachChange(Sender: TObject);
     procedure cbLineTypeChange(Sender: TObject);
     procedure cbRotatedChange(Sender: TObject);
     procedure cbSortedChange(Sender: TObject);
@@ -101,12 +107,17 @@ begin
   for i := 1 to 10 do begin
     s := TLineSeries.Create(chFast);
     s.SeriesColor := clRed;
+    if cb3D.Checked then
+      s.Depth := 15 - s.Depth;
+    s.AxisIndexY := Ord(cbRotated.Checked);
+    s.AxisIndexX := 1 - s.AxisIndexY;
+    s.ListSource.Sorted := cbSorted.Checked;
     for j := 1 to POINTS_PER_SERIE do
       s.AddXY(j, Random * 5 + chFast.SeriesCount * 10);
     chFast.AddSeries(s);
   end;
   lblPointsCount.Caption :=
-    Format('Points: %.2e', [chFast.SeriesCount * POINTS_PER_SERIE * 1.0]);
+    Format('Points: %.0n', [chFast.SeriesCount * POINTS_PER_SERIE * 1.0]);
 end;
 
 procedure TForm1.btnRefreshClick(Sender: TObject);
@@ -135,6 +146,11 @@ begin
   Chart_CustomDrawPointer.Invalidate;
 end;
 
+procedure TForm1.cbColorEachChange(Sender: TObject);
+begin
+  lsColorEach.ColorEach := TColorEachMode(cbColorEach.ItemIndex);
+end;
+
 procedure TForm1.cbLineTypeChange(Sender: TObject);
 var
   ls: TLineSeries;
@@ -151,6 +167,8 @@ begin
     ls.AxisIndexY := Ord(cbRotated.Checked);
     ls.AxisIndexX := 1 - ls.AxisIndexY;
   end;
+  chFastConstantLine1.LineStyle := TLineStyle(cbRotated.Checked);
+  chFastConstantLine1.AxisIndex := Ord(cbRotated.Checked);
 end;
 
 procedure TForm1.cbSortedChange(Sender: TObject);
@@ -172,7 +190,13 @@ var
   st: TSeriesPointerStyle;
   ls: TLineSeries;
   s: ShortString;
+  i: Integer;
+  x, y: Double;
+  clr: TColor;
 begin
+  lblPointsCount.Caption := '';
+
+  // Populate the series for the PointerStyle demo
   for st in TSeriesPointerStyle do begin
     ls := TLineSeries.Create(Self);
     ls.LinePen.Color := clGreen;
@@ -188,6 +212,15 @@ begin
     ls.Marks.Distance := 4;
     chPointers.AddSeries(ls);
   end;
+
+  // Populate series for the "ColorEach" demo
+  for i:=0 to 20 do begin
+    x := i/2;
+    y := sin(x);
+    clr := InterpolateRGB(clRed, clYellow, (y+1)/2);
+    lsColorEach.AddXY(x, y, '', clr);
+  end;
+  cbColorEach.ItemIndex := ord(lsColorEach.ColorEach);
 end;
 
 procedure TForm1.lsGetPointerStyleGetPointerStyle(ASender: TChartSeries;

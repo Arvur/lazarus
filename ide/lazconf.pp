@@ -47,10 +47,8 @@ interface
 
 uses
   SysUtils, Classes,
-  // LCL
-  LCLProc,
   // LazUtils
-  FileUtil, LazFileUtils, LazUTF8, LazUTF8Classes,
+  FileUtil, LazFileUtils, LazUTF8, LazUTF8Classes, LazLoggerBase,
   // Codetools
   DefineTemplates;
 
@@ -120,10 +118,6 @@ procedure AddFilenameToList(List: TStrings; const Filename: string;
   SkipEmpty: boolean = true);
 
 const
-  EmptyLine = LineEnding + LineEnding;
-  EndOfLine: shortstring = LineEnding;
-  
-const
   ExitCodeRestartLazarus = 99;
 
 implementation
@@ -187,7 +181,7 @@ begin
   else
     Result:=SearchFileInPath(Executable,'',
                              GetEnvironmentVariableUTF8('PATH'),PathSeparator,
-                             [sffDontSearchInBasePath]);
+                             sffFindProgramInPath);
   Result:=TrimFilename(Result);
 end;
 
@@ -331,6 +325,10 @@ begin
   if (CompareText(copy(TargetOS,1,3), 'win') = 0)
   or (CompareText(copy(TargetOS,1,3), 'dos') = 0) then
     Result:='.exe'
+  else if SameText(TargetOS, 'browser') or SameText(TargetOS,'nodejs') then
+    Result:='.js'
+  else if SameText(TargetOS, 'embedded') then
+      Result:='.elf'
   else
     Result:='';
 end;
@@ -360,6 +358,7 @@ begin
   or (CompareText(TargetOS, 'freebsd') = 0)
   or (CompareText(TargetOS, 'openbsd') = 0)
   or (CompareText(TargetOS, 'netbsd') = 0)
+  or (CompareText(TargetOS, 'dragonfly') = 0)
   or (CompareText(TargetOS, 'haiku') = 0) then
     Result:='.so'
   else
@@ -373,6 +372,8 @@ begin
   if TargetOS='' then
     TargetOS:=GetCompiledTargetOS;
   Result:='';
+  if SameText(TargetOS, 'browser') or SameText(TargetOS,'nodejs') then
+    exit('.js');
   SrcOS:=GetDefaultSrcOSForTargetOS(TargetOS);
   if CompareText(SrcOS, 'unix') = 0 then
     Result:='lib';
@@ -399,6 +400,7 @@ begin
   or (CompareText(TargetOS,'freebsd')=0)
   or (CompareText(TargetOS,'netbsd')=0)
   or (CompareText(TargetOS,'openbsd')=0)
+  or (CompareText(TargetOS,'dragonfly')=0)
   then
     Result:=ExtractFilePath(Result)+lowercase(ExtractFileName(Result));
 end;

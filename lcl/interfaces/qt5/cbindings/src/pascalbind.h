@@ -93,6 +93,13 @@ typedef struct {
 } TQColor;
 typedef TQColor *PQColor;
 
+
+typedef struct {
+  int start;
+  int length;
+} TTextRange;
+typedef TTextRange *PTextRange;
+
 #if defined DARWIN
 typedef struct CGImage *CGImageRef;
 #endif

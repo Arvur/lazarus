@@ -28,10 +28,16 @@ unit InspectDlg;
 interface
 
 uses
-  Classes, SysUtils, Forms, Controls, Graphics, IDEWindowIntf, DebuggerStrConst, ComCtrls,
-  ObjectInspector, PropEdits, IDEImagesIntf, Debugger, DebuggerDlg, DbgIntfBaseTypes,
-  DbgIntfDebuggerBase, BaseDebugManager, LazarusIDEStrConsts, LCLType, Grids, StdCtrls, Menus,
-  LCLProc, InputHistory, IDEProcs;
+  Classes, SysUtils,
+  // LCL
+  LCLProc, LCLType, Grids, StdCtrls, Menus, Forms, Controls, Graphics, ComCtrls,
+  // IdeIntf
+  IDEWindowIntf, IDEImagesIntf, ObjectInspector, PropEdits,
+  // DebuggerIntf
+  DbgIntfDebuggerBase, DbgIntfBaseTypes,
+  // IDE
+  LazarusIDEStrConsts, BaseDebugManager, InputHistory, IDEProcs,
+  Debugger, DebuggerDlg, DebuggerStrConst, EnvironmentOpts;
 
 type
 
@@ -64,6 +70,7 @@ type
     procedure btnUseInstanceClick(Sender: TObject);
     procedure EdInspectEditingDone(Sender: TObject);
     procedure EdInspectKeyDown(Sender: TObject; var Key: Word; {%H-}Shift: TShiftState);
+    procedure FormActivate(Sender: TObject);
     procedure FormClose(Sender: TObject; var {%H-}CloseAction: TCloseAction);
     procedure FormCreate(Sender: TObject);
     procedure FormKeyDown(Sender: TObject; var Key: Word; {%H-}Shift: TShiftState);
@@ -83,8 +90,14 @@ type
     FGridData: TStringGrid;
     FGridMethods: TStringGrid;
     FUpdateLock, FUpdateNeeded: Boolean;
+    FTestUpdateLock: Boolean;
+    FRowClicked: Integer;
     FHistory: TStringList;
     FHistoryIndex: Integer;
+    procedure EvaluateCallback(Sender: TObject; ASuccess: Boolean;
+      ResultText: String; ResultDBGType: TDBGType);
+    procedure EvaluateTestCallback(Sender: TObject; ASuccess: Boolean;
+      {%H-}ResultText: String; ResultDBGType: TDBGType);
     procedure Localize;
     function  ShortenedExpression: String;
     procedure ContextChanged(Sender: TObject);
@@ -188,17 +201,33 @@ begin
   if Button = mbExtra2 then btnForwardClick(nil);
 end;
 
+procedure TIDEInspectDlg.EvaluateTestCallback(Sender: TObject;
+  ASuccess: Boolean; ResultText: String; ResultDBGType: TDBGType);
+begin
+  FTestUpdateLock := False;
+  if ASuccess and (ResultDBGType <> nil) then begin
+    if pos('Cannot access memory at address', ResultDBGType.Value.AsString) = 1 then begin
+      FreeAndNil(ResultDBGType);
+      Execute(FGridData.Cells[2, FRowClicked] + '(' + FExpression + ')[0]');
+      exit;
+    end;
+    FreeAndNil(ResultDBGType);
+  end;
+  Execute('(' + FExpression + ')^');
+end;
+
 procedure TIDEInspectDlg.DataGridDoubleClick(Sender: TObject);
 var
   i: Integer;
   s: String;
-  TestHumanReadable: String;
-  TestDBGInfo: TDBGType;
   TestOpts: TDBGEvaluateFlags;
 begin
+  if FTestUpdateLock then
+    exit;
+
   if (FDBGInfo = nil) or (FExpression = '') then exit;
 
-  if (FDBGInfo.Kind in [skClass, skRecord]) then begin
+  if (FDBGInfo.Kind in [skClass, skRecord, skObject]) then begin
     i := FGridData.Row;
     if (i < 1) or (i >= FGridData.RowCount) then exit;
     s := FGridData.Cells[1, i];
@@ -211,29 +240,23 @@ begin
   end;
 
   if (FDBGInfo.Kind in [skPointer]) then begin
-    i := FGridData.Row;
-    if (i < 1) or (i >= FGridData.RowCount) then exit;
-    s := FGridData.Cells[1, i];
+    FTestUpdateLock := true;
+    try
 
-    //TestOpts := [defFullTypeInfo];
-    TestOpts := [];
-    if btnUseInstance.Down then
-      include(TestOpts, defClassAutoCast);
-    TestDBGInfo := nil;
-    TestHumanReadable:='';
-    if DebugBoss.Evaluate('(' + FExpression + ')^', TestHumanReadable, TestDBGInfo, TestOpts) and
-       assigned(TestDBGInfo)
-    then
-    begin ///TODO: result needs an error flag
-      if pos('Cannot access memory at address', TestDBGInfo.Value.AsString) = 1 then begin
-        FreeAndNil(TestDBGInfo);
-        Execute(FGridData.Cells[2, i] + '(' + FExpression + ')[0]');
-        exit;
+      FRowClicked := FGridData.Row;
+      if (FRowClicked < 1) or (FRowClicked >= FGridData.RowCount) then exit;
+      s := FGridData.Cells[1, FRowClicked];
+
+      //TestOpts := [defFullTypeInfo];
+      TestOpts := [];
+      if btnUseInstance.Down then
+        include(TestOpts, defClassAutoCast);
+
+      if not DebugBoss.Evaluate('(' + FExpression + ')^', @EvaluateTestCallback, TestOpts) then
+        EvaluateTestCallback(nil, False, '', nil);
+      except
+        FTestUpdateLock := False;
       end;
-    end;
-    FreeAndNil(TestDBGInfo);
-
-    Execute('(' + FExpression + ')^');
     exit;
   end;
 
@@ -276,7 +299,7 @@ end;
 
 procedure TIDEInspectDlg.FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
-  if Key = VK_ESCAPE then
+  if (Key = VK_ESCAPE) and not Docked then
     Close;
 end;
 
@@ -625,10 +648,10 @@ begin
           FGridData.Cells[0,k]:=fld.ClassName;
           FGridData.Cells[4,k]:=FieldLocationNames[fld.Location];
         end;
-      skProcedure:
+      skProcedure,skProcedureRef:
         begin
         end;
-      skFunction:
+      skFunction,skFunctionRef:
         begin
         end;
        skPointer:
@@ -653,7 +676,7 @@ begin
   k:=0;
   for j := 0 to FDBGInfo.Fields.Count-1 do begin
     case FDBGInfo.Fields[j].DBGType.Kind of
-      skProcedure,skFunction: inc(k);
+      skProcedure,skFunction,skProcedureRef, skFunctionRef: inc(k);
     end;
   end;
   k:=k+1;
@@ -662,7 +685,7 @@ begin
   k:=0;
   for j := 0 to FDBGInfo.Fields.Count-1 do begin
     case FDBGInfo.Fields[j].DBGType.Kind of
-      skProcedure:
+      skProcedure, skProcedureRef:
         begin
           inc(k);
           FGridMethods.Cells[0,k]:=FDBGInfo.Fields[j].Name;
@@ -674,7 +697,7 @@ begin
           FGridMethods.Cells[2,k]:='';
           FGridMethods.Cells[3,k]:='???';
         end;
-      skFunction:
+      skFunction, skFunctionRef:
         begin
           inc(k);
           FGridMethods.Cells[0,k]:=FDBGInfo.Fields[j].Name;
@@ -811,6 +834,11 @@ begin
   InternalExecute(AExpression);
 end;
 
+procedure TIDEInspectDlg.FormActivate(Sender: TObject);
+begin
+  EdInspect.DropDownCount := EnvironmentOptions.DropDownCount;
+end;
+
 procedure TIDEInspectDlg.GotoHistory(AIndex: Integer);
 begin
   FHistoryIndex := AIndex;
@@ -831,12 +859,60 @@ begin
   UpdateData;
 end;
 
+procedure TIDEInspectDlg.EvaluateCallback(Sender: TObject; ASuccess: Boolean;
+  ResultText: String; ResultDBGType: TDBGType);
+begin
+  FUpdateLock := False;
+
+  FHumanReadable := ResultText;
+  FDBGInfo := ResultDBGType;
+
+  if not ASuccess or not assigned(FDBGInfo) then
+  begin
+    FreeAndNil(FDBGInfo);
+    Clear;
+    StatusBar1.SimpleText:=Format(lisInspectUnavailableError, [ShortenedExpression, FHumanReadable]);
+    Exit;
+  end;
+  case FDBGInfo.Kind of
+    skClass, skObject, skInterface: InspectClass();
+    skRecord: InspectRecord();
+    skVariant: InspectVariant();
+    skEnum: InspectEnum;
+    skSet: InspectSet;
+    skProcedure, skProcedureRef: InspectSimple;
+    skFunction, skFunctionRef: InspectSimple;
+    skSimple,
+    skInteger,
+    skCardinal, skBoolean, skChar, skFloat: InspectSimple();
+    skArray: InspectSimple();
+    skPointer: InspectPointer();
+  //  skDecomposable: ;
+    else begin
+        Clear;
+        StatusBar1.SimpleText:=Format(lisInspectUnavailableError, [ShortenedExpression, FHumanReadable]);
+      end;
+  end;
+end;
+
 procedure TIDEInspectDlg.UpdateData;
 var
   Opts: TDBGEvaluateFlags;
 begin
+  if DebugBoss.State in [dsRun, dsStop, dsIdle] then begin
+    // No request can be running
+    FUpdateLock := False;
+    FTestUpdateLock := False;
+  end;
+
   if FUpdateLock then begin
     FUpdateNeeded := True;
+    exit;
+  end;
+
+  if FExpression = '' then begin
+    Clear;
+    StatusBar1.SimpleText := '';
     exit;
   end;
 
@@ -844,12 +920,6 @@ begin
   FUpdateNeeded := False;
   try
     FreeAndNil(FDBGInfo);
-    if FExpression = ''
-    then begin
-      Clear;
-      StatusBar1.SimpleText := '';
-      exit;
-    end;
 
     InputHistories.HistoryLists.Add(ClassName, FExpression,rltCaseSensitive);
     if EdInspect.Items.IndexOf(FExpression) = -1
@@ -858,30 +928,11 @@ begin
     Opts := [defFullTypeInfo];
     if btnUseInstance.Down then
       include(Opts, defClassAutoCast);
-    if not DebugBoss.Evaluate(FExpression, FHumanReadable, FDBGInfo, Opts)
-    or not assigned(FDBGInfo) then
-    begin
-      FreeAndNil(FDBGInfo);
-      Clear;
-      StatusBar1.SimpleText:=Format(lisInspectUnavailable, [ShortenedExpression]);
-      Exit;
-    end;
-    case FDBGInfo.Kind of
-      skClass: InspectClass();
-      skRecord: InspectRecord();
-      skVariant: InspectVariant();
-      skEnum: InspectEnum;
-      skSet: InspectSet;
-      skProcedure: InspectSimple;
-      skFunction: InspectSimple;
-      skSimple,
-      skInteger,
-      skCardinal, skBoolean, skChar, skFloat: InspectSimple();
-      skArray: InspectSimple();
-      skPointer: InspectPointer();
-    //  skDecomposable: ;
-    end;
-  finally
+
+    if not DebugBoss.Evaluate(FExpression, @EvaluateCallback, Opts) then
+      EvaluateCallback(nil, False, '', nil);
+
+  except
     FUpdateLock := False;
   end;
 

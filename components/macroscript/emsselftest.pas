@@ -4,14 +4,16 @@ unit EMSSelfTest;
 
 interface
 
+{$IFDEF PasMacroNativeCalls}
 {$IFDEF darwin}
   {$DEFINE NeedTPointFix }
 {$ENDIF}
+{$ENDIF}
 
 uses
-  Classes, SysUtils, SynEdit, SynEditTypes, SynEditKeyCmds, LazLoggerBase,
+  Classes, SysUtils, SynEdit, LazLoggerBase,
   IDECommands, EMScriptClasses, EMScriptMacro, Clipbrd, Dialogs, Controls,
-  uPSCompiler, uPSRuntime, uPSUtils, uPSDebugger, uPSR_std, uPSC_std;
+  uPSCompiler, uPSRuntime, uPSUtils;
 
 type
 
@@ -56,7 +58,7 @@ type TPoint2 = record x,y,a,b,c: Longint; end;
 {%region RegisterSelfTests}
 
 var
-  TestResultA: integer;
+  {%H-}TestResultA: integer;
   TestResultInt1, TestResultInt2: integer;
   TestInputInt1, TestInputInt2: integer;
   TestResultBool1, TestResultBool2: boolean;
@@ -208,7 +210,7 @@ const
   Proctest_getstr2:   function: String = @test_getstr2;
   Proctest_varstr1:   procedure (var AValue: String)  = @test_varstr1;
 
-{$IFDEF PasMacroNoNativeCalls}
+{$IFnDEF PasMacroNativeCalls}
 const
   Id_test_ord_mb    = 901;
   Id_test_ord_mt    = 902;
@@ -250,11 +252,11 @@ begin
       end;
     Id_test_int1: begin // test_int1(AValue: Integer);
         if Stack.Count < 1 then raise TEMScriptBadParamException.Create('Invalid param count for "test_int1"');
-        test_int1(Stack.GetUInt(-1));
+        test_int1(Stack.GetInt(-1));
       end;
     Id_test_int2: begin // test_int2(AValue: Integer);
         if Stack.Count < 1 then raise TEMScriptBadParamException.Create('Invalid param count for "test_int2"');
-        test_int2(Stack.GetUInt(-1));
+        test_int2(Stack.GetInt(-1));
       end;
     Id_test_getint1: begin
         if Stack.Count < 1 then raise TEMScriptBadParamException.Create('Invalid param count for "test_getint1"');
@@ -355,7 +357,7 @@ end;
 procedure ExecRegisterSelfTests(AExec: TEMSTPSExec);
 begin
   // for tests
-  {$IFnDEF PasMacroNoNativeCalls}
+  {$IFDEF PasMacroNativeCalls}
   AExec.RegisterDelphiFunction(Functest_ord_mb,    'test_ord_mb',   cdRegister);
   AExec.RegisterDelphiFunction(Functest_ord_mt,    'test_ord_mt',   cdRegister);
   AExec.RegisterDelphiFunction(Proctest_int1,      'test_int1',     cdRegister);
@@ -443,6 +445,7 @@ begin
   Exec := TEMSTPSTestExec.Create;
 end;
 
+type THackTEMSEditorMacro = class(TEMSEditorMacro) end;
 function DoSelfTest: Boolean;
 var
   m: TEMSEditorMacro;
@@ -457,17 +460,17 @@ var
   procedure AssertEQ(Msg: String; Exp, Got: String); overload;
   begin
     if not(Got = Exp) then
-      raise TEMScriptSelfTestException.Create(Format('%s [Exp: "%s" / Got: "%s"]', [Msg, Exp, Got]));
+      raise TEMScriptSelfTestException.Create(Format('%s [Exp: "%s" / Got: "%s" / Info: %s / SynTxt: %s]', [Msg, Exp, Got, dbgs(m.IsInvalid) + ' ' + THackTEMSEditorMacro(m).GetErrorMsg, syn.Text]));
   end;
   procedure AssertEQ(Msg: String; Exp, Got: Integer); overload;
   begin
     if not(Got = Exp) then
-      raise TEMScriptSelfTestException.Create(Format('%s [Exp: %d / Got: %d]', [Msg, Exp, Got]));
+      raise TEMScriptSelfTestException.Create(Format('%s [Exp: %d / Got: %d / Info: %s / SynTxt: %s]', [Msg, Exp, Got, dbgs(m.IsInvalid) + ' ' + THackTEMSEditorMacro(m).GetErrorMsg, syn.Text]));
   end;
   procedure AssertEQ(Msg: String; Exp, Got: Boolean); overload;
   begin
     if not(Got = Exp) then
-      raise TEMScriptSelfTestException.Create(Format('%s [Exp: %s / Got: %s]', [Msg, dbgs(Exp), dbgs(Got)]));
+      raise TEMScriptSelfTestException.Create(Format('%s [Exp: %s / Got: %s / Info: %s / SynTxt: %s]', [Msg, dbgs(Exp), dbgs(Got), dbgs(m.IsInvalid) + ' ' + THackTEMSEditorMacro(m).GetErrorMsg, syn.Text]));
   end;
 
   procedure TestInt(Msg, AText: String; Exp: Integer);
@@ -771,6 +774,30 @@ begin
     TestSyn('Replace All',   'Test abc abcde 123',
             'begin Caller.SearchReplace(''abc'', ''XYZ'', [ssoReplaceAll]); end.',
             'Test XYZ XYZde 123'
+            );
+
+    TestSyn('Replace word',   'Test abc abcde 123',
+            'begin Caller.SearchReplace(''abc'', ''XYZ'', [ssoReplace, ssoWholeWord]); end.',
+            'Test XYZ abcde 123'
+            );
+
+    TestSyn('Replace All / res',   'Test abc abcde 123',
+            'begin if 2 <> Caller.SearchReplace(''abc'', ''XYZ'', [ssoReplaceAll]) then ecChar(''M''); end.',
+            'Test XYZ XYZde 123'
+            );
+
+    TestSyn('Replace word / res',   'Test abc abcde 123',
+            'begin if 1 <> Caller.SearchReplace(''abc'', ''XYZ'', [ssoReplace]) then ecChar(''M''); end.',
+            'Test XYZ abcde 123'
+            );
+
+    TestSyn('Lines[1]',   'Test'+LineEnding+'abc'+LineEnding+'abcde'+LineEnding+'123',
+            'begin if ''abc'' = Caller.Lines[1] then begin Caller.SelectAll; ecChar(''M''); end; end.',
+            'M'
+            );
+    TestSyn('Lines[3]',   'Test'+LineEnding+'abc'+LineEnding+'abcde'+LineEnding+'123',
+            'begin if ''123'' = Caller.Lines[3] then begin Caller.SelectAll; ecChar(''M''); end; end.',
+            'M'
             );
 
       Result := True;

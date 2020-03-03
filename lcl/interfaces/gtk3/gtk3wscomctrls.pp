@@ -121,6 +121,8 @@ type
     class procedure ColumnSetMinWidth(const ALV: TCustomListView; const AIndex: Integer; const {%H-}AColumn: TListColumn; const AMinWidth: integer); override;
     class procedure ColumnSetWidth(const ALV: TCustomListView; const AIndex: Integer; const {%H-}AColumn: TListColumn; const AWidth: Integer); override;
     class procedure ColumnSetVisible(const ALV: TCustomListView; const AIndex: Integer; const {%H-}AColumn: TListColumn; const AVisible: Boolean); override;
+    class procedure ColumnSetSortIndicator(const ALV: TCustomListView; const AIndex: Integer;
+      const AColumn: TListColumn; const ASortIndicator: TSortIndicator);override;
 
     // items
     class procedure ItemDelete(const ALV: TCustomListView; const AIndex: Integer); override;
@@ -163,7 +165,7 @@ type
     class procedure SetHotTrackStyles(const ALV: TCustomListView; const {%H-}AValue: TListHotTrackStyles); override;
     class procedure SetHoverTime(const ALV: TCustomListView; const {%H-}AValue: Integer); override;
     //    class procedure SetIconOptions(const ALV: TCustomListView; const AValue: TIconOptions); override;
-    class procedure SetImageList(const ALV: TCustomListView; const AList: TListViewImageList; const AValue: TCustomImageList); override;
+    class procedure SetImageList(const ALV: TCustomListView; const AList: TListViewImageList; const AValue: TCustomImageListResolution); override;
     class procedure SetItemsCount(const ALV: TCustomListView; const {%H-}Avalue: Integer); override;
     class procedure SetProperty(const ALV: TCustomListView; const AProp: TListViewProperty; const AIsSet: Boolean); override;
     class procedure SetProperties(const ALV: TCustomListView; const AProps: TListViewProperties); override;
@@ -595,6 +597,19 @@ begin
   TGtk3ListView(ALV.Handle).SetColumnVisible(AIndex, AColumn, AVisible);
 end;
 
+class procedure TGtk3WSCustomListView.ColumnSetSortIndicator(
+  const ALV: TCustomListView; const AIndex: Integer;
+  const AColumn: TListColumn; const ASortIndicator: TSortIndicator);
+begin
+  if not WSCheckHandleAllocated(ALV, 'ColumnSetSortIndicator') then
+    Exit;
+
+  TGtk3ListView(ALV.Handle).ColumnSetSortIndicator(AIndex,AColumn,ASortIndicator);
+end;
+
+
+
+
 type
   TListItemHack = class(TListItem)
   end;
@@ -880,7 +895,7 @@ begin
 end;
 
 class procedure TGtk3WSCustomListView.SetImageList(const ALV: TCustomListView;
-  const AList: TListViewImageList; const AValue: TCustomImageList);
+  const AList: TListViewImageList; const AValue: TCustomImageListResolution);
 var
   AView: TGtk3ListView;
   i: Integer;

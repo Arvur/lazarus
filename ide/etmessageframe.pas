@@ -57,6 +57,7 @@ type
 
   TLMsgWndView = class(TLazExtToolView)
   private
+    FAsyncQueued: boolean;
     FControl: TMessagesCtrl;
     FFilter: TLMsgViewFilter;
     fPaintBottom: integer; // only valid if FPaintStamp=Control.FPaintStamp
@@ -65,10 +66,13 @@ type
     FPendingChanges: TETMultiSrcChanges;
     procedure SetFilter(AValue: TLMsgViewFilter);
     procedure OnMarksFixed(ListOfTMessageLine: TFPList); // (main thread) called after mlfFixed was added to these messages
+    procedure CallOnChangedInMainThread({%H-}Data: PtrInt); // (main thread)
   protected
     procedure SetToolState(AValue: TLMVToolState); override;
     procedure FetchAllPending; override; // (main thread)
     procedure ToolExited; override; // (main thread)
+    procedure QueueAsyncOnChanged; override; // (worker thread)
+    procedure RemoveAsyncOnChanged; override; // (worker thread)
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -354,10 +358,13 @@ type
     procedure RemoveFilterMsgTypeClick(Sender: TObject);
     procedure WndStayOnTopMenuItemClick(Sender: TObject);
   private
+    FImages: TLCLGlyphs;
     function AllMessagesAsString(const OnlyShown: boolean): String;
     function GetAboutView: TLMsgWndView;
     function GetViews(Index: integer): TLMsgWndView;
     procedure HideSearch;
+    procedure ImagesGetWidthForPPI(Sender: TCustomImageList; {%H-}AImageWidth,
+      {%H-}APPI: Integer; var AResultWidth: Integer);
     procedure SaveClicked(OnlyShown: boolean);
     procedure CopyAllClicked(OnlyShown: boolean);
     procedure CopyMsgToClipboard(OnlyFilename: boolean);
@@ -661,7 +668,7 @@ begin
   inherited ToolExited;
   if Tool.Terminated then begin
     ToolState:=lmvtsFailed;
-  end else if (ExitStatus<>0) then begin
+  end else if (ExitStatus<>0) or (ExitCode<>0) then begin
     // tool stopped with errors
     ErrCount:=0;
     EnterCriticalSection;
@@ -674,8 +681,8 @@ begin
     if ErrCount=0 then begin
       // parser did not add an error message
       // => add an error message
-      // add the last 3 lines of output with fatal urgency
-      Tool.EnterCriticalSection; // Note: always lock Tool before View
+      // add up the last 100 lines of output with panic urgency
+      Tool.EnterCriticalSection; // Note: always lock Tool *before* View
       try
         EnterCriticalSection;
         try
@@ -693,9 +700,14 @@ begin
           end;
           MsgLine:=PendingLines.CreateLine(-1);
           MsgLine.Urgency:=mluPanic;
-          MsgLine.Msg:=Format(
-            lisToolStoppedWithExitCodeUseContextMenuToGetMoreInfo, [IntToStr(
-            ExitStatus)]);
+          if ExitCode<>0 then
+            MsgLine.Msg:=Format(
+              lisToolStoppedWithExitCodeUseContextMenuToGetMoreInfo, [IntToStr(
+              ExitCode)])
+          else
+            MsgLine.Msg:=Format(
+              lisToolStoppedWithExitStatusUseContextMenuToGetMoreInfo, [
+              IntToStr(ExitStatus)]);
           PendingLines.Add(MsgLine);
         finally
           LeaveCriticalSection;
@@ -728,6 +740,30 @@ begin
     ToolState:=lmvtsFailed;
   end else
     ToolState:=lmvtsSuccess;
+end;
+
+procedure TLMsgWndView.CallOnChangedInMainThread(Data: PtrInt);
+begin
+  FAsyncQueued:=false;
+  if csDestroying in ComponentState then exit;
+  if Assigned(OnChanged) then
+    OnChanged(Self);
+end;
+
+procedure TLMsgWndView.QueueAsyncOnChanged;
+begin
+  if FAsyncQueued then exit;
+  FAsyncQueued:=true;
+  if Application<>nil then
+    Application.QueueAsyncCall(@CallOnChangedInMainThread,0);
+end;
+
+procedure TLMsgWndView.RemoveAsyncOnChanged;
+begin
+  if not FAsyncQueued then exit;
+  FAsyncQueued:=false;
+  if Application<>nil then
+    Application.RemoveAsyncCalls(Self);
 end;
 
 constructor TLMsgWndView.Create(AOwner: TComponent);
@@ -1547,6 +1583,7 @@ var
   FirstLineIsNotSelectedMessage: Boolean;
   SecondLineIsNotSelectedMessage: Boolean;
   col: TColor;
+  ImgRes: TScaledImageListResolution;
 begin
   if Focused then
     Include(FStates,mcsFocused)
@@ -1612,10 +1649,11 @@ begin
       ImgIndex:=fUrgencyStyles[Line.Urgency].ImageIndex;
       if (Images<>nil) and (mcoShowMsgIcons in Options)
       and (ImgIndex>=0) and (ImgIndex<Images.Count) then begin
-        Images.Draw(Canvas,
+        ImgRes := Images.ResolutionForControl[0, Self];
+        ImgRes.Draw(Canvas,
           NodeRect.Left + 1, (NodeRect.Top + NodeRect.Bottom - Images.Height) div 2,
           ImgIndex, gdeNormal);
-        inc(NodeRect.Left,Images.Width+2);
+        inc(NodeRect.Left, ImgRes.Width+2);
       end;
       // message text
       col:=UrgencyStyles[Line.Urgency].Color;
@@ -1811,6 +1849,48 @@ begin
 end;
 
 procedure TMessagesCtrl.DoAllViewsStopped;
+{off $DEFINE VerboseMsgFrame}
+
+  {$IFDEF VerboseMsgFrame}
+  procedure DbgViews;
+  var
+    i, j: Integer;
+    View: TLMsgWndView;
+    Tool: TAbstractExternalTool;
+    SrcMsg: TMessageLine;
+  begin
+    debugln(['TMessagesCtrl.DoAllViewsStopped ']);
+    debugln(['DbgViews===START========================================']);
+    for i:=0 to ViewCount-1 do
+    begin
+      View:=Views[i];
+      View.RebuildLines;
+      Tool:=View.Tool;
+      if Tool=nil then continue;
+      debugln(['DbgViews ',i,'/',ViewCount,' Tool.Title=',Tool.Title]);
+      Tool.EnterCriticalSection; // lock Tool before View
+      try
+        View.EnterCriticalSection;
+        try
+          for j:=0 to Tool.WorkerMessages.Count-1 do begin
+            SrcMsg:=Tool.WorkerMessages[j];
+            debugln(['WorkerMsg ',SrcMsg.Filename,'(',SrcMsg.Line,',',SrcMsg.Column,') ',UrgencyToStr(SrcMsg.Urgency),'/',SrcMsg.SubTool,': ',SrcMsg.Msg]);
+          end;
+          for j:=0 to View.Lines.Count-1 do begin
+            SrcMsg:=View.Lines[j];
+            debugln(['ViewMsg ',SrcMsg.Filename,'(',SrcMsg.Line,',',SrcMsg.Column,') ',UrgencyToStr(SrcMsg.Urgency),'/',SrcMsg.SubTool,': ',SrcMsg.Msg]);
+          end;
+        finally
+          View.LeaveCriticalSection;
+        end;
+      finally
+        Tool.LeaveCriticalSection;
+      end;
+    end;
+    debugln(['DbgViews===END==========================================']);
+  end;
+  {$ENDIF}
+
 var
   CurLine: TMessageLine;
 begin
@@ -1824,6 +1904,9 @@ begin
     if SelectFirstUrgentMessage(mluError,true) then
       OpenSelection;
   end;
+  {$IFDEF VerboseMsgFrame}
+  DbgViews;
+  {$ENDIF}
 end;
 
 function TMessagesCtrl.SearchNext(StartView: TLMsgWndView; StartLine: integer;
@@ -2416,7 +2499,6 @@ begin
   for u:=Low(TMessageLineUrgency) to high(TMessageLineUrgency) do
     fUrgencyStyles[u]:=TMsgCtrlUrgencyStyle.Create(Self,u);
   ShowHint:=true;
-  DoubleBuffered:=true;
 end;
 
 destructor TMessagesCtrl.Destroy;
@@ -3174,6 +3256,13 @@ begin
   HideSearch;
 end;
 
+procedure TMessagesFrame.ImagesGetWidthForPPI(Sender: TCustomImageList;
+  AImageWidth, APPI: Integer; var AResultWidth: Integer);
+begin
+  if (16<=AResultWidth) and (AResultWidth<=20) then
+    AResultWidth := 16;
+end;
+
 procedure TMessagesFrame.MoreOptionsMenuItemClick(Sender: TObject);
 begin
   LazarusIDE.DoOpenIDEOptions(TMsgWndOptionsFrame);
@@ -3197,6 +3286,7 @@ var
   Tool: TAbstractExternalTool;
   Proc: TProcessUTF8;
   Memo: TMemo;
+  i: Integer;
 begin
   View:=GetAboutView;
   if View=nil then exit;
@@ -3225,12 +3315,25 @@ begin
       s+='Parameters:'+LineEnding;
       s+=Proc.Parameters.Text+LineEnding;
       s+='Command Line:'+LineEnding;
-      s+=Tool.Process.Executable+' '+Tool.CmdLineParams+LineEnding+LineEnding;
+      s+=StrToCmdLineParam(Tool.Process.Executable)+' '+MergeCmdLineParams(Tool.Process.Parameters)+LineEnding+LineEnding;
+      s+='Parsers: ';
+      if Tool.ParserCount=0 then
+        s+='none'
+      else begin
+        for i:=0 to Tool.ParserCount-1 do begin
+          if i>0 then s+=', ';
+          s+=Tool.Parsers[i].GetLocalizedParserName;
+        end;
+      end;
+      s+=LineEnding+LineEnding;
+
       s+='ProcessID:'+LineEnding+IntToStr(Proc.ProcessID)+LineEnding+LineEnding;
       if Tool.Terminated then
         s+='Terminated'+LineEnding+LineEnding
-      else
+      else begin
+        s+='ExitCode:'+LineEnding+IntToStr(Proc.ExitCode)+LineEnding;
         s+='ExitStatus:'+LineEnding+IntToStr(Proc.ExitStatus)+LineEnding+LineEnding;
+      end;
     end;
     if Tool.ErrorMessage<>'' then
       s+=lisError+Tool.ErrorMessage+LineEnding+LineEnding;
@@ -3315,7 +3418,7 @@ var
   Filename: String;
   fs: TFileStreamUTF8;
 begin
-  Dlg:=TSaveDialog.Create(nil);
+  Dlg:=IDESaveDialogClass.Create(nil);
   try
     Dlg.Title:=lisSaveMessages;
     Dlg.FileName:='messages.txt';
@@ -3444,12 +3547,18 @@ begin
   inherited Create(TheOwner);
 
   MessagesCtrl:=TMessagesCtrl.Create(Self);
-  ImgIDInfo:=IDEImages.LoadImage('state12x12_information', 12);
-  ImgIDHint:=IDEImages.LoadImage('state12x12_hint', 12);
-  ImgIDNote:=IDEImages.LoadImage('state12x12_note', 12);
-  ImgIDWarning:=IDEImages.LoadImage('state12x12_warning', 12);
-  ImgIDError:=IDEImages.LoadImage('state12x12_error', 12);
-  ImgIDFatal:=IDEImages.LoadImage('state12x12_fatal', 12);
+  FImages := TLCLGlyphs.Create(Self);
+  FImages.Width := 12;
+  FImages.Height := 12;
+  FImages.RegisterResolutions([12, 16, 24]);
+  FImages.SetWidth100Suffix(16);
+  FImages.OnGetWidthForPPI := @ImagesGetWidthForPPI;
+  ImgIDInfo:=FImages.GetImageIndex('state_information');
+  ImgIDHint:=FImages.GetImageIndex('state_hint');
+  ImgIDNote:=FImages.GetImageIndex('state_note');
+  ImgIDWarning:=FImages.GetImageIndex('state_warning');
+  ImgIDError:=FImages.GetImageIndex('state_error');
+  ImgIDFatal:=FImages.GetImageIndex('state_fatal');
   with MessagesCtrl do begin
     Name:='MessagesCtrl';
     Align:=alClient;
@@ -3480,7 +3589,7 @@ begin
       EnvironmentOptions.MsgColors[mluFatal]);
     UrgencyStyles[mluPanic].SetValues(lisPanic, ImgIDFatal,
       EnvironmentOptions.MsgColors[mluPanic]);
-    Images:=IDEImages.Images_12;
+    Images:=Self.FImages;
     PopupMenu:=MsgCtrlPopupMenu;
   end;
   MessagesCtrl.SourceMarks:=ExtToolsMarks;
@@ -3488,11 +3597,11 @@ begin
   // search
   SearchPanel.Visible:=false; // by default the search is hidden
   HideSearchSpeedButton.Hint:=lisHideSearch;
-  TIDEImages.AssignImage(HideSearchSpeedButton.Glyph, 'debugger_power_grey');
+  IDEImages.AssignImage(HideSearchSpeedButton, 'debugger_power_grey');
   SearchNextSpeedButton.Hint:=lisUDSearchNextOccurrenceOfThisPhrase;
-  TIDEImages.AssignImage(SearchNextSpeedButton.Glyph, 'callstack_bottom');
+  IDEImages.AssignImage(SearchNextSpeedButton, 'callstack_bottom');
   SearchPrevSpeedButton.Hint:=lisUDSearchPreviousOccurrenceOfThisPhrase;
-  TIDEImages.AssignImage(SearchPrevSpeedButton.Glyph, 'callstack_top');
+  IDEImages.AssignImage(SearchPrevSpeedButton, 'callstack_top');
   SearchEdit.TextHint:=lisUDSearch;
 end;
 

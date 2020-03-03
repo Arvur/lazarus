@@ -22,11 +22,14 @@ unit gtk3widgets;
 interface
 
 uses
-  Classes, SysUtils, Controls, Graphics, Dialogs, Forms, StdCtrls, ComCtrls, Menus,
-  types,
-  LCLType, LCLProc, LMessages, LCLMessageGlue, LCLIntf,
+  Classes, SysUtils, types, math,
+  // LCL
+  Controls, StdCtrls, ExtCtrls, Buttons, ComCtrls, Graphics, Dialogs, Forms, Menus, ExtDlgs,
+  Spin, CheckLst, PairSplitter, LCLType, LCLProc, LMessages, LCLMessageGlue, LCLIntf,
+  graphtype,
+  // GTK3
   LazGtk3, LazGdk3, LazGObject2, LazGLib2, LazCairo1, LazPango1, LazGdkPixbuf2,
-  gtk3objects;
+  gtk3objects, gtk3procs, gtk3private, Gtk3CellRenderer;
 
 type
   TByteSet = set of byte;
@@ -51,7 +54,7 @@ type
     wtGroupBox, wtCalendar, wtTrackBar, wtScrollBar,
     wtScrollingWin, wtListBox, wtListView, wtCheckListBox, wtMemo, wtTreeModel,
     wtCustomControl, wtScrollingWinControl,
-    wtWindow, wtDialog, wtHintWindow);
+    wtWindow, wtDialog, wtHintWindow, wtGLArea);
   TGtk3WidgetTypes = set of TGtk3WidgetType;
 
   { TGtk3Widget }
@@ -92,7 +95,7 @@ type
     function _Release: LongInt; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
     function EatArrowKeys(const AKey: Word): Boolean; virtual;
     function getText: String; virtual;
-    procedure setText(AValue: String); virtual;
+    procedure setText(const AValue: String); virtual;
     function GetContext: HDC; virtual;
     function CreateWidget(const Params: TCreateParams):PGtkWidget; virtual;
     procedure DestroyWidget; virtual;
@@ -162,7 +165,7 @@ type
     procedure SetParent(AParent: TGtk3Widget; const ALeft, ATop: Integer); virtual;
     procedure Show; virtual;
     procedure ShowAll; virtual;
-    procedure Update(ARect: PRect);
+    procedure Update(ARect: PRect); virtual;
     property CairoContext: Pcairo_t read GetCairoContext;
     property Color: TColor read GetColor write SetColor;
     property Context: HDC read GetContext;
@@ -207,7 +210,7 @@ type
   protected
     function EatArrowKeys(const AKey: Word): Boolean; override;
     function getText: String; override;
-    procedure setText(AValue: String); override;
+    procedure setText(const AValue: String); override;
     function CreateWidget(const Params: TCreateParams):PGtkWidget; override;
   public
     procedure InitializeWidget; override;
@@ -329,7 +332,7 @@ type
     procedure SetStaticBorderStyle(AValue: TStaticBorderStyle);
   protected
     function getText: String; override;
-    procedure setText(AValue: String); override;
+    procedure setText(const AValue: String); override;
     function CreateWidget(const Params: TCreateParams):PGtkWidget; override;
   public
     property Alignment: TAlignment read GetAlignment write SetAlignment;
@@ -349,10 +352,11 @@ type
   private
     FPageLabel: PGtkLabel;
   protected
-    procedure setText(AValue: String); override;
+    procedure setText(const AValue: String); override;
     function getText: String; override;
     function CreateWidget(const Params: TCreateParams):PGtkWidget; override;
     procedure DestroyWidget; override;
+    function getClientOffset:TPoint;override;
   public
     function getClientRect: TRect; override;
   end;
@@ -371,7 +375,7 @@ type
     procedure SetPageIndex(AIndex: Integer);
     procedure SetShowTabs(const AShowTabs: Boolean);
     procedure SetTabPosition(const ATabPosition: TTabPosition);
-    procedure SetTabLabelText(AChild: TCustomPage; AText: String);
+    procedure SetTabLabelText(AChild: TCustomPage; const AText: String);
     function  GetTabLabelText(AChild: TCustomPage): String;
   end;
 
@@ -380,6 +384,22 @@ type
   TGtk3Bin = class(TGtk3Container)
 
   end;
+
+
+  { TGtk3Paned }
+
+  TGtk3Paned = class(TGtk3Container)
+  protected
+    function CreateWidget(const Params: TCreateParams):PGtkWidget; override;
+  end;
+
+  { TGtk3SplitterSide }
+
+  TGtk3SplitterSide = class(TGtk3Container)
+  protected
+    function CreateWidget(const Params: TCreateParams):PGtkWidget; override;
+  end;
+
 
   { TGtk3MenuShell }
 
@@ -413,7 +433,7 @@ type
   TGtk3MenuItem = class(TGtk3Bin)
   private
     function GetCaption: string;
-    procedure SetCaption(AValue: string);
+    procedure SetCaption(const AValue: string);
   protected
     function CreateWidget(const Params: TCreateParams):PGtkWidget; override;
   public
@@ -451,7 +471,12 @@ type
   { TGtk3ToolBar }
 
   TGtk3ToolBar = class(TGtk3Container)
-  protected
+  private
+    fBmpList:TList;
+    procedure ButtonClicked(data: gPointer); cdecl;
+    procedure ClearGlyphs;
+  public
+    destructor Destroy;override;
     function CreateWidget(const Params: TCreateParams):PGtkWidget; override;
   end;
 
@@ -469,7 +494,7 @@ type
     procedure SetWordWrap(AValue: Boolean);
   protected
     function getText: String; override;
-    procedure setText(AValue: String); override;
+    procedure setText(const AValue: String); override;
     function CreateWidget(const Params: TCreateParams):PGtkWidget; override;
     function EatArrowKeys(const AKey: Word): Boolean; override;
   public
@@ -546,6 +571,7 @@ type
     procedure SetColumnMinWidth(AIndex: Integer; AColumn: TListColumn; AMinWidth: Integer);
     procedure SetColumnWidth(AIndex: Integer; AColumn: TListColumn; AWidth: Integer);
     procedure SetColumnVisible(AIndex: Integer; AColumn: TListColumn; AVisible: Boolean);
+    procedure ColumnSetSortIndicator(const AIndex: Integer; const AColumn: TListColumn; const ASortIndicator: TSortIndicator);
 
     procedure ItemDelete(AIndex: Integer);
     procedure ItemInsert(AIndex: Integer; AItem: TListItem);
@@ -578,8 +604,6 @@ type
 
   TGtk3Panel = class(TGtk3Bin)
   private
-    FBevelInner: TBevelCut;
-    FBevelOuter: TBevelCut;
     FBorderStyle: TBorderStyle;
     FText: String;
   protected
@@ -587,10 +611,8 @@ type
     function CreateWidget(const Params: TCreateParams):PGtkWidget; override;
     procedure DoBeforeLCLPaint; override;
     function getText: String; override;
-    procedure setText(AValue: String); override;
+    procedure setText(const AValue: String); override;
   public
-    property BevelInner: TBevelCut read FBevelInner write FBevelInner;
-    property BevelOuter: TBevelCut read FBevelOuter write FBevelOuter;
     property BorderStyle: TBorderStyle read FBorderStyle write FBorderStyle;
   end;
 
@@ -600,7 +622,7 @@ type
   protected
     function CreateWidget(const Params: TCreateParams):PGtkWidget; override;
     function getText: String; override;
-    procedure setText(AValue: String); override;
+    procedure setText(const AValue: String); override;
   public
   end;
 
@@ -617,9 +639,9 @@ type
     function CreateWidget(const Params: TCreateParams):PGtkWidget; override;
     function EatArrowKeys(const AKey: Word): Boolean; override;
     function getText: String; override;
-    procedure setText(AValue: String); override;
+    procedure setText(const AValue: String); override;
   public
-    procedure DumpPrivateStructValues(ADbgEvent: String);
+    procedure DumpPrivateStructValues(const ADbgEvent: String);
   public
     function CanFocus: Boolean; override;
     procedure SetFocus; override;
@@ -639,21 +661,25 @@ type
     FMargin: Integer;
     FLayout: Integer;
     FSpacing: Integer;
+    FImage: TBitmap;
     function getLayout: Integer;
     function getMargin: Integer;
     procedure SetLayout(AValue: Integer);
     procedure SetMargin(AValue: Integer);
     procedure SetSpacing(AValue: Integer);
   protected
+    procedure SetImage(AImage:TBitmap);
     function getText: String; override;
-    procedure setText(AValue: String); override;
+    procedure setText(const AValue: String); override;
     function CreateWidget(const Params: TCreateParams):PGtkWidget; override;
   public
+    destructor Destroy;override;
     function IsWidgetOk: Boolean; override;
     procedure SetDefault(const ADefault: Boolean);
     property Layout: Integer read getLayout write SetLayout;
     property Margin: Integer read getMargin write SetMargin;
     property Spacing: Integer read FSpacing write SetSpacing;
+    property Image:TBitmap read fImage write SetImage;
   end;
 
   { TGtk3ToggleButton }
@@ -680,8 +706,10 @@ type
   { TGtk3RadioButton }
 
   TGtk3RadioButton = class(TGtk3CheckBox)
+  private
   protected
     function CreateWidget(const Params: TCreateParams):PGtkWidget; override;
+    procedure InitializeWidget; override;
   public
   end;
 
@@ -707,6 +735,13 @@ type
       function CreateWidget(const Params: TCreateParams):PGtkWidget; override;
   end;
 
+  { TGtk3Splitter }
+
+  TGtk3Splitter = class(TGtk3Panel)
+  public
+  end;
+
+
   { TGtk3Window }
 
   TGtk3Window = class(TGtk3ScrollableWin) {we are TGtk3Bin actually, but it won't hurt since we need scroll}
@@ -719,12 +754,12 @@ type
     function GetTitle: String;
     procedure SetIcon(AValue: PGdkPixBuf);
     procedure SetSkipTaskBarHint(AValue: Boolean);
-    procedure SetTitle(AValue: String);
+    procedure SetTitle(const AValue: String);
   protected
     function CreateWidget(const Params: TCreateParams):PGtkWidget; override;
     function EatArrowKeys(const AKey: Word): Boolean; override;
     function getText: String; override;
-    procedure setText(AValue: String); override;
+    procedure setText(const AValue: String); override;
   public
     // function getClientBounds: TRect; override;
     function getClientRect: TRect; override;
@@ -752,7 +787,7 @@ type
       FText: String;
     protected
       function getText: String; override;
-      procedure setText(AValue: String); override;
+      procedure setText(const AValue: String); override;
       function CreateWidget(const Params: TCreateParams):PGtkWidget; override;
   end;
 
@@ -785,12 +820,48 @@ type
     constructor Create(const ACommonDialog: TCommonDialog); virtual; overload;
   end;
 
+  { TGtk3GLArea }
+  TGtk3GLArea = class(TGtk3Widget)
+  protected
+    function CreateWidget(const Params: TCreateParams): PGtkWidget; override;
+  public
+    procedure Update(ARect: PRect); override;
+  end;
+
+
+
 {main event filter for all widgets, also called from widgetset main eventfilter}
 function Gtk3WidgetEvent(widget: PGtkWidget; event: PGdkEvent; data: GPointer): gboolean; cdecl;
 
 implementation
-uses Spin, gtk3int, gtk3procs, gtk3private, Gtk3CellRenderer, ExtDlgs, math,
-  CheckLst;
+
+uses gtk3int,imglist;
+
+const
+  GDK_DEFAULT_EVENTS_MASK: TGdkEventMask =
+    2 +        //GDK_EXPOSURE_MASK
+    4 +        //GDK_POINTER_MOTION_MASK
+    8 +        //GDK_POINTER_MOTION_HINT_MASK
+    16 +       //GDK_BUTTON_MOTION_MASK
+    32 +       //GDK_BUTTON1_MOTION_MASK
+    64 +       //GDK_BUTTON2_MOTION_MASK
+    128 +      //GDK_BUTTON3_MOTION_MASK
+    256 +      //GDK_BUTTON_PRESS_MASK
+    512 +      //GDK_BUTTON_RELEASE_MASK
+    1024 +     //GDK_KEY_PRESS_MASK
+    2048 +     //GDK_KEY_RELEASE_MASK
+    4096 +     //GDK_ENTER_NOTIFY_MASK
+    8192 +     //GDK_LEAVE_NOTIFY_MASK
+    16384 +    //GDK_FOCUS_CHANGE_MASK
+    32768 +    //GDK_STRUCTURE_MASK
+    65536 +    //GDK_PROPERTY_CHANGE_MASK
+    131072 +   //GDK_VISIBILITY_NOTIFY_MASK
+    262144 +   //GDK_PROXIMITY_IN_MASK
+    524288 +   //GDK_PROXIMITY_OUT_MASK
+    1048576 +  //GDK_SUBSTRUCTURE_MASK
+    2097152 +  //GDK_SCROLL_MASK
+    4194304;   //GDK_TOUCH_MASK
+ // 8388608    //GDK_SMOOTH_SCROLL_MASK: there is a bug in GTK3, see https://stackoverflow.com/questions/11775161/gtk3-get-mouse-scroll-direction
 
 function Gtk3EventToStr(AEvent: TGdkEventType): String;
 begin
@@ -1303,7 +1374,7 @@ begin
   if (AWindow <> nil) and AWidget^.get_has_window then
   begin
     // do resize to lcl size when mapping widget
-    gdk_window_set_events(AWindow, GDK_ALL_EVENTS_MASK);
+    gdk_window_set_events(AWindow, GDK_DEFAULT_EVENTS_MASK);
     if not (wtWindow in TGtk3Widget(Data).WidgetType) then
     begin
       with TGtk3Widget(Data).LCLObject do
@@ -1467,7 +1538,7 @@ begin
     if AIsKeyEvent then
       Result := Result or KF_ALTDOWN
     else
-      Result := Result or $20000000;
+      Result := Result or MK_ALT;
   end;
 end;
 
@@ -1498,6 +1569,14 @@ begin
     GDK_SCROLL_DOWN}: Msg.Msg := LM_VSCROLL;
     2, 3{GDK_SCROLL_LEFT,
     GDK_SCROLL_RIGHT}: Msg.Msg := LM_HSCROLL;
+    else
+      begin
+        if AEvent^.scroll.direction = GDK_SCROLL_SMOOTH then
+          DebugLn('Gtk3ScrolledWindowScrollEvent: Use PGtkWidget^.set_events(GDK_DEFAULT_EVENTS_MASK) in CreateWidget to prevent GTK3 bug with GDK_SCROLL_SMOOTH')
+        else
+          DebugLn('Gtk3ScrolledWindowScrollEvent: Unknown scroll direction: ', dbgs(AEvent^.scroll.direction));
+      end;
+      Exit;
   end;
 
   case Msg.Msg of
@@ -1554,7 +1633,7 @@ begin
     ShiftState := ShiftState + [ssShift];
   if AState and MK_CONTROL <> 0 then
     ShiftState := ShiftState + [ssCtrl];
-  if AState and $20000000 <> 0 then
+  if AState and MK_ALT <> 0 then
     ShiftState := ShiftState + [ssAlt];
   // MappedXY := TranslateGdkPointToClientArea(AEvent^.scroll.window, EventXY,
   //                                        {%H-}TGtk3Widget(AWinControl.Handle).GetContainerWidget);
@@ -1587,6 +1666,25 @@ begin
   // DebugLn('Gtk3ScrollEvent for ', dbgsName(TGtk3Widget(AData).LCLObject),' Result ',dbgs(Result));
 end;
 
+{ TGtk3SplitterSide }
+
+function TGtk3SplitterSide.CreateWidget(const Params: TCreateParams): PGtkWidget;
+begin
+  Result:=TGtkScrolledWindow.new(nil, nil);
+end;
+
+{ TGtk3Paned }
+
+function TGtk3Paned.CreateWidget(const Params: TCreateParams): PGtkWidget;
+const
+  ornt:array[TPairSplitterType] of TGtkOrientation=(
+    GTK_ORIENTATION_HORIZONTAL,
+    GTK_ORIENTATION_VERTICAL
+    );
+begin
+  Result:=TGtkPaned.new(ornt[TPairSplitter(Self.LCLObject).SplitterType]);
+end;
+
 { TGtk3Widget }
 
 function TGtk3Widget.GtkEventMouseEnterLeave(Sender: PGtkWidget; Event: PGdkEvent): Boolean;
@@ -1594,23 +1692,22 @@ function TGtk3Widget.GtkEventMouseEnterLeave(Sender: PGtkWidget; Event: PGdkEven
 var
   Msg: TLMessage;
   // MouseMsg: TLMMouseMove absolute Msg;
+  {$IFDEF GTK3DEBUGCORE}
   MousePos: TPoint;
+  {$ENDIF}
 begin
   Result := False;
   FillChar(Msg, SizeOf(Msg), #0);
   if Event^.type_ = GDK_ENTER_NOTIFY then
-  begin
-    Msg.Msg := LM_MOUSEENTER;
-  end else
-  begin
+    Msg.Msg := LM_MOUSEENTER
+  else
     Msg.Msg := LM_MOUSELEAVE;
-  end;
 
-  MousePos.X := Round(Event^.crossing.x);
-  MousePos.Y := Round(Event^.crossing.y);
   NotifyApplicationUserInput(LCLObject, Msg.Msg);
   Result := DeliverMessage(Msg, True) <> 0;
   {$IFDEF GTK3DEBUGCORE}
+  MousePos.X := Round(Event^.crossing.x);
+  MousePos.Y := Round(Event^.crossing.y);
   DebugLn('GtkEventMouseEnterLeave: mousePos ',dbgs(MousePos),' Object ',dbgsName(LCLObject),
     ' IsEnter ',dbgs(Event^.type_ = GDK_ENTER_NOTIFY),' Result=',dbgs(Result));
   {$ENDIF}
@@ -1665,9 +1762,10 @@ function TGtk3Widget.GtkEventPaint(Sender: PGtkWidget; AContext: Pcairo_t
   ): Boolean; cdecl;
 var
   Msg: TLMPaint;
-  AStruct: PPaintStruct;
+  AStruct: TPaintStruct;
   P: TPoint;
   AClipRect: TGdkRectangle;
+  localClip:TRect;
 begin
   Result := False;
 
@@ -1677,9 +1775,9 @@ begin
   FillChar(Msg, SizeOf(Msg), #0);
 
   Msg.Msg := LM_PAINT;
-  New(AStruct);
-  FillChar(AStruct^, SizeOf(TPaintStruct), 0);
-  Msg.PaintStruct := AStruct;
+  //New(AStruct);
+  FillChar(AStruct, SizeOf(TPaintStruct), 0);
+  Msg.PaintStruct := @AStruct;
 
   with PaintData do
   begin
@@ -1690,14 +1788,15 @@ begin
     ClipRegion := nil;
     // gdk_cairo_region(AContext, ClipRegion);
     // Event^.expose.region;
-    if ClipRect = nil then
-      New(ClipRect);
+    //if ClipRect = nil then
+    //  New(ClipRect);
     gdk_cairo_get_clip_rectangle(AContext, @AClipRect);
-    ClipRect^ := RectFromGdkRect(AClipRect);
+    localClip:=RectFromGdkRect(AClipRect);
+    ClipRect := @localClip;
   end;
 
   FCairoContext := AContext;
-  Msg.DC := BeginPaint(THandle(Self), AStruct^);
+  Msg.DC := BeginPaint(THandle(Self), AStruct);
   FContext := Msg.DC;
 
   Msg.PaintStruct^.rcPaint := PaintData.ClipRect^;
@@ -1743,11 +1842,11 @@ begin
       LCLObject.WindowProc(TLMessage(Msg));
     finally
       FCairoContext := nil;
-      Dispose(PaintData.ClipRect);
+      //Dispose(PaintData.ClipRect);
       Fillchar(FPaintData, SizeOf(FPaintData), 0);
       FContext := 0;
-      EndPaint(THandle(Self), AStruct^);
-      Dispose(AStruct);
+      EndPaint(THandle(Self), AStruct);
+      //Dispose(AStruct);
     end;
   except
     Application.HandleException(nil);
@@ -2394,7 +2493,7 @@ begin
   Result := '';
 end;
 
-procedure TGtk3Widget.setText(AValue: String);
+procedure TGtk3Widget.setText(const AValue: String);
 begin
   // DebugLn('WARNING: ',dbgsName(LCLObject),' self=',dbgsName(Self),' does not implement setText !');
 end;
@@ -2405,8 +2504,7 @@ begin
     FWidget^.Visible := AValue;
 end;
 
-function TGtk3Widget.QueryInterface(constref iid: TGuid; out obj): LongInt;
-  cdecl;
+function TGtk3Widget.QueryInterface(constref iid: TGuid; out obj): LongInt; cdecl;
 begin
   if GetInterface(iid, obj) then
     Result := 0
@@ -2520,7 +2618,7 @@ begin
   LCLIntf.SetProp(HWND(Self),'lclwidget',Self);
 
   // move signal connections into attach events
-  FWidget^.set_events(GDK_ALL_EVENTS_MASK);
+  FWidget^.set_events(GDK_DEFAULT_EVENTS_MASK);
   g_signal_connect_data(FWidget, 'event', TGCallback(@Gtk3WidgetEvent), Self, nil, 0);
 
 
@@ -2539,7 +2637,7 @@ begin
 
   if FCentralWidget <> nil then
   begin
-    FCentralWidget^.set_events(GDK_ALL_EVENTS_MASK);
+    FCentralWidget^.set_events(GDK_DEFAULT_EVENTS_MASK);
     g_signal_connect_data(FCentralWidget, 'event', TGCallback(@Gtk3WidgetEvent), Self, nil, 0);
     for i := GTK_STATE_NORMAL to GTK_STATE_INSENSITIVE do
     begin
@@ -2920,7 +3018,7 @@ begin
     StyleContext^.get_background_color(GTK_STATE_FLAG_NORMAL, @AGdkRGBA);
 
     // writeln('ACOLOR R=',AColor.Red,' G=',AColor.green,' B=',AColor.blue);
-    // AColor := TColortoTGDKColor(AValue);
+    // AColor := TColorToTGDKColor(AValue);
     {AGdkRGBA.alpha := 0;
     AGdkRGBA.red := AColor.red / 65535.00;
     AGdkRGBA.blue := AColor.blue / 65535.00;
@@ -2932,7 +3030,7 @@ begin
     FWidget^.override_background_color(GTK_STATE_FLAG_SELECTED, @AGdkRGBA);
   end else
   begin
-    AColor := TColortoTGDKColor(AValue);
+    AColor := TColorToTGDKColor(AValue);
     // writeln('ACOLOR R=',AColor.Red,' G=',AColor.green,' B=',AColor.blue);
     //inherited SetColor(AValue);
   end;
@@ -2944,8 +3042,6 @@ var
 begin
   FHasPaint := True;
   FBorderStyle := bsNone;
-  FBevelInner := bvNone;
-  FBevelOuter := bvNone;
   // wtLayout = using GtkLayout
   // FWidgetType := [wtWidget, wtLayout];
   // Result := TGtkLayout.new(nil, nil);
@@ -2971,14 +3067,26 @@ end;
 procedure TGtk3Panel.DoBeforeLCLPaint;
 var
   DC: TGtk3DeviceContext;
+  NColor: TColor;
 begin
   inherited DoBeforeLCLPaint;
-  // example how to paint borderstyle/bevels of TPanel before we send event to lcl
-  DC := TGtk3DeviceContext(FContext);
   if not Visible then
     exit;
+
+  DC := TGtk3DeviceContext(FContext);
+
+  NColor := LCLObject.Color;
+  if (NColor <> clNone) and (NColor <> clDefault) then
+  begin
+    DC.CurrentBrush.Color := ColorToRGB(NColor);
+    DC.fillRect(0, 0, LCLObject.Width, LCLObject.Height);
+  end;
+
   if BorderStyle <> bsNone then
-    DC.drawRect(0, 0, LCLObject.Width, LCLObject.Height, LCLObject.Color <> clDefault);
+  begin
+    DC.CurrentPen.Color := ColorToRGB(clBtnShadow); // not sure what color to use here?
+    DC.drawRect(0, 0, LCLObject.Width, LCLObject.Height, False, True);
+  end;
 end;
 
 function TGtk3Panel.getText: String;
@@ -2986,7 +3094,7 @@ begin
   Result := FText;
 end;
 
-procedure TGtk3Panel.setText(AValue: String);
+procedure TGtk3Panel.setText(const AValue: String);
 begin
   if FText = AValue then
     exit;
@@ -3020,7 +3128,7 @@ begin
   end;
 end;
 
-procedure TGtk3GroupBox.setText(AValue: String);
+procedure TGtk3GroupBox.setText(const AValue: String);
 begin
   if IsWidgetOK then
   begin
@@ -3230,7 +3338,7 @@ begin
     Result := '';
 end;
 
-procedure TGtk3Entry.setText(AValue: String);
+procedure TGtk3Entry.setText(const AValue: String);
 begin
   if IsValidHandle and IsWidgetOK then
     PGtkEntry(Widget)^.set_text(PgChar(AValue));
@@ -3499,6 +3607,7 @@ var
 begin
   if IsWidgetOK then
   begin
+    PGtkScale(FWidget)^.set_draw_value(ATickStyle <> tsNone);
     if ATickStyle = tsNone then
       PGtkScale(FWidget)^.clear_marks
     else
@@ -3650,7 +3759,7 @@ begin
     Result := PGtkLabel(getContainerWidget)^.get_text;
 end;
 
-procedure TGtk3StaticText.setText(AValue: String);
+procedure TGtk3StaticText.setText(const AValue: String);
 begin
   if IsWidgetOk then
     PGtkLabel(getContainerWidget)^.set_text(PgChar(AValue));
@@ -3845,7 +3954,7 @@ var
   AClass: PGTypeClass;
 begin
   inherited InitializeWidget;
-  //TODO: move hookers check variable code into Gtk3WidgetSet.
+  //TODO: move hook check variable code into Gtk3WidgetSet.
   if not AProgressClassHookInitialized then
   begin
     AProgressClassHookInitialized := True;
@@ -3868,22 +3977,116 @@ end;
 
 { TGtk3ToolBar }
 
+procedure TGtk3ToolBar.ClearGlyphs;
+var i:integer;
+begin
+  if Assigned(fBmpList) then
+  for i:=fBmpList.Count-1 downto 0 do
+    TObject(fBmpList[i]).Free;
+end;
+
+destructor TGtk3ToolBar.Destroy;
+begin
+  ClearGlyphs;
+  fBmpList.Free;
+  inherited Destroy;
+end;
+
+procedure TGtk3ToolBar.ButtonClicked(data: gPointer);cdecl;
+begin
+  if TObject(data) is TToolButton then
+  TToolButton(data).Click;
+end;
+
 function TGtk3ToolBar.CreateWidget(const Params: TCreateParams): PGtkWidget;
 var
+  i:integer;
   AToolBar: TToolBar;
+  btn:TToolButton;
+  gtb:PGtkToolItem;
+  wmenu,wicon:PGtkWidget;
+  pb:PGdkPixBuf;
+  bmp:TBitmap;
+  resolution:TCustomImageListResolution;
+  raw:TRawImage;
+  bs:string;
 begin
   AToolBar := TToolBar(LCLObject);
   FHasPaint := False;
   FWidgetType := [wtWidget, wtContainer];
-  Result := PGtkWidget(TGtkHBox.new(GTK_ORIENTATION_HORIZONTAL, 0));
-  FCentralWidget := PGtkWidget(TGtkFixed.new);
-  PGtkHBox(Result)^.add(FCentralWidget);
-  PGtkFixed(FCentralWidget)^.set_has_window(True);
+  Result:=PGtkWidget(TGtkToolbar.new);
+
+  if not Assigned(fBmpList) then
+    fBmpList:=TList.Create;
+
+  ClearGlyphs;
+
+  // allocate appropriate number of tool items
+  for i:=0 to AToolbar.ButtonCount-1 do
+  begin
+    btn:=AToolBar.Buttons[i];
+    bs:= ReplaceAmpersandsWithUnderscores(btn.Caption);
+    wicon:=nil;
+    if btn is TToolButton then
+    begin
+      if (btn.ImageIndex>=0) and
+          assigned(AToolbar.Images) and
+          not (btn.Style in [tbsSeparator,tbsDivider]) then
+      begin
+        if Assigned(AToolBar.Images) and (btn.ImageIndex>=0) then
+        begin
+          bmp:=TBitmap.Create; { this carries gdk pixmap }
+          resolution:=AToolBar.Images.Resolution[AToolBar.ImagesWidth]; // not AToolBar.Images.Width, issue #36465
+          resolution.GetRawImage(btn.ImageIndex,raw);
+          { convince the bitmap it has actually another format }
+          bmp.BeginUpdate();
+          raw.Description.Init_BPP32_R8G8B8A8_BIO_TTB(resolution.Width,resolution.Height);
+          bmp.LoadFromRawImage(raw,false);
+          bmp.EndUpdate();
+          pb:=TGtk3Image(bmp.Handle).Handle;
+          wicon := TGtkImage.new_from_pixbuf(pb);
+          fBmpList.Add(bmp);
+        end
+        else
+          wicon := nil;
+      end;
+
+      case btn.Style of
+  	  tbsSeparator:
+    	  gtb:=TGtkSeparatorToolItem.new();
+      tbsDropDown:
+        begin
+        	gtb:=TGtkMenuToolButton.new(wicon,PgChar(bs));
+          if Assigned(btn.DropdownMenu) then
+          begin
+          	wmenu:=TGtk3Menu(btn.DropdownMenu.Handle).Widget;
+          	PGtkMenuToolButton(gtb)^.set_menu(wmenu);
+          end;
+        end;
+      tbsCheck:
+        begin
+          gtb:=TGtkToggleToolButton.new();
+          PGtkToolButton(gtb)^.set_label(PgChar(bs));
+          PGtkToolButton(gtb)^.set_icon_widget(wicon);
+        end
+  	  else
+    	  gtb:=TGtkToolButton.new(wicon,PgChar(bs));
+ 		  end;
+      gtb^.set_tooltip_text(PgChar(btn.Hint));
+      PgtkToolButton(gtb)^.set_use_underline(true);
+      PGtkToolBar(Result)^.add(gtb);
+
+      if not (btn.Style in [tbsSeparator,tbsDivider]) then
+      g_signal_connect_data(gtb,'clicked',
+        TGCallback(@TGtk3Toolbar.ButtonClicked), btn, nil, 0);
+    end;
+  end;
+
 end;
 
 { TGtk3Page }
 
-procedure TGtk3Page.setText(AValue: String);
+procedure TGtk3Page.setText(const AValue: String);
 begin
   if Assigned(FPageLabel) then
     FPageLabel^.set_text(PChar(AValue));
@@ -3901,6 +4104,7 @@ function TGtk3Page.CreateWidget(const Params: TCreateParams): PGtkWidget;
 begin
   FWidgetType := FWidgetType + [wtContainer];
   FPageLabel:= TGtkLabel.new(PChar(Params.Caption));
+  Self.FHasPaint:=true;
   // ref it to save it in case TabVisble is set to false
   FPageLabel^.ref;
   Result := TGtkHBox.new(GTK_ORIENTATION_HORIZONTAL, 0);
@@ -3916,6 +4120,20 @@ begin
   // unref it to allow it to be destroyed
   FPageLabel^.unref;
 end;
+
+function TGtk3Page.getClientOffset: TPoint;
+var
+  Allocation: TGtkAllocation;
+  R: TRect;
+begin
+  Self.Widget^.get_allocation(@Allocation);
+  Result.X := -Allocation.X;
+  Result.Y := -Allocation.Y;
+
+  R := getClientBounds;
+  Result := Point(Result.x + R.Left, Result.y + R.Top);
+end;
+
 
 function TGtk3Page.getClientRect: TRect;
 var
@@ -4193,7 +4411,7 @@ begin
     PGtkNoteBook(GetContainerWidget)^.set_tab_pos(GtkPositionTypeMap[ATabPosition]);
 end;
 
-procedure TGtk3NoteBook.SetTabLabelText(AChild: TCustomPage; AText: String);
+procedure TGtk3NoteBook.SetTabLabelText(AChild: TCustomPage; const AText: String);
 begin
   if IsWidgetOK then
     TGtk3Widget(AChild.Handle).setText(AText);
@@ -4284,35 +4502,68 @@ begin
     Result := PGtkMenuItem(FWidget)^.get_label;
 end;
 
-procedure TGtk3MenuItem.SetCaption(AValue: string);
+procedure TGtk3MenuItem.SetCaption(const AValue: string);
 begin
   if IsWidgetOK then
     PGtkMenuItem(FWidget)^.set_label(PgChar(AValue));
 end;
 
 function TGtk3MenuItem.CreateWidget(const Params: TCreateParams): PGtkWidget;
+var
+  ndx:integer;
+  pl:PGsList;
+  parentMenu:TMenuItem;
+  picon:PGtkImage;
+  pmenu:PGtkMenuItem;
+  pimgmenu:PgtkImageMenuItem absolute pmenu;
+  img:TGtk3Image;
 begin
+  Result:=nil;
   FWidgetType := [wtWidget, wtMenuItem];
   if MenuItem.Caption = cLineCaption then
     Result := TGtkSeparatorMenuItem.new
   else
+  if (MenuItem.HasIcon) then
+  begin
+    pimgmenu := TGtkImageMenuItem.new();
+    MenuItem.UpdateImage(true);
+    img:=Tgtk3Image(MenuItem.Bitmap.Handle);
+    picon := TGtkImage.new_from_pixbuf(img.Handle);
+    pimgmenu^.set_image(picon);
+    pimgmenu^.set_always_show_image(true);
+    Result:=pimgmenu;
+  end else
   if MenuItem.RadioItem and not MenuItem.HasIcon then
-    Result := TGtkRadioMenuItem.new(nil)
+  begin
+    Result := TGtkRadioMenuItem.new(nil);
+    if Assigned(menuItem.Parent) then
+    begin
+      ndx:=menuItem.Parent.IndexOf(MenuItem);
+      if (ndx>0) then
+      begin
+        ParentMenu:=menuItem.Parent.Items[ndx-1];
+        if (MenuItem.GroupIndex>0) and (ParentMenu.GroupIndex=MenuItem.GroupIndex) then
+        begin
+          pl:=PGtkRadioMenuItem(TGtk3MenuItem(ParentMenu.Handle).Widget)^.get_group;
+          PGtkRadioMenuItem(Result)^.set_group(pl);
+        end;
+      end;
+    end;
+  end
   else
-  if MenuItem.IsCheckItem or MenuItem.HasIcon then
+  if MenuItem.IsCheckItem and not MenuItem.HasIcon then
     Result := TGtkCheckMenuItem.new
   else
     Result := TGtkMenuItem.new;
 
-  if MenuItem.Caption <> cLineCaption then
+  if Assigned(Result) and (MenuItem.Caption <> cLineCaption) {and not MenuItem.HasIcon} then
   begin
-    PGtkMenuItem(Result)^.set_label(PgChar(MenuItem.Caption));
+    PGtkMenuItem(Result)^.use_underline := True;
+    PGtkMenuItem(Result)^.set_label(PgChar(ReplaceAmpersandsWithUnderscores(MenuItem.Caption)));
     PGtkMenuItem(Result)^.set_sensitive(MenuItem.Enabled);
-    // there's nothing like this in Gtk3
-    // if MenuItem.RightJustify then
-    //  gtk_menu_item_right_justify(PGtkMenuItem(Widget));
-
   end;
+
+
 end;
 
 constructor TGtk3MenuItem.Create(const AMenuItem: TMenuItem);
@@ -4357,7 +4608,7 @@ begin
   LCLIntf.SetProp(HWND(Self),'lclwidget',Self);
 
   // move signal connections into attach events
-  FWidget^.set_events(GDK_ALL_EVENTS_MASK);
+  FWidget^.set_events(GDK_DEFAULT_EVENTS_MASK);
   g_signal_connect_data(FWidget, 'event', TGCallback(@Gtk3MenuItemEvent), Self, nil, 0);
   g_signal_connect_data(FWidget,'activate',TGCallBack(@Gtk3MenuItemActivated), Self, nil, 0);
   // must hide all by default
@@ -4685,7 +4936,7 @@ begin
   // DebugLn('TGtk3Memo.getText Result=',Result);
 end;
 
-procedure TGtk3Memo.setText(AValue: String);
+procedure TGtk3Memo.setText(const AValue: String);
 var
   ABuffer: PGtkTextBuffer;
   AIter: PGtkTextIter;
@@ -5572,6 +5823,27 @@ begin
   end;
 end;
 
+procedure TGtk3ListView.ColumnSetSortIndicator(const AIndex: Integer;
+  const AColumn: TListColumn; const ASortIndicator: TSortIndicator);
+const
+  GtkOrder : array [ TSortIndicator] of TGtkSortType = (0, {GTK_SORT_ASCENDING}0, {GTK_SORT_DESCENDING}1);
+var
+  AGtkColumn: PGtkTreeViewColumn;
+begin
+  AGtkColumn := PGtkTreeView(getContainerWidget)^.get_column(AIndex);
+
+  if AGtkColumn <> nil then
+  begin
+    if ASortIndicator = siNone then
+      AGtkColumn^.set_sort_indicator(false)
+    else
+    begin
+      AGtkColumn^.set_sort_indicator(true);
+      AgtkColumn^.set_sort_order(GtkOrder[ASortIndicator]);
+    end;
+  end;
+end;
+
 procedure TGtk3ListView.ItemDelete(AIndex: Integer);
 var
   AModel: PGtkTreeModel;
@@ -5722,6 +5994,7 @@ begin
     begin
       Path := nil;
       Column := nil;
+      Cell := nil;
       if IsTreeView then
         PGtkTreeView(GetContainerWidget)^.get_cursor(@Path, Column)
       else
@@ -5840,7 +6113,9 @@ var
   ACombo: TCustomComboBox;
   ListStore: PGtkListStore;
   ItemList: TGtkListStoreStringList;
-  Renderer : PGtkCellRenderer;
+  Renderer: PGtkCellRenderer;
+  bs: string;
+  pos: gint;
 begin
   FWidgetType := FWidgetType + [wtTreeModel, wtComboBox];
   ACombo := TCustomComboBox(LCLObject);
@@ -5861,12 +6136,17 @@ begin
     // do not allow combo button to get focus, entry should take focus
     if PGtkComboBox(Result)^.priv3^.button <> nil then
       PGtkComboBox(Result)^.priv3^.button^.set_can_focus(False);
+
+    bs := Self.LCLObject.Caption;
+    pos := 0;
+    PGtkEditable(PGtkComboBox(Result)^.get_child)^.insert_text(pgChar(PChar(bs)),length(bs),@pos);
+
     // set lclwidget data to entry
     g_object_set_data(PGtkComboBox(Result)^.get_child, 'lclwidget', Self);
     // when we scroll with mouse wheel over entry our scrollevent doesn't catch entry
     // but parent control with window (eg. form), so we are settint all events mask to
     // catch all mouse events on gtkentry.
-    PGtkEntry(PGtkComboBox(Result)^.get_child)^.set_events(GDK_ALL_EVENTS_MASK);
+    PGtkEntry(PGtkComboBox(Result)^.get_child)^.set_events(GDK_DEFAULT_EVENTS_MASK);
   end else
   begin
     // FCentralWidget := PGtkWidget(TGtkComboBox.new_with_model(PGtkTreeModel(ListStore)));
@@ -5913,13 +6193,13 @@ begin
     Result := StrPas(PGtkComboBox(GetContainerWidget)^.get_title);
 end;
 
-procedure TGtk3ComboBox.setText(AValue: String);
+procedure TGtk3ComboBox.setText(const AValue: String);
 begin
   if Gtk3IsComboBox(FWidget) then
     PGtkComboBox(GetContainerWidget)^.set_title(PgChar(AValue));
 end;
 
-procedure TGtk3ComboBox.DumpPrivateStructValues(ADbgEvent: String);
+procedure TGtk3ComboBox.DumpPrivateStructValues(const ADbgEvent: String);
 var
   AComboWidget: PGtkComboBox;
   APrivate: PGtkComboBoxPrivate;
@@ -5996,10 +6276,7 @@ begin
 end;
 
 function GtkPopupCloseUp(AData: Pointer): gboolean; cdecl;
-var
-  ComboBox: TCustomComboBox;
 begin
-  ComboBox := TCustomComboBox(TGtk3Widget(AData).LCLObject);
   LCLSendCloseUpMsg(TGtk3Widget(AData).LCLObject);
   Result := False;// stop the timer
 end;
@@ -6046,7 +6323,7 @@ begin
   end;
   if GetCellView <> nil then
   begin
-    gtk_widget_set_events(FCellView, GDK_ALL_EVENTS_MASK);
+    gtk_widget_set_events(FCellView, GDK_DEFAULT_EVENTS_MASK);
     g_object_set_data(FCellView, 'lclwidget', Self);
     g_signal_connect_data(FCellView, 'event', TGCallback(@Gtk3WidgetEvent), Self, nil, 0);
   end;
@@ -6150,6 +6427,13 @@ begin
   end;
 end;
 
+procedure TGtk3Button.SetImage(AImage: TBitmap);
+begin
+  if Assigned(fImage) then
+    fImage.free;
+  fImage:=AImage;
+end;
+
 function TGtk3Button.getText: String;
 begin
   if IsWidgetOK then
@@ -6158,18 +6442,31 @@ begin
     Result := '';
 end;
 
-procedure TGtk3Button.setText(AValue: String);
+procedure TGtk3Button.setText(const AValue: String);
 begin
   if IsWidgetOk then
-    PGtkButton(FWidget)^.set_label(PgChar(AValue));
+  begin
+    PGtkButton(FWidget)^.set_label(PgChar(ReplaceAmpersandsWithUnderscores(AValue)));
+  end;
 end;
 
 function TGtk3Button.CreateWidget(const Params: TCreateParams): PGtkWidget;
+var
+  btn:PGtkButton absolute Result;
 begin
   Result := PGtkWidget(TGtkButton.new);
+
+  btn^.set_use_underline(true);
+
   FMargin := -1;
   FLayout := GTK_POS_LEFT;
   FSpacing := 2; // default gtk3 spacing is 2
+end;
+
+destructor TGtk3Button.Destroy;
+begin
+  SetImage(nil);
+  inherited Destroy;
 end;
 
 function TGtk3Button.IsWidgetOk: Boolean;
@@ -6200,10 +6497,13 @@ begin
   g_signal_connect_data(FWidget, 'toggled', TGCallback(@Gtk3Toggled), Self, nil, 0);
 end;
 
-function TGtk3ToggleButton.CreateWidget(const Params: TCreateParams
-  ): PGtkWidget;
+function TGtk3ToggleButton.CreateWidget(const Params: TCreateParams): PGtkWidget;
+var
+  btn: PGtkToggleButton;
 begin
-  Result := PGtkWidget(TGtkToggleButton.new);
+  btn := TGtkToggleButton.new;
+  btn^.use_underline := True;
+  Result := PGtkWidget(btn);
 end;
 
 { TGtk3CheckBox }
@@ -6233,21 +6533,80 @@ begin
 end;
 
 function TGtk3CheckBox.CreateWidget(const Params: TCreateParams): PGtkWidget;
+var
+  check: PGtkCheckButton;
 begin
-  Result := PGtkWidget(TGtkCheckButton.new);
+  check := TGtkCheckButton.new;
+  Result := PGtkWidget(check);
+  check^.set_use_underline(True);
 end;
 
 { TGtk3RadioButton }
 
 function TGtk3RadioButton.CreateWidget(const Params: TCreateParams): PGtkWidget;
+var
+  btn: PGtkRadioButton;
+  w: PGtkWidget;
+  ctl, Parent: TWinControl;
+  rb: TRadioButton;
+  //pl: PGsList;
+  i: Integer;
 begin
-  Result := PGtkWidget(TGtkRadioButton.new(nil));
+  if Self.LCLObject.Name='HiddenRadioButton' then
+    exit;
+  btn := TGtkRadioButton.new(nil);
+  btn^.use_underline := True;
+  Result := PGtkWidget(btn);
+  ctl := Self.LCLObject;
+  if Assigned(ctl) then
+  begin
+    Parent := ctl.Parent;
+    if (Parent is TRadioGroup) then
+    begin
+      if (TRadioGroup(Parent).Items.Count>0) then
+      begin
+        rb := TRadioButton(Parent.Controls[0]);
+        if rb<>ctl then
+        begin
+          w := TGtk3RadioButton(rb.Handle).Widget;
+          //pl := PGtkRadioButton(w)^.get_group;
+          //PGtkRadioButton(Result)^.set_group(pl);
+          PGtkRadioButton(Result)^.join_group(PGtkRadioButton(w));
+        end;
+      end
+    end
+    else
+    begin
+      for i := 0 to Parent.ControlCount - 1 do
+        if Parent.Controls[i] is TRadioButton and
+           TWinControl(Parent.Controls[i]).HandleAllocated then
+        begin
+          rb := TRadioButton(Parent.Controls[i]);
+          w := TGtk3RadioButton(rb.Handle).Widget;
+          //pl := PGtkRadioButton(w)^.get_group;
+          //PGtkRadioButton(Result)^.set_group(pl);
+          PGtkRadioButton(Result)^.join_group(PGtkRadioButton(w));
+          Break;
+        end;
+    end;
+  end;
+end;
+
+procedure TGtk3RadioButton.InitializeWidget;
+begin
+  if Self.LCLObject.Name='HiddenRadioButton' then
+  begin
+    exit;
+   { PGtkRadioButton(Self.Widget)^.set_group(nil);
+   // PGtkRadioButton(Self.Widget)^.set_inconsistent(true);
+    PGtkRadioButton(Self.Widget)^.set_visible(false);}
+  end;
+  inherited InitializeWidget;
 end;
 
 { TGtk3CustomControl }
 
-function TGtk3CustomControl.CreateWidget(const Params: TCreateParams
-  ): PGtkWidget;
+function TGtk3CustomControl.CreateWidget(const Params: TCreateParams): PGtkWidget;
 var
   FUseLayout: Boolean;
 begin
@@ -6398,7 +6757,7 @@ end;
 
 function TGtk3Window.GetTitle: String;
 begin
-  Result := '';
+  Result:=PGtkWindow(FWidget)^.get_title();
 end;
 
 procedure TGtk3Window.SetIcon(AValue: PGdkPixBuf);
@@ -6430,7 +6789,7 @@ begin
     PGtkWindow(Widget)^.set_skip_taskbar_hint(AValue);
 end;
 
-procedure TGtk3Window.SetTitle(AValue: String);
+procedure TGtk3Window.SetTitle(const AValue: String);
 begin
   PGtkWindow(FWidget)^.set_title(PGChar(AValue));
 end;
@@ -6502,9 +6861,15 @@ begin
   FHasPaint := True;
   AForm := TCustomForm(LCLObject);
 
-  FWidgetType := [wtWidget, wtLayout, wtScrollingWin, wtWindow];
-
-  Result := TGtkWindow.new(GTK_WINDOW_TOPLEVEL);
+  if not Assigned(LCLObject.Parent) then
+  begin
+    Result := TGtkWindow.new(GTK_WINDOW_TOPLEVEL);
+    FWidgetType := [wtWidget, wtLayout, wtScrollingWin, wtWindow];
+  end else
+  begin
+    Result := PGtkScrolledWindow(TGtkScrolledWindow.new(nil, nil));
+    FWidgetType := [wtWidget, wtLayout, wtScrollingWin, wtCustomControl]
+  end;
 
   FBox := TGtkVBox.new(GTK_ORIENTATION_VERTICAL, 0);
 
@@ -6559,7 +6924,7 @@ begin
   Result := Title;
 end;
 
-procedure TGtk3Window.setText(AValue: String);
+procedure TGtk3Window.setText(const AValue: String);
 begin
   Title := AValue;
 end;
@@ -6720,7 +7085,7 @@ begin
   Result := FText;
 end;
 
-procedure TGtk3HintWindow.setText(AValue: String);
+procedure TGtk3HintWindow.setText(const AValue: String);
 begin
   FText := AValue;
 end;
@@ -6835,10 +7200,7 @@ begin
   end
   else
   if FileDialog is TSelectDirectoryDialog then
-  begin
     Action := GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER;
-    Button1 := GTK_STOCK_OPEN;
-  end;
 
   FWidget := gtk_file_chooser_dialog_new(PgChar(FileDialog.Title), nil,
     Action, PChar(GTK_STOCK_CANCEL),
@@ -6889,6 +7251,19 @@ begin
   CommonDialog := ACommonDialog;
 end;
 
+{ TGtk3GLArea }
+
+procedure TGtk3GLArea.Update(ARect: PRect);
+begin
+  if IsWidgetOK then
+    PGtkGLArea(Widget)^.queue_render;
+end;
+
+function TGtk3GLArea.CreateWidget(const Params: TCreateParams): PGtkWidget;
+begin
+  FWidgetType := [wtWidget, wtGLArea];
+  Result := TGtkGLArea.new;
+end;
 
 end.
 

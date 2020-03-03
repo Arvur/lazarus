@@ -81,7 +81,7 @@ begin
   BorderIcons := [biSystemMenu, biHelp];
   Caption := 'Find';
   //OnCreate := @FormCreate;
-  Position := poMainFormCenter;
+  //Position := poMainFormCenter;
 
   LCLVersion := '1.3';
 
@@ -91,7 +91,7 @@ begin
     Height := 17;
     Top := 15;
     Width := 77;
-    BorderSpacing.Right := 2;
+    BorderSpacing.Right := 8;
     Caption := 'Text to find';
     FocusControl := EditFind;
     ParentColor := False;
@@ -102,39 +102,13 @@ begin
     Left := 85;
     Height := 27;
     Top := 10;
+    BorderSpacing.Top := 8;
     Width := 303;
     TabOrder := 0;
     Text := 'EditFind';
     Parent := Self;
   end;
-  DirectionRadioGroup := TRadioGroup.Create(Self);
-  with DirectionRadioGroup do begin
-    Left := 155;
-    Height := 45;
-    Top := 49;
-    Width := 227;
-    AutoFill := True;
-    AutoSize := True;
-    BorderSpacing.Left := 12;
-    //BorderSpacing.Around := 0;
-    Caption := 'Direction';
-    ChildSizing.LeftRightSpacing := 6;
-    ChildSizing.TopBottomSpacing := 6;
-    ChildSizing.EnlargeHorizontal := crsHomogenousChildResize;
-    ChildSizing.EnlargeVertical := crsHomogenousChildResize;
-    ChildSizing.ShrinkHorizontal := crsScaleChilds;
-    ChildSizing.ShrinkVertical := crsScaleChilds;
-    ChildSizing.Layout := cclLeftToRightThenTopToBottom;
-    ChildSizing.ControlsPerLine := 2;
-    ClientHeight := 48;
-    ClientWidth := 217;
-    Columns := 2;
-    Constraints.MaxHeight := 60;
-    Items.Add('Forward');
-    Items.Add('Backward');
-    TabOrder := 1;
-    Parent := Self;
-  end;
+
   FlagsPanel := TPanel.Create(Self);
   With FlagsPanel do begin
     Left := 6;
@@ -143,13 +117,15 @@ begin
     Width := 143;
     AutoSize := True;
     BorderSpacing.Around := 6;
+    BorderSpacing.Top := 4;
     BevelOuter := bvNone;
+    ChildSizing.LeftRightSpacing := 8;
     ChildSizing.VerticalSpacing := 6;
     ChildSizing.Layout := cclLeftToRightThenTopToBottom;
     ChildSizing.ControlsPerLine := 1;
     ClientHeight := 82;
     ClientWidth := 143;
-    TabOrder := 2;
+    TabOrder := 1;
     Parent := Self;
   end;
   // Flags Panel Objects
@@ -184,6 +160,36 @@ begin
       Parent := FlagsPanel;
     end;
   //End of Flags Panel objects
+
+  DirectionRadioGroup := TRadioGroup.Create(Self);
+  with DirectionRadioGroup do begin
+    Left := 155;
+    Height := 45;
+    Top := 49;
+    Width := 227;
+    AutoFill := True;
+    AutoSize := True;
+    BorderSpacing.Left := 12;
+    //BorderSpacing.Around := 0;
+    Caption := 'Direction';
+    ChildSizing.LeftRightSpacing := 6;
+    ChildSizing.TopBottomSpacing := 6;
+    ChildSizing.EnlargeHorizontal := crsHomogenousChildResize;
+    ChildSizing.EnlargeVertical := crsHomogenousChildResize;
+    ChildSizing.ShrinkHorizontal := crsScaleChilds;
+    ChildSizing.ShrinkVertical := crsScaleChilds;
+    ChildSizing.Layout := cclLeftToRightThenTopToBottom;
+    ChildSizing.ControlsPerLine := 2;
+    ClientHeight := 48;
+    ClientWidth := 217;
+    Columns := 2;
+    Constraints.MaxHeight := 60;
+    Items.Add('Forward');
+    Items.Add('Backward');
+    TabOrder := 2;
+    Parent := Self;
+  end;
+
   BtnPanel := TPanel.Create(Self);
   with BtnPanel do begin
     Left := 388;
@@ -407,6 +413,8 @@ end;
 procedure TFindDialog.DoCloseForm(Sender: TObject; var CloseAction: TCloseAction);
 begin
   if csDesigning in ComponentState then exit;
+  FFormTop := FFindForm.Top;
+  FFormLeft := FFindForm.Left;
   if Assigned(OnClose) then OnClose(Self);
 end;
 
@@ -498,16 +506,15 @@ begin
 end;
 
 function TFindDialog.CreateForm: TForm;
-Var
-  StrTmp : String;
 begin
   // do not use Self as Owner, otherwise as desgntime this will not work
+  //debugln(['TFindDialog.CreateForm: Left=',Left,', Top=',Top,', Position=',dbgs(position),', FFormLeft=',FFormLeft,', FFormTop=',FFormTop]);
   Result := TFindDialogForm.CreateNew(nil,Options);
   with TFindDialogForm(Result) do
   begin
     FindButton.Caption := rsFind;
     CancelButton.Caption := rsMbCancel;
-    HelpButton.Caption := ifsVK_HELP;
+    HelpButton.Caption := rsHelp;
     WholeWordsOnlyCheckBox.Caption := rsWholeWordsOnly;
     CaseSensitiveCheckBox.Caption := rsCaseSensitive;
     EntireScopeCheckBox.Caption := rsEntireScope;
@@ -520,9 +527,9 @@ begin
     HelpButton.OnClick := @HelpClick;
     CancelButton.OnClick := @CancelClick;
     PopupMode := pmAuto;
-    // Init local property with defaut value
-    FFormTop  := top;
-    FFormLeft := Left;
+    // Init local property with default value
+    Result.Top := FFormTop;
+    Result.Left := FFormLeft;
   end;
 end;
 
@@ -576,15 +583,19 @@ begin
 end;
 
 procedure TFindDialog.CalcPosition(aForm:Tform);
-Var
-  MfBound : Trect;
-
 begin
-  MfBound := Application.MainForm.BoundsRect;
-  FFormTop  := MfBound.Top + (((MfBound.Bottom - MfBound.Top)  - aForm.Height) Div 2);
-  FFormLeft := MfBound.Left + (((MfBound.Right - MfBound.Left) - aForm.Width) Div 2);
-  aForm.Top := FFormTop;
-  aForm.Left := FFormLeft;
+  //debugln(['TFindDialog.CalcPosition: Left=',Left,', Top=',Top,', Position=',dbgs(position),', FFormLeft=',FFormLeft,', FFormTop=',FFormTop]);
+  if (csDesigning in ComponentState) then
+  begin
+    aForm.Position := poScreenCenter;
+    Exit;
+  end;
+  if (FFormLeft < 0) and (FFormTop < 0) then
+  begin
+    aForm.Position := poMainFormCenter;
+    FFormTop := aForm.Top;
+    FFormLeft := aForm.Left;
+  end;
 end;
 
 
@@ -592,6 +603,8 @@ constructor TFindDialog.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FOptions:=[frDown];
+  FFormLeft := -1;
+  FFormTop := -1;
 end;
 
 destructor TFindDialog.Destroy;

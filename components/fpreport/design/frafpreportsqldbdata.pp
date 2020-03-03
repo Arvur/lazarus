@@ -14,13 +14,12 @@
  **********************************************************************}
 unit frafpreportsqldbdata;
 
-{$mode objfpc}{$H+}
 
 interface
 
 uses
   Classes, SysUtils, FileUtil, Forms, Controls, EditBtn, StdCtrls, Buttons, ActnList, SynEdit, SynHighlighterSQL,
-  fpreportdesignreportdata, fpjson,  db, sqldb, reportdesigndatasql, dialogs;
+  fpreportdesignreportdata, fpjson, sqldb, fpreportdatasqldb, dialogs;
 
 type
   TFrame = TReportDataConfigFrame;
@@ -54,21 +53,12 @@ type
 
   { TSQLDBReportDataHandler }
 
-  TSQLDBReportDataHandler = Class(TDesignReportDataHandler)
-    Function CreateDataset(AOwner : TComponent; AConfig : TJSONObject) : TDataset; override;
-    Function CreateConfigFrame(AOwner : TComponent) : TReportDataConfigFrame; override;
-    Class Function CheckConfig(AConfig: TJSONObject): String; override;
-    Class Function DataType : String; override;
-    Class Function DataTypeDescription : String; override;
-  end;
 
 implementation
 
-uses frmfpreportdataconnectioneditor, ibconnection, pqconnection, sqlite3conn, odbcconn;
+uses  frmfpreportdataconnectioneditor;
 
-resourcestring
-  SErrNoConnectionData = 'No connection data available';
-  SErrNoSQL = 'No SQL statement set';
+
 
 {$R *.lfm}
 
@@ -94,7 +84,6 @@ begin
   end;
 end;
 
-
 procedure TSQLReportDataConfigFrame.ATestExecute(Sender: TObject);
 
 Var
@@ -103,7 +92,9 @@ Var
 begin
   S:=TFPReportConnector.TestConnection(FConnectionData);
   if (S<>'') then
-    MessageDlg(SErrConnectionNotOK,S,mtError,[mbOK],0);
+    MessageDlg(SErrConnectionNotOK,S,mtError,[mbOK],0)
+  else
+    MessageDlg(SSuccess,SConnectionSuccesful,mtInformation,[mbOK],0)
 end;
 
 constructor TSQLReportDataConfigFrame.Create(AOwner: TComponent);
@@ -150,42 +141,7 @@ begin
     Result:=TFPReportConnector.TestConnection(FConnectionData);
 end;
 
-{ TSQLDBReportDataHandler }
-
-function TSQLDBReportDataHandler.CreateDataset(AOwner: TComponent; AConfig: TJSONObject): TDataset;
-begin
-  Result:=TFPReportConnector.CreateDataset(aOwner,aConfig);
-end;
-
-function TSQLDBReportDataHandler.CreateConfigFrame(AOwner: TComponent): TReportDataConfigFrame;
-begin
-  Result:=TSQLReportDataConfigFrame.Create(AOwner);
-end;
-
-class function TSQLDBReportDataHandler.CheckConfig(AConfig: TJSONObject): String;
-
-Var
-  O : TJSONObject;
-
-begin
-  O:=aConfig.Get(keyConnection,TJSONObject(Nil));
-  if (O=Nil) or (O.Count=0) then
-    Result:=SErrNoConnectionData
-  else if Trim(aConfig.Get(keySQL,''))='' then
-    Result:=SErrNoSQL
-end;
-
-class function TSQLDBReportDataHandler.DataType: String;
-begin
-  Result:='SQLDB';
-end;
-
-class function TSQLDBReportDataHandler.DataTypeDescription: String;
-begin
-  Result:='SQL Database server';
-end;
-
 initialization
-  TSQLDBReportDataHandler.RegisterHandler;
+  TSQLDBReportDataHandler.RegisterConfigClass(TSQLReportDataConfigFrame);
 end.
 

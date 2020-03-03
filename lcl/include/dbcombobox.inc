@@ -28,53 +28,13 @@ begin
     Text := '';
 end;
 
-procedure TDBComboBox.KeyDown(var Key: Word; Shift: TShiftState);
-begin
-  inherited KeyDown(Key, Shift);
-  if Key=VK_ESCAPE then begin
-    //cancel out of editing by reset on esc
-    FDataLink.Reset;
-    SelectAll;
-    Key := VK_UNKNOWN;
-  end else
-  if Key in [VK_DELETE, VK_BACK] then begin
-    if not FDataLink.Edit then
-      Key := VK_UNKNOWN;
-  end;
-end;
-
 procedure TDBComboBox.KeyPress(var Key: char);
 begin
   inherited KeyPress(Key);
   case Key of
-    #8: // special keys
-      if not FDatalink.Edit then
-        Key:=#0;
-
     #32..#255: //standard keys
-      if not FieldCanAcceptKey(FDataLink.Field, Key) or not FDatalink.Edit then
+      if not FieldCanAcceptKey(FDataLink.Field, Key) then
         Key:=#0;
   end;//case
 end;
 
-procedure TDBComboBox.Select;
-begin
-  //avoid reseting text when calling select
-  FDataLink.OnDataChange := nil;
-  try
-    if FDataLink.Edit then
-    begin
-       FDataLink.Modified;
-       FDataLink.UpdateData;
-       inherited Select;
-    end
-    else
-    begin
-       // if cannot modify, let it reset
-       FDatalink.Reset;
-       DataChange(Self);
-    end;
-  finally
-    FDataLink.OnDataChange := @DataChange;
-  end;
-end;

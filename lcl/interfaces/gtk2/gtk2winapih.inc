@@ -47,6 +47,7 @@ function ClipboardGetFormats(ClipboardType: TClipboardType;
 function ClipboardGetOwnerShip(ClipboardType: TClipboardType;
   OnRequestProc: TClipboardRequestEvent;  FormatCount: integer;
   Formats: PClipboardFormat): boolean; override;
+function ClipboardFormatNeedsNullByte(const {%H-}AFormat: TPredefinedClipboardFormat): Boolean; override;
 function ClipboardRegisterFormat(const AMimeType: string): TClipboardFormat; override;
 
 function CombineRgn(Dest, Src1, Src2 : HRGN; fnCombineMode : Longint) : Longint;  override;
@@ -138,6 +139,7 @@ function GetSysColor(nIndex: Integer): DWORD; override;
 function GetSysColorBrush(nIndex: Integer): HBrush; override;
 function GetSystemMetrics(nIndex: Integer): Integer;  override;
 function GetTextColor(DC: HDC) : TColorRef; override;
+function GetTextExtentExPoint(DC: HDC; Str: PChar; Count, MaxWidth: Integer; MaxCount, PartialWidths: PInteger; var Size: TSize): Boolean; override;
 function GetTextExtentPoint(DC: HDC; Str: PChar; Count: Integer; var Size: TSize): Boolean; override;
 function GetTextMetrics(DC: HDC; var TM: TTextMetric): Boolean;  override;
 function GetViewPortExtEx(DC: HDC; Size: PSize): Integer; override;

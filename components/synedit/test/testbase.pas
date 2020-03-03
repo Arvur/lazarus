@@ -7,7 +7,7 @@ interface
 
 uses
   Classes, SysUtils, math, fpcunit,
-  Forms, LCLType, LCLProc, Clipbrd, LazUTF8,
+  Forms, LCLType, LCLProc, Clipbrd, Controls, LazUTF8,
   SynEdit, SynEditTypes, SynEditPointClasses, SynEditKeyCmds, LazSynTextArea, SynEditMarkup;
 
 type
@@ -36,6 +36,7 @@ type
                              AFlags: TTestSetSelFlags = []
                             );
     procedure SimulatePaintText;
+    procedure InvalidateLines(FirstLine, LastLine: integer); reintroduce;
     property ViewedTextBuffer;
     property TextBuffer;
     property TextView; // foldedview
@@ -48,10 +49,19 @@ type
 
   TTestBase = class(TTestCase)
   private
+    FCurError: String;
+  protected
+    procedure ClearError;
+    procedure MaybeThrowError;
+    function AddErrorTestTrue(Msg: String; Actual: Boolean): Boolean;
+    function AddErrorTestEqual(Msg: String; Expected, Actual: Integer): Boolean;
+
+  private
     FBaseTestName: String;
     FBaseTestNames: Array of String;
     FFixedBaseTestNames: Integer;
     FForm : TForm;
+    FScroll: TScrollBox;
     FUseFullText: Boolean;
     function GetClipBoardText: String;
     procedure SetBaseTestName(const AValue: String);
@@ -70,6 +80,7 @@ type
     function  LinesReplaceText(Lines: Array of String; Repl: Array of const): String;
   protected
     procedure ReCreateEdit;
+    procedure SetSynEditHeight(Lines: Integer; PartLinePixel: Integer = 3);
     procedure SetLines(Lines: Array of String);
     (* Setting selection, with one X/Y pair having negative values, will set caret to other X/Y pair and clear selection *)
     // Locical Caret
@@ -85,7 +96,9 @@ type
     procedure SetCaretAndSelPhysBackward(X1, Y1, X2, Y2: Integer;
       DoLock: Boolean = False; AMode: TSynSelectionMode = smCurrent);
     procedure DoKeyPress(Key: Word; Shift: TShiftState = []);
+    procedure DoKeyPress(Key: Array of Word; Shift: TShiftState = []);
     procedure DoKeyPressAtPos(X, Y: Integer; Key: Word; Shift: TShiftState = []);
+    procedure DoKeyPressAtPos(X, Y: Integer; Key: array of Word; Shift: TShiftState = []);
 
     procedure TestFail(Name, Func, Expect, Got: String; Result: Boolean = False);
     procedure PushBaseName(Add: String);
@@ -166,6 +179,7 @@ begin
       VK_RETURN:   c := #13;
       VK_TAB:      c := #9;
       VK_ESCAPE:   c := #27;
+      VK_SPACE:    c := #32;
     end
   else
   if Shift = [ssShift] then
@@ -249,14 +263,23 @@ begin
   //PaintTextLines(Rect(0,0,1000,1000), 0, Lines.Count - 1, 1, 100);
 end;
 
+procedure TTestSynEdit.InvalidateLines(FirstLine, LastLine: integer);
+begin
+  inherited;
+end;
+
 { TTestBase }
 
 procedure TTestBase.SetUp;
 begin
+  ClearError;
   inherited SetUp;
   Clipboard.Open;
 
   FForm := TForm.Create(nil);
+  FScroll := TScrollBox.Create(FForm);
+  FScroll.Parent := FForm;
+  FScroll.Align := alClient;
   ReCreateEdit;
   FForm.Show;
   FFixedBaseTestNames := 0;
@@ -475,6 +498,39 @@ begin
   PushBaseName(AValue);
 end;
 
+procedure TTestBase.ClearError;
+begin
+  FCurError := '';
+end;
+
+procedure TTestBase.MaybeThrowError;
+var
+  s: String;
+begin
+  s := FCurError;
+  ClearError;
+  if s <> '' then
+    AssertTrue(s, False);
+end;
+
+function TTestBase.AddErrorTestTrue(Msg: String; Actual: Boolean): Boolean;
+begin
+  Result := Actual;
+  if not Actual then begin
+    if FCurError <> '' then FCurError := FCurError + LineEnding;
+    FCurError := FCurError + Msg;
+  end;
+end;
+
+function TTestBase.AddErrorTestEqual(Msg: String; Expected, Actual: Integer
+  ): Boolean;
+begin
+  Result := AddErrorTestTrue(
+    ComparisonMsg(Msg,IntToStr(PtrInt(Expected)), IntToStr(PtrInt(Actual))),
+    Expected = Actual
+  );
+end;
+
 function TTestBase.GetClipBoardText: String;
 begin
   Result := Clipboard.AsText;
@@ -549,12 +605,18 @@ end;
 procedure TTestBase.ReCreateEdit;
 begin
   FreeAndNil(FSynEdit);
-  FSynEdit := TTestSynEdit.Create(FForm);
+  FSynEdit := TTestSynEdit.Create(FScroll);
   FSynEdit.Parent := FForm;
   FSynEdit.Top := 0;
   FSynEdit.Left := 0;
   FSynEdit.Width:= 500;
   FSynEdit.Height := 250; // FSynEdit.Font.Height * 20 + 2;
+end;
+
+procedure TTestBase.SetSynEditHeight(Lines: Integer; PartLinePixel: Integer);
+begin
+  FSynEdit.Height := FSynEdit.LineHeight * Lines + PartLinePixel +
+    (FSynEdit.Height - FSynEdit.ClientHeight);
 end;
 
 procedure TTestBase.SetLines(Lines: array of String);
@@ -675,7 +737,22 @@ begin
   {$IFDEF WITH_APPMSG}Application.ProcessMessages;{$ENDIF}
 end;
 
+procedure TTestBase.DoKeyPress(Key: array of Word; Shift: TShiftState);
+var
+  i: Integer;
+begin
+  for i := 0 to Length(Key) - 1 do
+    DoKeyPress(Key[i], Shift);
+end;
+
 procedure TTestBase.DoKeyPressAtPos(X, Y: Integer; Key: Word; Shift: TShiftState = []);
+begin
+  SetCaret(X, Y);
+  DoKeyPress(Key, Shift);
+end;
+
+procedure TTestBase.DoKeyPressAtPos(X, Y: Integer; Key: array of Word;
+  Shift: TShiftState);
 begin
   SetCaret(X, Y);
   DoKeyPress(Key, Shift);

@@ -5,13 +5,14 @@ unit SynColorAttribEditor;
 interface
 
 uses
-  Classes, Controls, StdCtrls, sysutils, ExtCtrls, Graphics, GraphUtil,
-  ColorBox, LCLProc, LCLType, LCLIntf, Dialogs, Menus, Forms, Spin, SynEdit,
-  SynGutterCodeFolding, SynEditTypes,
-  SynEditMouseCmds, SynEditHighlighter, SynTextDrawer,
-  EditorOptions, IDEOptionsIntf,
-  editor_general_options, IDEImagesIntf, LazarusIDEStrConsts, IDEProcs, typinfo,
-  LazConf, SourceMarks, types, math, FPCanvas;
+  Classes, Controls, sysutils, types, typinfo, math, FPCanvas,
+  // LCL
+  LCLProc, LCLType, LCLIntf, Forms, StdCtrls, ExtCtrls, Graphics, GraphUtil,
+  ColorBox, Dialogs, Menus, Spin,
+  // SynEdit
+  SynEditTypes, SynTextDrawer,
+  // IDE
+  EditorOptions, SourceMarks, LazarusIDEStrConsts, EnvironmentOpts;
 
 type
 
@@ -25,6 +26,11 @@ type
     ColumnPosBevel: TPanel;
     ForePriorLabel: TLabel;
     ForePriorSpin: TSpinEdit;
+    MarkupFoldStyleBox: TComboBox;
+    MarkupFoldAlphaSpin: TSpinEdit;
+    MarkupFoldAlphaLabel: TLabel;
+    MarkupFoldColorUseDefaultCheckBox: TCheckBox;
+    MarkupFoldColorBox: TColorBox;
     FramePriorSpin: TSpinEdit;
     FramePriorLabel: TLabel;
     FrameStyleBox: TComboBox;
@@ -72,7 +78,6 @@ type
     procedure pnlElementAttributesResize(Sender: TObject);
     procedure TextStyleRadioOnChange(Sender: TObject);
   private
-    { private declarations }
     FCurHighlightElement: TColorSchemeAttribute;
     FCurrentColorScheme: TColorSchemeLanguage;
     FOnChanged: TNotifyEvent;
@@ -83,10 +88,10 @@ type
     procedure DoChanged;
     procedure SetShowPrior(AValue: Boolean);
   public
-    { public declarations }
     constructor Create(TheOwner: TComponent); override;
     procedure Setup;
     procedure UpdateAll;
+    procedure DoResized;
     // CurrentColorScheme must be set before CurHighlightElement
     property CurHighlightElement: TColorSchemeAttribute read FCurHighlightElement write SetCurHighlightElement;
     property CurrentColorScheme: TColorSchemeLanguage read FCurrentColorScheme write FCurrentColorScheme;
@@ -139,6 +144,12 @@ begin
     FrameEdgesBox.Enabled := FrameColorBox.Selected <> clDefault;
     FrameStyleBox.Enabled := FrameColorBox.Selected <> clDefault;
   end;
+  if Sender = MarkupFoldColorBox then
+  begin
+    FCurHighlightElement.MarkupFoldLineColor := DefaultToNone(MarkupFoldColorBox.Selected);
+    MarkupFoldColorUseDefaultCheckBox.Checked := MarkupFoldColorBox.Selected <> clDefault;
+    MarkupFoldStyleBox.Enabled := MarkupFoldColorBox.Selected <> clDefault;
+  end;
   if Sender = FrameEdgesBox then
   begin
     FCurHighlightElement.FrameEdges := TSynFrameEdges(FrameEdgesBox.ItemIndex);
@@ -146,6 +157,10 @@ begin
   if Sender = FrameStyleBox then
   begin
     FCurHighlightElement.FrameStyle := TSynLineStyle(FrameStyleBox.ItemIndex);
+  end;
+  if Sender = MarkupFoldStyleBox then
+  begin
+    FCurHighlightElement.MarkupFoldLineStyle := TSynLineStyle(MarkupFoldStyleBox.ItemIndex);
   end;
 
   UpdatingColor := False;
@@ -175,6 +190,8 @@ begin
     FCurHighlightElement.BackAlpha := v;
   if Sender = FrameAlphaSpin then
     FCurHighlightElement.FrameAlpha := v;
+  if Sender = MarkupFoldAlphaSpin then
+    FCurHighlightElement.MarkupFoldLineAlpha := v;
 
   DoChanged;
 end;
@@ -256,6 +273,32 @@ begin
   end;
 end;
 
+procedure TSynColorAttrEditor.DoResized;
+var
+  S: TSpinEdit;
+begin
+  S := FramePriorSpin;
+  if not S.Visible then
+    S := FrameAlphaSpin;
+  if Width > S.Left + S.Width + FrameStyleBox.Width + FrameEdgesBox.Width + 15 then
+  begin
+    FrameEdgesBox.AnchorSide[akTop].Control := S;
+    FrameEdgesBox.AnchorSide[akTop].Side := asrTop;
+    FrameEdgesBox.AnchorSide[akLeft].Control := S;
+    FrameEdgesBox.AnchorSide[akLeft].Side := asrBottom;
+    FrameEdgesBox.BorderSpacing.Top := 0;
+    FrameEdgesBox.BorderSpacing.Left := 6;
+  end
+  else begin
+    FrameEdgesBox.AnchorSide[akTop].Control := FrameColorBox;
+    FrameEdgesBox.AnchorSide[akTop].Side := asrBottom;
+    FrameEdgesBox.AnchorSide[akLeft].Control := FrameColorBox;
+    FrameEdgesBox.AnchorSide[akLeft].Side := asrTop;
+    FrameEdgesBox.BorderSpacing.Top := 3;
+    FrameEdgesBox.BorderSpacing.Left := 0;
+  end;
+end;
+
 procedure TSynColorAttrEditor.FrameStyleBoxDrawItem(Control: TWinControl; Index: Integer; ARect: TRect;
   State: TOwnerDrawState);
 var
@@ -298,6 +341,7 @@ begin
     if Sender = ForeGroundUseDefaultCheckBox then TheColorBox := ForegroundColorBox;
     if Sender = BackGroundUseDefaultCheckBox then TheColorBox := BackGroundColorBox;
     if Sender = FrameColorUseDefaultCheckBox then TheColorBox := FrameColorBox;
+    if Sender = MarkupFoldColorUseDefaultCheckBox then TheColorBox := MarkupFoldColorBox;
     if Assigned(TheColorBox) then begin
       if TCheckBox(Sender).Checked then begin
         TheColorBox.Selected := TheColorBox.Tag;
@@ -326,6 +370,12 @@ begin
         FrameEdgesBox.Enabled := TCheckBox(Sender).Checked;
         FrameStyleBox.Enabled := TCheckBox(Sender).Checked;
         DoChanged;
+      end;
+      if (Sender = MarkupFoldColorUseDefaultCheckBox) and
+         (DefaultToNone(MarkupFoldColorBox.Selected) <> FCurHighlightElement.MarkupFoldLineColor)
+      then begin
+        FCurHighlightElement.MarkupFoldLineColor := DefaultToNone(MarkupFoldColorBox.Selected);
+        MarkupFoldStyleBox.Enabled := MarkupFoldColorBox.Selected <> clDefault;
       end;
     end;
 
@@ -379,6 +429,7 @@ procedure TSynColorAttrEditor.pnlElementAttributesResize(Sender: TObject);
 var
   MinAnchor: TControl;
   MinWidth: Integer;
+  S: TSpinEdit;
 
   procedure CheckControl(Other: TControl);
   var w,h: Integer;
@@ -399,8 +450,14 @@ begin
   CheckControl(ForeGroundUseDefaultCheckBox);
   CheckControl(BackGroundUseDefaultCheckBox);
   CheckControl(FrameColorUseDefaultCheckBox);
+  CheckControl(MarkupFoldColorUseDefaultCheckBox);
 
   ColumnPosBevel.AnchorSide[akLeft].Control := MinAnchor;
+  Constraints.MinHeight := pnlItalic.Top + pnlItalic.Height;
+  S := BackPriorSpin;
+  if not S.Visible then
+    S := BackAlphaSpin;
+  Constraints.MinWidth := S.Left + S.Width;
 end;
 
 procedure TSynColorAttrEditor.TextStyleRadioOnChange(Sender: TObject);
@@ -468,6 +525,12 @@ begin
 end;
 
 procedure TSynColorAttrEditor.UpdateAll;
+  function IsAhaElement(Element: TColorSchemeAttribute; aha: TAdditionalHilightAttribute): Boolean;
+  begin
+    Result := (FCurrentColorScheme <> nil) and
+              (FCurrentColorScheme.AttributeByEnum[aha] <> nil) and
+              (Element.StoredName = FCurrentColorScheme.AttributeByEnum[aha].StoredName);
+  end;
 begin
   if (FCurHighlightElement = nil) or UpdatingColor then
     Exit;
@@ -476,18 +539,24 @@ begin
   try
     // Adjust color captions
     ForeGroundUseDefaultCheckBox.Caption := dlgForecolor;
+    BackGroundUseDefaultCheckBox.Caption := dlgBackColor;
     FrameColorUseDefaultCheckBox.Caption := dlgFrameColor;
     if FCurrentColorScheme <> nil then begin
-      if (FCurrentColorScheme.AttributeByEnum[ahaModifiedLine] <> nil) and
-         (FCurHighlightElement.StoredName = FCurrentColorScheme.AttributeByEnum[ahaModifiedLine].StoredName)
-      then begin
+      if IsAhaElement(FCurHighlightElement, ahaModifiedLine) then begin
         ForeGroundUseDefaultCheckBox.Caption := dlgSavedLineColor;
         FrameColorUseDefaultCheckBox.Caption := dlgUnsavedLineColor;
       end else
-      if (FCurrentColorScheme.AttributeByEnum[ahaCodeFoldingTree] <> nil) and
-         (FCurHighlightElement.StoredName = FCurrentColorScheme.AttributeByEnum[ahaCodeFoldingTree].StoredName)
-      then begin
+      if IsAhaElement(FCurHighlightElement, ahaCodeFoldingTree) then begin
         FrameColorUseDefaultCheckBox.Caption := dlgGutterCollapsedColor;
+      end else
+      if IsAhaElement(FCurHighlightElement, ahaCaretColor) then begin
+        ForeGroundUseDefaultCheckBox.Caption := dlgCaretForeColor;
+        BackGroundUseDefaultCheckBox.Caption := dlgCaretBackColor;
+      end else
+      if IsAhaElement(FCurHighlightElement, ahaOverviewGutter) then begin
+        ForeGroundUseDefaultCheckBox.Caption := dlgOverviewGutterBack1Color;
+        BackGroundUseDefaultCheckBox.Caption := dlgOverviewGutterBack2Color;
+        FrameColorUseDefaultCheckBox.Caption := dlgOverviewGutterPageColor;
       end;
     end;
 
@@ -591,6 +660,30 @@ begin
     FramePriorLabel.Visible := FramePriorSpin.Visible;
     FramePriorSpin.Value    := FCurHighlightElement.FramePriority;
 
+    // Markup Fold
+    MarkupFoldColorUseDefaultCheckBox.Visible := hafMarkupFoldColor in FCurHighlightElement.Features;
+    MarkupFoldColorBox.Visible                := hafMarkupFoldColor in FCurHighlightElement.Features;
+    MarkupFoldAlphaLabel.Visible             := hafMarkupFoldColor in FCurHighlightElement.Features;
+    MarkupFoldAlphaSpin.Visible              := hafMarkupFoldColor in FCurHighlightElement.Features;
+    MarkupFoldStyleBox.Visible               := hafMarkupFoldColor in FCurHighlightElement.Features;
+
+    MarkupFoldColorBox.Selected := NoneToDefault(FCurHighlightElement.MarkupFoldLineColor);
+    if MarkupFoldColorBox.Selected = clDefault then
+      MarkupFoldColorBox.Tag := MarkupFoldColorBox.DefaultColorColor
+    else
+      MarkupFoldColorBox.Tag := MarkupFoldColorBox.Selected;
+    MarkupFoldColorUseDefaultCheckBox.Checked := MarkupFoldColorBox.Selected <> clDefault;
+
+    MarkupFoldStyleBox.ItemIndex := integer(FCurHighlightElement.MarkupFoldLineStyle);
+    MarkupFoldStyleBox.Enabled := MarkupFoldColorUseDefaultCheckBox.Checked;
+
+    if FCurHighlightElement.MarkupFoldLineAlpha = 0 then begin
+      MarkupFoldAlphaSpin.Value    := 256; // Off
+      MarkupFoldAlphaSpin.Caption  := dlgEdOff;
+    end
+    else
+      MarkupFoldAlphaSpin.Value    := FCurHighlightElement.MarkupFoldLineAlpha;
+
     // Styles
     TextBoldCheckBox.Visible      := hafStyle in FCurHighlightElement.Features;
     TextItalicCheckBox.Visible    := hafStyle in FCurHighlightElement.Features;
@@ -675,6 +768,13 @@ constructor TSynColorAttrEditor.Create(TheOwner: TComponent);
 begin
   inherited Create(TheOwner);
   FShowPrior := False;
+  ForegroundColorBox.DropDownCount := EnvironmentOptions.DropDownCount;
+  BackGroundColorBox.DropDownCount := EnvironmentOptions.DropDownCount;
+  FrameColorBox.DropDownCount := EnvironmentOptions.DropDownCount;
+  FrameEdgesBox.DropDownCount := EnvironmentOptions.DropDownCount;
+  FrameStyleBox.DropDownCount := EnvironmentOptions.DropDownCount;
+  MarkupFoldColorBox.DropDownCount := EnvironmentOptions.DropDownCount;
+  MarkupFoldStyleBox.DropDownCount := EnvironmentOptions.DropDownCount;
 end;
 
 procedure TSynColorAttrEditor.Setup;
@@ -686,9 +786,11 @@ begin
   ForeGroundUseDefaultCheckBox.Caption := dlgForecolor;
   BackGroundUseDefaultCheckBox.Caption := dlgBackColor;
   FrameColorUseDefaultCheckBox.Caption := dlgFrameColor;
+  MarkupFoldColorUseDefaultCheckBox.Caption := dlgMarkupFoldColor;
   ForeAlphaLabel.Caption := lisAlpha;
   BackAlphaLabel.Caption := lisAlpha;
   FrameAlphaLabel.Caption := lisAlpha;
+  MarkupFoldAlphaLabel.Caption := lisAlpha;
   ForePriorLabel.Caption := lisPriority;
   BackPriorLabel.Caption := lisPriority;
   FramePriorLabel.Caption := lisPriority;

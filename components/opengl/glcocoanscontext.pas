@@ -24,8 +24,9 @@ unit GLCocoaNSContext;
 interface
 
 uses
-  Classes, SysUtils, types, CocoaWSCommon, CocoaPrivate, CocoaUtils, LCLType,
-  Controls, LazLoggerBase, WSLCLClasses, gl, MacOSAll, CocoaAll;
+  Classes, SysUtils, types, CocoaWSCommon, CocoaPrivate, CocoaUtils, LCLType, Cocoa_Extra,
+  LMessages, LCLMessageGlue,
+  Controls, LazLoggerBase, WSLCLClasses, MacOSAll, CocoaAll;
 
 function LBackingScaleFactor(Handle: HWND): single;
 procedure LSetWantsBestResolutionOpenGLSurface(const AValue: boolean; Handle: HWND);
@@ -60,8 +61,6 @@ type
   NSScreenFix = objccategory external (NSScreen)
      function backingScaleFactor: CGFloat ; message 'backingScaleFactor';
   end;
-  TDummyNoWarnObjCNotUsed = objc.BOOL;
-  TDummyNoWarnObjCBaseNotUsed = objcbase.NSInteger;
 
   { TCocoaOpenGLView }
 
@@ -71,31 +70,28 @@ type
     //nsGL: NSOpenGLContext;
     callback: TLCLCommonCallback;
     backingScaleFactor: Single;
-    function acceptsFirstResponder: Boolean; override;
-    function becomeFirstResponder: Boolean; override;
-    function resignFirstResponder: Boolean; override;
+    function acceptsFirstResponder: LCLObjCBoolean; override;
+    function becomeFirstResponder: LCLObjCBoolean; override;
+    function resignFirstResponder: LCLObjCBoolean; override;
     procedure drawRect(dirtyRect: NSRect); override;
     procedure dealloc; override;
     function lclGetCallback: ICommonCallback; override;
     procedure lclClearCallback; override;
-    function lclIsHandle: Boolean; override;
     function lclIsEnabled: Boolean; override;
     // mouse
     procedure mouseDown(event: NSEvent); override;
     procedure mouseUp(event: NSEvent); override;
     procedure rightMouseDown(event: NSEvent); override;
     procedure rightMouseUp(event: NSEvent); override;
+    procedure rightMouseDragged(event: NSEvent); override;
     procedure otherMouseDown(event: NSEvent); override;
     procedure otherMouseUp(event: NSEvent); override;
+    procedure otherMouseDragged(event: NSEvent); override;
     procedure mouseDragged(event: NSEvent); override;
     procedure mouseEntered(event: NSEvent); override;
     procedure mouseExited(event: NSEvent); override;
     procedure mouseMoved(event: NSEvent); override;
     procedure scrollWheel(event: NSEvent); override;
-    // key
-    procedure keyDown(event: NSEvent); override;
-    procedure keyUp(event: NSEvent); override;
-    procedure flagsChanged(event: NSEvent); override;
     // other
     procedure resetCursorRects; override;
   end;
@@ -199,7 +195,7 @@ begin
   Result:=0;
   p := nil;
   if (AParams.WndParent <> 0) then
-    p := CocoaUtils.GetNSObjectView(NSObject(AParams.WndParent));
+    p := NSObject(AParams.WndParent).lclContentView;
   if Assigned(p) then
     LCLToNSRect(types.Bounds(AParams.X, AParams.Y, AParams.Width, AParams.Height),
       p.frame.size.height, ns)
@@ -392,18 +388,18 @@ end;              *)
 
 { TCocoaOpenGLView }
 
-function TCocoaOpenGLView.acceptsFirstResponder: Boolean;
+function TCocoaOpenGLView.acceptsFirstResponder: LCLObjCBoolean;
 begin
   Result := True;
 end;
 
-function TCocoaOpenGLView.becomeFirstResponder: Boolean;
+function TCocoaOpenGLView.becomeFirstResponder: LCLObjCBoolean;
 begin
   Result:=inherited becomeFirstResponder;
   callback.BecomeFirstResponder;
 end;
 
-function TCocoaOpenGLView.resignFirstResponder: Boolean;
+function TCocoaOpenGLView.resignFirstResponder: LCLObjCBoolean;
 begin
   Result:=inherited resignFirstResponder;
   callback.ResignFirstResponder;
@@ -424,11 +420,6 @@ begin
   callback := nil;
 end;
 
-function TCocoaOpenGLView.lclIsHandle: Boolean;
-begin
-  Result:=true;
-end;
-
 function TCocoaOpenGLView.lclIsEnabled: Boolean;
 begin
   Result := Owner.Enabled;
@@ -437,7 +428,11 @@ end;
 procedure TCocoaOpenGLView.mouseDown(event: NSEvent);
 begin
   if not Assigned(callback) or not callback.MouseUpDownEvent(event) then
-    inherited mouseDown(event);
+  begin
+    // do not pass mouseDown below or it will pass it to the parent control
+    // causing double events
+    //inherited mouseDown(event);
+  end;
 end;
 
 procedure TCocoaOpenGLView.mouseUp(event: NSEvent);
@@ -458,6 +453,12 @@ begin
     inherited rightMouseUp(event);
 end;
 
+procedure TCocoaOpenGLView.rightMouseDragged(event: NSEvent);
+begin
+  if not Assigned(callback) or not callback.MouseMove(event) then
+    inherited rightMouseDragged(event);
+end;
+
 procedure TCocoaOpenGLView.otherMouseDown(event: NSEvent);
 begin
   if not Assigned(callback) or not callback.MouseUpDownEvent(event) then
@@ -470,10 +471,17 @@ begin
     inherited otherMouseUp(event);
 end;
 
-procedure TCocoaOpenGLView.mouseDragged(event: NSEvent);
+procedure TCocoaOpenGLView.otherMouseDragged(event: NSEvent);
 begin
   if not Assigned(callback) or not callback.MouseMove(event) then
-    inherited mouseDragged(event);
+    inherited otherMouseDragged(event);
+end;
+
+procedure TCocoaOpenGLView.mouseDragged(event: NSEvent);
+begin
+  if Assigned(callback)
+    then callback.MouseMove(event)
+    else inherited mouseDragged(event);
 end;
 
 procedure TCocoaOpenGLView.mouseEntered(event: NSEvent);
@@ -494,26 +502,9 @@ end;
 
 procedure TCocoaOpenGLView.scrollWheel(event: NSEvent);
 begin
-  if not Assigned(callback) or not callback.scrollWheel(event) then
-    inherited scrollWheel(event);
-end;
-
-procedure TCocoaOpenGLView.keyDown(event: NSEvent);
-begin
-  if not Assigned(callback) or not callback.KeyEvent(event) then
-    inherited keyDown(event);
-end;
-
-procedure TCocoaOpenGLView.keyUp(event: NSEvent);
-begin
-  if not Assigned(callback) or not callback.KeyEvent(event) then
-    inherited keyUp(event);
-end;
-
-procedure TCocoaOpenGLView.flagsChanged(event: NSEvent);
-begin
-  if not Assigned(callback) or not callback.KeyEvent(event) then
-    inherited flagsChanged(event);
+  if Assigned(callback)
+    then callback.scrollWheel(event)
+    else inherited scrollWheel(event);
 end;
 
 procedure TCocoaOpenGLView.resetCursorRects;
@@ -523,10 +514,31 @@ begin
 end;
 
 procedure TCocoaOpenGLView.drawRect(dirtyRect: NSRect);
+var
+  ctx : NSGraphicsContext;
+  PS  : TPaintStruct;
+  r   : NSRect;
 begin
+  ctx := NSGraphicsContext.currentContext;
   inherited drawRect(dirtyRect);
   if CheckMainThread and Assigned(callback) then
-    callback.Draw(NSGraphicsContext.currentContext, bounds, dirtyRect);
+  begin
+    if ctx = nil then
+    begin
+      // In macOS 10.14 (mojave) current context is nil
+      // we still can paint anything releated to OpenGL!
+      // todo: consider creating a dummy context (for a bitmap)
+      FillChar(PS, SizeOf(TPaintStruct), 0);
+      r := frame;
+      r.origin.x:=0;
+      r.origin.y:=0;
+      PS.hdc := HDC(0);
+      PS.rcPaint := NSRectToRect(r);
+      LCLSendPaintMsg(Owner, HDC(0), @PS);
+    end
+    else
+      callback.Draw(ctx, bounds, dirtyRect);
+  end;
 end;
 
 end.

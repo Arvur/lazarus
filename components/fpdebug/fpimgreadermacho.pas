@@ -9,7 +9,7 @@ uses
   macho, FpImgReaderMachoFile, FpImgReaderBase, LazLoggerBase,
   DbgIntfBaseTypes,
   lazfglhash,
-  fpDbgSymTable;
+  fpDbgSymTable, FpDbgUtil;
 
 type
 
@@ -42,6 +42,7 @@ type
     class function isValid(ASource: TDbgFileLoader): Boolean; override;
     class function UserName: AnsiString; override;
     class procedure LoadSubFiles(ASubFiles: TStrings; ALoaderList: TFPObjectList);
+    procedure AddSubFilesToLoaderList(ALoaderList: TObject; PrimaryLoader: TObject); override;
     procedure ParseSymbolTable(AfpSymbolInfo: TfpSymbolList); override;
   public
     constructor Create(ASource: TDbgFileLoader; ADebugMap: TObject; OwnSource: Boolean); override;
@@ -53,9 +54,12 @@ implementation
 uses
   FpDbgLoader;
 
+var
+  DBG_VERBOSE, DBG_WARNINGS: PLazLoggerLogGroup;
+
 type
-  PnlistArray = ^TnlistArray;
-  TnlistArray = array[0..maxSmallint] of nlist;
+  PnlistArray = ^nlist; // ^array[0..infinite] of nlist;
+  PnlistArray64 = ^nlist_64; // ^array[0..infinite] of nlist_64;
 
 const
   // Symbol-map section name
@@ -76,7 +80,7 @@ type
 
   TAppleDwarfDebugMap = class(TObject)
   private
-    FAddressMap: TDbgAddressMapList;
+    //FAddressMap: TDbgAddressMapList;
     FDir: string;
     FGlobalList: TDbgAddressMapHashList;
     FObjectFile: string;
@@ -86,6 +90,7 @@ type
   public
     constructor create;
     destructor destroy; override;
+    procedure clear;
     property Offset: TDBGPtr read FOffset write FOffset;
     property Dir: string read FDir write FDir;
     property ObjectFile: string read FObjectFile write FObjectFile;
@@ -100,7 +105,7 @@ type
     // in the main executable.
     // This property is only available in the debug-map for a specific
     // object-file.
-    property AddressMap: TDbgAddressMapList read FAddressMap;
+    //property AddressMap: TDbgAddressMapList read FAddressMap;
   end;
 
 function isValidMachoStream(ASource: TDbgFileLoader): Boolean;
@@ -130,14 +135,25 @@ end;
 constructor TAppleDwarfDebugMap.create;
 begin
   FGlobalList := TDbgAddressMapHashList.Create;
-  FAddressMap := TDbgAddressMapList.Create;
+  //FAddressMap := TDbgAddressMapList.Create;
 end;
 
 destructor TAppleDwarfDebugMap.destroy;
 begin
-  FAddressMap.Free;
+  //FAddressMap.Free;
   FGlobalList.Free;
   inherited destroy;
+end;
+
+procedure TAppleDwarfDebugMap.clear;
+begin
+  //FAddressMap.Clear;
+  FDir := '';
+  FGlobalList.Clear;
+  FObjectFile := '';
+  FObjFileAge := 0;
+  FOffset := 0;
+  FSourceFile := '';
 end;
 
 { TDbgMachoDataSource }
@@ -184,7 +200,11 @@ var
   p: PDbgImageSection;
   ps: PDbgImageSection;
   SymbolArr: PnlistArray;
+  SymbolArr64: PnlistArray64;
   SymbolStr: pointer;
+  SymbolType: uint8_t;
+  StringOffset: uint32_t;
+  SymbolValue: TDBGPtr;
   i: integer;
   SymbolCount: integer;
 begin
@@ -192,18 +212,38 @@ begin
   ps := Section[_symbolstrings];
   if assigned(p) and assigned(ps) then
   begin
-    SymbolArr:=PDbgImageSectionEx(p)^.Sect.RawData;
     SymbolStr:=PDbgImageSectionEx(ps)^.Sect.RawData;
-    SymbolCount := PDbgImageSectionEx(p)^.Sect.Size div sizeof(nlist);
+    if Image64Bit then
+      begin
+        SymbolArr64:=PDbgImageSectionEx(p)^.Sect.RawData;
+        SymbolCount := PDbgImageSectionEx(p)^.Sect.Size div sizeof(nlist_64);
+      end
+      else
+      begin
+        SymbolArr:=PDbgImageSectionEx(p)^.Sect.RawData;
+        SymbolCount := PDbgImageSectionEx(p)^.Sect.Size div sizeof(nlist);
+      end;
     for i := 0 to SymbolCount-1 do
     begin
-      if (SymbolArr^[i].n_type and $e0)<>0 then
+      if Image64Bit then
+      begin
+        SymbolType := SymbolArr64[i].n_type;
+        StringOffset := SymbolArr64[i].n_un.n_strx;
+        SymbolValue := SymbolArr64[i].n_value;
+      end
+      else
+      begin
+        SymbolType := SymbolArr[i].n_type;
+        StringOffset := SymbolArr[i].n_un.n_strx;
+        SymbolValue := SymbolArr[i].n_value;
+      end;
+      if (SymbolType and $e0)<>0 then
         // This is a stabs-entry. Ignore.
         Continue;
-      if (SymbolArr^[i].n_type and $0e)=$e then
+      if (SymbolType and $0e)=$e then
       begin
         // Section-index is ignored for now...
-        AfpSymbolInfo.AddObject(pchar(SymbolStr+SymbolArr^[i].n_un.n_strx), TObject(PtrUInt(SymbolArr^[i].n_value)));
+        AfpSymbolInfo.Add(pchar(SymbolStr+StringOffset), SymbolValue);
       end
     end;
   end;
@@ -258,7 +298,10 @@ begin
     SectionSize := StabsCmd.strsize;
   end else begin
     SectionOffset := StabsCmd.symoff;
-    SectionSize := Int64(StabsCmd.nsyms * sizeof(nlist));
+    if Image64Bit then
+      SectionSize := Int64(StabsCmd.nsyms * sizeof(nlist_64))
+    else
+      SectionSize := Int64(StabsCmd.nsyms * sizeof(nlist));
   end;
 end;
 
@@ -298,6 +341,56 @@ begin
   fSource.LoadMemory(ex^.Offs, Result^.Size, Result^.RawData);
 end;
 
+procedure TDbgMachoDataSource.AddSubFilesToLoaderList(ALoaderList: TObject;
+  PrimaryLoader: TObject);
+var
+  PLoader: TDbgImageLoader absolute PrimaryLoader;
+  LList: TDbgImageLoaderList absolute ALoaderList;
+  ALoader: TDbgImageLoader;
+  fname, dSYMFilename: String;
+  i: SizeInt;
+begin
+  // JvdS: Mach-O binaries do not contain DWARF-debug info. Instead this info
+  // is stored inside the .o files, and the executable contains a map (in stabs-
+  // format) of all these .o files. An alternative to parsing this map and reading
+  // those .o files a dSYM-bundle could be used, which could be generated
+  // with dsymutil.
+
+  // PLoader.FileName in Contents/MacOS
+  ALoader:=nil;
+
+  fname := PLoader.FileName;
+  i := pos('/Contents/MacOS', fname);
+  if i > 0 then delete(fname, i, Length(fname));
+  dSYMFilename:=ChangeFileExt(PLoader.FileName, '.dSYM');
+  dSYMFilename:=dSYMFilename+'/Contents/Resources/DWARF/'+ExtractFileName(fname); // TDbgProcess.Name
+
+  if ExtractFileExt(dSYMFilename)='.app' then
+    dSYMFilename := ChangeFileExt(dSYMFilename,'');
+
+  if FileExists(dSYMFilename) then
+    begin
+    ALoader := TDbgImageLoader.Create(dSYMFilename);
+    if GUIDToString(ALoader.UUID)<>GUIDToString(PLoader.UUID) then
+      begin
+      AddReaderError('The unique UUID''s of the executable and the dSYM bundle with debug-info ('+dSYMFilename+') do not match.');
+      debugln(DBG_WARNINGS, 'The unique UUID''s of the executable and the dSYM bundle with debug-info ('+dSYMFilename+') do not match.');
+      FreeAndNil(ALoader);
+      end
+    else
+      begin
+      debugln(DBG_VERBOSE, 'Load debug-info from dSYM bundle ('+dSYMFilename+').');
+      LList.Add(ALoader);
+      end;
+    end;
+
+  if not assigned(ALoader) then
+    begin
+    debugln(DBG_VERBOSE, 'Read debug-info from separate object files.');
+    TDbgMachoDataSource.LoadSubFiles(PLoader.SubFiles, LList);
+    end;
+end;
+
 constructor TDbgMachoDataSource.Create(ASource: TDbgFileLoader; ADebugMap: TObject; OwnSource: Boolean);
 const
   SymbolsSectionName : array [Boolean] of AnsiString = (_symbol, _symbolstrings);
@@ -333,7 +426,6 @@ begin
       P^.Offs := fs.sec64.offset;
       p^.Sect.Size := fs.sec64.size;
     end;
-DebugLn(Name);
 
     p^.Sect.VirtualAddress := 0; // Todo?
     p^.Loaded := False;
@@ -511,42 +603,78 @@ var
   p: PDbgImageSection;
   ps: PDbgImageSection;
   SymbolArr: PnlistArray;
+  SymbolArr64: PnlistArray64;
   SymbolStr: pointer;
   i: integer;
   SymbolCount: integer;
+  SymbolType, SymbolSect: uint8_t;
+  StringOffset: uint32_t;
+  SymbolValue: QWord;
   State: TDebugTableState;
   AddressMap: TDbgAddressMap;
   ProcName: string;
   DwarfDebugMap: TAppleDwarfDebugMap;
+  FullDwarfDebugMap: TDbgAddressMapPointerHashList;
+  ind: THTCustomNode;
 begin
   DwarfDebugMap:=nil;
+  FullDwarfDebugMap := TDbgAddressMapPointerHashList.Create;
   p := Section[_symbol];
   ps := Section[_symbolstrings];
   if assigned(p) and assigned(ps) then
   begin
-    SymbolArr:=PDbgImageSectionEx(p)^.Sect.RawData;
     SymbolStr:=PDbgImageSectionEx(ps)^.Sect.RawData;
-    SymbolCount := PDbgImageSectionEx(p)^.Sect.Size div sizeof(nlist);
+    if Image64Bit then
+    begin
+      SymbolArr64:=PDbgImageSectionEx(p)^.Sect.RawData;
+      SymbolCount := PDbgImageSectionEx(p)^.Sect.Size div sizeof(nlist_64);
+    end
+    else
+    begin
+      SymbolArr:=PDbgImageSectionEx(p)^.Sect.RawData;
+      SymbolCount := PDbgImageSectionEx(p)^.Sect.Size div sizeof(nlist);
+    end;
     state := dtsEnd;
     for i := 0 to SymbolCount-1 do
     begin
+      if Image64Bit then
+      begin
+        SymbolType := SymbolArr64[i].n_type;
+        StringOffset := SymbolArr64[i].n_un.n_strx;
+        SymbolValue := SymbolArr64[i].n_value;
+        SymbolSect := SymbolArr64[i].n_sect;
+      end
+      else
+      begin
+        SymbolType := SymbolArr[i].n_type;
+        StringOffset := SymbolArr[i].n_un.n_strx;
+        SymbolValue := SymbolArr[i].n_value;
+        SymbolSect := SymbolArr[i].n_sect;
+      end;
       case state of
         dtsEnd:
           begin
-            if SymbolArr^[i].n_type = N_SO then
+            if SymbolType = N_SO then
             begin
-              if assigned(DwarfDebugMap) then
-                DwarfDebugMap.Free;
-              DwarfDebugMap := TAppleDwarfDebugMap.Create;
-              DwarfDebugMap.Dir := pchar(SymbolStr+SymbolArr^[i].n_un.n_strx);
+              if not assigned(DwarfDebugMap) then
+                DwarfDebugMap := TAppleDwarfDebugMap.Create
+              else
+                DwarfDebugMap.clear;
+              DwarfDebugMap.Dir := pchar(SymbolStr+StringOffset);
               state := dtsDir;
+            end
+            else if (SymbolType in [14,15]) then begin
+              ind := FullDwarfDebugMap.Find(pchar(SymbolStr+StringOffset));
+              if (ind <> nil) and (FullDwarfDebugMap.ItemPointerFromNode(ind)^.NewAddr = 0) then begin
+                FullDwarfDebugMap.ItemPointerFromNode(ind)^.NewAddr := SymbolValue;
+              end;
             end;
           end;
         dtsDir:
           begin
-            if SymbolArr^[i].n_type = N_SO then
+            if SymbolType = N_SO then
             begin
-              DwarfDebugMap.SourceFile:=pchar(SymbolStr+SymbolArr^[i].n_un.n_strx);
+              DwarfDebugMap.SourceFile:=pchar(SymbolStr+StringOffset);
               inc(state);
             end
             else
@@ -554,27 +682,32 @@ begin
           end;
         dtsSource:
           begin
-            if SymbolArr^[i].n_type = N_OSO then
+            if SymbolType = N_OSO then
             begin
-              DwarfDebugMap.ObjectFile:=pchar(SymbolStr+SymbolArr^[i].n_un.n_strx);
-              DwarfDebugMap.ObjFileAge:=SymbolArr^[i].n_value;
+              DwarfDebugMap.ObjectFile:=pchar(SymbolStr+StringOffset);
+              DwarfDebugMap.ObjFileAge:=SymbolValue;
               inc(state);
             end;
           end;
         dtsObjectFile:
           begin
-            if (SymbolArr^[i].n_type = N_BNSYM) then
+            if (SymbolType = N_BNSYM) then
             begin
               inc(state);
             end
-            else if (SymbolArr^[i].n_type = N_STSYM) then
+            else if (SymbolType = N_STSYM) or (SymbolType = N_GSYM) then
             begin
-              AddressMap.NewAddr:=SymbolArr^[i].n_value;
+              AddressMap.NewAddr:=SymbolValue;
               AddressMap.OrgAddr:=0;
               AddressMap.Length:=0;
-              DwarfDebugMap.GlobalList.Add(pchar(SymbolStr+SymbolArr^[i].n_un.n_strx), AddressMap);
+              DwarfDebugMap.GlobalList.Add(pchar(SymbolStr+StringOffset), AddressMap);
+              if (SymbolType = N_GSYM) and (SymbolValue = 0) then begin
+                ind := DwarfDebugMap.GlobalList.Find(pchar(SymbolStr+StringOffset));
+                FullDwarfDebugMap.Add(pchar(SymbolStr+StringOffset),
+                  DwarfDebugMap.GlobalList.ItemPointerFromNode(ind));
+              end;
             end
-            else if (SymbolArr^[i].n_type = N_SO) and (SymbolArr^[i].n_sect=1) then
+            else if (SymbolType = N_SO) and (SymbolSect=1) then
             begin
               state := dtsEnd;
               SubFiles.AddObject(DwarfDebugMap.ObjectFile, DwarfDebugMap);
@@ -583,24 +716,24 @@ begin
           end;
         dtsProc:
           begin
-            if (SymbolArr^[i].n_type = N_FUN) and (SymbolArr^[i].n_sect=1) then
+            if (SymbolType = N_FUN) and (SymbolSect=1) then
             begin
-              AddressMap.NewAddr:=SymbolArr^[i].n_value;
-              ProcName:=pchar(SymbolStr+SymbolArr^[i].n_un.n_strx);
+              AddressMap.NewAddr:=SymbolValue;
+              ProcName:=pchar(SymbolStr+StringOffset);
               inc(state);
             end;
           end;
         dtsProcLen:
           begin
-            if (SymbolArr^[i].n_type = N_FUN) and (SymbolArr^[i].n_sect=0) then
+            if (SymbolType = N_FUN) and (SymbolSect=0) then
             begin
-              AddressMap.Length:=SymbolArr^[i].n_value;
+              AddressMap.Length:=SymbolValue;
               inc(state);
             end;
           end;
         dtsProcEnd:
           begin
-            if (SymbolArr^[i].n_type = N_ENSYM) and (SymbolArr^[i].n_sect=1) then
+            if (SymbolType = N_ENSYM) and (SymbolSect=1) then
             begin
               DwarfDebugMap.GlobalList.Add(ProcName, AddressMap);
               state := dtsObjectFile;
@@ -609,6 +742,7 @@ begin
       end;
     end;
   end;
+  FullDwarfDebugMap.Free;
 end;
 
 procedure TDbgMachoDataSource.ParseSubAppleDwarfDataMap(ADebugMap: TObject);
@@ -616,7 +750,11 @@ var
   p: PDbgImageSection;
   ps: PDbgImageSection;
   SymbolArr: PnlistArray;
+  SymbolArr64: PnlistArray64;
   SymbolStr: pointer;
+  SymbolType: uint8_t;
+  StringOffset: uint32_t;
+  SymbolValue: QWord;
   i: integer;
   SymbolCount: integer;
   MainDwarfDebugMap: TAppleDwarfDebugMap;
@@ -629,30 +767,50 @@ begin
   ps := Section[_symbolstrings];
   if assigned(p) and assigned(ps) then
   begin
-    SymbolArr:=PDbgImageSectionEx(p)^.Sect.RawData;
     SymbolStr:=PDbgImageSectionEx(ps)^.Sect.RawData;
-    SymbolCount := PDbgImageSectionEx(p)^.Sect.Size div sizeof(nlist);
+    if Image64Bit then
+    begin
+      SymbolArr64:=PDbgImageSectionEx(p)^.Sect.RawData;
+      SymbolCount := PDbgImageSectionEx(p)^.Sect.Size div sizeof(nlist_64);
+    end
+    else
+    begin
+      SymbolArr:=PDbgImageSectionEx(p)^.Sect.RawData;
+      SymbolCount := PDbgImageSectionEx(p)^.Sect.Size div sizeof(nlist);
+    end;
     for i := 0 to SymbolCount-1 do
     begin
-      if SymbolArr^[i].n_type = N_SECT then
+      if Image64Bit then
       begin
-        s := pchar(SymbolStr+SymbolArr^[i].n_un.n_strx);
+        SymbolType := SymbolArr64[i].n_type;
+        StringOffset := SymbolArr64[i].n_un.n_strx;
+        SymbolValue := SymbolArr64[i].n_value;
+      end
+      else
+      begin
+        SymbolType := SymbolArr[i].n_type;
+        StringOffset := SymbolArr[i].n_un.n_strx;
+        SymbolValue := SymbolArr[i].n_value;
+      end;
+      if SymbolType = N_SECT then
+      begin
+        s := pchar(SymbolStr+StringOffset);
         ind := MainDwarfDebugMap.GlobalList.Find(s);
         if assigned(ind) then
           begin
-            AddressMap:=MainDwarfDebugMap.GlobalList.Items[s];
-            AddressMap.OrgAddr:=SymbolArr^[i].n_value;
+            AddressMap:=MainDwarfDebugMap.GlobalList.ItemFromNode(ind);
+            AddressMap.OrgAddr:=SymbolValue;
             AddressMapList.Add(AddressMap);
           end;
       end;
-      if SymbolArr^[i].n_type = N_SECT+N_EXT then
+      if SymbolType = N_SECT+N_EXT then
       begin
-        s := pchar(SymbolStr+SymbolArr^[i].n_un.n_strx);
+        s := pchar(SymbolStr+StringOffset);
         ind := MainDwarfDebugMap.GlobalList.Find(s);
         if assigned(ind) then
           begin
-            AddressMap:=MainDwarfDebugMap.GlobalList.Items[s];
-            AddressMap.OrgAddr:=SymbolArr^[i].n_value;
+            AddressMap:=MainDwarfDebugMap.GlobalList.ItemFromNode(ind);
+            AddressMap.OrgAddr:=SymbolValue;
             AddressMapList.Add(AddressMap);
           end;
       end;
@@ -663,5 +821,7 @@ end;
 initialization
   RegisterImageReaderClass( TDbgMachoDataSource );
 
+  DBG_VERBOSE := DebugLogger.FindOrRegisterLogGroup('DBG_VERBOSE' {$IFDEF DBG_VERBOSE} , True {$ENDIF} );
+  DBG_WARNINGS := DebugLogger.FindOrRegisterLogGroup('DBG_WARNINGS' {$IFDEF DBG_WARNINGS} , True {$ENDIF} );
 end.
 

@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"X-Generator: Poedit 1.5.4\n"
+"X-Generator: Poedit 1.8.7.1\n"
 
 #: fppkg_const.rsaboutform
 msgid "About form"
@@ -55,11 +55,20 @@ msgstr "Letöltő"
 msgid "fpmake compiler config"
 msgstr "fpmake fordító beállítások"
 
+#: fppkg_const.rsfppkgenvironmentoptions
+msgid "Fppkg"
+msgstr "Fppkg"
+
+#: fppkg_const.rsfppkgenvironmentoptionscaption
+msgid "Compilation"
+msgstr "Fordítás"
+
 #: fppkg_const.rsfppkgoptions
 msgid "fppkg options"
 msgstr "fppkg beállítások"
 
 #: fppkg_const.rsfppkgsfailedresultds
+#, object-pascal-format
 msgid "Fppkg %s failed: Result %d%s%s"
 msgstr "Fppkg %s hiba. Eredmény: %d%s%s"
 
@@ -94,6 +103,10 @@ msgstr "Nincs futtatható fppkg"
 #: fppkg_const.rsoptions
 msgid "Options"
 msgstr "Beállítások"
+
+#: fppkg_const.rspackagefileoptionstitle
+msgid "FPMake"
+msgstr "FPMake"
 
 #: fppkg_const.rsremotemirrorsurl
 msgid "Remote mirrors URL"

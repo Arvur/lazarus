@@ -40,6 +40,8 @@ interface
 uses
   // RTL+FCL
   Classes, SysUtils, types, Laz_AVL_Tree,
+  // LazUtils
+  LazLoggerBase,
   // LCL
   LCLProc, LCLType, Forms, Controls, Dialogs, Buttons, ComCtrls, Menus, StdCtrls, ExtCtrls,
   // CodeTools
@@ -49,7 +51,7 @@ uses
   // IDEIntf
   LazIDEIntf, IDECommands, MenuIntf, SrcEditorIntf, IDEDialogs, IDEImagesIntf,
   // IDE
-  LazarusIDEStrConsts, IDEOptionDefs, IDEProcs, CodeExplOpts;
+  LazarusIDEStrConsts, IDEOptionDefs, CodeExplOpts;
 
 type
   TCodeExplorerView = class;
@@ -182,6 +184,7 @@ type
     ImgIDClass: Integer;
     ImgIDClassInterface: Integer;
     ImgIDRecord: Integer;
+    ImgIDEnum: Integer;
     ImgIDHelper: Integer;
     ImgIDConst: Integer;
     ImgIDSection: Integer;
@@ -192,6 +195,8 @@ type
     ImgIDInterface: Integer;
     ImgIDProcedure: Integer;
     ImgIDFunction: Integer;
+    ImgIDConstructor: Integer;
+    ImgIDDestructor: Integer;
     ImgIDProgram: Integer;
     ImgIDProperty: Integer;
     ImgIDPropertyReadOnly: Integer;
@@ -199,6 +204,7 @@ type
     ImgIDUnit: Integer;
     ImgIDVariable: Integer;
     ImgIDHint: Integer;
+    ImgIDLabel: Integer;
     procedure AssignAllImages;
     procedure ClearCodeTreeView;
     procedure ClearDirectivesTreeView;
@@ -466,7 +472,7 @@ begin
   FMode := CodeExplorerOptions.Mode;
   UpdateMode;
 
-  Name:=NonModalIDEWindowNames[nmiwCodeExplorerName];
+  Name:=NonModalIDEWindowNames[nmiwCodeExplorer];
   UpdateCaption;
 
   case CodeExplorerOptions.Page of
@@ -714,38 +720,38 @@ begin
 end;
 
 procedure TCodeExplorerView.AssignAllImages;
-var
-  ImageSize: Integer;
 begin
-  TIDEImages.AssignImage(CodeRefreshSpeedButton.Glyph, 'laz_refresh');
-  TIDEImages.AssignImage(CodeOptionsSpeedButton.Glyph, 'menu_environment_options');
-  TIDEImages.AssignImage(DirRefreshSpeedButton.Glyph, 'laz_refresh');
-  TIDEImages.AssignImage(DirOptionsSpeedButton.Glyph, 'menu_environment_options');
+  IDEImages.AssignImage(CodeRefreshSpeedButton, 'laz_refresh');
+  IDEImages.AssignImage(CodeOptionsSpeedButton, 'menu_environment_options');
+  IDEImages.AssignImage(DirRefreshSpeedButton, 'laz_refresh');
+  IDEImages.AssignImage(DirOptionsSpeedButton, 'menu_environment_options');
 
-  ImageSize := TIDEImages.ScaledSize;
-  Imagelist1.Width := ImageSize;
-  Imagelist1.Height := ImageSize;
-  ImgIDDefault := TIDEImages.AddImageToImageList(Imagelist1, 'ce_default');
-  ImgIDProgram := TIDEImages.AddImageToImageList(Imagelist1, 'ce_program');
-  ImgIDUnit := TIDEImages.AddImageToImageList(Imagelist1, 'ce_unit');
-  ImgIDInterface := TIDEImages.AddImageToImageList(Imagelist1, 'ce_interface');
-  ImgIDImplementation := TIDEImages.AddImageToImageList(Imagelist1, 'ce_implementation');
-  ImgIDInitialization := TIDEImages.AddImageToImageList(Imagelist1, 'ce_initialization');
-  ImgIDFinalization := TIDEImages.AddImageToImageList(Imagelist1, 'ce_finalization');
-  ImgIDType := TIDEImages.AddImageToImageList(Imagelist1, 'ce_type');
-  ImgIDVariable := TIDEImages.AddImageToImageList(Imagelist1, 'ce_variable');
-  ImgIDConst := TIDEImages.AddImageToImageList(Imagelist1, 'ce_const');
-  ImgIDClass := TIDEImages.AddImageToImageList(Imagelist1, 'ce_class');
-  ImgIDClassInterface := TIDEImages.AddImageToImageList(Imagelist1, 'ce_classinterface');
-  ImgIDHelper := TIDEImages.AddImageToImageList(Imagelist1, 'ce_helper');
-  ImgIDRecord := TIDEImages.AddImageToImageList(Imagelist1, 'ce_record');
-  ImgIDProcedure := TIDEImages.AddImageToImageList(Imagelist1, 'ce_procedure');
-  ImgIDFunction := TIDEImages.AddImageToImageList(Imagelist1, 'ce_function');
-  ImgIDProperty := TIDEImages.AddImageToImageList(Imagelist1, 'ce_property');
-  ImgIDPropertyReadOnly := TIDEImages.AddImageToImageList(Imagelist1, 'ce_property_readonly');
+  CodeTreeview.Images := IDEImages.Images_16;
+  ImgIDDefault := IDEImages.GetImageIndex('ce_default');
+  ImgIDProgram := IDEImages.GetImageIndex('ce_program');
+  ImgIDUnit := IDEImages.GetImageIndex('cc_unit');
+  ImgIDInterface := IDEImages.GetImageIndex('ce_interface');
+  ImgIDImplementation := IDEImages.GetImageIndex('ce_implementation');
+  ImgIDInitialization := IDEImages.GetImageIndex('ce_initialization');
+  ImgIDFinalization := IDEImages.GetImageIndex('ce_finalization');
+  ImgIDType := IDEImages.GetImageIndex('cc_type');
+  ImgIDVariable := IDEImages.GetImageIndex('cc_variable');
+  ImgIDConst := IDEImages.GetImageIndex('cc_constant');
+  ImgIDClass := IDEImages.GetImageIndex('cc_class');
+  ImgIDClassInterface := IDEImages.GetImageIndex('ce_classinterface');
+  ImgIDHelper := IDEImages.GetImageIndex('ce_helper');
+  ImgIDRecord := IDEImages.GetImageIndex('cc_record');
+  ImgIDEnum := IDEImages.GetImageIndex('cc_enum');
+  ImgIDProcedure := IDEImages.GetImageIndex('cc_procedure');
+  ImgIDFunction := IDEImages.GetImageIndex('cc_function');
+  ImgIDConstructor := IDEImages.GetImageIndex('cc_constructor');
+  ImgIDDestructor := IDEImages.GetImageIndex('cc_destructor');
+  ImgIDLabel := IDEImages.GetImageIndex('cc_label');
+  ImgIDProperty := IDEImages.GetImageIndex('cc_property');
+  ImgIDPropertyReadOnly := IDEImages.GetImageIndex('cc_property_ro');
   // sections
-  ImgIDSection := TIDEImages.AddImageToImageList(Imagelist1, 'ce_section');
-  ImgIDHint := TIDEImages.AddImageToImageList(Imagelist1, 'state_hint');
+  ImgIDSection := IDEImages.GetImageIndex('ce_section');
+  ImgIDHint := IDEImages.GetImageIndex('state_hint');
 end;
 
 function TCodeExplorerView.GetCodeNodeDescription(ACodeTool: TCodeTool;
@@ -907,6 +913,8 @@ begin
               Result := ImgIDClass;
             ctnObject,ctnRecordType:
               Result := ImgIDRecord;
+            ctnEnumerationType,ctnEnumIdentifier:
+              Result:=ImgIDEnum;
             ctnClassHelper,ctnRecordHelper,ctnTypeHelper:
               Result := ImgIDHelper;
           else
@@ -925,15 +933,26 @@ begin
     ctnObjCClass,ctnObjCCategory,ctnCPPClass:
                                       Result:=ImgIDClass;
     ctnRecordType:                    Result:=ImgIDRecord;
+    ctnEnumerationType,ctnEnumIdentifier:
+                                      Result:=ImgIDEnum;
     ctnClassHelper,ctnRecordHelper,ctnTypeHelper:
                                       Result:=ImgIDHelper;
-    ctnProcedure:                     if Tool.NodeIsFunction(CodeNode) then
+    ctnProcedure:
+                                      if Tool.NodeIsConstructor(CodeNode) then
+                                        Result:=ImgIDConstructor
+                                      else
+                                      if Tool.NodeIsDestructor(CodeNode) then
+                                        Result:=ImgIDDestructor
+                                      else
+                                      if Tool.NodeIsFunction(CodeNode) then
                                         Result:=ImgIDFunction
                                       else
                                         Result:=ImgIDProcedure;
     ctnProperty:                      Result:=ImgIDProperty;
     ctnUsesSection:                   Result:=ImgIDSection;
     ctnUseUnit:                       Result:=ImgIDUnit;
+    ctnLabelSection:                  Result:=ImgIDSection;
+    ctnLabel:                         Result:=ImgIDLabel;
   else
     Result:=ImgIDDefault;
   end;
@@ -975,7 +994,8 @@ begin
     CurParentViewNode:=ParentViewNode;
 
     // don't show statements
-    if (CodeNode.Desc in AllPascalStatements+[ctnParameterList]) then begin
+    if (CodeNode.Desc in AllPascalStatements+[ctnParameterList]-
+        [ctnInitialization,ctnFinalization]) then begin
       ShowNode:=false;
       ShowChilds:=false;
     end;
@@ -1941,11 +1961,11 @@ procedure TCodeExplorerView.UpdateMode;
 begin
   if FMode=cemCategory
   then begin
-    TIDEImages.AssignImage(CodeModeSpeedButton.Glyph, 'show_category');
+    IDEImages.AssignImage(CodeModeSpeedButton, 'show_category');
     CodeModeSpeedButton.Hint:=lisCEModeShowSourceNodes;
   end
   else begin
-    TIDEImages.AssignImage(CodeModeSpeedButton.Glyph, 'show_source');
+    IDEImages.AssignImage(CodeModeSpeedButton, 'show_source');
     CodeModeSpeedButton.Hint:=lisCEModeShowCategories;
   end;
   Refresh(true);
@@ -2030,7 +2050,7 @@ var
   CurPage: TCodeExplorerPage;
 begin
   if FUpdateCount<=0 then
-    RaiseException('TCodeExplorerView.EndUpdate');
+    RaiseGDBException('TCodeExplorerView.EndUpdate');
   dec(FUpdateCount);
   if FUpdateCount=0 then begin
     CurPage:=CurrentPage;

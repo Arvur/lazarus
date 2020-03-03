@@ -56,7 +56,7 @@ uses
   FPReadGif,
   {$ENDIF}
   // LazUtils
-  FPCAdds, LazUTF8Classes,
+  FPCAdds, LazUTF8Classes, LazLoggerBase, LazUtilities,
   // LCL
   LCLVersion, LCLStrConsts, LCLType, LCLProc, LMessages, LResources, LCLResCache,
   IntfGraphics, GraphType, IcnsTypes, GraphMath, WSReferences;
@@ -86,7 +86,7 @@ type
     Orientation: Integer;
   end;
 
-const
+var
   // New TFont instances are initialized with the values in this structure.
   // About font default values: The default font is chosen by the interfaces
   // depending on the context. For example, there can be a different default
@@ -203,41 +203,7 @@ type
   TCanvasState = set of TCanvasStates;
   TCanvasOrientation = (csLefttoRight, coRighttoLeft);
 
-  { TProgressEvent is a generic progress notification event which may be
-        used by TGraphic classes with computationally intensive (slow)
-        operations, such as loading, storing, or transforming image data.
-    Event params:
-      Stage - Indicates whether this call to the OnProgress event is to
-        prepare for, process, or clean up after a graphic operation.  If
-        OnProgress is called at all, the first call for a graphic operation
-        will be with Stage = psStarting, to allow the OnProgress event handler
-        to allocate whatever resources it needs to process subsequent progress
-        notifications.  After Stage = psStarting, you are guaranteed that
-        OnProgress will be called again with Stage = psEnding to allow you
-        to free those resources, even if the graphic operation is aborted by
-        an exception.  Zero or more calls to OnProgress with Stage = psRunning
-        may occur between the psStarting and psEnding calls.
-      PercentDone - The ratio of work done to work remaining, on a scale of
-        0 to 100.  Values may repeat or even regress (get smaller) in
-        successive calls.  PercentDone is usually only a guess, and the
-        guess may be dramatically altered as new information is discovered
-        in decoding the image.
-      RedrawNow - Indicates whether the graphic can be/should be redrawn
-        immediately.  Useful for showing successive approximations of
-        an image as data is available instead of waiting for all the data
-        to arrive before drawing anything.  Since there is no message loop
-        activity during graphic operations, you should call Update to force
-        a control to be redrawn immediately in the OnProgress event handler.
-        Redrawing a graphic when RedrawNow = False could corrupt the image
-        and/or cause exceptions.
-      Rect - Area of image that has changed and needs to be redrawn.
-      Msg - Optional text describing in one or two words what the graphic
-        class is currently working on.  Ex:  "Loading" "Storing"
-        "Reducing colors".  The Msg string can also be empty.
-        Msg strings should be resourced for translation,  should not
-        contain trailing periods, and should be used only for
-        display purposes.  (do not: if Msg = 'Loading' then...)
-  }
+  { TProgressEvent }
   TProgressStage = TFPImgProgressStage;
   TProgressEvent = TFPImgProgressEvent;
 
@@ -348,7 +314,7 @@ const
   clDontMask = clBlack;
 
   // !! deprecated colors !!
-  {$warnings off}
+  {$IFDEF DefineCLXColors}
   // CLX base, mapped, pseudo, rgb values
   clForeground = TColor(-1) deprecated;
   clButton = TColor(-2) deprecated;
@@ -425,7 +391,7 @@ type
   TColorRole = (crForeground, crButton, crLight, crMidlight, crDark, crMid,
     crText, crBrightText, crButtonText, crBase, crBackground, crShadow,
     crHighlight, crHighlightText, crNoRole);
-  {$warnings on}
+  {$ENDIF}
 
 const
   cmBlackness = BLACKNESS;
@@ -514,8 +480,6 @@ type
 
   TFont = class(TFPCustomFont)
   private
-    FCanUTF8: boolean;
-    FCanUTF8Valid: boolean;
     FIsMonoSpace: boolean;
     FIsMonoSpaceValid: boolean;
     FOrientation: Integer;
@@ -531,7 +495,6 @@ type
     FHeight: integer; // FHeight = -(FSize * FPixelsPerInch) div 72
     FReference: TWSFontReference;
     procedure FreeReference;
-    function GetCanUTF8: boolean;
     function GetHandle: HFONT;
     function GetData: TFontData;
     function GetIsMonoSpace: boolean;
@@ -581,7 +544,6 @@ type
     function IsEqual(AFont: TFont): boolean; virtual;
     property IsMonoSpace: boolean read GetIsMonoSpace;
     procedure SetDefault;
-    property CanUTF8: boolean read GetCanUTF8; deprecated;
     property PixelsPerInch: Integer read FPixelsPerInch write SetPixelsPerInch;
     property Reference: TWSFontReference read GetReference;
   published
@@ -802,32 +764,8 @@ type
 
   { TGraphic }
 
-  { The TGraphic class is an abstract base class for dealing with graphic images
-    such as bitmaps, pixmaps, icons, and other image formats.
-      LoadFromFile - Read the graphic from the file system.  The old contents of
-        the graphic are lost.  If the file is not of the right format, an
-        exception will be generated.
-      SaveToFile - Writes the graphic to disk in the file provided.
-      LoadFromStream - Like LoadFromFile except source is a stream (e.g.
-        TBlobStream).
-      SaveToStream - stream analogue of SaveToFile.
-      LoadFromClipboardFormat - Replaces the current image with the data
-        provided.  If the TGraphic does not support that format it will generate
-        an exception.
-      SaveToClipboardFormats - Converts the image to a clipboard format.  If the
-        image does not support being translated into a clipboard format it
-        will generate an exception.
-      Height - The native, unstretched, height of the graphic.
-      Palette - Color palette of image.  Zero if graphic doesn't need/use palettes.
-      Transparent - Some parts of the image are not opaque. aka the background
-        can be seen through.
-      Width - The native, unstretched, width of the graphic.
-      OnChange - Called whenever the graphic changes
-      PaletteModified - Indicates in OnChange whether color palette has changed.
-        Stays true until whoever's responsible for realizing this new palette
-        (ex: TImage) sets it to False.
-      OnProgress - Generic progress indicator event. Propagates out to TPicture
-        and TImage OnProgress events.}
+  { TGraphic is an abstract base class for images like TRasterImage,
+    TCustomBitmap, TBitmap, etc. }
 
   TGraphic = class(TPersistent)
   private
@@ -902,54 +840,6 @@ type
 
 
   { TPicture }
-
-  { TPicture is a TGraphic container.  It is used in place of a TGraphic if the
-    graphic can be of any TGraphic class.  LoadFromFile and SaveToFile are
-    polymorphic. For example, if the TPicture is holding an Icon, you can
-    LoadFromFile a bitmap file, where if the class is TIcon you could only read
-    .ICO files.
-
-      LoadFromFile - Reads a picture from disk. The TGraphic class created
-        determined by the file extension of the file. If the file extension is
-        not recognized an exception is generated.
-      SaveToFile - Writes the picture to disk.
-      LoadFromClipboardFormat - ToDo: Reads the picture from the handle provided in
-        the given clipboard format.  If the format is not supported, an
-        exception is generated.
-      SaveToClipboardFormats - ToDo: Allocates a global handle and writes the picture
-        in its native clipboard format (CF_BITMAP for bitmaps, CF_METAFILE
-        for metafiles, etc.).  Formats will contain the formats written.
-        Returns the number of clipboard items written to the array pointed to
-        by Formats and Datas or would be written if either Formats or Datas are
-        nil.
-      SupportsClipboardFormat - Returns true if the given clipboard format
-        is supported by LoadFromClipboardFormat.
-      Assign - Copys the contents of the given TPicture.  Used most often in
-        the implementation of TPicture properties.
-      RegisterFileFormat - Register a new TGraphic class for use in
-        LoadFromFile.
-      RegisterClipboardFormat - Registers a new TGraphic class for use in
-        LoadFromClipboardFormat.
-      UnRegisterGraphicClass - Removes all references to the specified TGraphic
-        class and all its descendents from the file format and clipboard format
-        internal lists.
-      Height - The native, unstretched, height of the picture.
-      Width - The native, unstretched, width of the picture.
-      Graphic - The TGraphic object contained by the TPicture
-      Bitmap - Returns a bitmap.  If the contents is not already a bitmap, the
-        contents are thrown away and a blank bitmap is returned.
-      Pixmap - Returns a pixmap.  If the contents is not already a pixmap, the
-        contents are thrown away and a blank pixmap is returned.
-      PNG - Returns a png.  If the contents is not already a png, the
-        contents are thrown away and a blank png (TPortableNetworkGraphic) is
-        returned.
-      PNM - Returns a pnm.  If the contents is not already a pnm, the
-        contents are thrown away and a blank pnm (TPortableAnyMapGraphic) is
-        returned.
-      Jpeg - Returns a jpeg. If the contents is not already a jpeg, the
-        contents are thrown away and a blank jpeg (TJPegImage) is
-        returned.
-      }
 
   TPicture = class(TPersistent)
   private
@@ -1211,10 +1101,10 @@ type
                   StartX,StartY,EndX,EndY: Integer); virtual;
     procedure PolyBezier(Points: PPoint; NumPts: Integer;
                          Filled: boolean = False;
-                         Continuous: boolean = False); virtual; {$IFDEF HasFPCanvas1}reintroduce;{$ENDIF}
+                         Continuous: boolean = True); virtual; {$IFDEF HasFPCanvas1}reintroduce;{$ENDIF}
     procedure PolyBezier(const Points: array of TPoint;
                          Filled: boolean = False;
-                         Continuous: boolean = False); {$IFDEF HasFPCanvas1}reintroduce;{$ENDIF}
+                         Continuous: boolean = True); {$IFDEF HasFPCanvas1}reintroduce;{$ENDIF}
     procedure Polygon(const Points: array of TPoint;
                       Winding: Boolean;
                       StartIndex: Integer = 0;
@@ -1629,6 +1519,7 @@ type
     function GetIndex(AFormat: TPixelFormat; AHeight, AWidth: Word): Integer;
     class function GetImagesClass: TIconImageClass; virtual;
     procedure Add(AIconImage: TIconImage);
+    procedure Sort;
     function Count: Integer;
     property Images[AIndex: Integer]: TIconImage read GetImage;
   end;
@@ -1740,6 +1631,7 @@ type
     function MaskHandleAllocated: boolean; override;
     function PaletteAllocated: boolean; override;
     procedure SetHandles(ABitmap, AMask: HBITMAP); override;
+    procedure Sort;
     function GetBestIndexForSize(ASize: TSize): Integer;
 
     property Current: Integer read FCurrent write SetCurrent;
@@ -1864,9 +1756,16 @@ type
   TJPEGImage = class(TFPImageBitmap)
   private
     FGrayScale: Boolean;
+    FMinHeight: Integer;
+    FMinWidth: Integer;
     FPerformance: TJPEGPerformance;
     FProgressiveEncoding: boolean;
     FQuality: TJPEGQualityRange;
+    FScale: TJPEGScale;
+    FSmoothing: Boolean;
+    procedure SetCompressionQuality(AValue: TJPEGQualityRange);
+    procedure SetGrayScale(AValue: Boolean);
+    procedure SetProgressiveEncoding(AValue: Boolean);
   protected
     procedure InitializeReader(AImage: TLazIntfImage; AReader: TFPCustomImageReader); override;
     procedure InitializeWriter(AImage: TLazIntfImage; AWriter: TFPCustomImageWriter); override;
@@ -1876,13 +1775,18 @@ type
     class function GetSharedImageClass: TSharedRasterImageClass; override;
   public
     constructor Create; override;
+    procedure Compress;
     class function IsStreamFormatSupported(Stream: TStream): Boolean; override;
     class function GetFileExtensions: string; override;
   public
-    property CompressionQuality: TJPEGQualityRange read FQuality write FQuality;
-    property GrayScale: Boolean read FGrayScale;
-    property ProgressiveEncoding: boolean read FProgressiveEncoding;
+    property CompressionQuality: TJPEGQualityRange read FQuality write SetCompressionQuality;
+    property GrayScale: Boolean read FGrayScale {$IF FPC_FullVersion >= 30400} write SetGrayScale{$IFEND};
+    property MinHeight: Integer read FMinHeight write FMinHeight;
+    property MinWidth: Integer read FMinWidth write FMinWidth;
+    property ProgressiveEncoding: boolean read FProgressiveEncoding write SetProgressiveEncoding;
     property Performance: TJPEGPerformance read FPerformance write FPerformance;
+    property Scale: TJPEGScale read FScale write FScale;
+    property Smoothing: Boolean read FSmoothing write FSmoothing;
   end;
   {$ENDIF}
 
@@ -2438,7 +2342,11 @@ type
 const
   FirstDeprecatedColorIndex = 53;
   LastDeprecatedColorIndex = 106;
+  {$IFDEF DefineCLXColors}
   Colors: array[0..106] of TIdentMapEntry = (
+  {$ELSE}
+  Colors: array[0..52] of TIdentMapEntry = (
+  {$ENDIF}
     // standard colors
     (Value: clBlack; Name: 'clBlack'),
     (Value: clMaroon; Name: 'clMaroon'),
@@ -2501,11 +2409,11 @@ const
     (Value: clGradientInactiveCaption; Name: 'clGradientInactiveCaption'),
 
     // one our special color
-    (Value: clForm; Name: 'clForm'),
+    (Value: clForm; Name: 'clForm')
 
-    {$warnings off}
+    {$IFDEF DefineCLXColors}
     // CLX base, mapped, pseudo, rgb values
-    (Value: clForeground; Name: 'clForeground'),
+   ,(Value: clForeground; Name: 'clForeground'),
     (Value: clButton; Name: 'clButton'),
     (Value: clLight; Name: 'clLight'),
     (Value: clMidlight; Name: 'clMidlight'),
@@ -2567,7 +2475,7 @@ const
     (Value: clActiveShadow; Name: 'clActiveShadow'),
     (Value: clActiveHighlight; Name: 'clActiveHighlight'),
     (Value: clActiveHighlightedText; Name: 'clActiveHighlightedText')
-    {$warnings on}
+    {$ENDIF}
     );
 
 function IdentEntry(Entry: Longint; out MapEntry: TIdentMapEntry): boolean;
@@ -2607,8 +2515,8 @@ end;
 function SysColorToSysColorIndex(Color: TColor): integer;
 begin
   if (Cardinal(Color) and Cardinal(SYS_COLOR_BASE)) <> 0 then begin
+    {$IFDEF DefineCLXColors}
     case Color of
-    {$warnings off}
     clHighlightedText..clForeground:   // Deprecated values!
       Result:=clForeground+COLOR_clForeground-Color;
     clNormalHighlightedText..clNormalForeground:
@@ -2617,10 +2525,12 @@ begin
       Result:=clDisabledForeground+COLOR_clDisabledForeground-Color;
     clActiveHighlightedText..clActiveForeground:
       Result:=clActiveForeground+COLOR_clActiveForeground-Color;
-    {$warnings on}
     else
+    {$ENDIF}
       Result:=Color and $FF;
+    {$IFDEF DefineCLXColors}
     end;
+    {$ENDIF}
   end else begin
     Result:=-1;
   end;

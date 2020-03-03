@@ -13,12 +13,12 @@ uses
   TATypes, TADrawUtils, TAMultiSeries, TALegend, TAStyles, TAFuncSeries, 
   TALegendPanel, TARadialSeries, TACustomSource, TAGeometry, TANavigation, 
   TADrawerCanvas, TADrawerSVG, TAIntervalSources, TAChartAxisUtils, 
-  TAChartListbox, TAEnumerators, TADataPointsEditor, TAChartExtentLink, 
-  TAToolEditors, TAMath, TAChartImageList, TAChartTeeChart, TADataTools, 
-  TAAnimatedSource, TATextElements, TAAxisSource, TASeriesPropEditors, 
-  TACustomFuncSeries, TAFitUtils, TAGUIConnector, TADiagram, TADiagramDrawing, 
-  TADiagramLayout, TAChartStrConsts, TAChartCombos, TAHtml, TAFonts, 
-  TAExpressionSeries, LazarusPackageIntf;
+  TAChartListbox, TAEnumerators, TAChartExtentLink, TAToolEditors, TAMath, 
+  TAChartImageList, TAChartTeeChart, TADataTools, TAAnimatedSource, 
+  TATextElements, TAAxisSource, TASeriesPropEditors, TACustomFuncSeries, 
+  TAFitUtils, TAGUIConnector, TADiagram, TADiagramDrawing, TADiagramLayout, 
+  TAChartStrConsts, TAChartCombos, TAHtml, TAFonts, TAExpressionSeries, 
+  TAFitLib, TASourcePropEditors, TADataPointsEditor, LazarusPackageIntf;
 
 implementation
 
@@ -35,12 +35,12 @@ begin
   RegisterUnit('TANavigation', @TANavigation.Register);
   RegisterUnit('TAIntervalSources', @TAIntervalSources.Register);
   RegisterUnit('TAChartListbox', @TAChartListbox.Register);
-  RegisterUnit('TADataPointsEditor', @TADataPointsEditor.Register);
   RegisterUnit('TAChartExtentLink', @TAChartExtentLink.Register);
   RegisterUnit('TAToolEditors', @TAToolEditors.Register);
   RegisterUnit('TAChartImageList', @TAChartImageList.Register);
   RegisterUnit('TASeriesPropEditors', @TASeriesPropEditors.Register);
   RegisterUnit('TAChartCombos', @TAChartCombos.Register);
+  RegisterUnit('TASourcePropEditors', @TASourcePropEditors.Register);
 end;
 
 initialization

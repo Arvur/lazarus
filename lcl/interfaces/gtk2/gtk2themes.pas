@@ -383,7 +383,6 @@ begin
               begin
                 case Details.State of
                   TS_DISABLED: Result.State := GTK_STATE_INSENSITIVE;
-                  //TS_HOT: Result.State := GTK_STATE_ACTIVE; // << painting bug in Laz+Gtk2
                 else
                   Result.State := GTK_STATE_NORMAL;
                 end;
@@ -598,6 +597,11 @@ begin
       end else
         Result := GetBaseDetailsSize(Details);
     {$ENDIF}
+    teHeader:
+      if Details.Part = HP_HEADERSORTARROW then
+        Result := Size(-1, -1) // not yet supported
+      else
+        Result := GetBaseDetailsSize(Details);
     else
       Result := GetBaseDetailsSize(Details);
   end;

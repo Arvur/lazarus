@@ -92,42 +92,60 @@ var
   begin
     LVInfo:= GetWin32WindowInfo(ALV.Handle);
     DataInfo := PNMLVOwnerData(NMHdr);
-    if not Assigned(DataInfo) or (not ALV.OwnerData) then Exit;
-
+    if not Assigned(DataInfo) or (not ALV.OwnerData) then
+      Exit;
     listitem := ALV.Items[DataInfo^.item.iItem];
-    if not Assigned(listitem) then Exit;
-
-    if DataInfo^.item.iSubItem = 0 then
+    if not Assigned(listitem) then
+      Exit;
+    if (DataInfo^.item.mask and LVIF_TEXT) <> 0 then
     begin
-      txt := listitem.Caption;
-      DataInfo^.item.mask := DataInfo^.item.mask or LVIF_IMAGE;
-      DataInfo^.item.iImage := listitem.ImageIndex;
-    end
-    else
-    begin
-      idx := DataInfo^.item.iSubItem - 1;
-      if idx < listitem.SubItems.Count then
-        txt := listitem.SubItems[idx]
+      if DataInfo^.item.iSubItem = 0 then
+        txt := listitem.Caption
       else
-        txt := '';
-    end;
-
-    if txt <> '' then
-    begin
-      if DataInfo^.hdr.code = UInt(LVN_GETDISPINFOA) then
       begin
-        LVInfo^.DispInfoTextA[LVInfo^.DispInfoIndex]:=Utf8ToAnsi(txt);
-        DataInfo^.item.pszText := @(LVInfo^.DispInfoTextA[LVInfo^.DispInfoIndex][1]);
+        idx := DataInfo^.item.iSubItem - 1;
+        if idx < listitem.SubItems.Count then
+          txt := listitem.SubItems[idx]
+        else
+          txt := '';
+      end;
+      if txt <> '' then
+      begin
+        if DataInfo^.hdr.code = UInt(LVN_GETDISPINFOA) then
+        begin
+          LVInfo^.DispInfoTextA[LVInfo^.DispInfoIndex]:=Utf8ToAnsi(txt);
+          DataInfo^.item.pszText := @(LVInfo^.DispInfoTextA[LVInfo^.DispInfoIndex][1]);
+        end
+        else
+        begin
+          LVInfo^.DispInfoTextW[LVInfo^.DispInfoIndex]:=UTF8Decode(txt);
+          DataInfo^.item.pszText := @(LVInfo^.DispInfoTextW[LVInfo^.DispInfoIndex][1]);
+        end;
+        inc(LVInfo^.DispInfoIndex);
+        if LVInfo^.DispInfoIndex=LV_DISP_INFO_COUNT then LVInfo^.DispInfoIndex:=0;
       end
       else
+        DataInfo^.item.pszText := nil;
+    end;
+    if (DataInfo^.item.mask and LVIF_IMAGE) <> 0 then
+    begin
+      if DataInfo^.item.iSubItem = 0 then
+        DataInfo^.item.iImage := listitem.ImageIndex
+      else
       begin
-        LVInfo^.DispInfoTextW[LVInfo^.DispInfoIndex]:=UTF8Decode(txt);
-        DataInfo^.item.pszText := @(LVInfo^.DispInfoTextW[LVInfo^.DispInfoIndex][1]);
+        idx := DataInfo^.item.iSubItem - 1;
+        if idx < listitem.SubItems.Count then
+          DataInfo^.item.iImage := listitem.SubItemImages[idx]
+        else
+          DataInfo^.item.iImage := -1;
       end;
-      inc(LVInfo^.DispInfoIndex);
-      if LVInfo^.DispInfoIndex=LV_DISP_INFO_COUNT then LVInfo^.DispInfoIndex:=0;
-    end else
-      DataInfo^.item.pszText := nil;
+      if Assigned(ALV.StateImages) then
+      begin
+        DataInfo^.item.state := IndexToStateImageMask(listitem.StateIndex + 1);
+        DataInfo^.item.stateMask := $F000; // States start from 12 bit
+        DataInfo^.item.mask := DataInfo^.item.mask or LVIF_STATE;
+      end;
+    end;
   end;
 
   procedure HandleListViewCustomDraw(ALV: TCustomListViewAccess);
@@ -213,43 +231,12 @@ var
     end;
   end;
 
-  function OwnMouseUpNeeded(ALV: TCustomListViewAccess): Boolean;
-  var
-    LVInfo: PWin32WindowInfo;
-    ListItem: TListItem;
-  begin
-    LVInfo:= GetWin32WindowInfo(ALV.Handle);
-    ListItem := ALV.GetItemAt(LVInfo^.MouseX, LVInfo^.MouseY);
-    Result := Assigned(ListItem);
-  end;
-
-var
-  Pos: TSmallPoint;
 begin
   Result := False;
   case Msg of
     WM_NOTIFY:
     begin
       case PNMHdr(LParam)^.code of
-        NM_CLICK, NM_RCLICK:
-          if OwnMouseUpNeeded(TCustomListViewAccess(AWinControl)) then
-          begin
-            // A listview doesn't get a WM_LBUTTONUP, WM_RBUTTONUP message,
-            // because it keeps the message in its own event loop,
-            // see msdn article about "Default List-View Message Processing"
-            // therefore we take this notification and create a
-            // LM_LBUTTONUP, LM_RBUTTONUP message out of it
-            WinProcess := False;
-            if PNMHdr(LParam)^.code = NM_CLICK then
-              Msg := LM_LBUTTONUP
-            else
-              Msg := LM_RBUTTONUP;
-            Pos := GetClientCursorPos(PNMHdr(LParam)^.hwndFrom);
-            // to make correct event sequence in LCL we should postpone this message
-            // since we are here after call of CallDefaultWindowProc
-            PostMessage(PNMHdr(LParam)^.hwndFrom, Msg, 0, MakeLParam(Pos.x, Pos.y));
-            Result := True;
-          end;
         LVN_GETDISPINFOA, LVN_GETDISPINFOW:
           HandleListViewOwnerData(TCustomListViewAccess(AWinControl));
         NM_CUSTOMDRAW:
@@ -497,6 +484,28 @@ begin
   else ListView_SetColumnWidth(ALV.Handle, AIndex, 0);
 end;
 
+class procedure TWin32WSCustomListView.ColumnSetSortIndicator(
+  const ALV: TCustomListView; const AIndex: Integer;
+  const AColumn: TListColumn; const AAndicator: TSortIndicator);
+var
+  Hdr: HWND;
+  Itm: THDITEM;
+begin
+  if not WSCheckHandleAllocated(ALV, 'ColumnSetSortIndicator')
+  then Exit;
+
+  Hdr := ListView_GetHeader(ALV.Handle);
+  FillChar(itm, sizeof(itm),0);
+  itm.mask := HDI_FORMAT;
+  Header_GetItem(Hdr, AIndex, Itm);
+  case AAndicator of
+    siNone:        itm.fmt := itm.fmt and (not (HDF_SORTDOWN or HDF_SORTUP));
+    siAscending:   itm.fmt := (itm.fmt or HDF_SORTUP) and (not HDF_SORTDOWN);
+    siDescending:  itm.fmt := (itm.fmt or HDF_SORTDOWN) and (not HDF_SORTUP);
+  end;
+  Header_SetItem(Hdr, AIndex, Itm);
+end;
+
 ////////////////////////////////////////////////////////////////////////////////
 // Item code
 ////////////////////////////////////////////////////////////////////////////////
@@ -541,21 +550,23 @@ begin
     B := AItem.Checked
   else
     B := False;
+
+  // apply texts
   ItemSetText(ALV, AIndex, AItem, 0, AItem.Caption);
   for i := 0 to AItem.SubItems.Count - 1 do
     ItemSetText(ALV, AIndex, AItem, i + 1, AItem.SubItems[i]);
+  // make sure no texts are left over
+  for i := AItem.SubItems.Count to ALV.ColumnCount-1 do
+    ItemSetText(ALV, AIndex, AItem, i + 1, '');
 
-  // set state images
-  if Assigned(TListView(ALV).StateImages) then
-    ItemSetStateImage(ALV, AIndex,AItem,0, AItem.StateIndex);
+  // set state image
+  ItemSetStateImage(ALV, AIndex,AItem,0, AItem.StateIndex);
 
-  // set images
-  if AItem.ImageIndex >= 0 then
-    ItemSetImage(ALV, AIndex, AItem, 0, AItem.ImageIndex);
+  // set image
+  ItemSetImage(ALV, AIndex, AItem, 0, AItem.ImageIndex);
 
-  // apply checkbox states
-  if ALV.Checkboxes then
-    ItemSetChecked(ALV, AIndex, AItem, B);
+  // apply checkbox state
+  ItemSetChecked(ALV, AIndex, AItem, B);
 end;
 
 class procedure TWin32WSCustomListView.ItemExchange(const ALV: TCustomListView;
@@ -746,6 +757,48 @@ begin
   ItemMsg := CN_DRAWITEM;
 end;
 
+function ListViewProc(Window: HWnd; Msg: UInt; WParam: Windows.WParam;
+    LParam: Windows.LParam): LResult; stdcall;
+var
+  WindowInfo: PWin32WindowInfo;
+  ListItem: TListItem;
+  ListView: TCustomListView;
+  AMsg: UINT;
+begin
+  case Msg of
+    WM_LBUTTONDOWN, WM_RBUTTONDOWN:
+      begin
+        // A ListView doesn't get a WM_LBUTTONUP, WM_RBUTTONUP message,
+        // because it keeps the message in its own event loop,
+        // see msdn article about "Default List-View Message Processing"
+        // therefore we take this notification and create a
+        // LM_LBUTTONUP, LM_RBUTTONUP message out of it
+
+        WindowInfo := GetWin32WindowInfo(Window);
+        ListView := TListView(WindowInfo^.WinControl);
+        ListItem := ListView.GetItemAt(WindowInfo^.MouseX, WindowInfo^.MouseY);
+
+        if Msg = WM_LBUTTONDOWN
+        then AMsg := LM_LBUTTONUP
+        else AMsg := LM_RBUTTONUP;
+
+        // for multiselected listbox the message has to be send after current
+        // message or the list item selecting does not work, also see issue #33330
+        if not Assigned(ListItem) and ListView.MultiSelect then
+        begin
+          Result := WindowProc(Window, Msg, WParam, LParam);
+          if not (Msg = WM_LBUTTONDBLCLK) and ((Msg = WM_LBUTTONDOWN) or not Assigned(ListView.PopupMenu)) then
+            PostMessage(Window, AMsg, 0, MakeLParam(WindowInfo^.MouseX, WindowInfo^.MouseY));
+          Exit;
+        end;
+
+        if Assigned(ListItem) then
+          PostMessage(Window, AMsg, 0, MakeLParam(WindowInfo^.MouseX, WindowInfo^.MouseY));
+      end;
+  end;
+  Result := WindowProc(Window, Msg, WParam, LParam);
+end;
+
 class function TWin32WSCustomListView.CreateHandle(const AWinControl: TWinControl;
   const AParams: TCreateParams): HWND;
 const
@@ -760,6 +813,7 @@ begin
   with Params do
   begin
     pClassName := WC_LISTVIEW;
+    SubClassWndProc := @ListViewProc;
     WindowTitle := StrCaption;
     Flags := Flags or LISTVIEWSTYLES[TListView(AWinControl).ViewStyle] or
       LVS_SINGLESEL or LVS_SHAREIMAGELISTS or
@@ -1133,7 +1187,8 @@ begin
   UpdateStyle(ALV.Handle, LVS_ALIGNMASK, ArrangementMap[AValue]);
 end;
 
-class procedure TWin32WSCustomListView.SetImageList(const ALV: TCustomListView; const AList: TListViewImageList; const AValue: TCustomImageList);
+class procedure TWin32WSCustomListView.SetImageList(const ALV: TCustomListView;
+  const AList: TListViewImageList; const AValue: TCustomImageListResolution);
 const
   LIST_MAP: array[TListViewImageList] of WPARAM = (
    {lvilSmall} LVSIL_SMALL,

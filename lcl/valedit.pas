@@ -6,7 +6,7 @@ interface
 
 uses
   ContNrs, SysUtils, Classes, Variants,
-  LazUtf8, Controls, StdCtrls, Grids, LResources, Dialogs, LCLType;
+  LazUtf8, Controls, StdCtrls, Grids, LResources, Dialogs, LCLType, Laz2_XMLCfg;
 
 type
 
@@ -14,6 +14,7 @@ type
   TValueListStrings = class;
 
   TEditStyle = (esSimple, esEllipsis, esPickList);
+  TVleSortCol = (colKey, colValue);
 
   { TItemProp }
 
@@ -118,6 +119,7 @@ type
   TValueListEditor = class(TCustomStringGrid)
   private
     FTitleCaptions: TStrings;
+    FCreating: Boolean;
     FStrings: TValueListStrings;
     FKeyOptions: TKeyOptions;
     FDisplayOptions: TDisplayOptions;
@@ -144,11 +146,14 @@ type
     procedure SetOptions(AValue: TGridOptions);
     procedure SetStrings(const AValue: TValueListStrings);
     procedure SetTitleCaptions(const AValue: TStrings);
+    procedure UpdateTitleCaptions(const KeyCap, ValCap: String);
   protected
     class procedure WSRegisterClass; override;
     procedure SetFixedCols(const AValue: Integer); override;
     procedure ShowColumnTitles;
     procedure AdjustRowCount; virtual;
+    procedure ColRowExchanged(IsColumn: Boolean; index, WithIndex: Integer); override;
+    procedure ColRowDeleted(IsColumn: Boolean; index: Integer); override;
     procedure DefineCellsProperty(Filer: TFiler); override;
     procedure InvalidateCachedRow;
     procedure GetAutoFillColumnInfo(const Index: Integer; var aMin,aMax,aPriority: Integer); override;
@@ -157,11 +162,15 @@ type
     function GetDefaultEditor(Column: Integer): TWinControl; override;
     function GetRowCount: Integer;
     procedure KeyDown(var Key : Word; Shift : TShiftState); override;
+    procedure LoadContent(cfg: TXMLConfig; Version: Integer); override;
     procedure ResetDefaultColWidths; override;
+    procedure SaveContent(cfg: TXMLConfig); override;
     procedure SetCells(ACol, ARow: Integer; const AValue: string); override;
+    procedure SetColCount(AValue: Integer); override;
     procedure SetEditText(ACol, ARow: Longint; const Value: string); override;
     procedure SetFixedRows(const AValue: Integer); override;
     procedure SetRowCount(AValue: Integer);
+    procedure Sort(ColSorting: Boolean; index,IndxFrom,IndxTo:Integer); override;
     procedure TitlesChanged(Sender: TObject);
     function ValidateEntry(const ACol,ARow:Integer; const OldValue:string; var NewValue:string): boolean; override;
   public
@@ -176,11 +185,15 @@ type
     procedure InsertColRow(IsColumn: boolean; index: integer);
     function InsertRow(const KeyName, Value: string; Append: Boolean): Integer;
     procedure InsertRowWithValues(Index: Integer; Values: array of String);
-    procedure ExchangeColRow(IsColumn: Boolean; index, WithIndex: Integer);
+    procedure ExchangeColRow(IsColumn: Boolean; index, WithIndex: Integer); override;
     function IsEmptyRow: Boolean; {Delphi compatible function}
     function IsEmptyRow(aRow: Integer): Boolean; {This for makes more sense to me}
+    procedure LoadFromCSVStream(AStream: TStream; ADelimiter: Char=',';
+      UseTitles: boolean=true; FromLine: Integer=0; SkipEmptyLines: Boolean=true); override;
     procedure MoveColRow(IsColumn: Boolean; FromIndex, ToIndex: Integer);
     function RestoreCurrentRow: Boolean;
+    procedure Sort(Index, IndxFrom, IndxTo: Integer);
+    procedure Sort(ACol: TVleSortCol = colKey);
 
     property Modified;
     property Keys[Index: Integer]: string read GetKey write SetKey;
@@ -269,6 +282,9 @@ type
     property OnMouseWheel;
     property OnMouseWheelDown;
     property OnMouseWheelUp;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
     property OnPickListSelect;
     property OnPrepareCanvas;
     property OnResize;
@@ -308,8 +324,13 @@ const
   rsVLEDuplicateKey = 'Duplicate Key:'+LineEnding+'A key with name "%s" already exists at column %d';
   //ToDo: Make this a resourcestring in lclstrconsts unit, once we are satisfied with ShowColumnTitles
   rsVLEKey = 'Key';
-  rsVLEName = 'Name';
+  rsVLEValue = 'Value';
   rsVLEInvalidRowColOperation = 'The operation %s is not allowed on a TValueListEditor%s.';
+  //LoadContent errors
+  rsVLENoRowCountFound = 'Error reading file "%s":'^m'No value for RowCount found.';
+  rsVLERowIndexOutOfBounds = 'Error reading file "%s":'^m'Row index out of bounds (%d).';
+  rsVLEColIndexOutOfBounds = 'Error reading file "%s":'^m'Column index out of bounds (%d).';
+  rsVLEIllegalColCount = 'ColCount of a TValueListEditor cannot be %d (it can only ever be 2).';
 
 procedure Register;
 
@@ -536,6 +557,7 @@ end;
 procedure TValueListStrings.Assign(Source: TPersistent);
 begin
   FGrid.InvalidateCachedRow;
+  Clear;  //if this is not done, and a TValueListEditor.Sort() is done and then later a Strings.Assign, an exception will occur.
   inherited Assign(Source);
   if (Source is TValueListStrings) then
     FItemProps.Assign(TValueListStrings(Source).FItemProps);
@@ -707,6 +729,7 @@ end;
 constructor TValueListEditor.Create(AOwner: TComponent);
 begin
   //need FStrings before inherited Create, because they are needed in overridden SelectEditor
+  FCreating := True;
   FStrings := TValueListStrings.Create(Self);
   FStrings.NameValueSeparator := '=';
   FTitleCaptions := TStringList.Create;
@@ -740,6 +763,7 @@ begin
   FDropDownRows := 8;
   ShowColumnTitles;
   AutoFillColumns := true;
+  FCreating := False;
 end;
 
 destructor TValueListEditor.Destroy;
@@ -764,9 +788,8 @@ end;
 
 procedure TValueListEditor.DeleteRow(Index: Integer);
 begin
-  Index := Index - FixedRows;
   //If we have only one row, it may be empty and we cannot remove
-  if not ((Index = 0) and (Strings.Count = 0)) then Strings.Delete(Index);
+  if not ((Index - FixedRows = 0) and (Strings.Count = 0)) then inherited DeleteRow(Index) ;
 end;
 
 procedure TValueListEditor.DeleteCol(Index: Integer);
@@ -848,7 +871,7 @@ end;
 procedure TValueListEditor.ExchangeColRow(IsColumn: Boolean; index, WithIndex: Integer);
 begin
   if not IsColumn then
-    Strings.Exchange(Index - FixedRows, WithIndex - FixedRows)
+    inherited ExchangeColRow(IsColumn, index, WithIndex)
   else
     Raise EGridException.CreateFmt(rsVLEInvalidRowColOperation,['ExchangeColRow',' on columns']);
 end;
@@ -868,6 +891,15 @@ begin
     Result := ((inherited GetCells(0,0)) = EmptyStr)  and ((inherited GetCells(1,0)) = EmptyStr)
   else
     Result := Strings.Strings[aRow - FixedRows] = EmptyStr;
+end;
+
+procedure TValueListEditor.LoadFromCSVStream(AStream: TStream;
+  ADelimiter: Char; UseTitles: boolean; FromLine: Integer;
+  SkipEmptyLines: Boolean);
+begin
+  inherited LoadFromCSVStream(AStream, ADelimiter, UseTitles, FromLine,
+    SkipEmptyLines);
+  if UseTitles then UpdateTitleCaptions(Cells[0,0],Cells[1,0]);
 end;
 
 procedure TValueListEditor.MoveColRow(IsColumn: Boolean; FromIndex,
@@ -890,6 +922,7 @@ begin
     Raise EGridException.CreateFmt(rsVLEInvalidRowColOperation,['MoveColRow',' on columns']);
 end;
 
+
 function TValueListEditor.RestoreCurrentRow: Boolean;
 begin
   //DbgOut('RestoreCurrentRow: Row=',DbgS(Row),' FLastEditedRow=',DbgS(FLastEditedRow),' SavedKey=',FRowTextOnEnter.Key,' SavedValue=',FRowTextOnEnter.Value);
@@ -910,9 +943,19 @@ begin
   end;
 end;
 
+
+procedure TValueListEditor.Sort(ACol: TVleSortCol = colKey);
+begin
+  SortColRow(True, Ord(ACol));
+end;
+
+procedure TValueListEditor.Sort(Index, IndxFrom, IndxTo: Integer);
+begin
+  Sort(True, Index, IndxFrom, IndxTo);
+end;
+
 procedure TValueListEditor.StringsChange(Sender: TObject);
 begin
-  //Since we never call inherited SetCell, this seems the logical place to do it
   Modified := True;
   AdjustRowCount;
   Invalidate;
@@ -1024,6 +1067,13 @@ begin
   FTitleCaptions.Assign(AValue);
 end;
 
+procedure TValueListEditor.UpdateTitleCaptions(const KeyCap, ValCap: String);
+begin
+  FTitleCaptions.Clear;
+  FTitleCaptions.Add(KeyCap);
+  FTitleCaptions.Add(ValCap);
+end;
+
 function TValueListEditor.GetKey(Index: Integer): string;
 begin
   Result:=Cells[0,Index];
@@ -1069,7 +1119,7 @@ begin
   if (doColumnTitles in DisplayOptions) then
   begin
     KeyCap := rsVLEKey;
-    ValCap := rsVLEName;
+    ValCap := rsVLEValue;
     if (TitleCaptions.Count > 0) then KeyCap := TitleCaptions[0];
     if (TitleCaptions.Count > 1) then ValCap := TitleCaptions[1];
     //Columns[0].Title.Caption := KeyCap;
@@ -1098,6 +1148,20 @@ begin
         Row:=1;
     inherited RowCount:=NewC;
   end;
+end;
+
+procedure TValueListEditor.ColRowExchanged(IsColumn: Boolean; index,
+  WithIndex: Integer);
+begin
+  Strings.Exchange(Index - FixedRows, WithIndex - FixedRows);
+  inherited ColRowExchanged(IsColumn, index, WithIndex);
+end;
+
+procedure TValueListEditor.ColRowDeleted(IsColumn: Boolean; index: Integer);
+begin
+  EditorMode := False;
+  Strings.Delete(Index-FixedRows);
+  inherited ColRowDeleted(IsColumn, index);
 end;
 
 procedure TValueListEditor.DefineCellsProperty(Filer: TFiler);
@@ -1251,6 +1315,77 @@ begin
     if RestoreCurrentRow then Key := 0;
 end;
 
+procedure TValueListEditor.LoadContent(cfg: TXMLConfig; Version: Integer);
+var
+  ContentSaved, HasColumnTitles, AlwaysShowEditor, HasSaveContent: Boolean;
+  i,j,k, RC: Integer;
+  KeyCap, ValCap, S: String;
+begin
+  KeyCap := '';
+  ValCap := '';
+  BeginUpdate;
+  try
+    AlwaysShowEditor := (goAlwaysShowEditor in Options);
+    if AlwaysShowEditor then Options := Options - [goAlwaysShowEditor];
+    HasSaveContent := soContent in SaveOptions;
+    //no need to load content in inherited LoadContent, since we re-implemented that here.
+    if HasSaveContent then
+      SaveOptions := SaveOptions - [soContent];
+    inherited LoadContent(Cfg, Version);
+    if HasSaveContent then
+      SaveOptions := SaveOptions + [soContent];
+    if soContent in SaveOptions then
+    begin
+      ContentSaved:=Cfg.GetValue('grid/saveoptions/content', false);
+      if ContentSaved then
+      begin
+        Clean(0,0,ColCount-1,RowCount-1,[]); //needed if the to be loaded grid has no entries
+        HasColumnTitles := cfg.getValue('grid/content/hascolumntitles', False);
+        if HasColumnTitles then
+          DisplayOptions := DisplayOptions + [doColumnTitles]
+        else
+          DisplayOptions := DisplayOptions - [doColumnTitles];
+
+        //contrary to other grids we restore the entire saved content,
+        //so we add/delete rows (not columns of course) as needed.
+        RC := cfg.GetValue('grid/content/rowcount', -1);
+        if (RC = -1) then
+        begin
+          raise EStreamError.CreateFmt(rsVLENoRowCountFound,[cfg.Filename]);
+        end;
+        if (RC < 1) then RC := 1;
+        if HasColumnTitles and (RC = 1) then
+          RC := 2;
+        RowCount := RC;
+
+        k:=cfg.getValue('grid/content/cells/cellcount', 0);
+        while k>0 do
+        begin
+          i := cfg.GetValue('grid/content/cells/cell'+IntToStr(k)+'/column', -1);
+          j := cfg.GetValue('grid/content/cells/cell'+IntTostr(k)+'/row',-1);
+          if not IsRowIndexValid(j) then
+            raise EStreamError.CreateFmt(rsVLERowIndexOutOfBounds,[cfg.Filename,j]);
+          if not IsColumnIndexValid(i) then
+            raise EStreamError.CreateFmt(rsVLEColIndexOutOfBounds,[cfg.Filename,i]);
+          S := cfg.GetValue('grid/content/cells/cell'+IntToStr(k)+'/text','');
+          Cells[i,j] := S;
+          if HasColumnTitles and (i = 0) and (j = 0) then
+            KeyCap := S
+          else if HasColumnTitles and (i = 1) and (j = 0) then
+            ValCap := S;
+          Dec(k);
+        end;
+        if HasColumnTitles then UpdateTitleCaptions(KeyCap, ValCap);
+      end;
+    end;
+  finally
+    if AlwaysShowEditor then Options := Options + [goAlwaysShowEditor];
+    if HasSaveContent then
+      SaveOptions := SaveOptions + [soContent];
+    EndUpdate(True);
+  end;
+end;
+
 procedure TValueListEditor.ResetDefaultColWidths;
 begin
   if not AutoFillColumns then
@@ -1259,6 +1394,49 @@ begin
   begin
     SetRawColWidths(0, -1);
     VisualChange;
+  end;
+end;
+
+procedure TValueListEditor.SaveContent(cfg: TXMLConfig);
+var
+  i,j,k: Integer;
+  Value: String;
+  HasSaveContent: Boolean;
+begin
+  HasSaveContent := soContent in SaveOptions;
+  //no need to save content in inherited SaveContent, since we re-implemented that here.
+  if HasSaveContent then
+    SaveOptions := SaveOptions - [soContent];
+  try
+    inherited SaveContent(cfg);
+    if HasSaveContent then
+      SaveOptions := SaveOptions + [soContent];
+    cfg.SetValue('grid/saveoptions/content', soContent in SaveOptions);
+    if soContent in SaveOptions then
+    begin
+      cfg.SetValue('grid/content/hascolumntitles',(doColumnTitles in FDisplayOptions));
+      cfg.SetValue('grid/content/rowcount', RowCount);
+      // Save Cell Contents
+      k:=0;
+      For i:=0 to ColCount-1 do
+        For j:=0 to RowCount-1 do
+        begin
+          //fGrid.Celda is unassigned for cells other than the title row, so we neet to query GetCells here
+          Value := GetCells(i,j);
+          if (Value <> '') then
+          begin
+            Inc(k);
+            //Cfg.SetValue('grid/content/cells/cellcount',k);
+            cfg.SetValue('grid/content/cells/cell'+IntToStr(k)+'/column',i);
+            cfg.SetValue('grid/content/cells/cell'+IntToStr(k)+'/row',j);
+            cfg.SetValue('grid/content/cells/cell'+IntToStr(k)+'/text', Value);
+          end;
+          Cfg.SetValue('grid/content/cells/cellcount',k);
+        end;
+     end;
+  finally
+    if HasSaveContent then
+      SaveOptions := SaveOptions + [soContent];
   end;
 end;
 
@@ -1301,6 +1479,13 @@ begin
   end;
 end;
 
+procedure TValueListEditor.SetColCount(AValue: Integer);
+begin
+  if (not FCreating) and (not (csLoading in ComponentState)) and (AValue <> 2) then
+    raise EGridException.CreateFmt(rsVLEIllegalColCount,[AValue]);
+  inherited SetColCount(AValue);
+end;
+
 function TValueListEditor.GetEditText(ACol, ARow: Integer): string;
 begin
   Result:= Cells[ACol, ARow];
@@ -1334,6 +1519,22 @@ begin
     while (NewCount < Strings.Count) do Strings.Delete(Strings.Count - 1);
     Strings.EndUpdate;
   end;
+end;
+
+procedure TValueListEditor.Sort(ColSorting: Boolean; index, IndxFrom,
+  IndxTo: Integer);
+var
+  HideEditor: Boolean;
+begin
+  HideEditor := goAlwaysShowEditor in Options;
+  if HideEditor then Options := Options - [goAlwaysShowEditor];
+  Strings.BeginUpdate;
+  try
+    inherited Sort(True, index, IndxFrom, IndxTo);
+  finally
+    Strings.EndUpdate;
+  end;
+  if HideEditor then Options := Options + [goAlwaysShowEditor];
 end;
 
 procedure TValueListEditor.TitlesChanged(Sender: TObject);

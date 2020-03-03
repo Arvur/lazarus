@@ -1151,7 +1151,7 @@ var
     for i := Low(ADashes) to High(ADashes) do
       ADashes[i] := ADashes[i] * Multiplier;
 
-    laz_gdk_gc_set_dashes(GC, 0, @ADashes[0], Length(ADashes));
+    laz_gdk_gc_set_dashes(GC, 4096, @ADashes[0], Length(ADashes))
   end;
 
 begin
@@ -1339,7 +1339,7 @@ begin
     NewMatrix.x0 := 0.0;
     NewMatrix.y0 := 0.0;
     pango_matrix_translate(@NewMatrix, X, Y);
-    pango_matrix_rotate(@NewMatrix, AFont^.LogFont.lfEscapement div 10);
+    pango_matrix_rotate(@NewMatrix, AFont^.LogFont.lfEscapement / 10);
 
     pango_context_set_matrix(WidgetCont, @NewMatrix);
     pango_layout_context_changed(AFont^.GDIFontObject);

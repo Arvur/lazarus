@@ -12,34 +12,35 @@ msgstr ""
 "X-Generator: Poedit 1.8.7.1\n"
 
 #: anchordockstr.adrsafreesideofasplittermustnotbeanchorednodetypeancho
+#, object-pascal-format
 msgid "A free side of a splitter must not be anchored: Node=\"%s\" Type=%s Anchors[%s]=\"%s\""
 msgstr "Egy elválasztó szabad oldala nem rögzíthető: Csomópont=\"%s\" Típus=%s Horgonyok[%s]=\"%s\""
 
-#: anchordockstr.adrsallfiles
-msgid "All files"
-msgstr "Minden fájl"
+#: anchordockstr.adrsallowdocksitestobeminimized
+msgid "Allow dock sites to be minimized"
+msgstr "A dokkterületek legyenek minimalizálhatók"
 
 #: anchordockstr.adrsamountofpixelthemousehastodragbeforedragstarts
 msgid "Amount of pixel the mouse has to drag before drag starts"
 msgstr "Ennyi képpontot kell mozdulnia az egérnek mielőtt a húzás elkezdődik"
 
-#: anchordockstr.adrsanchordockinglayout
-msgid "Anchor Docking Layout"
-msgstr "Rögzített ablakelrendezés"
-
 #: anchordockstr.adrsanchorisnotsplitternodeanchors
+#, object-pascal-format
 msgid "Anchor is not splitter: Node=\"%s\" Anchors[%s]=\"%s\""
 msgstr "Rögzítés nem elválasztóhoz: Csomópont=\"%s\" Horgonyok[%s]=\"%s\""
 
 #: anchordockstr.adrsanchornotfoundnodeanchors
+#, object-pascal-format
 msgid "Anchor not found: Node=\"%s\" Anchors[%s]=\"%s\""
 msgstr "Rögzítési hely nem található: Csomópont=\"%s\" Horgonyok[%s]=\"%s\""
 
 #: anchordockstr.adrsanchortowrongsideofsplitternodeanchors
+#, object-pascal-format
 msgid "Anchor to wrong side of splitter: Node=\"%s\" Anchors[%s]=\"%s\""
 msgstr "Rögzítés az elválasztó rossz oldalához: Csomópont=\"%s\" Horgonyok[%s]=\"%s\""
 
 #: anchordockstr.adrsapagemustnotbeanchorednodeparentparenttypeanchors
+#, object-pascal-format
 msgid "A page must not be anchored: Node=\"%s\" Parent=%s ParentType=%s Anchors[%s]=\"%s\""
 msgstr "Egy lap nem rögzíthető: Csomópont=\"%s\" Szülő:%s Szülőtípus=%s Horgonyok[%s]=\"%s\""
 
@@ -60,6 +61,7 @@ msgid "control is already a docksite"
 msgstr "a vezérlő már dokkterület"
 
 #: anchordockstr.adrscustomdocksitecanhaveonlyonesite
+#, object-pascal-format
 msgid "Custom dock site \"%s\" can have only one site."
 msgstr "Az \"%s\" dokkterület csak egy területet tartalmazhat."
 
@@ -72,6 +74,7 @@ msgid "Docking options"
 msgstr "Dokkolás beállításai"
 
 #: anchordockstr.adrsdraganddockc
+#, object-pascal-format
 msgid "Use the mouse to drag and dock window \"%s\""
 msgstr "Használja az egeret a(z) \"%s\" ablak húzásához és dokkolásához"
 
@@ -96,20 +99,9 @@ msgid "Enlarge"
 msgstr "Bővítés"
 
 #: anchordockstr.adrsenlargeside
+#, object-pascal-format
 msgid "Enlarge %s side"
 msgstr "Bővítés %s"
-
-#: anchordockstr.adrserror
-msgid "Error"
-msgstr "Hiba"
-
-#: anchordockstr.adrserrorloadingwindowlayoutfromfile
-msgid "Error loading window layout from file \"%s\"%s%s"
-msgstr "Hiba az ablakelrendezés \"%s\" fájlból olvasásakor%s%s"
-
-#: anchordockstr.adrserrorwritingwindowlayouttofile
-msgid "Error writing window layout to file \"%s\"%s%s"
-msgstr "Hiba az ablakelrendezés \"%s\" fájlba írásakor%s%s"
 
 #: anchordockstr.adrsfilledheaders
 msgid "Fill headers"
@@ -156,20 +148,12 @@ msgid "Highlight focused"
 msgstr "Kiválasztott elem kiemelése"
 
 #: anchordockstr.adrshighlightfocusedhint
-msgid "Highlight focused docked controls"
-msgstr "Kiválasztott dokkolt vezérlők kiemelése"
+msgid "Highlight header of focused docked control"
+msgstr "Kiválasztott dokkolt vezérlők fejlécének kiemelése"
 
 #: anchordockstr.adrsleft
 msgid "left"
 msgstr "balra"
-
-#: anchordockstr.adrsloadwindowlayoutfromfile
-msgid "Load window layout from file ..."
-msgstr "Ablakelrendezés betöltése fájlból..."
-
-#: anchordockstr.adrsloadwindowlayoutfromfilexml
-msgid "Load window layout from file (*.xml)"
-msgstr "Ablakelrendezés betöltése fájlból (*.xml)"
 
 #: anchordockstr.adrslocked
 msgid "Locked"
@@ -178,6 +162,10 @@ msgstr "Zárolva"
 #: anchordockstr.adrsmerge
 msgid "Merge"
 msgstr "Egyesítés"
+
+#: anchordockstr.adrsminimize
+msgid "Minimize"
+msgstr "Minimalizálás"
 
 #: anchordockstr.adrsmissingcontrolname
 msgid "missing control name"
@@ -216,40 +204,28 @@ msgid "No captions for floating sites"
 msgstr "Nincs cím a lebegő területek esetén"
 
 #: anchordockstr.adrsnochildrenallowedfornodetype
+#, object-pascal-format
 msgid "No children allowed for Node=\"%s\" Type=%s"
 msgstr "Gyermekek nincsenek engedélyezve: Csomópont=\"%s\" Típus=\"%s\""
 
 #: anchordockstr.adrsnotsupportedhasparent
+#, object-pascal-format
 msgid "Not supported: %s has parent %s"
 msgstr "Nincs támogatva: %s szülője %s"
 
 #: anchordockstr.adrsquit
+#, object-pascal-format
 msgid "Quit %s"
 msgstr "Kilépés - %s"
 
 #: anchordockstr.adrsrequestedbutcreated
+#, object-pascal-format
 msgid "%s requested, but %s created"
 msgstr "a kért %s helyett %s lett létrehozva"
-
-#: anchordockstr.adrsrestoredefaultlayout
-msgid "Restore default layout"
-msgstr "Alapértelmezett elrendezés visszaállítása"
 
 #: anchordockstr.adrsright
 msgid "right"
 msgstr "jobbra"
-
-#: anchordockstr.adrssavewindowlayoutasdefault
-msgid "Save window layout as default"
-msgstr "Ablakelrendezés mentése alapértelmezettnek"
-
-#: anchordockstr.adrssavewindowlayouttofile
-msgid "Save window layout to file ..."
-msgstr "Ablakelrendezés mentése fájlba..."
-
-#: anchordockstr.adrssavewindowlayouttofilexml
-msgid "Save window layout to file (*.xml)"
-msgstr "Ablakelrendezés mentése fájlba (*.xml)"
 
 #: anchordockstr.adrsscaleonresize
 msgid "Scale on resize"
@@ -284,6 +260,7 @@ msgid "Tab position"
 msgstr "Lappozíció"
 
 #: anchordockstr.adrsthereisanotherdockmasterinstalledonlyonedockingpac
+#, object-pascal-format
 msgid "There is another dock master installed. Only one docking package can be installed at a time. Please uninstall the other dock master %s and restart the IDE"
 msgstr "Már telepítve van egy másik dokkmester. Egyszerre csak egy dokkoló csomag lehet telepítve. Távolítsa el a másik dokkmestert (%s) és indítsa újra az IDE-t!"
 
@@ -292,6 +269,7 @@ msgid "top"
 msgstr "fel"
 
 #: anchordockstr.adrstouseanchordockingyoumustfirstuninstall
+#, object-pascal-format
 msgid "To use anchordocking you must first uninstall %s"
 msgstr "Az ablakok rögzítésének használatához először el kell távolítani ezt: %s"
 

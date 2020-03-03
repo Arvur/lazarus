@@ -312,16 +312,6 @@ begin
 end;
 
 {------------------------------------------------------------------------------
-  Function: FontCanUTF8
-  Params:
-  Returns:
- ------------------------------------------------------------------------------}
-function TQtWidgetSet.FontCanUTF8(Font: HFont): boolean;
-begin
-  Result := IsValidGDIObject(Font);
-end;
-
-{------------------------------------------------------------------------------
   Function: FontIsMonoSpace
   Params:
   Returns:
@@ -742,7 +732,7 @@ var
   Desc: TRawImageDescription absolute ARawImage.Description;
 
   //SrcWidth, SrcHeight: Integer;
-  WinID: Cardinal;
+  WinID: PtrUInt;
   DCSize: TSize;
   Pixmap: TQtPixmap;
   Image: QImageH;

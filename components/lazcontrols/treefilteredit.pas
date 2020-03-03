@@ -96,7 +96,7 @@ type
     function ReturnKeyHandled: Boolean; override;
     procedure SortAndFilter; override;
     procedure ApplyFilterCore; override;
-    function GetDefaultGlyph: TBitmap; override;
+    function GetDefaultGlyphName: string; override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -132,9 +132,6 @@ type
     Filename: string;
     constructor Create(AFilename: string; aData: Pointer);
   end;
-
-var
-  TreeFilterGlyph: TBitmap;
 
 implementation
 
@@ -197,10 +194,11 @@ begin
   fSortedData.Clear;
   for Origi:=0 to fOriginalData.Count-1 do begin
     s:=fOriginalData[Origi];
-    if (fOwner.Filter='') or (Pos(fOwner.Filter,lowercase(s))>0) then begin
+    if (fOwner.Filter='') or
+        fOwner.DoFilterItem(s, nil) then begin
       i:=fSortedData.Count-1;
       while i>=0 do begin
-        if CompareFNs(s,fSortedData[i])>=0 then break;
+        if CompareFNs(s,fSortedData[i]) >= 0 then break;
         dec(i);
       end;
       fSortedData.InsertObject(i+1, s, fOriginalData.Objects[Origi]);
@@ -430,9 +428,9 @@ begin
   inherited Destroy;
 end;
 
-function TTreeFilterEdit.GetDefaultGlyph: TBitmap;
+function TTreeFilterEdit.GetDefaultGlyphName: string;
 begin
-  Result := TreeFilterGlyph;
+  Result := 'btnfiltercancel';
 end;
 
 procedure TTreeFilterEdit.OnBeforeTreeDestroy(Sender: TObject);
@@ -470,18 +468,16 @@ function TTreeFilterEdit.FilterTree(Node: TTreeNode): Boolean;
 // Returns True if Node or its siblings or child nodes have visible items.
 var
   Pass, Done: Boolean;
-  FilterLC: string;
 begin
   Result := False;
   Done := False;
-  FilterLC:=UTF8LowerCase(Filter);
   while (Node<>nil) and not Done do
   begin
     // Filter with event handler if there is one.
     if Assigned(fOnFilterNode) then
       Pass := fOnFilterNode(Node, Done);
     if not (Pass and Done) then
-      Pass := DoFilterItem(Node.Text, FilterLC, Node.Data);
+      Pass := DoFilterItem(Node.Text, Node.Data);
     if Pass and (fFirstPassedNode=Nil) then
       fFirstPassedNode:=Node;
     // Recursive call for child nodes.

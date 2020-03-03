@@ -27,12 +27,12 @@ unit opkman_progressfrm;
 interface
 
 uses
-  SysUtils, Classes, VirtualTrees,
+  SysUtils, Classes, laz.VirtualTrees,
   // LCL
   Forms, Controls, Graphics, Dialogs, ComCtrls, StdCtrls, ExtCtrls, ButtonPanel,
   // OpkMan
   opkman_installer, opkman_common, opkman_const, opkman_downloader, opkman_zipper,
-  opkman_options;
+  opkman_options, opkman_maindm;
 
 type
 
@@ -40,7 +40,6 @@ type
 
   TProgressFrm = class(TForm)
     cbExtractOpen: TCheckBox;
-    imTree: TImageList;
     lbElapsed: TLabel;
     lbElapsedData: TLabel;
     lbPackage: TLabel;
@@ -71,7 +70,7 @@ type
     FMdlRes: TModalResult;
     FType: Integer;
     FCnt, FTotCnt: Integer;
-    FVST: TVirtualStringTree;
+    FVST: TLazVirtualStringTree;
     procedure VSTGetText(Sender: TBaseVirtualTree; Node: PVirtualNode;
       Column: TColumnIndex; {%H-}TextType: TVSTTextType; var CellText: String);
     procedure VSTGetImageIndex(Sender: TBaseVirtualTree; Node: PVirtualNode;
@@ -147,26 +146,26 @@ procedure TProgressFrm.FormCreate(Sender: TObject);
 begin
   if not Options.UseDefaultTheme then
     Self.Color := clBtnFace;
-  FVST := TVirtualStringTree.Create(nil);
+  FVST := TLazVirtualStringTree.Create(nil);
   with FVST do
   begin
     Parent := Self;
     Align := alClient;
     Anchors := [akLeft, akTop, akRight];
-    Images := imTree;
+    Images := MainDM.Images;
     if not Options.UseDefaultTheme then
       Color := clBtnFace;
-    DefaultNodeHeight := 25;
+    DefaultNodeHeight := Scale96ToForm(25);
     Indent := 0;
     TabOrder := 1;
     DefaultText := '';
     Header.AutoSizeIndex := 0;
-    Header.Height := 25;
+    Header.Height := Scale96ToForm(25);
     Visible := False;
     Colors.BorderColor := clBlack;
-    BorderSpacing.Top := 10;
-    BorderSpacing.Left := 10;
-    BorderSpacing.Right := 10;
+    BorderSpacing.Top := Scale96ToForm(10);
+    BorderSpacing.Left := Scale96ToForm(10);
+    BorderSpacing.Right := Scale96ToForm(10);
     with Header.Columns.Add do begin
       Position := 0;
       Width := 250;
@@ -223,14 +222,17 @@ begin
   else
     lbReceived.Caption := rsProgressFrm_lbReceived_Caption0 + '  ' + FormatSize(ACurPos) + ' / ' + rsProgressFrm_Caption5;
   lbReceived.Update;
-  pb.Position := Round((ACurPos/ACurSize) * 100);
+  if ACurSize > 0 then
+    pb.Position := Round((ACurPos/ACurSize) * 100);
   pb.Update;
   lbReceivedTotal.Caption := rsProgressFrm_lbReceivedTotal_Caption0 + '  ' + FormatSize(ATotPos) + ' / ' + FormatSize(ATotSize);
   lbReceivedTotal.Update;
-  pbTotal.Position := Round((ATotPos/ATotSize) * 100);
+  if ATotSize > 0 then
+    pbTotal.Position := Round((ATotPos/ATotSize) * 100);
   pbTotal.Update;
   FCnt := ACnt;
   FTotCnt := ATotCnt;
+  Application.ProcessMessages;
 end;
 
 procedure TProgressFrm.DoOnPackageDownloadError(Sender: TObject; APackageName: String;
@@ -259,7 +261,7 @@ begin
     FSuccess := False;
     PackageDownloader.OnPackageDownloadProgress := nil;
     PackageDownloader.OnPackageDownloadError := nil;
-    PackageDownloader.CancelDownloadPackages;
+    PackageDownloader.Cancel;
     Close;
   end;
 end;
@@ -286,14 +288,17 @@ begin
   lbRemainingData.Update;
   lbReceived.Caption := rsProgressFrm_lbReceived_Caption1 + '  ' + FormatSize(ACurPos) + ' / ' + FormatSize(ACurSize);
   lbReceived.Update;
-  pb.Position := Round((ACurPos/ACurSize) * 100);
+  if ACurSize > 0 then
+    pb.Position := Round((ACurPos/ACurSize) * 100);
   pb.Update;
   lbReceivedTotal.Caption := rsProgressFrm_lbReceivedTotal_Caption1 + '  ' + FormatSize(ATotPos) + ' / ' + FormatSize(ATotSize);
   lbReceivedTotal.Update;
-  pbTotal.Position := Round((ATotPos/ATotSize) * 100);
+  if ATotSize > 0 then
+    pbTotal.Position := Round((ATotPos/ATotSize) * 100);
   pbTotal.Update;
   FCnt := ACnt;
   FTotCnt := ATotCnt;
+  Application.ProcessMessages;
 end;
 
 procedure TProgressFrm.DoOnZipError(Sender: TObject; APackageName: String; const AErrMsg: String);
@@ -352,32 +357,32 @@ begin
     imOpenPackage:
        begin
          Data^.FName := rsProgressFrm_Info5 + ' "' + APackageName + '".';
-         Data^.FImageIndex := 0;
+         Data^.FImageIndex := IMG_INFO;
        end;
     imOpenPackageSuccess:
        begin
          Data^.FName := rsProgressFrm_Info1;
-         Data^.FImageIndex := 1;
+         Data^.FImageIndex := IMG_OK;
        end;
     imCompilePackage:
        begin
          Data^.FName := rsProgressFrm_Info6 + ' "' + APackageName + '".';
-         Data^.FImageIndex := 0;
+         Data^.FImageIndex := IMG_INFO;
        end;
     imCompilePackageSuccess:
        begin
          Data^.FName := rsProgressFrm_Info1;
-         Data^.FImageIndex := 1;
+         Data^.FImageIndex := IMG_OK;
        end;
     imInstallPackage:
        begin
          Data^.FName := rsProgressFrm_Info0 + ' "' + APackageName + '".';
-         Data^.FImageIndex := 0;
+         Data^.FImageIndex := IMG_INFO;
        end;
     imInstallPackageSuccess:
        begin
          Data^.FName := rsProgressFrm_Info1;
-         Data^.FImageIndex := 1;
+         Data^.FImageIndex := IMG_OK;
        end;
     imPackageCompleted:
        begin
@@ -402,7 +407,7 @@ begin
   Node := FVST.AddChild(nil);
   Data := FVST.GetNodeData(Node);
   Data^.FName := AErrMsg;
-  Data^.FImageIndex := 2;
+  Data^.FImageIndex := IMG_ERROR;
   FVST.TopNode := Node;
   if ((FMdlRes = mrNone) or (FMdlRes = mrYes) or (FMdlRes = mrNo)) then
   begin
@@ -445,6 +450,8 @@ end;
 
 procedure TProgressFrm.DoOnPackageUpdateProgress(Sender: TObject; AUPackageName,
   AUPackageURL: String; ACnt, ATotCnt: Integer; AUTyp: Integer; AUErrMsg: String);
+const
+  IMG_UTyp: array[0..2] of Integer = (IMG_INFO, IMG_OK, IMG_ERROR);
 var
   Node: PVirtualNode;
   Data: PData;
@@ -462,8 +469,9 @@ begin
        else
          Data^.FName := rsProgressFrm_Error5 + '.';
   end;
-  Data^.FImageIndex := AUTyp;
+  Data^.FImageIndex := IMG_UTyp[AUTyp];
   FVST.TopNode := Node;
+  Application.ProcessMessages;
 end;
 
 procedure TProgressFrm.DoOnPackageUpdateCompleted(Sender: TObject;
@@ -477,7 +485,7 @@ begin
     Node := FVST.AddChild(nil);
     Data := FVST.GetNodeData(Node);
     Data^.FName := rsProgressFrm_Info3;
-    Data^.FImageIndex := 0;
+    Data^.FImageIndex := IMG_INFO;
     FVST.TopNode := Node;
     FVST.RepaintNode(Node);
     Application.ProcessMessages;
@@ -489,7 +497,7 @@ begin
     Node := FVST.AddChild(nil);
     Data := FVST.GetNodeData(Node);
     Data^.FName := rsProgressFrm_Error6;
-    Data^.FImageIndex := 2;
+    Data^.FImageIndex := IMG_ERROR;
     FVST.TopNode := Node;
     FVST.RepaintNode(Node);
     Sleep(2000);
@@ -509,7 +517,7 @@ begin
          FSuccess := False;
          PackageDownloader.OnPackageDownloadProgress := nil;
          PackageDownloader.OnPackageDownloadError := nil;
-         PackageDownloader.CancelDownloadPackages;
+         PackageDownloader.Cancel;
        end;
     1: begin
          FSuccess := False;
@@ -527,7 +535,7 @@ begin
          FSuccess := False;
          PackageDownloader.OnPackageUpdateProgress := nil;
          PackageDownloader.OnPackageDownloadError := nil;
-         PackageDownloader.CancelUpdatePackages;
+         PackageDownloader.Cancel;
        end;
    end;
   Close;

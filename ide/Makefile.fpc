@@ -101,7 +101,7 @@ DEFAULT_IDE_OPTIONS= $(LAZARUS_LIBPATHS) \
   -Fu../components/ideintf/units/$(CPU_TARGET)-$(OS_TARGET)/$(LCL_PLATFORM) \
   -Fu../components/synedit/units/$(CPU_TARGET)-$(OS_TARGET)/$(LCL_PLATFORM) \
   -Fu../components/lazcontrols/lib/$(CPU_TARGET)-$(OS_TARGET)/$(LCL_PLATFORM) \
-  -Fu../components/lazdebuggergdbmi/lib/$(CPU_TARGET)-$(OS_TARGET) \
+  -Fu../components/lazdebuggergdbmi/units/$(CPU_TARGET)-$(OS_TARGET)/$(LCL_PLATFORM) \
   -Fu../units/$(CPU_TARGET)-$(OS_TARGET)/$(LCL_PLATFORM)
 
 #
@@ -121,6 +121,11 @@ BIG_IDE_OPTIONS=-dBigIDE $(DEFAULT_IDE_OPTIONS) \
   -Fu../components/projecttemplates/lib/$(CPU_TARGET)-$(OS_TARGET)/$(LCL_PLATFORM) \
   -Fu../components/sqldb/lib/$(CPU_TARGET)-$(OS_TARGET)/$(LCL_PLATFORM) \
   -Fu../components/sdf/lib/$(CPU_TARGET)-$(OS_TARGET)/$(LCL_PLATFORM) \
+  -Fu../components/fpdebug/lib/$(CPU_TARGET)-$(OS_TARGET) \
+  -Fu../components/lazdebuggers/cmdlinedebuggerbase/lib/$(CPU_TARGET)-$(OS_TARGET) \
+  -Fu../components/lazdebuggers/lazdebuggerlldb/lib/$(CPU_TARGET)-$(OS_TARGET) \
+  -Fu../components/lazdebuggers/lazdebuggerfplldb/lib/$(CPU_TARGET)-$(OS_TARGET) \
+  -Fu../components/lazdebuggers/lazdebuggerfp/lib/$(CPU_TARGET)-$(OS_TARGET) \
   -Fu../components/leakview/lib/$(CPU_TARGET)-$(OS_TARGET)/$(LCL_PLATFORM) \
   -Fu../components/memds/lib/$(CPU_TARGET)-$(OS_TARGET)/$(LCL_PLATFORM) \
   -Fu../components/tachart/lib/$(CPU_TARGET)-$(OS_TARGET)/$(LCL_PLATFORM) \
@@ -134,6 +139,10 @@ BIG_IDE_OPTIONS=-dBigIDE $(DEFAULT_IDE_OPTIONS) \
   -Fu../components/externhelp/lib/$(CPU_TARGET)-$(OS_TARGET)/$(LCL_PLATFORM) \
   -Fu../components/PascalScript/Source/lib/$(CPU_TARGET)-$(OS_TARGET) \
   -Fu../components/macroscript/lib/$(CPU_TARGET)-$(OS_TARGET) \
+  -Fu../components/lclextensions/lib/$(CPU_TARGET)-$(OS_TARGET)-$(LCL_PLATFORM) \
+  -Fu../components/virtualtreeview/lib/$(CPU_TARGET)-$(OS_TARGET)-$(LCL_PLATFORM) \
+  -Fu../components/onlinepackagemanager/lib/$(CPU_TARGET)-$(OS_TARGET)/$(LCL_PLATFORM) \
+  -Fu../components/pas2js/units/$(CPU_TARGET)-$(OS_TARGET)/$(LCL_PLATFORM)
 
 #
 # Options for compiling lazbuild

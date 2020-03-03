@@ -91,6 +91,7 @@ type
     FFonts : TFPObjectHashTable;
     FPageIndex : Integer;
     FPages : TFPList;
+    FShowBandTypeNames: Boolean;
     FVDPI: integer;
     FVertOffset: Integer;
     FZoom: Double;
@@ -148,6 +149,7 @@ type
     Function    GetElementRect(BandLayout,ElementLayout : TFPReportLayout) : TRect;
     Function    GetElementRect(ABand : TFPReportCustomBand; AElement : TFPReportElement) : TRect;
     Class function RGBtoBGR(const AColor: UInt32): TColor;
+    Class function BGRToRGB(const AColor: TColor): TFPReportColor;
     // Properties
     property    HDPI: integer read FHDPI write FHDPI;
     property    VDPI: integer read FVDPI write FVDPI;
@@ -164,6 +166,8 @@ type
     Property    HyperLinks : THyperLinkList Read FHyperLinks;
     // Design mode or not
     Property    DrawMode : TReportDrawMode Read FDrawMode Write FDrawMode;
+    // ShowBandTypeNames
+    Property ShowBandTypeNames : Boolean Read FShowBandTypeNames Write FShowBandTypeNames;
   end;
 
 const
@@ -206,6 +210,16 @@ begin
   R:= GetColorComponent(C);
 //    Alpha := GetColorComponent(C);
   Result:=RGBToColor(R,G,B);
+end;
+
+class function TFPReportExportCanvas.BGRToRGB(const AColor: TColor): TFPReportColor;
+
+var
+  R,G,B : Byte;
+
+begin
+  RedGreenBlue(ColorToRGB(AColor),R,G,B);
+  Result:=RGBToReportColor(R,G,B);
 end;
 
 { THyperLinkList }
@@ -430,7 +444,7 @@ procedure TFPReportExportCanvas.RenderFrame(const ABand: TFPReportCustomBand; co
   const APos: TFPReportPoint; const AWidth, AHeight: TFPReportUnits);
 
 begin
-  RenderFrame(AFrame,CoordToRect(APos,AWidth,AHeight),ABand.Frame.BackgroundColor);
+  RenderFrame(AFrame,CoordToRect(APos,AWidth,AHeight), ABand.Frame.BackgroundColor);
 end;
 
 Type
@@ -843,6 +857,7 @@ begin
   FImageHeight := 0;
   // store the original DPI, we will restore it later
   FFonts:=TFPObjectHashTable.Create(True);
+  FShowBandTypeNames:=True;
 end;
 
 destructor TFPReportExportCanvas.Destroy;
@@ -877,6 +892,7 @@ procedure TFPReportExportCanvas.RenderElement(ABand : TFPReportCustomBand; Eleme
 
 Var
   C : TFPReportPoint;
+  LB,LE : TFPReportLayout;
 
 begin
   {$IFDEF DEBUGRD}
@@ -894,11 +910,13 @@ begin
     RenderCheckbox(ABand,TFPReportCustomCheckbox(Element))
   else if not (Element is TFPReportCustomBand) then
     begin
-    C.Left := ABand.RTLayout.Left + Element.RTLayout.Left;
-    C.Top := ABand.RTLayout.Top + Element.RTLayout.Top ; // + Element.RTLayout.Height;
-    RenderFrame(ABand, Element.Frame, C, Element.RTLayout.Width, Element.RTLayout.Height);
-    C.Left:=aband.RTLayout.Left;
-    C.Top:=aband.RTLayout.Top;
+    LB:=GetLayout(ABand);
+    LE:=GetLayout(Element);
+    C.Left := LB.Left + LE.Left;
+    C.Top := LB.Top + LE.Top ; // + Element.RTLayout.Height;
+    RenderFrame(ABand, Element.Frame, C, LE.Width, LE.Height);
+    C.Left:=LB.Left;
+    C.Top:=LB.Top;
     RenderUnknownElement(C,Element,Self.VDPI);
     end;
 end;
@@ -958,7 +976,13 @@ begin
   TopLeft.Top:=L.Top;
   N:=ABand.Name;
   if N='' then
-    N:='Unnamed '+DefaultBandNames[ABand.ReportBandType]+' band';
+    N:='Unnamed '+DefaultBandNames[ABand.ReportBandType]+' band'
+  else if ShowBandTypeNames then
+    N:=N+' ('+DefaultBandNames[ABand.ReportBandType]+')';
+  Canvas.Font.Name:='default';
+  Canvas.Font.Size:=10;
+  Canvas.Font.Style:=[];
+  Canvas.Font.Color:=clBlack;
   TH:=GetBandHandleHeight;
   X:=FHorzOffset+HmmToPixels(TopLeft.Left);
   Y:=FVertOffset+VmmToPixels(TopLeft.Top)-TH-2*BandTitleMargin;

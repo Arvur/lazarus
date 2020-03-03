@@ -27,8 +27,9 @@ unit FileUtil;
 interface
 
 uses
-  Classes, SysUtils,
-  Masks, LazUTF8, LazFileUtils, StrUtils;
+  Classes, SysUtils, StrUtils,
+  // LazUtils
+  Masks, LazUTF8, LazFileUtils;
 
 {$IF defined(Windows) or defined(darwin) or defined(HASAMIGA)}
 {$define CaseInsensitiveFilenames}
@@ -56,15 +57,17 @@ function CompareFilenames(Filename1: PChar; Len1: integer;
 function ExtractShortPathNameUTF8(Const FileName : String) : String;
 function DeleteDirectory(const DirectoryName: string; OnlyChildren: boolean): boolean;
 function ProgramDirectory: string;
+function ProgramDirectoryWithBundle: string;
 
 function ExpandUNCFileNameUTF8(const FileName: string): string;
 function FileSize(const Filename: string): int64; overload; inline;
-function ExtractFileNameWithoutExt(const AFilename: string): string;
 function FilenameIsPascalUnit(const Filename: string): boolean;
-function CreateAbsoluteSearchPath(const SearchPath, BaseDirectory: string): string;
-function CreateAbsolutePath(const Filename, BaseDirectory: string): string;
 function FileIsInPath(const Filename, Path: string): boolean;
 function FileIsInDirectory(const Filename, Directory: string): boolean;
+
+function ExtractFileNameWithoutExt(const AFilename: string): string; deprecated 'Use the function from unit LazFileUtils';
+function CreateAbsoluteSearchPath(const SearchPath, BaseDirectory: string): string; deprecated 'Use the function from unit LazFileUtils';
+function CreateAbsolutePath(const Filename, BaseDirectory: string): string; deprecated 'Use the function from unit LazFileUtils';
 
 function GetAllFilesMask: string; inline;
 function GetExeExt: string; inline;
@@ -74,9 +77,13 @@ function ReadFileToString(const Filename: string): string;
 type
   TSearchFileInPathFlag = (
     sffDontSearchInBasePath, // do not search in BasePath, search only in SearchPath.
-    sffSearchLoUpCase
+    sffSearchLoUpCase,
+    sffFile, // must be file, not directory
+    sffExecutable // file must be executable
     );
   TSearchFileInPathFlags = set of TSearchFileInPathFlag;
+const
+  sffFindProgramInPath = [{$IFDEF Unix}sffDontSearchInBasePath,{$ENDIF}sffFile,sffExecutable];
 
 function SearchFileInPath(const Filename, BasePath, SearchPath,
   Delimiter: string; Flags: TSearchFileInPathFlags): string; overload;
@@ -99,14 +106,12 @@ type
     function GetFileName: String;
   public
     procedure Stop;
-
     function IsDirectory: Boolean;
   public
     property FileName: String read GetFileName;
     property FileInfo: TSearchRec read FFileInfo;
     property Level: Integer read FLevel;
     property Path: String read FPath;
-
     property Searching: Boolean read FSearching;
   end;
 
@@ -119,6 +124,7 @@ type
   TFileSearcher = class(TFileIterator)
   private
     FMaskSeparator: char;
+    FPathSeparator: char;
     FFollowSymLink: Boolean;
     FOnFileFound: TFileFoundEvent;
     FOnDirectoryFound: TDirectoryFoundEvent;
@@ -136,6 +142,7 @@ type
       ASearchSubDirs: Boolean = True; CaseSensitive: Boolean = False);
   public
     property MaskSeparator: char read FMaskSeparator write FMaskSeparator;
+    property PathSeparator: char read FPathSeparator write FPathSeparator;
     property FollowSymLink: Boolean read FFollowSymLink write FFollowSymLink;
     property FileAttribute: Word read FFileAttribute write FFileAttribute default faAnyfile;
     property DirectoryAttribute: Word read FDirectoryAttribute write FDirectoryAttribute default faDirectory;
@@ -167,14 +174,16 @@ type
   end;
 
 function FindAllFiles(const SearchPath: String; SearchMask: String = '';
-  SearchSubDirs: Boolean = True; DirAttr: Word = faDirectory): TStringList; overload;
+  SearchSubDirs: Boolean = True; DirAttr: Word = faDirectory;
+  MaskSeparator: char = ';'; PathSeparator: char = ';'): TStringList; overload;
 procedure FindAllFiles(AList: TStrings; const SearchPath: String;
-  SearchMask: String = ''; SearchSubDirs: Boolean = True; DirAttr: Word = faDirectory); overload;
+  SearchMask: String = ''; SearchSubDirs: Boolean = True; DirAttr: Word = faDirectory;
+  MaskSeparator: char = ';'; PathSeparator: char = ';'); overload;
 
 function FindAllDirectories(const SearchPath: string;
-  SearchSubDirs: Boolean = True): TStringList; overload;
+  SearchSubDirs: Boolean = True; PathSeparator: char = ';'): TStringList; overload;
 procedure FindAllDirectories(AList: TStrings; const SearchPath: String;
-  SearchSubDirs: Boolean = true); overload;
+  SearchSubDirs: Boolean = true; PathSeparator: char = ';'); overload;
 
 // flags for copy
 type

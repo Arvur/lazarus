@@ -332,7 +332,7 @@ procedure TControl.AdjustSize;
 
   procedure RaiseLoop;
   begin
-    raise Exception.Create('TControl.AdjustSize loop detected '+DbgSName(Self)+' Bounds='+dbgs(BoundsRect));
+    raise ELayoutException.Create('TControl.AdjustSize loop detected '+DbgSName(Self)+' Bounds='+dbgs(BoundsRect));
   end;
 
 begin
@@ -652,8 +652,8 @@ begin
     ' KeepBase=',KeepBase]);
   //if (Parent=nil) and (Left>0) and (ALeft=0) then DumpStack; // This can happen if the interface has not yet moved the window and for some reason something applies the interface coords back to the LCL
   {$ENDIF}
-  if not KeepBase then
-    UpdateAlignIndex;
+  if Assigned(Parent) and not KeepBase then
+    Parent.UpdateAlignIndex(Self);
 
   // constraint the size
   DoConstrainedResize(ALeft, ATop, AWidth, AHeight);
@@ -665,10 +665,9 @@ begin
 
   // check for loop.
   if (not KeepBase) and (cfKillChangeBounds in GetTopParent.FControlFlags) then
-    raise Exception.Create('TControl.ChangeBounds loop detected '+DbgSName(Self)
-      +' Left='+dbgs(Left)+',Top='+dbgs(Top)+',Width='+dbgs(Width)+',Height='+dbgs(Height)
-      +' NewLeft='+dbgs(aLeft)+',NewTop='+dbgs(aTop)+',NewWidth='+dbgs(aWidth)+',NewHeight='+dbgs(aHeight)
-      );
+    raise ELayoutException.CreateFmt('TControl.ChangeBounds loop detected %s '+
+      'Left=%d,Top=%d,Width=%d,Height=%d NewLeft=%d,NewTop=%d,NewWidth=%d,NewHeight=%d',
+            [DbgSName(Self), Left,Top,Width,Height, aLeft,aTop,aWidth,aHeight]);
   OldLeft := FLeft;
   OldTop := FTop;
   OldWidth := FWidth;
@@ -941,6 +940,19 @@ end;
 
 procedure TControl.ExecuteDefaultAction;
 begin
+end;
+
+procedure TControl.FixDesignFontsPPI(const ADesignTimePPI: Integer);
+begin
+  // Problem: Font.PixelsPerInch isn't saved in the LFM, therefore the
+  // design-time font PPI is different from the one that is loaded on target
+  // machine, which results in different font scaling.
+  // DoFixDesignFont restores the corrent design-time font PPI so that it can
+  // be used for LCL HighDPI scaling.
+  // Override this function - list all custom fonts in the overriden procedure
+  // To-Do: maybe save Font.PixelsPerInch in the LFM and remove this?
+
+  DoFixDesignFontPPI(Font, ADesignTimePPI);
 end;
 
 procedure TControl.ExecuteCancelAction;
@@ -1223,12 +1235,15 @@ begin
 
   if FParentFont then
   begin
-    Font.BeginUpdate;
-    try
-      Font.PixelsPerInch := FParent.Font.PixelsPerInch; // PixelsPerInch isn't assigned
-      Font := FParent.Font;
-    finally
-      Font.EndUpdate;
+    if Assigned(FParent) then
+    begin
+      Font.BeginUpdate;
+      try
+        Font.PixelsPerInch := FParent.Font.PixelsPerInch; // PixelsPerInch isn't assigned
+        Font := FParent.Font;
+      finally
+        Font.EndUpdate;
+      end;
     end;
     FParentFont := True;
   end;
@@ -1734,11 +1749,9 @@ begin
   {$IFDEF VerboseDrag}
   DebugLn('TControl.DragOver ',Name,':',ClassName,' XY=',IntToStr(X),',',IntToStr(Y));
   {$ENDIF}
-  Accept := False;
-  if Assigned(FOnDragOver) then begin
-    Accept := True;
+  Accept := Assigned(FOnDragOver);
+  if Accept then
     FOnDragOver(Self,Source,X,Y,State,Accept);
-  end;
 end;
 
 {------------------------------------------------------------------------------
@@ -1787,25 +1800,6 @@ end;
 function TControl.CanAutoSize(var NewWidth, NewHeight : Integer): Boolean;
 begin
   Result := True;
-end;
-
-{------------------------------------------------------------------------------
-       TControl UpdateAlignIndex
-
-  Move this control to position 0 of Parent.FAlignOrder
-------------------------------------------------------------------------------}
-procedure TControl.UpdateAlignIndex;
-var
-  i: Integer;
-begin
-  if Parent=nil then exit;
-  if Parent.FAlignOrder=nil then
-    Parent.FAlignOrder:=TFPList.Create;
-  i:=Parent.FAlignOrder.IndexOf(Self);
-  if i<0 then
-    Parent.FAlignOrder.Insert(0,Self)
-  else
-    Parent.FAlignOrder.Move(i,0);
 end;
 
 {------------------------------------------------------------------------------
@@ -1918,7 +1912,7 @@ begin
   if (AFont.Height=0) and not (csDesigning in ComponentState) then
     AFont.Height := MulDiv(GetFontData(AFont.Reference.Handle).Height, AFont.PixelsPerInch, Screen.PixelsPerInch);
   if AToPPI>0 then
-    AFont.PixelsPerInch := MulDiv(AFont.PixelsPerInch, AToPPI, AFont.PixelsPerInch)
+    AFont.PixelsPerInch := AToPPI
   else
     AFont.PixelsPerInch := Round(AFont.PixelsPerInch*AProportion);
 end;
@@ -2933,7 +2927,7 @@ procedure TControl.UpdateMouseCursor(X, Y: integer);
 begin
   //DebugLn(['TControl.UpdateMouseCursor ',DbgSName(Self)]);
   if csDesigning in ComponentState then Exit;
-  if Screen.Cursor <> crDefault then Exit;
+  if Screen.RealCursor <> crDefault then Exit;
   SetTempCursor(Cursor);
 end;
 
@@ -3475,7 +3469,7 @@ begin
   ChangeText :=
     (csSetCaption in ControlStyle) and not (csLoading in ComponentState) and
     (Name = Text) and
-    ((Owner = nil) or not (Owner is TControl) or not (csLoading in TControl(Owner).ComponentState));
+    ((Owner = nil) or not (Owner is TControl) or not (csLoading in Owner.ComponentState));
   inherited SetName(Value);
   if ChangeText then Text := Value;
 end;
@@ -3636,7 +3630,7 @@ end;
 
 procedure TControl.WMCancelMode(var Message: TLMessage);
 begin
-  MouseCapture := False;
+  SetCaptureControl(nil);
 end;
 
 function TControl.IsEnabledStored: Boolean;
@@ -4247,13 +4241,11 @@ procedure TControl.SetWidth(Value: Integer);
   begin
     // the user changed the width
     if Value<0 then
-      raise EInvalidOperation.Create(
-        'TWinControl.SetBounds ('+DbgSName(Self)+'): Negative width '
-          +dbgs(Value)+' not allowed.');
+      raise ELayoutException.CreateFmt('TWinControl.SetBounds (%s): Negative width %d not allowed.',
+                                       [DbgSName(Self), Value]);
     if Value>=10000 then
-      raise EInvalidOperation.Create(
-        'TWinControl.SetBounds ('+DbgSName(Self)+'): Width '
-          +dbgs(Value)+' not allowed.');
+      raise ELayoutException.CreateFmt('TWinControl.SetBounds (%s): Width %d not allowed.',
+                                       [DbgSName(Self), Value]);
   end;
 
 begin
@@ -4275,6 +4267,15 @@ class procedure TControl.WSRegisterClass;
 begin
   inherited WSRegisterClass;
   RegisterControl;
+  RegisterPropertyToSkip(TControl, 'AlignWithMargins', 'VCL compatibility property', '');
+  RegisterPropertyToSkip(TControl, 'Ctl3D',            'VCL compatibility property', '');
+  RegisterPropertyToSkip(TControl, 'ParentCtl3D',      'VCL compatibility property', '');
+  RegisterPropertyToSkip(TControl, 'IsControl',        'VCL compatibility property', '');
+  RegisterPropertyToSkip(TControl, 'DesignSize',       'VCL compatibility property', '');
+  RegisterPropertyToSkip(TControl, 'ExplicitLeft',     'VCL compatibility property', '');
+  RegisterPropertyToSkip(TControl, 'ExplicitHeight',   'VCL compatibility property', '');
+  RegisterPropertyToSkip(TControl, 'ExplicitTop',      'VCL compatibility property', '');
+  RegisterPropertyToSkip(TControl, 'ExplicitWidth',    'VCL compatibility property', '');
 end;
 
 function TControl.GetCursor: TCursor;
@@ -4291,13 +4292,11 @@ procedure TControl.SetHeight(Value: Integer);
   begin
     // the user changed the height
     if Value<0 then
-      raise EInvalidOperation.Create(
-        'TWinControl.SetHeight ('+DbgSName(Self)+'): Negative height '
-          +dbgs(Value)+' not allowed.');
+      raise ELayoutException.CreateFmt('TWinControl.SetHeight (%s): Negative height %d not allowed.',
+                                       [DbgSName(Self), Value]);
     if Value>=10000 then
-      raise EInvalidOperation.Create(
-        'TWinControl.SetBounds ('+DbgSName(Self)+'): Height '
-          +dbgs(Value)+' not allowed.');
+      raise ELayoutException.CreateFmt('TWinControl.SetBounds (%s): Height %d not allowed.',
+                                       [DbgSName(Self), Value]);
   end;
 
 begin
@@ -4884,6 +4883,11 @@ begin
   EnableAutoSizing{$IFDEF DebugDisableAutoSizing}('TControl.ReplaceDockedControl'){$ENDIF};
 end;
 
+function TControl.Docked: Boolean;
+begin
+  Result := Assigned(Parent) and (Parent = HostDockSite) and (GetParentForm(Parent) <> Parent);
+end;
+
 procedure TControl.AddHandlerOnResize(const OnResizeEvent: TNotifyEvent;
   AsFirst: boolean);
 begin
@@ -5247,10 +5251,6 @@ begin
   Result := Parent;
 end;
 
-{------------------------------------------------------------------------------
-  function TControl.IsParentOf(AControl: TControl): boolean;
-
- ------------------------------------------------------------------------------}
 function TControl.IsParentOf(AControl: TControl): boolean;
 begin
   Result := False;
@@ -5267,6 +5267,25 @@ begin
   Result := Self;
   while Assigned(Result.Parent) do
     Result := Result.Parent;
+end;
+
+function TControl.FindSubComponent(AName: string): TComponent;
+// Like TComponent.FindComponent but finds also a subcomponent which name is
+//  separated by a dot. For example 'LabeledEdit1.SubLabel'.
+var
+  i: Integer;
+  SubName: String;
+begin
+  i := Pos('.', AName);
+  if i > 0 then begin
+    SubName := Copy(AName, i+1, Length(AName));
+    Delete(AName, i, Length(AName));
+  end
+  else
+    SubName := '';
+  Result := FindComponent(AName);
+  if Assigned(Result) and (SubName<>'') then
+    Result := Result.FindComponent(SubName);
 end;
 
 {------------------------------------------------------------------------------
@@ -5539,6 +5558,11 @@ begin
   end;
 end;
 
+function TControl.GetCanvasScaleFactor: Double;
+begin
+  Result := TWSControlClass(WidgetSetClass).GetCanvasScaleFactor(Self);
+end;
+
 {------------------------------------------------------------------------------
   function TControl.GetDefaultWidth: integer;
 
@@ -5549,14 +5573,14 @@ function TControl.GetDefaultWidth: integer;
 begin
   if WidthIsAnchored then
     // if width is anchored the read and base bounds were changed at designtime
-    Result := GetControlClassDefaultSize.cx
+    Result := Scale96ToFont(GetControlClassDefaultSize.cx)
   else if cfBaseBoundsValid in FControlFlags then
     Result := FBaseBounds.Right - FBaseBounds.Left
   else
   if cfWidthLoaded in FControlFlags then
     Result := FReadBounds.Right - FReadBounds.Left
   else
-    Result := GetControlClassDefaultSize.cx;
+    Result := Scale96ToFont(GetControlClassDefaultSize.cx);
 end;
 
 {------------------------------------------------------------------------------
@@ -5569,14 +5593,14 @@ function TControl.GetDefaultHeight: integer;
 begin
   if HeightIsAnchored then
     // if height is anchored the read and base bounds were changed at designtime
-    Result := GetControlClassDefaultSize.cy
+    Result := Scale96ToFont(GetControlClassDefaultSize.cy)
   else if cfBaseBoundsValid in FControlFlags then
     Result := BaseBounds.Bottom - BaseBounds.Top
   else
   if cfHeightLoaded in FControlFlags then
     Result := FReadBounds.Bottom - FReadBounds.Top
   else
-    Result := GetControlClassDefaultSize.CY;
+    Result := Scale96ToFont(GetControlClassDefaultSize.cy);
 end;
 
 {------------------------------------------------------------------------------
@@ -5626,7 +5650,7 @@ procedure TControl.InvalidatePreferredSize;
 
   procedure RaiseLoop;
   begin
-    raise Exception.Create('TControl.InvalidatePreferredSize loop detected '+DbgSName(Self)+' Bounds='+dbgs(BoundsRect));
+    raise ELayoutException.Create('TControl.InvalidatePreferredSize loop detected '+DbgSName(Self)+' Bounds='+dbgs(BoundsRect));
   end;
 
 var
@@ -5723,10 +5747,9 @@ begin
   {$IFDEF DebugDisableAutoSizing}
   CheckReason;
   {$ENDIF}
-
   if FAutoSizingLockCount<=0 then
-    raise EInvalidOperation.Create('TControl.EnableAutoSizing '+DbgSName(Self)+': missing DisableAutoSizing');
-
+    raise ELayoutException.CreateFmt('TControl.EnableAutoSizing %s: missing DisableAutoSizing',
+                                     [DbgSName(Self)]);
   dec(FAutoSizingLockCount);
   //DebugLn([Space(FAutoSizingLockCount*2),'TControl.EnableAutoSizing ',DbgSName(Self),' ',FAutoSizingLockCount]);
   if (FAutoSizingLockCount=0) then

@@ -2,7 +2,7 @@
 #
 #   Makefile.fpc for InstantFPCLaz 1.0
 #
-#   This file was generated on 1-10-15
+#   This file was generated on 12-7-18
 
 [package]
 name=instantfpclaz
@@ -24,6 +24,7 @@ files=$(wildcard $(COMPILER_UNITTARGETDIR)/*$(OEXT)) \
       $(wildcard $(COMPILER_UNITTARGETDIR)/*.res) \
       $(wildcard $(COMPILER_UNITTARGETDIR)/*.compiled) \
       $(wildcard *$(OEXT)) $(wildcard *$(PPUEXT)) $(wildcard *$(RSTEXT))
+
 [prerules]
 # LCL Platform
 ifndef LCL_PLATFORM

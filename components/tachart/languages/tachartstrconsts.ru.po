@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Language: ru\n"
-"X-Generator: Poedit 1.7.7\n"
+"X-Generator: Poedit 2.2.1\n"
 
 #: tachartstrconsts.descolor
 msgid "Color"
@@ -27,6 +27,22 @@ msgstr "Удалить строку"
 msgid "Insert row"
 msgstr "Вставить строку"
 
+#: tachartstrconsts.desmovedown
+msgid "Move down"
+msgstr "Переместить вниз"
+
+#: tachartstrconsts.desmoveup
+msgid "Move up"
+msgstr "Переместить вверх"
+
+#: tachartstrconsts.desnointeger
+msgid "Value must be an integer."
+msgstr "Значение должно быть целым."
+
+#: tachartstrconsts.desnonumber
+msgid "Non-numeric value."
+msgstr "Значение не является числом."
+
 #: tachartstrconsts.destext
 msgid "Text"
 msgstr "Текст"
@@ -42,6 +58,10 @@ msgstr "Диаграмма с областями"
 #: tachartstrconsts.rsautoscale
 msgid "Auto scale"
 msgstr "Автоматический масштаб"
+
+#: tachartstrconsts.rsaxisclicktool
+msgid "Axis click"
+msgstr "Щелчок по оси"
 
 #: tachartstrconsts.rsbarseries
 msgid "Bar series"
@@ -164,7 +184,32 @@ msgstr "Измерение расстояния"
 msgid "Down triangle"
 msgstr "Треугольник с вершиной снизу"
 
+#: tachartstrconsts.rserrfitdimerror
+msgid "Non-matching count of x and y values."
+msgstr "Нет соответствия между количествами значений по x и y."
+
+#: tachartstrconsts.rserrfitmoreparamsthanvalues
+msgid "There are more fitting parameters than data values."
+msgstr "Независимых переменных больше количества имеющихся величин."
+
+#: tachartstrconsts.rserrfitnobasefunctions
+msgid "Not enough user-provided base functions."
+msgstr "Недостаточно пользовательских базовых функций."
+
+#: tachartstrconsts.rserrfitnofitparams
+msgid "No fit parameters specified."
+msgstr "Независимых переменных не задано."
+
+#: tachartstrconsts.rserrfitsingular
+msgid "Fitting matrix is (nearly) singular."
+msgstr "Матрица аппроксимации (практически) вырождена."
+
+#: tachartstrconsts.rserrillegalfitparamcount
+msgid "The number of fit parameters cannot be less than 1."
+msgstr "Независимых переменных не может быть меньше одной."
+
 #: tachartstrconsts.rserrinvalidresulttype
+#, object-pascal-format
 msgid "Expression result type must be integer or float. Got \"%s\"."
 msgstr "Тип результата выражения должен быть целым либо вещественным, но сейчас является \"%s\"."
 
@@ -180,6 +225,58 @@ msgstr "Диаграмма по математическому выражени�
 msgid "Vector field series"
 msgstr "Диаграмма с векторным полем"
 
+#: tachartstrconsts.rsfitadjcoefficientofdetermination
+msgid "Adj. coefficient of determination"
+msgstr "Скорректированный коэффициент детерминации"
+
+#: tachartstrconsts.rsfitchisquared
+msgid "Chi-squared"
+msgstr "Хи-квадрат"
+
+#: tachartstrconsts.rsfitcoefficientofdetermination
+msgid "Coefficient of determination (R2)"
+msgstr "Коэффициент детерминации (R2)"
+
+#: tachartstrconsts.rsfitdegreesoffreedom
+msgid "Degrees of freedom"
+msgstr "Степени свободы"
+
+#: tachartstrconsts.rsfiterrorsumofsquares
+msgid "Error sum of squares (SSE)"
+msgstr "Сумма квадратов ошибки (SSE)"
+
+#: tachartstrconsts.rsfitnumfitparams
+msgid "Number of fit parameters"
+msgstr "Количество независимых переменных"
+
+#: tachartstrconsts.rsfitnumobservations
+msgid "Number of observations"
+msgstr "Количество наблюдений"
+
+#: tachartstrconsts.rsfitpvalue
+msgid "p value"
+msgstr "P-значение"
+
+#: tachartstrconsts.rsfitreducedchisquared
+msgid "Reduced Chi-squared"
+msgstr "Редуцированный хи-квадрат"
+
+#: tachartstrconsts.rsfitregressionsumofsquares
+msgid "Regression sum of squares (SSR)"
+msgstr "Регрессионная сумма квадратов (SSR)"
+
+#: tachartstrconsts.rsfitresidualstandarderror
+msgid "Residual standard error"
+msgstr "Остаточное стандартное отклонение"
+
+#: tachartstrconsts.rsfittotalsumofsquares
+msgid "Total sum of squares (SST)"
+msgstr "Полная сумма квадратов (SST)"
+
+#: tachartstrconsts.rsfitvarianceratio
+msgid "Variance ratio F"
+msgstr "Дисперсионное отношение F"
+
 #: tachartstrconsts.rsfullstarsymbol
 msgid "Star (full)"
 msgstr "Звезда (полная)"
@@ -187,6 +284,10 @@ msgstr "Звезда (полная)"
 #: tachartstrconsts.rsfunctionseries
 msgid "Function series"
 msgstr "Диаграмма по функции"
+
+#: tachartstrconsts.rsheaderfooterclicktool
+msgid "Header/footer click"
+msgstr "Щелчок по колонтитулам"
 
 #: tachartstrconsts.rshexagonsymbol
 msgid "Hexagon"
@@ -228,6 +329,10 @@ msgstr "Скобка слева"
 msgid "Left triangle"
 msgstr "Треугольник с вершиной слева"
 
+#: tachartstrconsts.rslegendclicktool
+msgid "Legend click"
+msgstr "Щелчок по легенде"
+
 #: tachartstrconsts.rslinear
 msgid "Linear"
 msgstr "Линейный масштаб"
@@ -235,6 +340,21 @@ msgstr "Линейный масштаб"
 #: tachartstrconsts.rslineseries
 msgid "Line series"
 msgstr "График"
+
+#: tachartstrconsts.rslistsourcecolorerror
+#, object-pascal-format
+msgid "The %0:s.DataPoints string \"%1:s\" is not an integer."
+msgstr "Строка %0:s.DataPoints \"%1:s\" не является целым числом."
+
+#: tachartstrconsts.rslistsourcenumericerror
+#, object-pascal-format
+msgid "The %0:s.DataPoints string \"%1:s\" is not a valid number."
+msgstr "Строка %0:s.DataPoints \"%1:s\" не является корректным числом."
+
+#: tachartstrconsts.rslistsourcestringformaterror
+#, object-pascal-format
+msgid "The data value count in the %0:s.DataPoints string \"%1:s\" differs from what is expected from XCount and YCount."
+msgstr "Количество значений в строке %0:s.DataPoints \"%1:s\" отличается от ожидаемого после чтения XCount и YCount."
 
 #: tachartstrconsts.rslogarithmic
 msgid "Logarithmic"
@@ -341,6 +461,25 @@ msgstr "Скобка справа"
 msgid "Right triangle"
 msgstr "Треугольник с вершиной справа"
 
+#: tachartstrconsts.rssourcecounterror
+#, object-pascal-format
+msgid "%0:s requires a chart source with at least %1:d %2:s value(s) per data point."
+msgstr "%0:s требуется источник данных для диаграммы, имеющий не менее следующего количества значений в величине: %1:d по оси %2:s."
+
+#: tachartstrconsts.rssourcecounterror2
+#, object-pascal-format
+msgid "This %0:s instance must have at least %1:d %2:s value(s) per data point."
+msgstr "Этот экземпляр %0:s должен иметь не менее следующего количества значений в величине: %1:d по оси %2:s."
+
+#: tachartstrconsts.rssourcenoteditable
+msgid "Editable chart source required"
+msgstr "Требуется доступный для редактирования источник данных для диаграммы"
+
+#: tachartstrconsts.rssourcesorterror
+#, object-pascal-format
+msgid "Selected sorting parameters are not supported by %s."
+msgstr "Выбранные параметры сортировки не поддерживаются %s."
+
 #: tachartstrconsts.rsstarsymbol
 msgid "Star (lines)"
 msgstr "Звезда (из линий)"
@@ -392,6 +531,7 @@ msgid "Edit axis transformations"
 msgstr "Редактор масштабов осей"
 
 #: tachartstrconsts.tasfailedsubcomponentrename
+#, object-pascal-format
 msgid "Failed to rename components: %s"
 msgstr "Невозможно переименовать компоненты: %s"
 

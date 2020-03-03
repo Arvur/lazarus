@@ -198,25 +198,36 @@ begin
 end;
 
 function GetBreakPointStateDescription(ABreakpoint: TBaseBreakpoint): string;
-const
-  //                 enabled  valid
-  DEBUG_STATE: array[Boolean, TValidState] of ShortString = (
-                {vsUnknown,     vsValid,   vsInvalid}
-    {Disabled} (lisOff, lisDisabled, lisInvalidOff),
-    {Endabled} (lisOn, lisEnabled, lisInvalidOn));
+var
+  DEBUG_STATE: array[Boolean, TValidState] of ShortString;
 begin
+  DEBUG_STATE[false, vsUnknown]:=lisOff;
+  DEBUG_STATE[false, vsValid]:=lisBPSDisabled;
+  DEBUG_STATE[false, vsInvalid]:=lisInvalidOff;
+  DEBUG_STATE[false, vsPending]:=lisInvalidOff;
+  DEBUG_STATE[true, vsUnknown]:=lisOn;
+  DEBUG_STATE[true, vsValid]:=lisBPSEnabled;
+  DEBUG_STATE[true, vsInvalid]:=lisInvalidOn;
+  DEBUG_STATE[true, vsPending]:=lisPendingOn;
   Result:=DEBUG_STATE[ABreakpoint.Enabled,ABreakpoint.Valid];
 end;
 
 function GetBreakPointActionsDescription(ABreakpoint: TBaseBreakpoint): string;
-const
-  DEBUG_ACTION: array[TIDEBreakPointAction] of ShortString =
-    (lisBreak, lisEnableGroups, lisDisableGroups, lisLogMessage, lisLogEvalExpression, lisLogCallStack, lisTakeSnapshot);
 var
+  DEBUG_ACTION: array[TIDEBreakPointAction] of ShortString;
   CurBreakPoint: TIDEBreakPoint;
   Action: TIDEBreakPointAction;
 begin
   Result := '';
+
+  DEBUG_ACTION[bpaStop]:=lisBreak;
+  DEBUG_ACTION[bpaEnableGroup]:=lisEnableGroups;
+  DEBUG_ACTION[bpaDisableGroup]:=lisDisableGroups;
+  DEBUG_ACTION[bpaLogMessage]:=lisLogMessage;
+  DEBUG_ACTION[bpaEValExpression]:=lisLogEvalExpression;
+  DEBUG_ACTION[bpaLogCallStack]:=lisLogCallStack;
+  DEBUG_ACTION[bpaTakeSnapshot]:=lisTakeSnapshot;
+
   if ABreakpoint is TIDEBreakPoint then begin
     CurBreakPoint:=TIDEBreakPoint(ABreakpoint);
     for Action := Low(TIDEBreakPointAction) to High(TIDEBreakPointAction) do
@@ -496,11 +507,13 @@ var
 begin
   SrcEdit := SourceEditorManager.GetActiveSE;
   if SrcEdit <> nil then
-    NewBreakpoint := BreakPoints.Add(SrcEdit.FileName, SrcEdit.CurrentCursorYLine)
+    NewBreakpoint := BreakPoints.Add(SrcEdit.FileName, SrcEdit.CurrentCursorYLine, True)
   else
-    NewBreakpoint := BreakPoints.Add('', 0);
-  if DebugBoss.ShowBreakPointProperties(NewBreakpoint) = mrOk then
-    UpdateAll
+    NewBreakpoint := BreakPoints.Add('', 0, True);
+  if DebugBoss.ShowBreakPointProperties(NewBreakpoint) = mrOk then begin
+    NewBreakpoint.EndUpdate;
+    UpdateAll;
+  end
   else
     ReleaseRefAndNil(NewBreakpoint);
 end;
@@ -509,9 +522,11 @@ procedure TBreakPointsDlg.actAddWatchPointExecute(Sender: TObject);
 var
   NewBreakpoint: TIDEBreakPoint;
 begin
-  NewBreakpoint := BreakPoints.Add('', wpsGlobal, wpkWrite);
-  if DebugBoss.ShowBreakPointProperties(NewBreakpoint) = mrOk then
-    UpdateAll
+  NewBreakpoint := BreakPoints.Add('', wpsGlobal, wpkWrite, True);
+  if DebugBoss.ShowBreakPointProperties(NewBreakpoint) = mrOk then begin
+    NewBreakpoint.EndUpdate;
+    UpdateAll;
+  end
   else
     ReleaseRefAndNil(NewBreakpoint);
 end;
@@ -520,9 +535,11 @@ procedure TBreakPointsDlg.actAddAddressBPExecute(Sender: TObject);
 var
   NewBreakpoint: TIDEBreakPoint;
 begin
-  NewBreakpoint := BreakPoints.Add(0);
-  if DebugBoss.ShowBreakPointProperties(NewBreakpoint) = mrOk then
-    UpdateAll
+  NewBreakpoint := BreakPoints.Add(0, True);
+  if DebugBoss.ShowBreakPointProperties(NewBreakpoint) = mrOk then begin
+    NewBreakpoint.EndUpdate;
+    UpdateAll;
+  end
   else
     ReleaseRefAndNil(NewBreakpoint);
 end;

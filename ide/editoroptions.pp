@@ -42,9 +42,10 @@ uses
   // RTL, FCL
   Classes, SysUtils, typinfo, resource,
   // LCL
-  Graphics, LCLProc, LResources, Forms, Dialogs, ComCtrls, LCLType,
+  Graphics, LCLProc, LResources, Forms, Dialogs, ComCtrls, LCLType, Controls,
   // LazUtils
   FileUtil, LazFileUtils, LazUTF8, LazClasses, LazUTF8Classes, Laz2_XMLCfg,
+  LazStringUtils,
   // Synedit
   SynEdit, SynEditAutoComplete, SynEditKeyCmds, SynEditTypes,
   SynEditMiscClasses, SynBeautifier, SynEditTextTrimmer, SynEditMouseCmds,
@@ -57,17 +58,18 @@ uses
   // SynEdit Highlighters
   SynEditHighlighter, SynEditHighlighterFoldBase, SynHighlighterCPP,
   SynHighlighterHTML, SynHighlighterJava, SynHighlighterLFM, SynHighlighterPas,
-  SynHighlighterPerl, SynHighlighterPHP, SynHighlighterSQL,
+  SynHighlighterPerl, SynHighlighterPHP, SynHighlighterSQL, SynHighlighterCss,
   SynHighlighterPython, SynHighlighterUNIXShellScript, SynHighlighterXML,
   SynHighlighterJScript, SynHighlighterDiff, SynHighlighterBat,
   SynHighlighterIni, SynHighlighterPo, SynHighlighterPike, SynPluginMultiCaret,
-  SynEditMarkupFoldColoring, SynEditMarkup,
+  SynEditMarkupFoldColoring, SynEditMarkup, SynGutterLineOverview,
   // codetools
   LinkScanner, CodeToolManager,
   // IDEIntf
-  IDECommands, SrcEditorIntf, IDEOptionsIntf, IDEDialogs, EditorSyntaxHighlighterDef,
+  IDECommands, SrcEditorIntf, IDEOptionsIntf, IDEOptEditorIntf, IDEDialogs,
+  EditorSyntaxHighlighterDef, MacroIntf,
   // IDE
-  SourceMarks, LazarusIDEStrConsts, IDEProcs, KeyMapping, LazConf;
+  SourceMarks, LazarusIDEStrConsts, KeyMapping, LazConf;
 
 const
   DefaultCompletionLongLineHintType = sclpExtendRightOnly;
@@ -79,6 +81,7 @@ type
   TSynHighlightElement = TSynHighlighterAttributes;
   TCustomSynClass = class of TSrcIDEHighlighter;
 
+  TLazSynPluginTemplateMultiCaret = class(TForm)     end;
   TLazSynPluginTemplateEditForm = class(TForm)     end;
   TLazSynPluginTemplateEditFormOff = class(TForm)  end;
   TLazSynPluginSyncroEditFormSel = class(TForm)    end;
@@ -88,7 +91,8 @@ type
   TColorSchemeAttributeFeature =
     ( hafBackColor, hafForeColor, hafFrameColor, hafAlpha, hafPrior,
       hafStyle, hafStyleMask,
-      hafFrameStyle, hafFrameEdges
+      hafFrameStyle, hafFrameEdges,
+      hafMarkupFoldColor // for the MarkupFoldColor module
     );
   TColorSchemeAttributeFeatures = set of TColorSchemeAttributeFeature;
 
@@ -119,8 +123,11 @@ const
     '',  // ahaRightMargin
     '',  // ahaSpecialVisibleChars
     '',  // ahaTopInfoHint
+    '', '', // ahaCaretColor, ahaOverviewGutter
     '', '', '',  // ahaIfDefBlockInactive, ahaIfDefBlockActive, ahaIfDefBlockTmpActive
-     '', '', ''  // ahaIfDefNodeInactive, ahaIfDefNodeActive, ahaIfDefNodeTmpActive
+    '', '', '',  // ahaIfDefNodeInactive, ahaIfDefNodeActive, ahaIfDefNodeTmpActive
+    '', '', '', '', // ahaIdentComplWindow, ahaIdentComplWindowBorder, ahaIdentComplWindowSelection, ahaIdentComplWindowHighlight
+    '', '', '', '', '', '', '', '', '', '' // ahaOutlineLevel1Color..ahaOutlineLevel10Color
   );
 
   ahaGroupMap: array[TAdditionalHilightAttribute] of TAhaGroupName = (
@@ -157,12 +164,29 @@ const
     { ahaRightMargin}          agnGutter,
     { ahaSpecialVisibleChars } agnText,
     { ahaTopInfoHint }         agnLine,
+    { ahaCaretColor }          agnText,
+    { ahaOverviewGutter }      agnGutter,
     { ahaIfDefBlockInactive }  agnIfDef,
     { ahaIfDefBlockActive }    agnIfDef,
     { ahaIfDefBlockTmpActive } agnIfDef,
     { ahaIfDefNodeInactive }   agnIfDef,
     { ahaIfDefNodeActive }     agnIfDef,
-    { ahaIfDefNodeTmpActive }  agnIfDef
+    { ahaIfDefNodeTmpActive }  agnIfDef,
+    { ahaIdentComplWindow }           agnIdentComplWindow,
+    { ahaIdentComplWindowBorder }     agnIdentComplWindow,
+    { ahaIdentComplWindowSelection }  agnIdentComplWindow,
+    { ahaIdentComplWindowHighlight }  agnIdentComplWindow,
+    { ahaOutlineLevel1Color }  agnOutlineColors,
+    { ahaOutlineLevel2Color }  agnOutlineColors,
+    { ahaOutlineLevel3Color }  agnOutlineColors,
+    { ahaOutlineLevel4Color }  agnOutlineColors,
+    { ahaOutlineLevel5Color }  agnOutlineColors,
+    { ahaOutlineLevel6Color }  agnOutlineColors,
+    { ahaOutlineLevel7Color }  agnOutlineColors,
+    { ahaOutlineLevel8Color }  agnOutlineColors,
+    { ahaOutlineLevel9Color }  agnOutlineColors,
+    { ahaOutlineLevel10Color } agnOutlineColors
+
   );
   ahaSupportedFeatures: array[TAdditionalHilightAttribute] of TColorSchemeAttributeFeatures =
   (
@@ -199,12 +223,28 @@ const
     { ahaRightMargin}         [hafForeColor],
     { ahaSpecialVisibleChars }[hafBackColor, hafForeColor, hafFrameColor, hafAlpha, hafPrior, hafFrameStyle, hafFrameEdges, hafStyle, hafStyleMask],
     { ahaTopInfoHint }        [hafBackColor, hafForeColor, hafFrameColor, hafAlpha, hafPrior, hafFrameStyle, hafFrameEdges, hafStyle, hafStyleMask],
+    { ahaCaretColor }         [hafBackColor, hafForeColor],
+    { ahaOverviewGutter }     [hafBackColor, hafForeColor, hafFrameColor],
     { ahaIfDefBlockInactive } [hafBackColor, hafForeColor, hafFrameColor, hafAlpha, hafPrior, hafFrameStyle, hafFrameEdges, hafStyle, hafStyleMask],
     { ahaIfDefBlockActive }   [hafBackColor, hafForeColor, hafFrameColor, hafAlpha, hafPrior, hafFrameStyle, hafFrameEdges, hafStyle, hafStyleMask],
     { ahaIfDefBlockTmpActive }[hafBackColor, hafForeColor, hafFrameColor, hafAlpha, hafPrior, hafFrameStyle, hafFrameEdges, hafStyle, hafStyleMask],
     { ahaIfDefNodeInactive }  [hafBackColor, hafForeColor, hafFrameColor, hafAlpha, hafPrior, hafFrameStyle, hafFrameEdges, hafStyle, hafStyleMask],
     { ahaIfDefNodeActive }    [hafBackColor, hafForeColor, hafFrameColor, hafAlpha, hafPrior, hafFrameStyle, hafFrameEdges, hafStyle, hafStyleMask],
-    { ahaIfDefNodeTmpActive } [hafBackColor, hafForeColor, hafFrameColor, hafAlpha, hafPrior, hafFrameStyle, hafFrameEdges, hafStyle, hafStyleMask]
+    { ahaIfDefNodeTmpActive } [hafBackColor, hafForeColor, hafFrameColor, hafAlpha, hafPrior, hafFrameStyle, hafFrameEdges, hafStyle, hafStyleMask],
+    { ahaIdentComplWindow }   [hafBackColor, hafForeColor],
+    { ahaIdentComplWindowBorder }    [hafForeColor],
+    { ahaIdentComplWindowSelection } [hafBackColor, hafForeColor],
+    { ahaIdentComplWindowHighlight } [hafForeColor],
+    { ahaFoldLevel1Color }    [hafBackColor, hafForeColor, hafFrameColor, hafAlpha, hafPrior, hafFrameStyle, hafFrameEdges, hafStyle, hafStyleMask, hafMarkupFoldColor],
+    { ahaFoldLevel2Color }    [hafBackColor, hafForeColor, hafFrameColor, hafAlpha, hafPrior, hafFrameStyle, hafFrameEdges, hafStyle, hafStyleMask, hafMarkupFoldColor],
+    { ahaFoldLevel3Color }    [hafBackColor, hafForeColor, hafFrameColor, hafAlpha, hafPrior, hafFrameStyle, hafFrameEdges, hafStyle, hafStyleMask, hafMarkupFoldColor],
+    { ahaFoldLevel4Color }    [hafBackColor, hafForeColor, hafFrameColor, hafAlpha, hafPrior, hafFrameStyle, hafFrameEdges, hafStyle, hafStyleMask, hafMarkupFoldColor],
+    { ahaFoldLevel5Color }    [hafBackColor, hafForeColor, hafFrameColor, hafAlpha, hafPrior, hafFrameStyle, hafFrameEdges, hafStyle, hafStyleMask, hafMarkupFoldColor],
+    { ahaFoldLevel6Color }    [hafBackColor, hafForeColor, hafFrameColor, hafAlpha, hafPrior, hafFrameStyle, hafFrameEdges, hafStyle, hafStyleMask, hafMarkupFoldColor],
+    { ahaFoldLevel7Color }    [hafBackColor, hafForeColor, hafFrameColor, hafAlpha, hafPrior, hafFrameStyle, hafFrameEdges, hafStyle, hafStyleMask, hafMarkupFoldColor],
+    { ahaFoldLevel8Color }    [hafBackColor, hafForeColor, hafFrameColor, hafAlpha, hafPrior, hafFrameStyle, hafFrameEdges, hafStyle, hafStyleMask, hafMarkupFoldColor],
+    { ahaFoldLevel9Color }    [hafBackColor, hafForeColor, hafFrameColor, hafAlpha, hafPrior, hafFrameStyle, hafFrameEdges, hafStyle, hafStyleMask, hafMarkupFoldColor],
+    { ahaFoldLevel10Color }   [hafBackColor, hafForeColor, hafFrameColor, hafAlpha, hafPrior, hafFrameStyle, hafFrameEdges, hafStyle, hafStyleMask, hafMarkupFoldColor]
   );
 
 
@@ -230,14 +270,21 @@ type
   private
     FFeatures: TColorSchemeAttributeFeatures;
     FGroup: TAhaGroupName;
+    FMarkupFoldLineAlpha: Byte;
+    FMarkupFoldLineColor: TColor;
+    FMarkupFoldLineStyle: TSynLineStyle;
     FOwner: TColorSchemeLanguage;
     FUseSchemeGlobals: Boolean;
     function GetIsUsingSchemeGlobals: Boolean;
     function OldAdditionalAttributeName(NewAha: String): string;
+    procedure SetMarkupFoldLineAlpha(AValue: Byte);
+    procedure SetMarkupFoldLineColor(AValue: TColor);
+    procedure SetMarkupFoldLineStyle(AValue: TSynLineStyle);
   protected
     procedure Init; override;
   public
     constructor Create(ASchemeLang: TColorSchemeLanguage; attribName: PString; aStoredName: String = '');
+    function IsEnabled: boolean; override;
     procedure ApplyTo(aDest: TSynHighlighterAttributes; aDefault: TColorSchemeAttribute = nil);
     procedure Assign(Src: TPersistent); override;
     function Equals(Other: TColorSchemeAttribute): Boolean; reintroduce;
@@ -254,6 +301,10 @@ type
     property Features: TColorSchemeAttributeFeatures read FFeatures write FFeatures;
   published
     property UseSchemeGlobals: Boolean read FUseSchemeGlobals write FUseSchemeGlobals;
+    // For markup fold color
+    property MarkupFoldLineColor: TColor read FMarkupFoldLineColor write SetMarkupFoldLineColor default clNone; // clDefault will take Color[].Frame or Color[].Foreground
+    property MarkupFoldLineStyle: TSynLineStyle read FMarkupFoldLineStyle write SetMarkupFoldLineStyle default slsSolid;
+    property MarkupFoldLineAlpha: Byte read FMarkupFoldLineAlpha write SetMarkupFoldLineAlpha default 0;
   end;
 
   { TColorSchemeLanguage }
@@ -267,6 +318,7 @@ type
     FOwner: TColorScheme;
     FLanguageName: String;
     FIsSchemeDefault: Boolean;
+    FFormatVersion: integer;
     function GetAttribute(Index: String): TColorSchemeAttribute;
     function GetAttributeAtPos(Index: Integer): TColorSchemeAttribute;
     function GetAttributeByEnum(Index: TAdditionalHilightAttribute): TColorSchemeAttribute;
@@ -397,6 +449,7 @@ const
       (Count: 0; Info: nil), // python
       (Count: 0; Info: nil), // php
       (Count: 0; Info: nil), // sql
+      (Count: 0; Info: nil), // css
       (Count: 0; Info: nil), // jscript
       (Count: 0; Info: nil), // Diff
       (Count: 0; Info: nil), // Ini
@@ -605,6 +658,7 @@ const
       (Count:  0; HasMarkup: False; Info: nil), // python
       (Count:  0; HasMarkup: False; Info: nil), // php
       (Count:  0; HasMarkup: False; Info: nil), // sql
+      (Count:  0; HasMarkup: False; Info: nil), // css
       (Count:  0; HasMarkup: False; Info: nil), // jscript
       (Count:  3; HasMarkup: False; Info: @EditorOptionsFoldInfoDiff[0]), // Diff
       (Count:  0; HasMarkup: False; Info: nil), // Bat
@@ -614,7 +668,7 @@ const
     );
 
 const
-  EditorOptsFormatVersion = 11;
+  EditorOptsFormatVersion = 13;
   { * Changes in Version 6:
        - ColorSchemes now have a Global settings part.
          Language specific changes must save UseSchemeGlobals=False (Default is true)
@@ -631,6 +685,11 @@ const
          eoTabIndent was added to SynEditDefaultOptions
     * Changes in Version 11:
          Default for GutterLeft set to moglUpClickAndSelect (was moGLDownClick)
+    * Changes in Version 12:
+         Used in Colorscheme/Version
+         Colors for MarkupFoldColor can now have gaps (before unset colors were filtered)
+    * Changes in Version 13:
+         CtrlMiddleTabClickClosesOthers was replaced by MiddleTabClickClosesOthersModifier
   }
   EditorMouseOptsFormatVersion = 1;
   { * Changes in Version 6:
@@ -641,7 +700,7 @@ const
     TCustomSynClass =
     (nil, nil, TIDESynFreePasSyn, TIDESynPasSyn, TSynLFMSyn, TSynXMLSyn,
     TSynHTMLSyn, TSynCPPSyn, TSynPerlSyn, TSynJavaSyn, TSynUNIXShellScriptSyn,
-    TSynPythonSyn, TSynPHPSyn, TSynSQLSyn, TSynJScriptSyn, TSynDiffSyn,
+    TSynPythonSyn, TSynPHPSyn, TSynSQLSyn,TSynCssSyn, TSynJScriptSyn, TSynDiffSyn,
     TSynBatSyn, TSynIniSyn, TSynPoSyn, TSynPikeSyn);
 
 
@@ -662,6 +721,7 @@ const
     comtPerl,  // lshPython
     comtHTML,  // lshPHP
     comtCPP,   // lshSQL
+    comtCPP,   // lshCss
     comtCPP,   // lshJScript
     comtNone,  // Diff
     comtNone,  // Bat
@@ -690,6 +750,10 @@ type
       value fo style [fsBold] as defined in synhighlighterhtml.pp.
     }
   TEditOptLanguageInfo = class
+  private
+    MappedAttributes: TStringList; // map attributes to pascal
+  protected
+    procedure prepare(Syntax :  TLazSyntaxHighlighter);virtual;
   public
     SynClass: TCustomSynClass;
     TheType:  TLazSyntaxHighlighter;
@@ -698,7 +762,7 @@ type
     ColorScheme: String;
     SampleSource: String;
     AddAttrSampleLines: array[TAdditionalHilightAttribute] of Integer; // first line = 1
-    MappedAttributes: TStringList; // map attributes to pascal
+//    MappedAttributes: TStringList; // map attributes to pascal
     DefaultCommentType: TCommentType;
     CaretXY: TPoint;
     constructor Create;
@@ -706,6 +770,15 @@ type
     function GetDefaultFilextension: String;
     procedure SetBothFilextensions(const Extensions: string);
     function SampleLineToAddAttr(Line: Integer): TAdditionalHilightAttribute;
+  end;
+
+  { TEditOptLangCssInfo }
+
+  TEditOptLangCssInfo = class(tEditOptLanguageInfo)
+  protected
+     procedure prepare(Syntax :  TLazSyntaxHighlighter);override;
+     function getSampleSource:string;
+     function getMappedAttributes: tStringList;
   end;
 
   { TEditOptLangList }
@@ -854,11 +927,20 @@ type
     FWheel: TMouseOptWheelAction;
     FAltWheel: TMouseOptWheelAction;
     FCtrlWheel: TMouseOptWheelAction;
+    FAltCtrlWheel: TMouseOptWheelAction;
     FShiftWheel: TMouseOptWheelAction;
     FShiftAltWheel: TMouseOptWheelAction;
     FShiftCtrlWheel: TMouseOptWheelAction;
-    FAltCtrlWheel: TMouseOptWheelAction;
     FShiftAltCtrlWheel: TMouseOptWheelAction;
+
+    FHorizWheel: TMouseOptWheelAction;
+    FAltHorizWheel: TMouseOptWheelAction;
+    FCtrlHorizWheel: TMouseOptWheelAction;
+    FAltCtrlHorizWheel: TMouseOptWheelAction;
+    FShiftHorizWheel: TMouseOptWheelAction;
+    FShiftAltHorizWheel: TMouseOptWheelAction;
+    FShiftCtrlHorizWheel: TMouseOptWheelAction;
+    FShiftAltCtrlHorizWheel: TMouseOptWheelAction;
 
     procedure ClearUserSchemes;
     function GetUserSchemeNames(Index: Integer): String;
@@ -1028,6 +1110,23 @@ type
     property AltCtrlWheel: TMouseOptWheelAction read FAltCtrlWheel write FAltCtrlWheel
              default mwaNone;
     property ShiftAltCtrlWheel: TMouseOptWheelAction read FShiftAltCtrlWheel write FShiftAltCtrlWheel
+             default mwaNone;
+    //
+    property HorizWheel: TMouseOptWheelAction read FHorizWheel write FHorizWheel
+             default mwaScrollHoriz;
+    property CtrlHorizWheel: TMouseOptWheelAction read FCtrlHorizWheel write FCtrlHorizWheel
+             default mwaNone;
+    property AltHorizWheel: TMouseOptWheelAction read FAltHorizWheel write FAltHorizWheel
+             default mwaScrollHorizPageLessOne;
+    property ShiftHorizWheel: TMouseOptWheelAction read FShiftHorizWheel write FShiftHorizWheel
+             default mwaScrollHorizSingleLine;
+    property ShiftAltHorizWheel: TMouseOptWheelAction read FShiftAltHorizWheel write FShiftAltHorizWheel
+             default mwaNone;
+    property ShiftCtrlHorizWheel: TMouseOptWheelAction read FShiftCtrlHorizWheel write FShiftCtrlHorizWheel
+             default mwaNone;
+    property AltCtrlHorizWheel: TMouseOptWheelAction read FAltCtrlHorizWheel write FAltCtrlHorizWheel
+             default mwaNone;
+    property ShiftAltCtrlHorizWheel: TMouseOptWheelAction read FShiftAltCtrlHorizWheel write FShiftAltCtrlHorizWheel
              default mwaNone;
 
     // the flag below is set by CalcCustomSavedActions
@@ -1309,8 +1408,11 @@ type
     FBlockTabIndent: Integer;
     FCompletionLongLineHintInMSec: Integer;
     FCompletionLongLineHintType: TSynCompletionLongHintType;
+    FMiddleTabClickClosesOthersModifier: TShiftState;
+    FMiddleTabClickClosesToRightModifier: TShiftState;
     FMultiCaretDefaultColumnSelectMode: TSynPluginMultiCaretDefaultMode;
     FMultiCaretDefaultMode: TSynPluginMultiCaretDefaultMode;
+    FMultiCaretDeleteSkipLineBreak: Boolean;
     FPasExtendedKeywordsMode: Boolean;
     FHideSingleTabInWindow: Boolean;
     FPasStringKeywordMode: TSynPasStringMode;
@@ -1381,16 +1483,14 @@ type
     fAutoBlockCompletion: Boolean;
     fAutoCodeParameters: Boolean;
     fAutoDelayInMSec: Integer;
+    fAutoHintDelayInMSec: Integer;
     FAutoRemoveEmptyMethods: Boolean;
     fAutoToolTipExprEval: Boolean;
     fAutoToolTipSymbTools: Boolean;
     FDbgHintAutoTypeCastClass: Boolean;
-    fCodeTemplateFileName: String;
+    fCodeTemplateFileNameRaw: String;
     fCTemplIndentToTokenStart: Boolean;
     fAutoDisplayFuncPrototypes: Boolean;
-    fUseContainsFilter: Boolean;
-    fHighlightCodeCompletionPrefix: Boolean;
-    fUseImagesInCompletionBox: Boolean;
 
     // Code Folding
     FUseCodeFolding: Boolean;
@@ -1431,7 +1531,7 @@ type
     FStringBreakPrefix: String;
 
     FDefaultValues: TEditorOptions;
-
+    function GetCodeTemplateFileNameExpand:String;
   protected
     function GetTabPosition: TTabPosition; override;
   public
@@ -1445,6 +1545,8 @@ type
     procedure Init;
     procedure Load;
     procedure Save;
+    function LoadCodeTemplates(AnAutoComplete: TSynEditAutoComplete): TModalResult;
+    function SaveCodeTemplates(AnAutoComplete: TSynEditAutoComplete): TModalResult;
     procedure TranslateResourceStrings;
     function GetAdditionalAttributeName(aha:TAdditionalHilightAttribute): string;
     function GetSynEditOptionName(SynOption: TSynEditorOption): string;
@@ -1461,7 +1563,8 @@ type
 
     function ExtensionToLazSyntaxHighlighter(Ext: String): TLazSyntaxHighlighter; override;
     function CreateSyn(LazSynHilighter: TLazSyntaxHighlighter): TSrcIDEHighlighter;
-    function ReadColorScheme(const LanguageName: String): String;
+    function ReadColorScheme(const LanguageName: String): String; // TODO: rename ReadColorSchemeName
+    function GetColorSchemeLanguage(aHighLighter: TSynCustomHighlighter; SynColorSchemeName: String = ''): TColorSchemeLanguage;
     function ReadPascalColorScheme: String;
     procedure WriteColorScheme(const LanguageName, SynColorScheme: String);
     procedure ReadHighlighterSettings(Syn: TSrcIDEHighlighter;
@@ -1582,12 +1685,6 @@ type
       read fAutoToolTipSymbTools write fAutoToolTipSymbTools default True; // declaration hints
     property AutoDisplayFunctionPrototypes: Boolean
       read fAutoDisplayFuncPrototypes write fAutoDisplayFuncPrototypes default True;
-    property ContainsCompletionFilter: Boolean
-      read fUseContainsFilter write fUseContainsFilter default True;
-    property HighlightCodeCompletionPrefix: Boolean
-      read fHighlightCodeCompletionPrefix write fHighlightCodeCompletionPrefix default True;
-    property UseImagesInCompletionBox: Boolean
-      read fUseImagesInCompletionBox write fUseImagesInCompletionBox default True;
 
   published
     property DbgHintAutoTypeCastClass: Boolean
@@ -1595,8 +1692,12 @@ type
   public
     property AutoDelayInMSec: Integer read fAutoDelayInMSec
       write fAutoDelayInMSec default 1000;
-    property CodeTemplateFileName: String
-      read fCodeTemplateFileName write fCodeTemplateFileName;
+    property AutoHintDelayInMSec: Integer read fAutoHintDelayInMSec
+      write fAutoHintDelayInMSec default 1000;
+    property CodeTemplateFileNameRaw: String
+      read fCodeTemplateFileNameRaw write fCodeTemplateFileNameRaw;
+    property CodeTemplateFileNameExpand:String
+      read GetCodeTemplateFileNameExpand;
     property CodeTemplateIndentToTokenStart: Boolean
       read fCTemplIndentToTokenStart write fCTemplIndentToTokenStart;
     property AutoRemoveEmptyMethods: Boolean read FAutoRemoveEmptyMethods
@@ -1641,6 +1742,8 @@ type
       read FMultiCaretOnColumnSelect write FMultiCaretOnColumnSelect default True;
     property MultiCaretDefaultMode: TSynPluginMultiCaretDefaultMode
              read FMultiCaretDefaultMode write FMultiCaretDefaultMode default mcmMoveAllCarets;
+    property MultiCaretDeleteSkipLineBreak: Boolean
+             read FMultiCaretDeleteSkipLineBreak write FMultiCaretDeleteSkipLineBreak default False;
     property MultiCaretDefaultColumnSelectMode: TSynPluginMultiCaretDefaultMode
              read FMultiCaretDefaultColumnSelectMode write FMultiCaretDefaultColumnSelectMode default mcmCancelOnCaretMove;
 
@@ -1652,7 +1755,11 @@ type
 
     // Multi window
     property CtrlMiddleTabClickClosesOthers: Boolean
-      read FCtrlMiddleTabClickClosesOthers write FCtrlMiddleTabClickClosesOthers default True;
+      read FCtrlMiddleTabClickClosesOthers write FCtrlMiddleTabClickClosesOthers stored False default True;
+    property MiddleTabClickClosesOthersModifier: TShiftState
+      read FMiddleTabClickClosesOthersModifier write FMiddleTabClickClosesOthersModifier default [ssCtrl];
+    property MiddleTabClickClosesToRightModifier: TShiftState
+      read FMiddleTabClickClosesToRightModifier write FMiddleTabClickClosesToRightModifier default [];
 
     property ShowFileNameInCaption: Boolean
       read FShowFileNameInCaption write FShowFileNameInCaption default False;
@@ -1742,6 +1849,7 @@ const
     lshPython,
     lshPHP,
     lshSQL,
+    lshCSS,
     lshJScript,
     lshDiff,
     lshBat,
@@ -2223,13 +2331,16 @@ end;
 
 const
   EditOptsConfFileName = 'editoroptions.xml';
+  DciFileVersion = 1;
+  DciFileVersionName = '!FileVersion';
+  DciVersionName = '!Version';
 
 function BuildBorlandDCIFile(
   ACustomSynAutoComplete: TCustomSynAutoComplete): Boolean;
   // returns if something has changed
 var
   sl: TStringList;
-  i, sp, ep: Integer;
+  i, sp, ep, v: Integer;
   Token, Comment, Value: String;
   Attributes: TStrings;
 begin
@@ -2243,6 +2354,14 @@ begin
       Value := ACustomSynAutoComplete.CompletionValues[i];
       sl.Add('[' + Token + ' | ' + Comment + ']');
       Attributes:=ACustomSynAutoComplete.CompletionAttributes[i];
+
+      // Store DciFileVersion as attribute to first macro
+      v := Attributes.IndexOfName(DciFileVersionName);
+      if v >= 0 then
+        Attributes.Delete(v);
+      if i = 0 then
+        Attributes.Values[DciFileVersionName] := IntToStr(DciFileVersion);
+
       if (Attributes<>nil) and (Attributes.Count>0) then begin
         sl.Add(CodeTemplateAttributesStartMagic);
         sl.AddStrings(Attributes);
@@ -2463,6 +2582,8 @@ begin
   AdditionalHighlightAttributes[ahaRightMargin]         := dlgRightMargin;
   AdditionalHighlightAttributes[ahaSpecialVisibleChars] := dlgAddHiSpecialVisibleChars;
   AdditionalHighlightAttributes[ahaTopInfoHint]         := dlgTopInfoHint;
+  AdditionalHighlightAttributes[ahaCaretColor]          := dlgCaretColor;
+  AdditionalHighlightAttributes[ahaOverviewGutter]      := dlgOverviewGutterColor;
   AdditionalHighlightAttributes[ahaIfDefBlockInactive]  := dlgIfDefBlockInactive;
   AdditionalHighlightAttributes[ahaIfDefBlockActive]    := dlgIfDefBlockActive;
   AdditionalHighlightAttributes[ahaIfDefBlockTmpActive] := dlgIfDefBlockTmpActive;
@@ -2470,6 +2591,24 @@ begin
   AdditionalHighlightAttributes[ahaIfDefNodeActive]     := dlgIfDefNodeActive;
   AdditionalHighlightAttributes[ahaIfDefNodeTmpActive]  := dlgIfDefNodeTmpActive;
   AdditionalHighlightGroupNames[agnIfDef]        := dlgAddHiAttrGroupIfDef;
+
+  AdditionalHighlightAttributes[ahaIdentComplWindow]          := dlgAddHiAttrDefaultWindow;
+  AdditionalHighlightAttributes[ahaIdentComplWindowBorder]    := dlgAddHiAttrWindowBorder;
+  AdditionalHighlightAttributes[ahaIdentComplWindowSelection] := dlgBlockGroupOptions;
+  AdditionalHighlightAttributes[ahaIdentComplWindowHighlight] := dlgAddHiAttrHighlightPrefix;
+  AdditionalHighlightGroupNames[agnIdentComplWindow]          := dlgIdentifierCompletion;
+
+  AdditionalHighlightAttributes[ahaOutlineLevel1Color]  := dlgAddHiAttrOutlineLevel1Color;
+  AdditionalHighlightAttributes[ahaOutlineLevel2Color]  := dlgAddHiAttrOutlineLevel2Color;
+  AdditionalHighlightAttributes[ahaOutlineLevel3Color]  := dlgAddHiAttrOutlineLevel3Color;
+  AdditionalHighlightAttributes[ahaOutlineLevel4Color]  := dlgAddHiAttrOutlineLevel4Color;
+  AdditionalHighlightAttributes[ahaOutlineLevel5Color]  := dlgAddHiAttrOutlineLevel5Color;
+  AdditionalHighlightAttributes[ahaOutlineLevel6Color]  := dlgAddHiAttrOutlineLevel6Color;
+  AdditionalHighlightAttributes[ahaOutlineLevel7Color]  := dlgAddHiAttrOutlineLevel7Color;
+  AdditionalHighlightAttributes[ahaOutlineLevel8Color]  := dlgAddHiAttrOutlineLevel8Color;
+  AdditionalHighlightAttributes[ahaOutlineLevel9Color]  := dlgAddHiAttrOutlineLevel9Color;
+  AdditionalHighlightAttributes[ahaOutlineLevel10Color] := dlgAddHiAttrOutlineLevel10Color;
+  AdditionalHighlightGroupNames[agnOutlineColors]  := dlgAddHiAttrGroupOutlineColors;
 
   AdditionalHighlightGroupNames[agnDefault]      := dlgAddHiAttrGroupDefault;
   AdditionalHighlightGroupNames[agnText]         := dlgAddHiAttrGroupText;
@@ -2533,6 +2672,52 @@ procedure TEditOptLanguageInfo.SetBothFilextensions(const Extensions: string);
 begin
   FileExtensions:=Extensions;
   DefaultFileExtensions:=Extensions;
+end;
+
+procedure TEditOptLanguageInfo.prepare(Syntax: TLazSyntaxHighlighter);
+begin
+  TheType := Syntax;
+  DefaultCommentType := DefaultCommentTypes[TheType];
+  SynClass := LazSyntaxHighlighterClasses[TheType];
+end;
+
+{ TEditOptLangCssInfo }
+
+procedure TEditOptLangCssInfo.prepare(Syntax: TLazSyntaxHighlighter);
+begin
+  inherited Prepare(syntax);
+  SetBothFilextensions('css');
+  SampleSource := getSampleSource;
+  AddAttrSampleLines[ahaTextBlock] := 4;
+  CaretXY := Point(1,1);
+  MappedAttributes := getMappedAttributes;;
+end;
+
+function TEditOptLangCssInfo.getSampleSource: string;
+begin
+  result :=
+      '.field :hover {'#10 +
+      '   display:inline;'#10+
+      '   border:10px;'#10+
+      '   color: #555;'#10+
+      '/* comment */'#10+
+      '}'#10+#10;
+end;
+
+function TEditOptLangCssInfo.getMappedAttributes: tStringList;
+begin
+    result:=tStringList.create;
+    with result do
+    begin
+      Add('Comment=Comment');
+      Add('Selector=Reserved_word');
+      Add('Identifier=Identifier');
+      Add('Space=Space');
+      Add('Symbol=Symbol');
+      Add('Number=Number');
+      Add('Key=Key');
+      Add('String=String');
+    end;
 end;
 
 { TEditOptLangList }
@@ -2939,6 +3124,13 @@ begin
   end;
   Add(NewInfo);
 
+  // create info for CSS
+  NewInfo := TEditOptLangCssInfo.Create;
+  NewInfo.Prepare(lshCss);
+  Add(NewInfo);
+
+
+
   // create info for JScript
   NewInfo := TEditOptLanguageInfo.Create;
   with NewInfo do
@@ -3290,6 +3482,15 @@ begin
   FShiftCtrlWheel       := mwaNone;
   FShiftAltWheel    := mwaNone;
   FShiftAltCtrlWheel    := mwaNone;
+  // wheel
+  FHorizWheel               := mwaScrollHoriz;
+  FCtrlHorizWheel           := mwaNone;
+  FAltHorizWheel            := mwaScrollHorizPageLessOne;
+  FShiftHorizWheel          := mwaScrollHorizSingleLine;
+  FAltCtrlHorizWheel     := mwaNone;
+  FShiftCtrlHorizWheel       := mwaNone;
+  FShiftAltHorizWheel    := mwaNone;
+  FShiftAltCtrlHorizWheel    := mwaNone;
   // right
   FTextRightClick := mbaContextMenu;
   FTextAltCtrlRightClick := mbaNone;
@@ -3507,11 +3708,20 @@ procedure TEditorMouseOptions.ResetTextToDefault;
     end;
   end;
 
-  procedure AddWheelAct(AnAction: TMouseOptWheelAction; const AShift, AShiftMask: TShiftState);
+  procedure AddWheelAct(AnAction: TMouseOptWheelAction; const AShift, AShiftMask: TShiftState; AnHorizontal: Boolean = False);
   var
     opt: TSynEditorMouseCommandOpt;
     opt2: integer;
+    mbU, mbD: TSynMouseButton;
   begin
+    if AnHorizontal then begin
+      mbD := mbXWheelLeft;
+      mbU := mbXWheelRight;
+    end
+    else begin
+      mbD := mbXWheelDown;
+      mbU := mbXWheelUp;
+    end;
     opt2 := 0;
     with FMainActions do begin
       case AnAction of
@@ -3533,18 +3743,18 @@ procedure TEditorMouseOptions.ResetTextToDefault;
                                    opt2 := 50;
           end;
         mwaZoom: begin
-            AddCommand(emcWheelZoomOut, False,  mbXWheelDown, ccAny, cdDown, AShift, AShiftMask);
-            AddCommand(emcWheelZoomIn,  False,  mbXWheelUp,   ccAny, cdDown, AShift, AShiftMask);
+            AddCommand(emcWheelZoomOut, False,  mbD, ccAny, cdDown, AShift, AShiftMask);
+            AddCommand(emcWheelZoomIn,  False,  mbU,   ccAny, cdDown, AShift, AShiftMask);
           end;
       end;
 
       if AnAction in [mwaScroll, mwaScrollSingleLine, mwaScrollPage, mwaScrollPageLessOne, mwaScrollHalfPage] then begin
-        AddCommand(emcWheelVertScrollDown,       False,  mbXWheelDown, ccAny, cdDown, AShift, AShiftMask, opt, 0, opt2);
-        AddCommand(emcWheelVertScrollUp,         False,  mbXWheelUp,   ccAny, cdDown, AShift, AShiftMask, opt, 0, opt2);
+        AddCommand(emcWheelVertScrollDown,       False,  mbD, ccAny, cdDown, AShift, AShiftMask, opt, 0, opt2);
+        AddCommand(emcWheelVertScrollUp,         False,  mbU,   ccAny, cdDown, AShift, AShiftMask, opt, 0, opt2);
       end;
       if AnAction in [mwaScrollHoriz, mwaScrollHorizSingleLine, mwaScrollHorizPage, mwaScrollHorizPageLessOne, mwaScrollHorizHalfPage] then begin
-        AddCommand(emcWheelHorizScrollDown,       False,  mbXWheelDown, ccAny, cdDown, AShift, AShiftMask, opt, 0, opt2);
-        AddCommand(emcWheelHorizScrollUp,         False,  mbXWheelUp,   ccAny, cdDown, AShift, AShiftMask, opt, 0, opt2);
+        AddCommand(emcWheelHorizScrollDown,       False,  mbD, ccAny, cdDown, AShift, AShiftMask, opt, 0, opt2);
+        AddCommand(emcWheelHorizScrollUp,         False,  mbU,   ccAny, cdDown, AShift, AShiftMask, opt, 0, opt2);
       end;
 
     end;
@@ -3691,6 +3901,23 @@ begin
   AddWheelAct(FShiftAltWheel,     [ssShift, ssAlt], ModKeys);
   AddWheelAct(FShiftAltCtrlWheel, [ssShift, ssAlt, ssCtrl], ModKeys);
 
+  ModKeys := [];
+  if FShiftHorizWheel         <> mwaNone then ModKeys := ModKeys + [ssShift];
+  if FCtrlHorizWheel          <> mwaNone then ModKeys := ModKeys + [SYNEDIT_LINK_MODIFIER];
+  if FAltHorizWheel           <> mwaNone then ModKeys := ModKeys + [ssAlt];
+  if FAltCtrlHorizWheel       <> mwaNone then ModKeys := ModKeys + [ssAlt] + [SYNEDIT_LINK_MODIFIER];
+  if FShiftCtrlHorizWheel     <> mwaNone then ModKeys := ModKeys + [ssShift] + [SYNEDIT_LINK_MODIFIER];
+  if FShiftAltHorizWheel      <> mwaNone then ModKeys := ModKeys + [ssShift, ssAlt];
+  if FShiftAltCtrlHorizWheel  <> mwaNone then ModKeys := ModKeys + [ssShift, ssAlt] + [SYNEDIT_LINK_MODIFIER];
+  AddWheelAct(FHorizWheel, [], [], True);
+  AddWheelAct(FCtrlHorizWheel,  [ssCtrl],  ModKeys, True);
+  AddWheelAct(FAltHorizWheel,   [ssAlt],   ModKeys, True);
+  AddWheelAct(FShiftHorizWheel, [ssShift], ModKeys, True);
+  AddWheelAct(FAltCtrlHorizWheel,      [ssAlt, ssCtrl], ModKeys, True);
+  AddWheelAct(FShiftCtrlHorizWheel,    [ssShift, ssCtrl], ModKeys, True);
+  AddWheelAct(FShiftAltHorizWheel,     [ssShift, ssAlt], ModKeys, True);
+  AddWheelAct(FShiftAltCtrlHorizWheel, [ssShift, ssAlt, ssCtrl], ModKeys, True);
+
   if FTextDrag then
     with FSelActions do begin
       AddCommand(emcStartDragMove, False, mbXLeft, ccSingle, cdDown, [], [], emcoNotDragedNoCaretOnUp);
@@ -3785,6 +4012,15 @@ begin
   FShiftCtrlWheel       := Src.ShiftCtrlWheel;
   FShiftAltWheel        := Src.ShiftAltWheel;
   FShiftAltCtrlWheel    := Src.ShiftAltCtrlWheel;
+  // wheel
+  FHorizWheel                := Src.HorizWheel;
+  FCtrlHorizWheel            := Src.CtrlHorizWheel;
+  FAltHorizWheel             := Src.AltHorizWheel;
+  FShiftHorizWheel           := Src.ShiftHorizWheel;
+  FAltCtrlHorizWheel         := Src.AltCtrlHorizWheel;
+  FShiftCtrlHorizWheel       := Src.ShiftCtrlHorizWheel;
+  FShiftAltHorizWheel        := Src.ShiftAltHorizWheel;
+  FShiftAltCtrlHorizWheel    := Src.ShiftAltCtrlHorizWheel;
   // right
   FTextAltCtrlRightClick := Src.TextAltCtrlRightClick;
   FTextAltRightClick := Src.TextAltRightClick;
@@ -3970,6 +4206,8 @@ begin
       try
         FMainActions.AddCommand(emcWheelVertScrollDown,       False,  mbXWheelDown, ccAny, cdDown, [], []);
         FMainActions.AddCommand(emcWheelVertScrollUp,         False,  mbXWheelUp,   ccAny, cdDown, [], []);
+        FMainActions.AddCommand(emcWheelHorizScrollDown,      False,  mbXWheelLeft, ccAny, cdDown, [], []);
+        FMainActions.AddCommand(emcWheelHorizScrollUp,        False,  mbXWheelRight,ccAny, cdDown, [], []);
       except
       end;
     end;
@@ -4385,8 +4623,6 @@ end;
 constructor TEditorOptions.Create;
 var
   ConfFileName: String;
-  fs: TFileStreamUTF8;
-  res: TResourceStream;
 begin
   inherited Create;
   InitLocale;
@@ -4413,26 +4649,9 @@ begin
   Init;
 
   // code templates (dci file)
-  fCodeTemplateFileName :=
+  fCodeTemplateFileNameRaw :=
     TrimFilename(AppendPathDelim(GetPrimaryConfigPath)+DefaultCodeTemplatesFilename);
   CopySecondaryConfigFile(DefaultCodeTemplatesFilename);
-  if not FileExistsUTF8(CodeTemplateFileName) then
-  begin
-    res := TResourceStream.Create(HInstance, PChar('lazarus_dci_file'), PChar(RT_RCDATA));
-    try
-      InvalidateFileStateCache;
-      fs := TFileStreamUTF8.Create(CodeTemplateFileName, fmCreate);
-      try
-        fs.CopyFrom(res, res.Size);
-      finally
-        fs.Free;
-      end;
-    except
-      DebugLn('WARNING: unable to write code template file "',
-        CodeTemplateFileName, '"');
-    end;
-    res.Free;
-  end;
 
   FMultiWinEditAccessOrder := TEditorOptionsEditAccessOrderList.Create;
   FMultiWinEditAccessOrder.InitDefaults;
@@ -4482,6 +4701,7 @@ begin
   FMultiCaretOnColumnSelect := True;
   FMultiCaretDefaultMode := mcmMoveAllCarets;
   FMultiCaretDefaultColumnSelectMode := mcmCancelOnCaretMove;
+  FMultiCaretDeleteSkipLineBreak := False;
 
   // Display options
   fEditorFont := SynDefaultFontName;
@@ -4528,6 +4748,8 @@ begin
 
   // Multi window
   FCtrlMiddleTabClickClosesOthers := True;
+  FMiddleTabClickClosesOthersModifier := [ssCtrl];
+  FMiddleTabClickClosesToRightModifier := [];
   FShowFileNameInCaption := False;
 
   // Comment
@@ -4615,6 +4837,8 @@ begin
           SynEditOptName := 'OverwriteBlock';
         eoAutoHideCursor:
           SynEditOptName := 'AutoHideCursor';
+        eoCaretMoveEndsSelection, eoPersistentCaretStopBlink, eoNoScrollOnSelectRange:
+          WriteStr(SynEditOptName, SynEditOpt2);
         else
           SynEditOptName := '';
       end;
@@ -4764,7 +4988,9 @@ begin
       XMLConfig.GetValue('EditorOptions/CodeTools/AutoToolTipSymbTools', True);
     fAutoDelayInMSec    :=
       XMLConfig.GetValue('EditorOptions/CodeTools/AutoDelayInMSec', 1000);
-    fCodeTemplateFileName :=
+    fAutoHintDelayInMSec    :=
+      XMLConfig.GetValue('EditorOptions/CodeTools/AutoDelayHintInMSec', 1000);
+    fCodeTemplateFileNameRaw :=
       XMLConfig.GetValue('EditorOptions/CodeTools/CodeTemplateFileName'
       , TrimFilename(AppendPathDelim(GetPrimaryConfigPath) + DefaultCodeTemplatesFilename));
     fCTemplIndentToTokenStart :=
@@ -4777,12 +5003,6 @@ begin
     FCompletionLongLineHintType := DefaultCompletionLongLineHintType;
     XMLConfig.ReadObject('EditorOptions/CodeTools/CompletionLongLineHintType',
                          Self, Self, 'CompletionLongLineHintType');
-    fUseContainsFilter :=
-      XMLConfig.GetValue('EditorOptions/CodeTools/ContainsCompletionFilter', True);
-    fHighlightCodeCompletionPrefix :=
-      XMLConfig.GetValue('EditorOptions/CodeTools/HighlightCodeCompletionPrefix', True);
-    fUseImagesInCompletionBox :=
-      XMLConfig.GetValue('EditorOptions/CodeTools/UseImagesInCompletionBox', True);
 
     // Code Folding
     FUseCodeFolding :=
@@ -4806,6 +5026,9 @@ begin
     on E: Exception do
       DebugLn('[TEditorOptions.Load] ERROR: ', e.Message);
   end;
+  if FileVersion < 13 then
+    if not CtrlMiddleTabClickClosesOthers then // user set option to false
+      MiddleTabClickClosesOthersModifier := [];
 end;
 
 procedure TEditorOptions.Save;
@@ -4850,6 +5073,8 @@ begin
           SynEditOptName := 'OverwriteBlock';
         eoAutoHideCursor:
           SynEditOptName := 'AutoHideCursor';
+        eoCaretMoveEndsSelection, eoPersistentCaretStopBlink, eoNoScrollOnSelectRange:
+          WriteStr(SynEditOptName, SynEditOpt2);
         else
           SynEditOptName := '';
       end;
@@ -4963,8 +5188,10 @@ begin
       , fAutoToolTipSymbTools, True);
     XMLConfig.SetDeleteValue('EditorOptions/CodeTools/AutoDelayInMSec'
       , fAutoDelayInMSec, 1000);
+    XMLConfig.SetDeleteValue('EditorOptions/CodeTools/AutoDelayHintInMSec'
+      , fAutoHintDelayInMSec, 1000);
     XMLConfig.SetDeleteValue('EditorOptions/CodeTools/CodeTemplateFileName'
-      , fCodeTemplateFileName, '');
+      , fCodeTemplateFileNameRaw, '');
     XMLConfig.SetDeleteValue(
       'EditorOptions/CodeTools/CodeTemplateIndentToTokenStart/Value'
       , fCTemplIndentToTokenStart, False);
@@ -4976,12 +5203,6 @@ begin
       FCompletionLongLineHintInMSec, 0);
     XMLConfig.WriteObject('EditorOptions/CodeTools/CompletionLongLineHintType',
                          Self, nil, 'CompletionLongLineHintType');
-    XMLConfig.SetDeleteValue('EditorOptions/CodeTools/ContainsCompletionFilter'
-      , fUseContainsFilter, True);
-    XMLConfig.SetDeleteValue('EditorOptions/CodeTools/HighlightCodeCompletionPrefix'
-      , fHighlightCodeCompletionPrefix, True);
-    XMLConfig.SetDeleteValue('EditorOptions/CodeTools/UseImagesInCompletionBox'
-      , fUseImagesInCompletionBox, True);
 
     // Code Folding
     XMLConfig.SetDeleteValue('EditorOptions/CodeFolding/UseCodeFolding',
@@ -5001,6 +5222,93 @@ begin
   except
     on E: Exception do
       DebugLn('[TEditorOptions.Save] ERROR: ', e.Message);
+  end;
+end;
+
+function TEditorOptions.LoadCodeTemplates(AnAutoComplete: TSynEditAutoComplete
+  ): TModalResult;
+
+  function ResourceDCIAsText: String;
+  var
+    data: TResourceStream;
+    i: Int64;
+  begin
+    data := TResourceStream.Create(HInstance, PChar('lazarus_dci_file'), PChar(RT_RCDATA));
+    i := data.Size;
+    if i > 0 then begin
+      SetLength(Result, i);
+      data.Read(Result[1], i);
+    end;
+    data.Free;
+  end;
+
+var
+  s: String;
+  FileVersion, i, j, v: Integer;
+  NewAutoComplete: TSynEditAutoComplete;
+  Attr: TStringList;
+  Added: Boolean;
+begin
+  s := CodeTemplateFileNameExpand;
+  Result := mrAbort;
+  if FileExistsUTF8(s) then begin
+    try
+      LoadStringsFromFileUTF8(AnAutoComplete.AutoCompleteList, s);
+      Result := mrOK;
+    except
+      Result := mrAbort;
+    end;
+    if Result = mrAbort then
+      exit;
+
+    FileVersion := AnAutoComplete.Completions.Count;
+    if (FileVersion > 0) then begin
+      FileVersion := AnAutoComplete.CompletionAttributes[0].IndexOfName(DciFileVersionName);
+      if (FileVersion >= 0) then
+        FileVersion := StrToIntDef(AnAutoComplete.CompletionAttributes[0][FileVersion], 0);
+    end;
+    if FileVersion < DciFileVersion then begin
+      // Merge new entries
+      NewAutoComplete := TSynEditAutoComplete.Create(nil);
+      NewAutoComplete.AutoCompleteList.Text := ResourceDCIAsText;
+      Added := False;
+      for i := 0 to NewAutoComplete.Completions.Count - 1 do begin
+        j := NewAutoComplete.CompletionAttributes[i].IndexOfName(DciVersionName);
+        if j < 0 then
+          continue;
+        v := StrToIntDef(NewAutoComplete.CompletionAttributes[i][j], 0);
+        if v <= FileVersion then
+          continue;
+        if AnAutoComplete.Completions.IndexOf(NewAutoComplete.Completions[i]) >= 0 then
+          continue;
+        Attr := TStringList.Create;
+        Attr.Assign(NewAutoComplete.CompletionAttributes[i]); // will be owned by AnAutoComplete;
+        AnAutoComplete.AddCompletion(
+          NewAutoComplete.Completions[i],
+          NewAutoComplete.CompletionValues[i],
+          NewAutoComplete.CompletionComments[i],
+          Attr);
+        Added := True;
+      end;
+      NewAutoComplete.Free;
+      if Added then
+        if BuildBorlandDCIFile(AnAutoComplete) then
+          SaveCodeTemplates(AnAutoComplete);
+    end;
+  end
+  else begin
+    AnAutoComplete.AutoCompleteList.Text := ResourceDCIAsText;
+  end;
+end;
+
+function TEditorOptions.SaveCodeTemplates(AnAutoComplete: TSynEditAutoComplete
+  ): TModalResult;
+begin
+  try
+    SaveStringsToFileUTF8(AnAutoComplete.AutoCompleteList, CodeTemplateFileNameExpand);
+    Result := mrOK;
+  except
+    Result := mrAbort;
   end;
 end;
 
@@ -5184,6 +5492,19 @@ begin
       end;
     end;
 
+    if (ASynEdit.Plugin[c] is TSynPluginMultiCaret) then begin
+      // Only ecPluginMultiCaretClearAll
+      // the others are handled in SynEdit.Keystrokes
+      TSynPluginMultiCaret(ASynEdit.Plugin[c]).Keystrokes.Clear;
+      if i >= 0 then begin
+        TSynPluginMultiCaret(ASynEdit.Plugin[c]).Keystrokes.Assign(
+                               TSynPluginMultiCaret(SimilarEdit.Plugin[i]).KeyStrokes);
+      end else begin
+        KeyMap.AssignTo(TSynPluginMultiCaret(ASynEdit.Plugin[c]).Keystrokes,
+                        TLazSynPluginTemplateMultiCaret, 0); //ecIdePTmplOffset);
+      end;
+    end;
+
     dec(c);
   end;
 end;
@@ -5241,6 +5562,24 @@ begin
   end;
 end;
 
+function TEditorOptions.GetColorSchemeLanguage(aHighLighter: TSynCustomHighlighter;
+  SynColorSchemeName: String): TColorSchemeLanguage;
+var
+  Scheme: TColorScheme;
+begin
+  Result := nil;
+  // initialize with defaults
+  if SynColorSchemeName = '' then
+    SynColorSchemeName := ReadColorScheme(aHighLighter.LanguageName);
+  if (SynColorSchemeName = '') then
+    exit;
+
+  Scheme := UserColorSchemeGroup.ColorSchemeGroup[SynColorSchemeName];
+  if Scheme = nil then
+    exit;
+  Result := Scheme.ColorSchemeBySynClass[aHighLighter.ClassType];
+end;
+
 procedure TEditorOptions.WriteColorScheme(const LanguageName, SynColorScheme: String);
 begin
   if (LanguageName = '') or (SynColorScheme = '') then
@@ -5255,20 +5594,9 @@ procedure TEditorOptions.ReadHighlighterSettings(Syn: TSrcIDEHighlighter;
   SynColorScheme: String);
 // if SynColorScheme='' then default ColorScheme will be used
 var
-  Scheme: TColorScheme;
   LangScheme: TColorSchemeLanguage;
 begin
-  // initialize with defaults
-  if SynColorScheme = '' then
-    SynColorScheme := ReadColorScheme(Syn.LanguageName);
-  //DebugLn(['TEditorOptions.ReadHighlighterSettings ',SynColorScheme,' Syn.ClassName=',Syn.ClassName]);
-  if (SynColorScheme = '') or (Syn.LanguageName = '') then
-    exit;
-
-  Scheme := UserColorSchemeGroup.ColorSchemeGroup[SynColorScheme];
-  if Scheme = nil then
-    exit;
-  LangScheme := Scheme.ColorSchemeBySynClass[Syn.ClassType];
+  LangScheme := GetColorSchemeLanguage(Syn, SynColorScheme);
   if LangScheme = nil then
     exit;
 
@@ -5483,8 +5811,6 @@ end;
 procedure TEditorOptions.SetMarkupColors(aSynEd: TSynEdit);
 var
   Scheme: TColorSchemeLanguage;
-  SchemeGrp: TColorScheme;
-  SynColorScheme: String;
 begin
   // Find current color scheme for default colors
   if (aSynEd.Highlighter = nil) then begin
@@ -5494,30 +5820,20 @@ begin
   end;
 
   // get current colorscheme:
-  SynColorScheme := ReadColorScheme(aSynEd.Highlighter.LanguageName);
-  SchemeGrp := UserColorSchemeGroup.ColorSchemeGroup[SynColorScheme];
-  if SchemeGrp = nil then
-    exit;
-  Scheme := SchemeGrp.ColorSchemeBySynClass[aSynEd.Highlighter.ClassType];
+  Scheme := GetColorSchemeLanguage(aSynEd.Highlighter);
 
   if Assigned(Scheme) then Scheme.ApplyTo(aSynEd);
-
 end;
 
 procedure TEditorOptions.SetMarkupColor(Syn : TSrcIDEHighlighter;
   AddHilightAttr : TAdditionalHilightAttribute; aMarkup : TSynSelectedColor);
 var
-  SynColorScheme: String;
   SchemeGrp: TColorScheme;
   Scheme: TColorSchemeLanguage;
   Attrib: TColorSchemeAttribute;
 begin
   if assigned(Syn) then begin
-    SynColorScheme := ReadColorScheme(Syn.LanguageName);
-    SchemeGrp := UserColorSchemeGroup.ColorSchemeGroup[SynColorScheme];
-    if SchemeGrp = nil then
-      exit;
-    Scheme := SchemeGrp.ColorSchemeBySynClass[Syn.ClassType];
+    Scheme := GetColorSchemeLanguage(Syn);
   end else begin
     SchemeGrp := UserColorSchemeGroup.ColorSchemeGroup[DefaultColorSchemeName];
     if SchemeGrp = nil then
@@ -5714,6 +6030,9 @@ begin
       TIDESynEditor(ASynEdit).MultiCaret.EnableWithColumnSelection := MultiCaretOnColumnSelect;
       TIDESynEditor(ASynEdit).MultiCaret.DefaultMode := FMultiCaretDefaultMode;
       TIDESynEditor(ASynEdit).MultiCaret.DefaultColumnSelectMode := FMultiCaretDefaultColumnSelectMode;
+      if FMultiCaretDeleteSkipLineBreak
+      then TIDESynEditor(ASynEdit).MultiCaret.Options := TIDESynEditor(ASynEdit).MultiCaret.Options + [smcoDeleteSkipLineBreak]
+      else TIDESynEditor(ASynEdit).MultiCaret.Options := TIDESynEditor(ASynEdit).MultiCaret.Options - [smcoDeleteSkipLineBreak];
     end;
     {$ENDIF}
 
@@ -5802,6 +6121,12 @@ begin
   end;
 end;
 
+function TEditorOptions.GetCodeTemplateFileNameExpand:String;
+begin
+  result:=fCodeTemplateFileNameRaw;
+  IDEMacros.SubstituteMacros(result);
+end;
+
 function TEditorOptions.GetTabPosition: TTabPosition;
 begin
   Result := fTabPosition;
@@ -5838,10 +6163,34 @@ begin
     else Result := ahaXmlNames[TAdditionalHilightAttribute(AttriIdx)];
 end;
 
+procedure TColorSchemeAttribute.SetMarkupFoldLineAlpha(AValue: Byte);
+begin
+  if FMarkupFoldLineAlpha = AValue then Exit;
+  FMarkupFoldLineAlpha := AValue;
+  Changed;
+end;
+
+procedure TColorSchemeAttribute.SetMarkupFoldLineColor(AValue: TColor);
+begin
+  if FMarkupFoldLineColor = AValue then Exit;
+  FMarkupFoldLineColor := AValue;
+  Changed;
+end;
+
+procedure TColorSchemeAttribute.SetMarkupFoldLineStyle(AValue: TSynLineStyle);
+begin
+  if FMarkupFoldLineStyle = AValue then Exit;
+  FMarkupFoldLineStyle := AValue;
+  Changed;
+end;
+
 procedure TColorSchemeAttribute.Init;
 begin
   inherited Init;
   FFeatures := [hafBackColor, hafForeColor, hafFrameColor, hafStyle, hafFrameStyle, hafFrameEdges];
+  FMarkupFoldLineColor := clNone;
+  FMarkupFoldLineStyle := slsSolid;
+  FMarkupFoldLineAlpha := 0;
 end;
 
 function TColorSchemeAttribute.GetIsUsingSchemeGlobals: Boolean;
@@ -5866,6 +6215,11 @@ begin
   inherited Create(attribName, aStoredName);
   FOwner := ASchemeLang;
   FUseSchemeGlobals := True;
+end;
+
+function TColorSchemeAttribute.IsEnabled: boolean;
+begin
+  Result := (inherited IsEnabled) or (FMarkupFoldLineColor <> clNone);
 end;
 
 procedure TColorSchemeAttribute.ApplyTo(aDest: TSynHighlighterAttributes;
@@ -5943,6 +6297,10 @@ begin
     FGroup := TColorSchemeAttribute(Src).FGroup;
     FUseSchemeGlobals := TColorSchemeAttribute(Src).FUseSchemeGlobals;
     FFeatures := TColorSchemeAttribute(Src).FFeatures;
+
+    FMarkupFoldLineColor := TColorSchemeAttribute(Src).FMarkupFoldLineColor;;
+    FMarkupFoldLineStyle := TColorSchemeAttribute(Src).FMarkupFoldLineStyle;;
+    FMarkupFoldLineAlpha := TColorSchemeAttribute(Src).FMarkupFoldLineAlpha;;
   end;
 
 end;
@@ -6283,6 +6641,7 @@ begin
   end
   else
     FormatVersion := 6;
+  FFormatVersion := FormatVersion;
   TmpPath := TmpPath + 'Scheme' + StrToValidXMLName(Name) + '/';
 
   if (aOldPath <> '') and (FormatVersion > 1) then begin
@@ -6337,6 +6696,10 @@ begin
       AttributeAtPos[i].FrameStyle := slsSolid;
       AttributeAtPos[i].FrameEdges := sfeBottom;
     end;
+
+    if (ColorVersion < 12) and (AttributeAtPos[i].Group = agnOutlineColors) then begin
+      AttributeAtPos[i].MarkupFoldLineColor := AttributeAtPos[i].Foreground;
+    end
   end;
   FreeAndNil(EmptyDef);
 
@@ -6413,9 +6776,20 @@ procedure TColorSchemeLanguage.ApplyTo(ASynEdit: TSynEdit);
     if assigned(ASynEdit.Gutter.Parts.ByClass[aClass, 0]) then
       SetMarkupColor(aha, ASynEdit.Gutter.Parts.ByClass[aClass, 0].MarkupInfo);
   end;
+  function GetUsedAttr(aha: TAdditionalHilightAttribute): TColorSchemeAttribute;
+  begin
+    Result := AttributeByEnum[aha];
+    if Assigned(Result) and Result.IsUsingSchemeGlobals then
+      Result := Result.GetSchemeGlobal;
+  end;
 var
   Attri: TColorSchemeAttribute;
-  i: Integer;
+  i, c, j: Integer;
+  IDESynEdit: TIDESynEditor;
+  aha: TAdditionalHilightAttribute;
+  col: TColor;
+  OGutter: TSynGutterLineOverview;
+  OGutterProv: TSynGutterLineOverviewProvider;
 begin
   ASynEdit.BeginUpdate;
   try
@@ -6434,19 +6808,13 @@ begin
       aSynEdit.Font.Color := clBlack;
     end;
 
-    Attri := Attribute[AhaToStoredName(ahaGutter)];
-    if Attri <> nil then begin
-      if Attri.IsUsingSchemeGlobals then
-        Attri := Attri.GetSchemeGlobal;
+    Attri := GetUsedAttr(ahaGutter);
+    if Attri <> nil then
       aSynEdit.Gutter.Color := Attri.Background;
-    end;
 
-    Attri := Attribute[AhaToStoredName(ahaRightMargin)];
-    if Attri <> nil then begin
-      if Attri.IsUsingSchemeGlobals then
-        Attri := Attri.GetSchemeGlobal;
+    Attri := GetUsedAttr(ahaRightMargin);
+    if Attri <> nil then
       aSynEdit.RightEdgeColor := Attri.Foreground;
-    end;
 
     SetMarkupColor(ahaTextBlock,         aSynEdit.SelectedColor);
     SetMarkupColor(ahaIncrementalSearch, aSynEdit.IncrementColor);
@@ -6457,8 +6825,18 @@ begin
     SetMarkupColor(ahaFoldedCodeLine,    aSynEdit.FoldedCodeLineColor);
     SetMarkupColor(ahaHiddenCodeLine,    aSynEdit.HiddenCodeLineColor);
     SetMarkupColor(ahaLineHighlight,     aSynEdit.LineHighlightColor);
-    if ASynEdit is TIDESynEditor then
+    if ASynEdit is TIDESynEditor then begin
       SetMarkupColor(ahaTopInfoHint,  TIDESynEditor(aSynEdit).TopInfoMarkup);
+      Attri := GetUsedAttr(ahaCaretColor);
+      if Attri <> nil then begin
+        TIDESynEditor(aSynEdit).CaretColor := Attri.Foreground;
+
+        col := Attri.Background;
+        if (col = clNone) or (col = clDefault) then
+          col := $606060;
+        TIDESynEditor(aSynEdit).MultiCaret.Color := col;
+      end;
+    end;
     SetMarkupColorByClass(ahaHighlightWord, TSynEditMarkupHighlightAllCaret);
     SetMarkupColorByClass(ahaWordGroup,     TSynEditMarkupWordGroup);
     SetMarkupColorByClass(ahaSpecialVisibleChars, TSynEditMarkupSpecialChar);
@@ -6489,6 +6867,73 @@ begin
     SetGutterColorByClass(ahaCodeFoldingTree, TSynGutterCodeFolding);
     SetGutterColorByClass(ahaGutterSeparator, TSynGutterSeparator);
 
+    OGutter := TSynGutterLineOverview(ASynEdit.RightGutter.Parts.ByClass[TSynGutterLineOverview, 0]);
+    if OGutter <> nil then begin
+      for i := 0 to OGutter.Providers.Count - 1 do begin
+        OGutterProv := OGutter.Providers[i];
+        if OGutterProv is TSynGutterLOvProviderModifiedLines then begin
+          Attri := GetUsedAttr(ahaModifiedLine);
+          if Attri <> nil then begin
+            OGutterProv.Color := Attri.FrameColor;
+            TSynGutterLOvProviderModifiedLines(OGutterProv).ColorSaved := Attri.Foreground;
+          end;
+        end
+        else
+        if OGutterProv is TSynGutterLOvProviderCurrentPage then begin
+          Attri := GetUsedAttr(ahaOverviewGutter);
+          if Attri <> nil then begin
+            OGutterProv.Color := Attri.FrameColor;
+          end;
+        end
+        else
+        if OGutterProv is TIDESynGutterLOvProviderPascal then begin
+          Attri := GetUsedAttr(ahaOverviewGutter);
+          if Attri <> nil then begin
+            OGutterProv.Color := Attri.Foreground;
+            TIDESynGutterLOvProviderPascal(OGutterProv).Color2 := Attri.Background;
+          end;
+        end;
+      end;
+    end;
+
+    if ASynEdit is TIDESynEditor then
+    begin
+      IDESynEdit := TIDESynEditor(ASynEdit);
+
+      Attri := GetUsedAttr(ahaIdentComplWindow);
+      if Attri<>nil then
+      begin
+        IDESynEdit.MarkupIdentComplWindow.TextColor := Attri.Foreground;
+        IDESynEdit.MarkupIdentComplWindow.WindowColor:= Attri.Background;
+      end else
+      begin
+        IDESynEdit.MarkupIdentComplWindow.TextColor := clNone;
+        IDESynEdit.MarkupIdentComplWindow.WindowColor:= clNone;
+      end;
+
+      Attri := GetUsedAttr(ahaIdentComplWindowBorder);
+      if Attri<>nil then
+        IDESynEdit.MarkupIdentComplWindow.BorderColor:= Attri.Foreground
+      else
+        IDESynEdit.MarkupIdentComplWindow.BorderColor:= clNone;
+
+      Attri := GetUsedAttr(ahaIdentComplWindowHighlight);
+      if Attri<>nil then
+        IDESynEdit.MarkupIdentComplWindow.HighlightColor:= Attri.Foreground
+      else
+        IDESynEdit.MarkupIdentComplWindow.HighlightColor:= clNone;
+
+      Attri := GetUsedAttr(ahaIdentComplWindowSelection);
+      if Attri<>nil then
+      begin
+        IDESynEdit.MarkupIdentComplWindow.TextSelectedColor:= Attri.Foreground;
+        IDESynEdit.MarkupIdentComplWindow.BackgroundSelectedColor:= Attri.Background;
+      end else
+      begin
+        IDESynEdit.MarkupIdentComplWindow.TextSelectedColor := clNone;
+        IDESynEdit.MarkupIdentComplWindow.BackgroundSelectedColor:= clNone;
+      end;
+    end;
 
     i := aSynEdit.PluginCount - 1;
     while (i >= 0) and not(aSynEdit.Plugin[i] is TSynPluginTemplateEdit) do
@@ -6506,6 +6951,32 @@ begin
       SetMarkupColor(ahaSyncroEditCur,   TSynPluginSyncroEdit(aSynEdit.Plugin[i]).MarkupInfoCurrent);
       SetMarkupColor(ahaSyncroEditSync,  TSynPluginSyncroEdit(aSynEdit.Plugin[i]).MarkupInfoSync);
       SetMarkupColor(ahaSyncroEditArea,  TSynPluginSyncroEdit(aSynEdit.Plugin[i]).MarkupInfoArea);
+    end;
+    i := aSynEdit.MarkupCount - 1;
+    while (i >= 0) and not(aSynEdit.Markup[i] is TSynEditMarkupFoldColors) do
+      dec(i);
+    if i >= 0 then begin
+      TSynEditMarkupFoldColors(aSynEdit.Markup[i]).ColorCount := 10;
+      j := 0;
+      c := 0;
+      for aha := ahaOutlineLevel1Color to ahaOutlineLevel10Color do begin
+        Attri := GetUsedAttr(aha);
+        if Attri = nil then Continue;
+        if (Attri.IsEnabled) or
+           (FFormatVersion >= 12)
+        then begin
+          SetMarkupColor(aha, TSynEditMarkupFoldColors(aSynEdit.Markup[i]).Color[j]);
+
+          TSynEditMarkupFoldColors(aSynEdit.Markup[i]).LineColor[j].Color := Attri.MarkupFoldLineColor;
+          TSynEditMarkupFoldColors(aSynEdit.Markup[i]).LineColor[j].Style := Attri.MarkupFoldLineStyle;
+          TSynEditMarkupFoldColors(aSynEdit.Markup[i]).LineColor[j].Alpha := Attri.MarkupFoldLineAlpha;
+          TSynEditMarkupFoldColors(aSynEdit.Markup[i]).LineColor[j].Priority := Attri.FramePriority;
+          inc(j);
+          if Attri.IsEnabled then
+            c := j;
+        end;
+      end;
+      TSynEditMarkupFoldColors(aSynEdit.Markup[i]).ColorCount := c; // discard unused colors at the end
     end;
   finally
     ASynEdit.EndUpdate;
@@ -6798,7 +7269,7 @@ begin
     l := length(s1)
   else
     l := length(s2);
-  while i < l do begin
+  while i <= l do begin
     Result := ord(s1[i]) - ord(s2[i]);
     if Result <> 0 then
       exit;

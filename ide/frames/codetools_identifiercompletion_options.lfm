@@ -78,12 +78,12 @@ object CodetoolsIndentifierCompletionOptionsFrame: TCodetoolsIndentifierCompleti
     AnchorSideRight.Side = asrBottom
     Left = 0
     Height = 19
-    Top = 247
+    Top = 365
     Width = 124
     Caption = 'ICReplaceCheckBox'
     ParentShowHint = False
     ShowHint = True
-    TabOrder = 9
+    TabOrder = 13
   end
   object ICAddDoCheckBox: TCheckBox
     AnchorSideLeft.Control = Owner
@@ -168,13 +168,13 @@ object CodetoolsIndentifierCompletionOptionsFrame: TCodetoolsIndentifierCompleti
   end
   object ICMiscDividerBevel: TDividerBevel
     AnchorSideLeft.Control = Owner
-    AnchorSideTop.Control = ICSortForScopeCheckBox
+    AnchorSideTop.Control = ICUseIconsInCompletionBoxCheckBox
     AnchorSideTop.Side = asrBottom
     AnchorSideRight.Control = Owner
     AnchorSideRight.Side = asrBottom
     Left = 0
     Height = 15
-    Top = 232
+    Top = 350
     Width = 537
     Caption = 'ICMiscDividerBevel'
     Anchors = [akTop, akLeft, akRight]
@@ -189,12 +189,12 @@ object CodetoolsIndentifierCompletionOptionsFrame: TCodetoolsIndentifierCompleti
     AnchorSideRight.Side = asrBottom
     Left = 0
     Height = 19
-    Top = 266
+    Top = 384
     Width = 151
     Caption = 'ICJumpToErrorCheckBox'
     ParentShowHint = False
     ShowHint = True
-    TabOrder = 10
+    TabOrder = 14
   end
   object ICAutoUseSingleIdent: TCheckBox
     AnchorSideLeft.Control = Owner
@@ -209,5 +209,96 @@ object CodetoolsIndentifierCompletionOptionsFrame: TCodetoolsIndentifierCompleti
     ParentShowHint = False
     ShowHint = True
     TabOrder = 1
+  end
+  object ICContainsFilterCheckBox: TCheckBox
+    AnchorSideLeft.Control = Owner
+    AnchorSideTop.Control = ICContentDividerBevel
+    AnchorSideTop.Side = asrBottom
+    Left = 0
+    Height = 19
+    Top = 247
+    Width = 156
+    Caption = 'ICContainsFilterCheckBox'
+    TabOrder = 9
+  end
+  object ICAppearanceDividerBevel: TDividerBevel
+    AnchorSideLeft.Control = Owner
+    AnchorSideTop.Control = ICIncludeCodeTemplatesCheckBox
+    AnchorSideTop.Side = asrBottom
+    AnchorSideRight.Control = Owner
+    AnchorSideRight.Side = asrBottom
+    Left = 0
+    Height = 15
+    Top = 314
+    Width = 537
+    Caption = 'ICAppearanceDividerBevel'
+    Anchors = [akTop, akLeft, akRight]
+    BorderSpacing.Top = 2
+    Font.Style = [fsBold]
+    ParentFont = False
+  end
+  object ICUseIconsInCompletionBoxCheckBox: TCheckBox
+    AnchorSideLeft.Control = Owner
+    AnchorSideTop.Control = ICAppearanceDividerBevel
+    AnchorSideTop.Side = asrBottom
+    Left = 0
+    Height = 19
+    Top = 329
+    Width = 222
+    Caption = 'ICUseIconsInCompletionBoxCheckBox'
+    TabOrder = 12
+  end
+  object ICContentDividerBevel: TDividerBevel
+    AnchorSideLeft.Control = Owner
+    AnchorSideTop.Control = ICSortForScopeCheckBox
+    AnchorSideTop.Side = asrBottom
+    AnchorSideRight.Control = Owner
+    AnchorSideRight.Side = asrBottom
+    Left = 0
+    Height = 15
+    Top = 232
+    Width = 537
+    Caption = 'ICContentDividerBevel'
+    Anchors = [akTop, akLeft, akRight]
+    BorderSpacing.Top = 2
+    Font.Style = [fsBold]
+    ParentFont = False
+  end
+  object ICIncludeWordsLabel: TLabel
+    AnchorSideTop.Control = ICAddWordsComboBox
+    AnchorSideTop.Side = asrCenter
+    Left = 0
+    Height = 15
+    Top = 272
+    Width = 112
+    Caption = 'ICIncludeWordsLabel'
+    ParentColor = False
+  end
+  object ICAddWordsComboBox: TComboBox
+    AnchorSideLeft.Control = ICIncludeWordsLabel
+    AnchorSideLeft.Side = asrBottom
+    AnchorSideTop.Control = ICContainsFilterCheckBox
+    AnchorSideTop.Side = asrBottom
+    Left = 117
+    Height = 23
+    Top = 268
+    Width = 200
+    BorderSpacing.Left = 5
+    BorderSpacing.Top = 2
+    ItemHeight = 15
+    Style = csDropDownList
+    TabOrder = 10
+  end
+  object ICIncludeCodeTemplatesCheckBox: TCheckBox
+    AnchorSideLeft.Control = Owner
+    AnchorSideTop.Control = ICAddWordsComboBox
+    AnchorSideTop.Side = asrBottom
+    Left = 0
+    Height = 19
+    Top = 293
+    Width = 205
+    BorderSpacing.Top = 2
+    Caption = 'ICIncludeCodeTemplatesCheckBox'
+    TabOrder = 11
   end
 end

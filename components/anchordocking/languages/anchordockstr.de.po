@@ -10,34 +10,35 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 
 #: anchordockstr.adrsafreesideofasplittermustnotbeanchorednodetypeancho
+#, object-pascal-format
 msgid "A free side of a splitter must not be anchored: Node=\"%s\" Type=%s Anchors[%s]=\"%s\""
 msgstr ""
 
-#: anchordockstr.adrsallfiles
-msgid "All files"
-msgstr "Alle Dateien"
+#: anchordockstr.adrsallowdocksitestobeminimized
+msgid "Allow dock sites to be minimized"
+msgstr ""
 
 #: anchordockstr.adrsamountofpixelthemousehastodragbeforedragstarts
 msgid "Amount of pixel the mouse has to drag before drag starts"
 msgstr ""
 
-#: anchordockstr.adrsanchordockinglayout
-msgid "Anchor Docking Layout"
-msgstr ""
-
 #: anchordockstr.adrsanchorisnotsplitternodeanchors
+#, object-pascal-format
 msgid "Anchor is not splitter: Node=\"%s\" Anchors[%s]=\"%s\""
 msgstr ""
 
 #: anchordockstr.adrsanchornotfoundnodeanchors
+#, object-pascal-format
 msgid "Anchor not found: Node=\"%s\" Anchors[%s]=\"%s\""
 msgstr ""
 
 #: anchordockstr.adrsanchortowrongsideofsplitternodeanchors
+#, object-pascal-format
 msgid "Anchor to wrong side of splitter: Node=\"%s\" Anchors[%s]=\"%s\""
 msgstr ""
 
 #: anchordockstr.adrsapagemustnotbeanchorednodeparentparenttypeanchors
+#, object-pascal-format
 msgid "A page must not be anchored: Node=\"%s\" Parent=%s ParentType=%s Anchors[%s]=\"%s\""
 msgstr ""
 
@@ -58,6 +59,7 @@ msgid "control is already a docksite"
 msgstr ""
 
 #: anchordockstr.adrscustomdocksitecanhaveonlyonesite
+#, object-pascal-format
 msgid "Custom dock site \"%s\" can have only one site."
 msgstr ""
 
@@ -70,6 +72,7 @@ msgid "Docking options"
 msgstr "Docking-Einstellungen"
 
 #: anchordockstr.adrsdraganddockc
+#, object-pascal-format
 msgid "Use the mouse to drag and dock window \"%s\""
 msgstr ""
 
@@ -94,19 +97,8 @@ msgid "Enlarge"
 msgstr "Vergrößern"
 
 #: anchordockstr.adrsenlargeside
+#, object-pascal-format
 msgid "Enlarge %s side"
-msgstr ""
-
-#: anchordockstr.adrserror
-msgid "Error"
-msgstr "Fehler"
-
-#: anchordockstr.adrserrorloadingwindowlayoutfromfile
-msgid "Error loading window layout from file \"%s\"%s%s"
-msgstr ""
-
-#: anchordockstr.adrserrorwritingwindowlayouttofile
-msgid "Error writing window layout to file \"%s\"%s%s"
 msgstr ""
 
 #: anchordockstr.adrsfilledheaders
@@ -154,19 +146,11 @@ msgid "Highlight focused"
 msgstr ""
 
 #: anchordockstr.adrshighlightfocusedhint
-msgid "Highlight focused docked controls"
+msgid "Highlight header of focused docked control"
 msgstr ""
 
 #: anchordockstr.adrsleft
 msgid "left"
-msgstr ""
-
-#: anchordockstr.adrsloadwindowlayoutfromfile
-msgid "Load window layout from file ..."
-msgstr ""
-
-#: anchordockstr.adrsloadwindowlayoutfromfilexml
-msgid "Load window layout from file (*.xml)"
 msgstr ""
 
 #: anchordockstr.adrslocked
@@ -175,6 +159,10 @@ msgstr ""
 
 #: anchordockstr.adrsmerge
 msgid "Merge"
+msgstr ""
+
+#: anchordockstr.adrsminimize
+msgid "Minimize"
 msgstr ""
 
 #: anchordockstr.adrsmissingcontrolname
@@ -214,40 +202,28 @@ msgid "No captions for floating sites"
 msgstr ""
 
 #: anchordockstr.adrsnochildrenallowedfornodetype
+#, object-pascal-format
 msgid "No children allowed for Node=\"%s\" Type=%s"
 msgstr ""
 
 #: anchordockstr.adrsnotsupportedhasparent
+#, object-pascal-format
 msgid "Not supported: %s has parent %s"
 msgstr ""
 
 #: anchordockstr.adrsquit
+#, object-pascal-format
 msgid "Quit %s"
 msgstr ""
 
 #: anchordockstr.adrsrequestedbutcreated
+#, object-pascal-format
 msgid "%s requested, but %s created"
-msgstr ""
-
-#: anchordockstr.adrsrestoredefaultlayout
-msgid "Restore default layout"
 msgstr ""
 
 #: anchordockstr.adrsright
 msgid "right"
 msgstr ""
-
-#: anchordockstr.adrssavewindowlayoutasdefault
-msgid "Save window layout as default"
-msgstr "Speichere Fensterlayout als Vorgabe"
-
-#: anchordockstr.adrssavewindowlayouttofile
-msgid "Save window layout to file ..."
-msgstr "Speichere Fensterlayout in Datei ..."
-
-#: anchordockstr.adrssavewindowlayouttofilexml
-msgid "Save window layout to file (*.xml)"
-msgstr "Speichere Fensterlayout in XML-Datei"
 
 #: anchordockstr.adrsscaleonresize
 msgid "Scale on resize"
@@ -282,6 +258,7 @@ msgid "Tab position"
 msgstr ""
 
 #: anchordockstr.adrsthereisanotherdockmasterinstalledonlyonedockingpac
+#, object-pascal-format
 msgid "There is another dock master installed. Only one docking package can be installed at a time. Please uninstall the other dock master %s and restart the IDE"
 msgstr ""
 
@@ -290,6 +267,7 @@ msgid "top"
 msgstr ""
 
 #: anchordockstr.adrstouseanchordockingyoumustfirstuninstall
+#, object-pascal-format
 msgid "To use anchordocking you must first uninstall %s"
 msgstr ""
 

@@ -27,7 +27,7 @@ interface
 uses
   Classes, SysUtils,
   // LCL
-  Forms, Controls, Graphics, StdCtrls, Buttons, ExtCtrls, ComCtrls, Menus,
+  Forms, Controls, Graphics, StdCtrls, Buttons, ExtCtrls, ComCtrls, Menus, ImgList,
   LCLIntf, LazConf, InterfaceBase, LCLPlatformDef, Clipbrd, LCLVersion,
   // LazUtils
   FPCAdds, LazFileUtils, lazutf8classes,
@@ -76,6 +76,7 @@ type
     CloseButton: TBitBtn;
     BuildDateLabel: TLABEL;
     AboutMemo: TMEMO;
+    CopyToClipboardButton: TSpeedButton;
     DocumentationLabel: TLabel;
     DocumentationURLLabel: TLabel;
     FPCVersionLabel: TLabel;
@@ -94,7 +95,9 @@ type
     ContributorsPage: TTabSheet;
     AcknowledgementsPage:TTabSheet;
     procedure AboutFormCreate(Sender:TObject);
+    procedure CopyToClipboardButtonClick(Sender: TObject);
     procedure FormClose(Sender: TObject; var {%H-}CloseAction: TCloseAction);
+    procedure FormShow(Sender: TObject);
     procedure miVerToClipboardClick(Sender: TObject);
     procedure NotebookPageChanged(Sender: TObject);
     procedure URLLabelMouseDown(Sender: TObject; {%H-}Button: TMouseButton;
@@ -106,6 +109,7 @@ type
     Contributors: TScrollingText;
     procedure LoadContributors;
     procedure LoadAcknowledgements;
+    procedure LoadLogo;
   public
   end;
 
@@ -120,6 +124,9 @@ function GetLazarusRevision: string;
 implementation
 
 {$R *.lfm}
+
+uses
+  GraphUtil, IDEImagesIntf;
 
 function ShowAboutForm: TModalResult;
 var
@@ -167,7 +174,6 @@ const
 
 begin
   Notebook.PageIndex:=0;
-  LogoImage.Picture.LoadFromResourceName(HInstance, 'splash_logo', TPortableNetworkGraphic);
   Caption:=lisAboutLazarus;
   VersionLabel.Caption := lisVersion+' #: '+ GetLazarusVersionString;
   RevisionLabel.Caption := lisSVNRevision+LazarusRevisionStr;
@@ -186,10 +192,10 @@ begin
 
   VersionLabel.Font.Color:= clWhite;
 
-  Constraints.MinWidth:= 460;
-  Constraints.MinHeight:= 380;
-  Width:= 460;
-  Height:= 380;
+  Width:= Scale96ToForm(460);
+  Height:= Scale96ToForm(380);
+  Constraints.MinWidth:= Width;
+  Constraints.MinHeight:= Height;
 
   AboutMemo.Lines.Text:=
     Format(lisAboutLazarusMsg,[DoubleLineEnding,DoubleLineEnding,DoubleLineEnding]);
@@ -202,12 +208,27 @@ begin
   LoadContributors;
   LoadAcknowledgements;
   CloseButton.Caption:=lisBtnClose;
+
+  CopyToClipboardButton.Caption := '';
+  CopyToClipboardButton.Images := IDEImages.Images_16;
+  CopyToClipboardButton.ImageIndex := IDEImages.LoadImage('laz_copy');
+  CopyToClipboardButton.Hint := lisVerToClipboard;
+end;
+
+procedure TAboutForm.CopyToClipboardButtonClick(Sender: TObject);
+begin
+  miVerToClipboardClick(nil);
 end;
 
 procedure TAboutForm.FormClose(Sender: TObject; var CloseAction: TCloseAction);
 begin
   Acknowledgements.Active := False;
   Contributors.Active     := False;
+end;
+
+procedure TAboutForm.FormShow(Sender: TObject);
+begin
+  LoadLogo;
 end;
 
 procedure TAboutForm.miVerToClipboardClick(Sender: TObject);
@@ -222,6 +243,7 @@ begin
     Contributors.Active:=NoteBook.ActivePage = ContributorsPage;
   if Assigned(Acknowledgements) then
     Acknowledgements.Active:=NoteBook.ActivePage = AcknowledgementsPage;
+  CopyToClipboardButton.Visible := Notebook.ActivePage = VersionPage;
 end;
 
 procedure TAboutForm.URLLabelMouseDown(Sender: TObject;
@@ -283,6 +305,24 @@ begin
   else
     Acknowledgements.Lines.Text:=lisAboutNoContributors;
 end;
+
+procedure TAboutForm.LoadLogo;
+var
+  pic: TPicture;
+  W, H: Integer;
+begin
+  pic := TPicture.Create;
+  try
+    pic.LoadFromResourceName(hInstance, 'splash_logo', TPortableNetworkGraphic);
+    W := LogoImage.Width;
+    H := LogoImage.Height;
+    LogoImage.Picture.Bitmap.SetSize(W, H);
+    AntiAliasedStretchDrawBitmap(pic.Bitmap, LogoImage.Picture.Bitmap, W, H);
+  finally
+    pic.Free;
+  end;
+end;
+
 
 { TScrollingText }
 

@@ -173,10 +173,6 @@ void QTextLayout_preeditAreaText(QTextLayoutH handle, PWideString retval)
 	copyQStringToPWideString(t_retval, retval);
 }
 
-void QTextLayout_clearAdditionalFormats(QTextLayoutH handle)
-{
-	((QTextLayout *)handle)->clearAdditionalFormats();
-}
 
 void QTextLayout_setCacheEnabled(QTextLayoutH handle, bool enable)
 {
@@ -303,6 +299,35 @@ void QTextLayout_glyphRuns(QTextLayoutH handle, PPtrIntArray retval, int from, i
 void QTextLayout_setFlags(QTextLayoutH handle, int flags)
 {
 	((QTextLayout *)handle)->setFlags(flags);
+}
+
+void QTextLayout_clearFormats(QTextLayoutH handle)
+{
+	((QTextLayout *)handle)->clearFormats();
+}
+
+int QTextLayout_formatsCount(QTextLayoutH handle)
+{
+  return ((QTextLayout *)handle)->formats().size();
+}
+
+int QTextLayout_textFormatsRanges(QTextLayoutH handle, PTextRange ranges, int maxCount)
+{
+  QVector<QTextLayout::FormatRange> t_retval;
+  int res = 0;
+  int cnt = maxCount;
+  int sz;
+
+  t_retval = ((QTextLayout *)handle)->formats();
+  sz = t_retval.size();
+  if (sz > cnt) cnt = sz;
+
+  for (int i=0; i<sz; i++)
+  {
+    ranges[i].start = t_retval.at(i).start;
+    ranges[i].length = t_retval.at(i).length;
+  }
+  return res;
 }
 
 QTextLineH QTextLine_Create()
@@ -446,4 +471,5 @@ void QTextLine_glyphRuns(QTextLineH handle, PPtrIntArray retval, int from, int l
 	t_retval = ((QTextLine *)handle)->glyphRuns(from, length);
 	copyQListTemplateToPtrIntArrayWithNew(t_retval, retval);
 }
+
 

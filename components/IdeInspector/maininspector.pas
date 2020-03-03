@@ -5,9 +5,16 @@ unit MainInspector;
 interface
 
 uses
-  Classes, SysUtils, FileUtil, Forms, Controls, Graphics, Dialogs, ExtCtrls, Buttons,
-  ComCtrls, Menus, StdCtrls, MenuIntf, ObjectInspector, PropEdits, types, typinfo,
-  LazIDEIntf, LazConfigStorage, BaseIDEIntf, LCLProc, IdeInspectKeyGrapper, math;
+  Classes, SysUtils, types, typinfo, math,
+  // LazUtils
+  FileUtil, LazConfigStorage,
+  // LCL
+  LCLProc, Forms, Controls, Graphics, Dialogs, ExtCtrls, ComCtrls, StdCtrls,
+  Buttons, Menus,
+  // IdeIntf
+  BaseIDEIntf, MenuIntf, LazIDEIntf, ObjectInspector, PropEdits,
+  // IdeInspector
+  IdeInspectKeyGrapper;
 
 type
 
@@ -86,7 +93,6 @@ type
     procedure TreeView1Change(Sender: TObject; Node: TTreeNode);
     procedure TreeView1Click(Sender: TObject);
   private
-    { private declarations }
     FSelected: TComponent;
     FFollowFrames: Boolean;
     FHistoryList: TList;
@@ -111,7 +117,6 @@ type
     procedure DisplayCurrent;
     procedure UpdateHistory(ForceAdd: Boolean = False);
   public
-    { public declarations }
     constructor Create(TheOwner: TComponent); override;
     destructor Destroy; override;
   end;
@@ -121,7 +126,7 @@ var
 
 resourcestring
   ideinspInspectIDE = 'Inspect IDE';
-  ideinspApplcicationComponents = 'Applcication.Components';
+  ideinspApplicationComponents = 'Application.Components';
   ideinspScreenForms = 'Screen.Forms';
   ideinspQuickLinks = 'Quick links';
   ideinspComponentsOwned = 'Components (Owned)';
@@ -144,7 +149,11 @@ const
      'ssLeft', 'ssRight', 'ssMiddle', 'ssDouble',
     // Extra additions
     'ssMeta', 'ssSuper', 'ssHyper', 'ssAltGr', 'ssCaps', 'ssNum',
-    'ssScroll', 'ssTriple', 'ssQuad', 'ssExtra1', 'ssExtra2');
+    'ssScroll', 'ssTriple', 'ssQuad', 'ssExtra1', 'ssExtra2'
+{$IF FPC_FULLVERSION >= 30101}
+    , 'ssScrollH'
+{$ENDIF}
+    );
 
 var
   OriginalBackTraceStrFunc: TBackTraceStrFunc;
@@ -379,7 +388,7 @@ begin
   popComponent.Items.Clear;
 
   m := TExtMenuItem.Create(Self);
-  m.Caption := ideinspApplcicationComponents + ' (' + IntToStr(Application.ComponentCount) + ')' ;
+  m.Caption := ideinspApplicationComponents + ' (' + IntToStr(Application.ComponentCount) + ')' ;
   m.Enabled := False;
   popComponent.Items.Add(m);
   for i := 0 to Application.ComponentCount - 1 do begin

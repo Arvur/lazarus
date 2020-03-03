@@ -50,6 +50,13 @@ begin
     FImages.FreeNotification(Self);
     FImages.RegisterChanges(FImageChangeLink);
   end;
+  FItems.UpdateImages(true);
+end;
+
+procedure TMenu.SetImagesWidth(const aImagesWidth: Integer);
+begin
+  if FImagesWidth = aImagesWidth then Exit;
+  FImagesWidth := aImagesWidth;
   FItems.UpdateImages;
 end;
 
@@ -305,6 +312,14 @@ procedure TMenu.MenuChanged(Sender: TObject; Source: TMenuItem; Rebuild: Boolean
 begin
   if ComponentState * [csLoading, csDestroying] = [] then
     DoChange(Source, Rebuild);
+end;
+
+procedure TMenu.AssignTo(Dest: TPersistent);
+begin
+  if Dest is TMenu then
+    Menu_Copy(Self, Dest as TMenu)
+  else
+    inherited AssignTo(Dest);
 end;
 
 procedure TMenu.Notification(AComponent: TComponent; Operation: TOperation);

@@ -38,7 +38,7 @@ uses
   AvgLvlTree, LazLogger, LazFileUtils, Laz2_XMLCfg, LazUTF8,
   // CodeTools
   FileProcs, BasicCodeTools, CodeToolManager, CodeCache, SourceChanger,
-  CodeTree, DefineTemplates;
+  CodeTree, DefineTemplates, LinkScanner;
 
 type
 
@@ -62,6 +62,7 @@ type
     FIncludePath: string;
     FLPKFilenames: TStrings;
     FRemovePrivateSections: boolean;
+    FSyntaxMode: TCompilerMode;
     FUndefines: TStringToStringTree;
     FUnitFilenames: TStrings;
     FVerbosity: integer;
@@ -79,6 +80,7 @@ type
     destructor Destroy; override;
     procedure WriteHelp; virtual;
     property Verbosity: integer read FVerbosity write FVerbosity;
+    property SyntaxMode: TCompilerMode read FSyntaxMode write FSyntaxMode;
     property Defines: TStringToStringTree read FDefines;
     property Undefines: TStringToStringTree read FUndefines;
     property IncludePath: string read FIncludePath write FIncludePath;
@@ -159,8 +161,8 @@ end;
 
 procedure TSourceCloser.DoRun;
 const
-  ShortOpts = 'hvqc:pd:u:i:ke:';
-  LongOpts = 'help verbose quiet compileroptions: disablecompile define: undefine: includepath: keepprivate error:';
+  ShortOpts = 'hvqc:pM:d:u:i:ke:';
+  LongOpts = 'help verbose quiet compileroptions: disablecompile mode: define: undefine: includepath: keepprivate error:';
 var
   ErrMsgIsDefault: Boolean;
 
@@ -174,6 +176,8 @@ var
   end;
 
   procedure ParseValueParam(ShortOpt: char; Value: string);
+  var
+    m: TCompilerMode;
   begin
     case ShortOpt of
     'c':
@@ -197,6 +201,15 @@ var
         if IncludePath<>'' then
           Value:=';'+Value;
         fIncludePath+=Value;
+      end;
+    'M':
+      begin
+      for m in TCompilerMode do
+        if SameText(CompilerModeNames[m],Value) then begin
+          SyntaxMode:=m;
+          exit;
+        end;
+      E('invalid syntaxmode "'+Value+'"');
       end;
     'd':
       begin
@@ -310,6 +323,7 @@ begin
       Option:=copy(Param,3,p-3);
       delete(Param,1,p);
       if Option='compileroptions' then Option:='c'
+      else if Option='mode' then Option:='M'
       else if Option='define' then Option:='d'
       else if Option='undefine' then Option:='u'
       else if Option='includepath' then Option:='i'
@@ -347,11 +361,39 @@ begin
 end;
 
 procedure TSourceCloser.ApplyDefines;
+
+  procedure AddDefine(const MacroName, Value: string);
+  var
+    DefTemplate: TDefineTemplate;
+  begin
+    DefTemplate:=TDefineTemplate.Create('Define '+MacroName,
+      'Define '+MacroName,
+      MacroName,Value,da_DefineRecurse);
+    CodeToolBoss.DefineTree.Add(DefTemplate);
+  end;
+
+  procedure AddUndefine(const MacroName: string);
+  var
+    DefTemplate: TDefineTemplate;
+  begin
+    DefTemplate:=TDefineTemplate.Create('Undefine '+MacroName,
+      'Undefine '+MacroName,
+      MacroName,'',da_UndefineRecurse);
+    CodeToolBoss.DefineTree.Add(DefTemplate);
+  end;
+
+  procedure AddDefineUndefine(const AName: string; Define: boolean);
+  begin
+    if Define then
+      AddDefine(AName,'')
+    else
+      AddUndefine(AName);
+  end;
+
 var
   IncPathTemplate: TDefineTemplate;
   S2SItem: PStringToStringItem;
-  MacroName: String;
-  DefTemplate: TDefineTemplate;
+  m: Integer;
 begin
   if fDefinesApplied then exit;
   fDefinesApplied:=true;
@@ -367,20 +409,15 @@ begin
       );
     CodeToolBoss.DefineTree.Add(IncPathTemplate);
   end;
-  for S2SItem in Defines do begin
-    MacroName:=S2SItem^.Name;
-    DefTemplate:=TDefineTemplate.Create('Define '+MacroName,
-      'Define '+MacroName,
-      MacroName,S2SItem^.Value,da_DefineRecurse);
-    CodeToolBoss.DefineTree.Add(DefTemplate);
-  end;
-  for S2SItem in Undefines do begin
-    MacroName:=S2SItem^.Name;
-    DefTemplate:=TDefineTemplate.Create('Undefine '+MacroName,
-      'Undefine '+MacroName,
-      MacroName,'',da_UndefineRecurse);
-    CodeToolBoss.DefineTree.Add(DefTemplate);
-  end;
+
+  for m:=low(FPCSyntaxModes) to high(FPCSyntaxModes) do
+    AddDefineUndefine('FPC_'+FPCSyntaxModes[m],
+      SameText(CompilerModeNames[SyntaxMode],FPCSyntaxModes[m]));
+
+  for S2SItem in Defines do
+    AddDefine(S2SItem^.Name,S2SItem^.Value);
+  for S2SItem in Undefines do
+    AddUndefine(S2SItem^.Name);
 end;
 
 procedure TSourceCloser.ConvertLPK(LPKFilename: string);
@@ -496,10 +533,13 @@ begin
   Node:=Tool.Tree.Root;
   while (Node<>nil) do begin
     if Node.Desc=ctnImplementation then begin
-      // delete implementation section including the 'implementation' keyword
-      StartPos:=Node.StartPos;
-      EndPos:=Node.NextBrother.StartPos;
-      DeleteNode(Tool, Node, StartPos, EndPos, Changer,false);
+      // delete implementation section excluding the 'implementation' keyword
+      StartPos:=Node.StartPos+length('implementation');
+      if Node.NextBrother.Desc=ctnEndPoint then
+        EndPos:=Node.EndPos
+      else
+        EndPos:=Node.NextBrother.StartPos;
+      DeleteNode(Tool, Node, StartPos, EndPos, Changer, true);
     end else if Node.Desc in [ctnInitialization,ctnFinalization] then begin
       // delete the content of the finalization and initialization section
       Tool.MoveCursorToNodeStart(Node);
@@ -541,6 +581,7 @@ constructor TSourceCloser.Create(TheOwner: TComponent);
 begin
   inherited Create(TheOwner);
   StopOnException:=True;
+  FSyntaxMode:=cmOBJFPC;
   fDefines:=TStringToStringTree.Create(false);
   FUndefines:=TStringToStringTree.Create(false);
   FLPKFilenames:=TStringList.Create;
@@ -589,6 +630,7 @@ begin
   writeln('  -p, --disablecompile');
   writeln('          Remove all compile commands from lpk.');
   writeln('Unit options:');
+  writeln('  -M <SyntaxMode>, --mode=<SyntaxMode> : delphi|delphiunicode|objfpc|fpc|macpas, default: '+CompilerModeNames[SyntaxMode]);
   writeln('  -d <MacroName>, --define=<MacroName> :');
   writeln('          Define Free Pascal macro. Can be passed multiple times.');
   writeln('  -u <MacroName>, --undefine=<MacroName> :');
@@ -600,7 +642,7 @@ begin
   writeln('  -e <errormessage>, --error=<error message>');
   writeln('         Change the message of the error directive added to the units.');
   writeln('         You can add this multiple times to add multiple directives.');
-  writeln('         The default error messages are:');
+  writeln('         The default error message is:');
   for i:=0 to FClosedSrcError.Count-1 do
     writeln('   ',FClosedSrcError[i]);
   writeln;

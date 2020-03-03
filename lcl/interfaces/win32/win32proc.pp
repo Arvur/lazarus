@@ -14,7 +14,7 @@
   for details about the license.
  *****************************************************************************
 }
-unit win32proc;
+unit Win32Proc;
 
 {$mode objfpc}{$H+}
 {$I win32defines.inc}
@@ -24,7 +24,7 @@ interface
 uses
   Windows, Win32Extra, Classes, SysUtils,
   LMessages, LCLType, LCLProc, LCLMessageGlue, LazUTF8, Controls, Forms, Menus,
-  GraphType, IntfGraphics;
+  GraphType, IntfGraphics, Themes;
 
 const
   LV_DISP_INFO_COUNT = 2;  
@@ -84,9 +84,10 @@ function ObjectToHWND(const AObject: TObject): HWND;
 function LCLControlSizeNeedsUpdate(Sender: TWinControl; SendSizeMsgOnDiff: boolean): boolean;
 function GetLCLClientBoundsOffset(Sender: TObject; out ORect: TRect): boolean;
 function GetLCLClientBoundsOffset(Handle: HWnd; out Rect: TRect): boolean;
-procedure LCLBoundsToWin32Bounds(Sender: TObject; var Left, Top, Width, Height: Integer);
+procedure LCLBoundsToWin32Bounds(Sender: TObject; var Left, Top: Integer);
 procedure Win32PosToLCLPos(Sender: TObject; var Left, Top: SmallInt);
 procedure GetWin32ControlPos(Window, Parent: HWND; var Left, Top: integer);
+function GetWin32NativeDoubleBuffered(Sender: TWinControl): boolean;
 
 procedure UpdateWindowStyle(Handle: HWnd; Style: integer; StyleMask: integer);
 
@@ -752,8 +753,7 @@ begin
   Result := GetLCLClientBoundsOffset(OwnerObject, Rect);
 end;
 
-procedure LCLBoundsToWin32Bounds(Sender: TObject;
-  var Left, Top, Width, Height: Integer);
+procedure LCLBoundsToWin32Bounds(Sender: TObject; var Left, Top: Integer);
 var
   ORect: TRect;
 begin
@@ -781,6 +781,14 @@ begin
   Windows.GetWindowRect(Parent, parRect);
   Left := winRect.Left - parRect.Left;
   Top := winRect.Top - parRect.Top;
+end;
+
+function GetWin32NativeDoubleBuffered(Sender: TWinControl): boolean;
+begin
+  // disable auto-DoubleBuffered to allow animations, see #33832
+  Result :=
+    Sender.DoubleBuffered
+    and not(ThemeServices.ThemesEnabled and (Application.DoubleBuffered=adbDefault) and Sender.ParentDoubleBuffered);
 end;
 
 {
@@ -1057,7 +1065,7 @@ end;
 
 function GetControlText(AHandle: HWND): string;
 var
-  TextLen: dword;
+  TextLen: longint;
   WideBuffer: WideString;
 begin
   TextLen := Windows.GetWindowTextLengthW(AHandle);

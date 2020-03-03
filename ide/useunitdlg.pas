@@ -194,7 +194,6 @@ begin
   ButtonPanel1.OKButton.Caption:=lisMenuOk;
   ButtonPanel1.CancelButton.Caption:=lisCancel;
   UnitImgInd := IDEImages.LoadImage('item_unit');
-  TIDEImages.AssignImage(FilterEdit.Glyph, 'btnfiltercancel');
   FProjUnits:=TStringList.Create;
 end;
 
@@ -394,7 +393,7 @@ var
   SrcEdit: TSourceEditor;
 begin
   if not (Assigned(FMainUsedUnits) and Assigned(FImplUsedUnits)) then Exit;
-  Screen.Cursor:=crHourGlass;
+  Screen.BeginWaitCursor;
   try
     FOtherUnits := TStringList.Create;
     FOtherUnits.Sorted := True;
@@ -414,7 +413,7 @@ begin
         end;
       end;
   finally
-    Screen.Cursor:=crDefault;
+    Screen.EndWaitCursor;
   end;
 end;
 

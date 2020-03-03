@@ -40,7 +40,8 @@ uses
   // CodeTools
   FileProcs,
   // LazUtils
-  LazUTF8, LazFileCache, LazFileUtils, LazUtilities, AvgLvlTree, LazDbgLog;
+  LazUTF8, LazFileCache, LazFileUtils, LazUtilities, LazStringUtils, LazDbgLog,
+  AvgLvlTree;
 
 // verbosity
 { $DEFINE CTDEBUG}
@@ -497,7 +498,7 @@ begin
     UnitLinkLen:=UnitLinkEnd-UnitLinkStart;
     if UnitLinkLen>0 then begin
       TheUnitName:=copy(UnitLinks,UnitLinkStart,UnitLinkLen);
-      if IsValidIdent(TheUnitName) then begin
+      if LazIsValidIdent(TheUnitName,true,true) then begin
         UnitLinkStart:=UnitLinkEnd+1;
         UnitLinkEnd:=UnitLinkStart;
         while (UnitLinkEnd<=length(UnitLinks))
@@ -535,43 +536,6 @@ function CompareUnitNameWithUnitLinkNode(AUnitName: Pointer; NodeData: pointer):
 begin
   Result:=CompareText(String(AUnitName),TUnitFileNameLink(NodeData).Unit_Name);
 end;
-
-{$IF FPC_FULLVERSION<30101}
-function IsValidIdent(const Ident: string; AllowDots: Boolean = False; StrictDots: Boolean = False): Boolean;
-const
-  Alpha = ['A'..'Z', 'a'..'z', '_'];
-  AlphaNum = Alpha + ['0'..'9'];
-  Dot = '.';
-var
-  First: Boolean;
-  I, Len: Integer;
-begin
-  Len := Length(Ident);
-  if Len < 1 then
-    Exit(False);
-  First := True;
-  for I := 1 to Len do
-  begin
-    if First then
-    begin
-      Result := Ident[I] in Alpha;
-      First := False;
-    end
-    else if AllowDots and (Ident[I] = Dot) then
-    begin
-      if StrictDots then
-      begin
-        Result := I < Len;
-        First := True;
-      end;
-    end
-    else
-      Result := Ident[I] in AlphaNum;
-    if not Result then
-      Break;
-  end;
-end;
-{$ENDIF}
 
 { TCTDirectoryCache }
 
@@ -660,7 +624,7 @@ begin
     GetMem(SortMap,WorkingListingCount*SizeOf(Pointer));
     for i:=0 to WorkingListingCount-1 do
       SortMap[i]:=@WorkingListing[i];
-    MergeSort(PPointer(SortMap),WorkingListingCount,@CompareWorkFileInfos);
+    MergeSortWithLen(PPointer(SortMap),WorkingListingCount,@CompareWorkFileInfos);
 
     // create listing
     TotalLen:=0;
@@ -1283,7 +1247,7 @@ begin
             aNameSpace:=NameSpaces;
             NameSpaces:='';
           end;
-          if IsValidIdent(aNameSpace,true,true) then begin
+          if LazIsValidIdent(aNameSpace,true,true) then begin
             aName:=aNameSpace+'.'+AUnitName;
             Result:=FindUnitSourceInCompletePath(aName,InFilename,AnyCase,
               FPCSrcSearchRequiresPPU,'');

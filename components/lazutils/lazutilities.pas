@@ -15,23 +15,29 @@ interface
 uses
   Classes, SysUtils;
 
+procedure FreeThenNil(var obj);
 function ComparePointers(p1, p2: Pointer): integer; inline;
+function CompareBoolean(b1, b2: boolean): integer;
 
-{ MergeSort:
+{ MergeSortWithLen:
   sort ascending, e.g. Compare(List[0],List[1])<0
   keeping order (for each i<j and Compare(List[i],List[j])=0) }
-procedure MergeSort(List: PPointer; ListLength: PtrInt;
-                    const Compare: TListSortCompare);
+procedure MergeSortWithLen(List: PPointer; ListLength: PtrInt;
+                           const Compare: TListSortCompare);
 
-function GetNextDelimitedItem(const List: string; Delimiter: char;
-                              var Position: integer): string;
-function HasDelimitedItem(const List: string; Delimiter: char; FindItem: string
-                          ): boolean;
-function FindNextDelimitedItem(const List: string; Delimiter: char;
-                               var Position: integer; FindItem: string): string;
-function MergeWithDelimiter(const a, b: string; Delimiter: char): string;
+var
+  ConsoleVerbosity: integer = 0; // 0=normal, -1=quiet, 1=verbose, 2=very verbose
 
 implementation
+
+procedure FreeThenNil(var obj);
+begin
+  if Pointer(obj) <> nil then
+  begin
+    TObject(obj).Free;
+    Pointer(obj) := nil;
+  end;
+end;
 
 function ComparePointers(p1, p2: Pointer): integer;
 begin
@@ -43,7 +49,17 @@ begin
     Result:=0;
 end;
 
-procedure MergeSort(List: PPointer; ListLength: PtrInt;
+function CompareBoolean(b1, b2: boolean): integer;
+begin
+  if b1=b2 then
+    Result:=0
+  else if b1 then
+    Result:=1
+  else
+    Result:=-1;
+end;
+
+procedure MergeSortWithLen(List: PPointer; ListLength: PtrInt;
   const Compare: TListSortCompare);
 var
   MergeList: PPointer;
@@ -113,48 +129,6 @@ begin
   finally
     FreeMem(MergeList);
   end;
-end;
-
-function GetNextDelimitedItem(const List: string; Delimiter: char;
-  var Position: integer): string;
-var
-  StartPos: LongInt;
-begin
-  StartPos:=Position;
-  while (Position<=length(List)) and (List[Position]<>Delimiter) do
-    inc(Position);
-  Result:=copy(List,StartPos,Position-StartPos);
-  if Position<=length(List) then inc(Position); // skip Delimiter
-end;
-
-function HasDelimitedItem(const List: string; Delimiter: char; FindItem: string
-  ): boolean;
-var
-  p: Integer;
-begin
-  p:=1;
-  Result:=FindNextDelimitedItem(List,Delimiter,p,FindItem)<>'';
-end;
-
-function FindNextDelimitedItem(const List: string; Delimiter: char;
-  var Position: integer; FindItem: string): string;
-begin
-  while Position<=length(List) do begin
-    Result:=GetNextDelimitedItem(List,Delimiter,Position);
-    if Result=FindItem then exit;
-  end;
-  Result:='';
-end;
-
-function MergeWithDelimiter(const a, b: string; Delimiter: char): string;
-begin
-  if a<>'' then begin
-    if b<>'' then
-      Result:=a+Delimiter+b
-    else
-      Result:=a;
-  end else
-    Result:=b;
 end;
 
 end.

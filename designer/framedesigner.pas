@@ -30,9 +30,14 @@ unit FrameDesigner;
 interface
 
 uses
-  Classes, SysUtils, Math, LCLProc, Graphics, GraphType, Forms, Controls,
-  FormEditingIntf, IDEProcs, DesignerProcs, CustomNonFormDesigner;
-  
+  Classes, SysUtils, Math,
+  // LCL
+  LCLProc, Graphics, GraphType, Forms, Controls,
+  // IdeIntf
+  FormEditingIntf,
+  // IDE
+  DesignerProcs, CustomNonFormDesigner;
+
 type
 
   { TFrameDesignerForm }
@@ -60,6 +65,7 @@ implementation
 
 destructor TFrameDesignerForm.Destroy;
 begin
+  DebugLn(['TFrameDesignerForm.Destroy: Self=', Self, ', LookupRoot=', LookupRoot]);
   if LookupRoot is TControl then
     TControl(LookupRoot).RemoveAllHandlersOfObject(Self);
   inherited Destroy;

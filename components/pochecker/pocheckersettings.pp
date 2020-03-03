@@ -29,7 +29,6 @@ type
     FResultsFormWindowState: TWindowState;
     FSelectDirectoryFilename: String;
     FTestTypes: TPoTestTypes;
-    FTestOptions: TPoTestOptions;
     FMasterPoList: TStringList;
     FMasterPoSelList: TStringList;
     FMainFormGeometry: TRect;
@@ -40,7 +39,6 @@ type
     function GetMasterPoList: TStrings;
     function GetMasterPoSelList: TStrings;
     function LoadTestTypes: TPoTestTypes;
-    function LoadTestOptions: TPoTestOptions;
     procedure LoadWindowsGeometry;
     procedure LoadDisableAntiAliasing;
     function LoadExternalEditorName: String;
@@ -50,7 +48,6 @@ type
     procedure LoadMasterPoList(List: TStrings);
     procedure LoadMasterPoSelList(List: TStrings);
     procedure SaveTestTypes;
-    procedure SaveTestOptions;
     procedure SaveWindowsGeometry;
     procedure SaveDisableAntialiasing;
     procedure SaveExternalEditorName;
@@ -72,7 +69,6 @@ type
 
     property Filename: String read FFilename;
     property TestTypes: TPoTestTypes read FTestTypes write FTestTypes;
-    property TestOptions: TPoTestOptions read FTestOptions write FTestOptions;
     property ExternalEditorName: String read FExternalEditorName write FExternalEditorName;
     property MasterPoList: TStrings read GetMasterPoList write SetMasterPoList;
     property MasterPoSelList: TStrings read GetMasterPoSelList write SetMasterPoSelList;
@@ -89,7 +85,6 @@ type
   end;
 
 function DbgS(PoTestTypes: TPoTestTypes): String; overload;
-function DbgS(PoTestOpts: TPoTestOptions): String; overload;
 function FitToRect(const ARect, FitIn: TRect): TRect;
 function IsDefaultRect(ARect: TRect): Boolean;
 function IsValidRect(ARect: TRect): Boolean;
@@ -152,20 +147,13 @@ const
     'CheckNumberOfItems',
     'CheckForIncompatibleFormatArguments',
     'CheckMissingIdentifiers',
-    'CheckForMismatchesInUntranslatedStrings',
-    'CheckForDuplicateUntranslatedValues',
-    'CheckStatistics'
-    );
-  TestoptionNames: array[TPoTestOption] of String = (
-    'FindAllChildren',
-    'IgnoreFuzzyStrings'
+    'CheckForMismatchesInUntranslatedStrings'
     );
 
   pSelectDirectoryFilename = 'SelectDirectoryFilename/';
   pLangFilter = 'LanguageFilter/';
   pLangPath = 'LanguageFiles/';
   pTestTypes = 'TestTypes/';
-  pTestOptions = 'TestOptions/';
   pWindowsGeometry = 'General/WindowsGeometry/';
   pMasterPoFiles = 'MasterPoFiles/';
   pMasterPoSelection = 'MasterPoSelection/';
@@ -188,20 +176,6 @@ begin
   if (Result[Length(Result)] = ',') then System.Delete(Result,Length(Result),1);
   Result := Result + ']';
 end;
-
-function DbgS(PoTestOpts: TPoTestOptions): String; overload;
-var
-  Opt: TPoTestOption;
-begin
-  Result := '[';
-  for Opt := Low(TPotestOption) to High(TPoTestOption) do
-  begin
-    if (Opt in PoTestOpts) then Result := Result + TestOptionNames[opt];
-  end;
-  if (Result[Length(Result)] = ',') then System.Delete(Result,Length(Result),1);
-  Result := Result + ']';
-end;
-
 
 
 { TPoCheckerSettings }
@@ -286,21 +260,6 @@ begin
     Name := TestTypeNames[tt];
     B := FConfig.GetValue(pTestTypes + Name + '/Value',False);
     if B then Result := Result + [tt];
-  end;
-end;
-
-function TPoCheckerSettings.LoadTestOptions: TPoTestOptions;
-var
-  opt: TPoTestOption;
-  Name: String;
-  B: Boolean;
-begin
-  Result := [];
-  for opt := Low(TPoTestOption) to High(TPoTestOption) do
-  begin
-    Name := TestOptionNames[opt];
-    B := FConfig.GetValue(pTestOptions + Name + '/Value',False);
-    if B then Result := Result + [opt];
   end;
 end;
 
@@ -452,18 +411,6 @@ begin
   end;
 end;
 
-procedure TPoCheckerSettings.SaveTestOptions;
-var
-  topt: TPoTestOption;
-  Name: String;
-begin
-  for topt := Low(TPoTestOptions) to High(TPoTestoptions) do
-  begin
-    Name := TestOptionNames[topt];
-    FConfig.SetDeleteValue(pTestOptions + Name + '/Value',(topt in FTestOptions),False);
-  end;
-end;
-
 procedure TPoCheckerSettings.SaveWindowsGeometry;
 begin
   FConfig.SetDeleteValue(pWindowsGeometry+'MainForm/Value',FMainFormGeometry,DefaultRect);
@@ -555,7 +502,6 @@ end;
 procedure TPoCheckerSettings.ResetAllProperties;
 begin
   FTestTypes := [];
-  FTestOptions := [];
   FMainFormGeometry := DefaultRect;
   FGraphFormGeometry := DefaultRect;
   FResultsFormGeometry := DefaultRect;
@@ -613,7 +559,6 @@ procedure TPoCheckerSettings.LoadConfig;
 begin
   try
     FTestTypes := LoadTestTypes;
-    FTestOptions := LoadTestOptions;
     FSelectDirectoryFilename := LoadSelectDirectoryFilename;
     FExternalEditorName := LoadExternalEditorName;
     FLangFilterLanguageAbbr := LoadLangFilterLanguageAbbr;
@@ -633,11 +578,7 @@ begin
   try
     FConfig.SetDeleteValue('Version','1.0','');
     RemoveUnwantedPaths;
-    //the next line can be removed after some time
-
-
     SaveTestTypes;
-    SaveTestOptions;
     SaveExternalEditorName;
     SaveSelectDirectoryFilename;
     SaveLangFilterLanguageAbbr;
@@ -646,9 +587,6 @@ begin
     SaveDisableAntialiasing;
     SaveMasterPoList;
     SaveMasterPoSelList;
-    //not used anymore, clear it. Remove this line after a while
-
-
     FConfig.WriteToDisk;
   except
     debugln('TPoCheckerSettings.SaveConfig: Error saving config.');

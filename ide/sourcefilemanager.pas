@@ -19,8 +19,8 @@
  ***************************************************************************
 
   Abstract:
-    Class TLazSourceFileManager has methods to deal with source files.
-    It deals with projects, packages and the IDE features when needed.
+    Functions to deal with different kinds of source files like
+     units, projects, packages and their related IDE features.
     The code is copied and refactored from the huge main.pp. The goal was to not
     call methods defined in TMainIDE but there are still some calls doing it.
 }
@@ -34,15 +34,19 @@ interface
 uses
   Classes, SysUtils, typinfo, math, fpjson, Laz_AVL_Tree,
   // LCL
-  Controls, Forms, Dialogs, LCLIntf, LCLType, LCLProc, LclStrConsts,
+  Controls, Forms, Dialogs, LCLIntf, LCLType, LclStrConsts,
   LResources, LCLMemManager,
   // LazUtils
-  LConvEncoding, LazFileCache, FileUtil, LazFileUtils, LazUTF8, AvgLvlTree,
+  LConvEncoding, LazFileCache, FileUtil, LazFileUtils, LazLoggerBase, LazUtilities,
+  LazUTF8, LazTracer, AvgLvlTree,
   // Codetools
+  {$IFDEF IDE_MEM_CHECK}
+  MemCheck,
+  {$ENDIF}
   BasicCodeTools, CodeToolsStructs, CodeToolManager, FileProcs, DefineTemplates,
   CodeCache, CodeTree, FindDeclarationTool, KeywordFuncLists,
   // IdeIntf
-  IDEDialogs, PropEdits, IDEMsgIntf, LazIDEIntf, MenuIntf, NewItemIntf, CompOptsIntf,
+  IDEDialogs, PropEdits, IDEMsgIntf, LazIDEIntf, MenuIntf, NewItemIntf,
   IDEWindowIntf, ProjectIntf, PackageIntf, PackageDependencyIntf, FormEditingIntf,
   IDEExternToolIntf, ObjectInspector, UnitResources, ComponentReg,
   SrcEditorIntf, EditorSyntaxHighlighterDef,
@@ -51,8 +55,8 @@ uses
   MainBase, MainBar, MainIntf, Project, ProjectDefs, ProjectInspector, CompilerOptions,
   SourceSynEditor, SourceEditor, EditorOptions, EnvironmentOpts, CustomFormEditor,
   ControlSelection, FormEditor, EmptyMethodsDlg, BaseDebugManager, TransferMacros,
-  BuildManager, EditorMacroListViewer, FindRenameIdentifier, GenericCheckList,
-  ViewUnit_Dlg, DiskDiffsDialog, InputHistory, CheckLFMDlg, PublishModule, etMessagesWnd,
+  BuildManager, EditorMacroListViewer, FindRenameIdentifier, BuildModesManager,
+  ViewUnit_Dlg, InputHistory, CheckLFMDlg, etMessagesWnd,
   ConvCodeTool, BasePkgManager, PackageDefs, PackageSystem, Designer, DesignerProcs;
 
 type
@@ -164,176 +168,6 @@ type
     function RevertMainUnit: TModalResult;
   end;
 
-  { TLazSourceFileManager }
-
-  TLazSourceFileManager = class
-  private
-    FProject: TProject;
-    FListForm: TGenericCheckListForm;
-    FCheckFilesOnDiskNeeded: boolean;
-    function AskToSaveEditors(EditorList: TList): TModalResult;
-    function AddPathToBuildModes(aPath, CurDirectory: string; IsIncludeFile: Boolean): Boolean;
-    function CheckMainSrcLCLInterfaces(Silent: boolean): TModalResult;
-    function FileExistsInIDE(const Filename: string;
-      SearchFlags: TProjectFileSearchFlags): boolean;
-    procedure RemovePathFromBuildModes(ObsoletePaths: String; pcos: TParsedCompilerOptString);
-    function ShowCheckListBuildModes(DlgMsg: String): Boolean;
-    // methods for publish project
-    procedure OnCopyFile(const Filename: string; var Copy: boolean; Data: TObject);
-    procedure OnCopyError(const ErrorData: TCopyErrorData;
-        var {%H-}Handled: boolean; {%H-}Data: TObject);
-  public
-    constructor Create;
-    destructor Destroy; override;
-    procedure AddRecentProjectFile(const AFilename: string);
-    procedure RemoveRecentProjectFile(const AFilename: string);
-    procedure UpdateSourceNames;
-    function CheckEditorNeedsSave(AEditor: TSourceEditorInterface;
-        IgnoreSharedEdits: Boolean): Boolean;
-    procedure ArrangeSourceEditorAndMessageView(PutOnTop: boolean);
-
-    // files/units/projects
-    function SomethingOfProjectIsModified(Verbose: boolean = false): boolean;
-    function NewFile(NewFileDescriptor: TProjectFileDescriptor;
-      var NewFilename: string; NewSource: string;
-      NewFlags: TNewFlags; NewOwner: TObject): TModalResult;
-    function NewOther: TModalResult;
-    function NewUnitOrForm(Template: TNewIDEItemTemplate;
-      DefaultDesc: TProjectFileDescriptor): TModalResult;
-    procedure CreateFileDialogFilterForSourceEditorFiles(Filter: string;
-        out AllEditorMask, AllMask: string);
-    function SaveEditorFile(AEditor: TSourceEditorInterface;
-                              Flags: TSaveFlags): TModalResult;
-    function SaveEditorFile(const Filename: string; Flags: TSaveFlags): TModalResult;
-    function CloseEditorFile(AEditor: TSourceEditorInterface;
-                               Flags: TCloseFlags):TModalResult;
-    function CloseEditorFile(const Filename: string; Flags: TCloseFlags): TModalResult;
-
-    function PublishModule(Options: TPublishModuleOptions;
-      const SrcDirectory, DestDirectory: string): TModalResult;
-
-    // interactive unit selection
-    function SelectProjectItems(ItemList: TViewUnitEntries; ItemType: TIDEProjectItem;
-      MultiSelect: boolean; var MultiSelectCheckedState: Boolean): TModalResult;
-    function SelectUnitComponents(DlgCaption: string; ItemType: TIDEProjectItem;
-      Files: TStringList; MultiSelect: boolean;
-      var MultiSelectCheckedState: Boolean): TModalResult;
-    // unit search
-    function FindUnitFile(const AFilename: string; TheOwner: TObject = nil;
-                          Flags: TFindUnitFileFlags = []): string;
-    function FindSourceFile(const AFilename, BaseDirectory: string;
-                            Flags: TFindSourceFlags): string;
-    function FindUnitsOfOwner(TheOwner: TObject; Flags: TFindUnitsOfOwnerFlags): TStrings;
-
-    function AddUnitToProject(const AEditor: TSourceEditorInterface): TModalResult;
-    function AddActiveUnitToProject: TModalResult;
-    function RemoveFromProjectDialog: TModalResult;
-    function InitNewProject(ProjectDesc: TProjectDescriptor): TModalResult;
-    function InitOpenedProjectFile(AFileName: string; Flags: TOpenFlags): TModalResult;
-    procedure NewProjectFromFile;
-    function CreateProjectForProgram(ProgramBuf: TCodeBuffer): TModalResult;
-    function InitProjectForProgram(ProgramBuf: TCodeBuffer): TModalResult;
-    function SaveProject(Flags: TSaveFlags): TModalResult;
-    function SaveProjectIfChanged: TModalResult;
-    function CloseProject: TModalResult;
-    procedure OpenProject(aMenuItem: TIDEMenuItem);
-    function CompleteLoadingProjectInfo: TModalResult;
-
-    procedure CloseAll;
-    procedure InvertedFileClose(PageIndex: LongInt; SrcNoteBook: TSourceNotebook);
-
-    // Ensure compilation is OK, build many modes at one go.
-    function PrepareForCompileWithMsg: TModalResult;
-    function BuildManyModes: Boolean;
-
-    // Project Inspector
-    // Checks if the UnitDirectory is part of the Unit Search Paths, if not,
-    // ask the user if he wants to extend dependencies or the Unit Search Paths.
-    function CheckDirIsInSearchPath(UnitInfo: TUnitInfo; AllowAddingDependencies, IsIncludeFile: Boolean): Boolean;
-
-  private
-    // methods for 'new unit'
-    function CreateNewCodeBuffer(Descriptor: TProjectFileDescriptor;
-        NewOwner: TObject; NewFilename: string; var NewCodeBuffer: TCodeBuffer;
-        var NewUnitName: string): TModalResult;
-    function CreateNewForm(NewUnitInfo: TUnitInfo;
-        AncestorType: TPersistentClass; ResourceCode: TCodeBuffer;
-        UseCreateFormStatements, DisableAutoSize: Boolean): TModalResult;
-    function NewUniqueComponentName(Prefix: string): string;
-
-    // methods for 'save unit'
-    function ShowSaveFileAsDialog(var AFilename: string; AnUnitInfo: TUnitInfo;
-        var LFMCode, LRSCode: TCodeBuffer; CanAbort: boolean): TModalResult;
-    function SaveUnitComponent(AnUnitInfo: TUnitInfo;
-        LRSCode, LFMCode: TCodeBuffer; Flags: TSaveFlags): TModalResult;
-    function RemoveLooseEvents(AnUnitInfo: TUnitInfo): TModalResult;
-    function RenameUnit(AnUnitInfo: TUnitInfo; NewFilename, NewUnitName: string;
-        var LFMCode, LRSCode: TCodeBuffer): TModalResult;
-    function RenameUnitLowerCase(AnUnitInfo: TUnitInfo; AskUser: boolean): TModalresult;
-    function ReplaceUnitUse(OldFilename, OldUnitName,
-                            NewFilename, NewUnitName: string;
-                            IgnoreErrors, Quiet, Confirm: boolean): TModalResult;
-
-    // private help methods for designer
-    function LoadResourceFile(AnUnitInfo: TUnitInfo; var LFMCode, LRSCode: TCodeBuffer;
-        AutoCreateResourceCode, ShowAbort: boolean): TModalResult;
-    function FindBaseComponentClass(AnUnitInfo: TUnitInfo; const AComponentClassName,
-        DescendantClassName: string; out AComponentClass: TComponentClass): boolean;
-    function LoadAncestorDependencyHidden(AnUnitInfo: TUnitInfo;
-        const aComponentClassName: string; OpenFlags: TOpenFlags;
-        out AncestorClass: TComponentClass; out AncestorUnitInfo: TUnitInfo): TModalResult;
-    function FindComponentClass(AnUnitInfo: TUnitInfo;
-        const AComponentClassName: string; Quiet: boolean;
-        out ComponentUnitInfo: TUnitInfo; out AComponentClass: TComponentClass;
-        out LFMFilename: string;  out AncestorClass: TComponentClass): TModalResult;
-    function LoadComponentDependencyHidden(AnUnitInfo: TUnitInfo;
-        const AComponentClassName: string; Flags: TOpenFlags; MustHaveLFM: boolean;
-        out AComponentClass: TComponentClass; out ComponentUnitInfo: TUnitInfo;
-        out AncestorClass: TComponentClass;
-        const IgnoreBtnText: string = ''): TModalResult;
-    function LoadIDECodeBuffer(var ACodeBuffer: TCodeBuffer;
-        const AFilename: string; Flags: TLoadBufferFlags; ShowAbort: boolean): TModalResult;
-  public
-    // related to Designer
-    function DesignerUnitIsVirtual(aLookupRoot: TComponent): Boolean;
-    function CheckLFMInEditor(LFMUnitInfo: TUnitInfo; Quiet: boolean): TModalResult;
-    function LoadLFM(AnUnitInfo: TUnitInfo; OpenFlags: TOpenFlags;
-                       CloseFlags: TCloseFlags): TModalResult;
-    function LoadLFM(AnUnitInfo: TUnitInfo; LFMBuf: TCodeBuffer;
-                       OpenFlags: TOpenFlags;
-                       CloseFlags: TCloseFlags): TModalResult;
-    function OpenComponent(const UnitFilename: string; OpenFlags: TOpenFlags;
-        CloseFlags: TCloseFlags; out Component: TComponent): TModalResult;
-    function UpdateUnitInfoResourceBaseClass(AnUnitInfo: TUnitInfo;
-      Quiet: boolean): boolean;
-    function CloseUnitComponent(AnUnitInfo: TUnitInfo; Flags: TCloseFlags): TModalResult;
-    function CloseDependingUnitComponents(AnUnitInfo: TUnitInfo;
-                                          Flags: TCloseFlags): TModalResult;
-    function UnitComponentIsUsed(AnUnitInfo: TUnitInfo;
-                                 CheckHasDesigner: boolean): boolean;
-
-    // many files
-    function RemoveFilesFromProject(AProject: TProject; UnitInfos: TFPList): TModalResult;
-
-    // methods for 'save project'
-  private
-    function ShowSaveProjectAsDialog(UseMainSourceFile: boolean): TModalResult;
-    function SaveProjectInfo(var Flags: TSaveFlags): TModalResult;
-    procedure GetMainUnit(out MainUnitInfo: TUnitInfo;
-        out MainUnitSrcEdit: TSourceEditor; UpdateModified: boolean);
-    procedure SaveSrcEditorProjectSpecificSettings(AnEditorInfo: TUnitEditorInfo);
-    procedure SaveSourceEditorProjectSpecificSettings;
-    procedure UpdateProjectResourceInfo;
-  public
-    function AskSaveProject(const ContinueText, ContinueBtn: string): TModalResult;
-    function SaveSourceEditorChangesToCodeCache(AEditor: TSourceEditorInterface): boolean;
-  public
-    function CheckFilesOnDisk(Instantaneous: boolean = false): TModalResult;
-    property CheckFilesOnDiskNeeded: boolean read FCheckFilesOnDiskNeeded;
-  end;
-
-
-function SourceFileMgr: TLazSourceFileManager;
 
 function CreateSrcEditPageName(const AnUnitName, AFilename: string;
   IgnoreEditor: TSourceEditor): string;
@@ -350,20 +184,128 @@ function OpenFileAtCursor(ActiveSrcEdit: TSourceEditor;
 function OpenMainUnit(PageIndex, WindowIndex: integer;
   Flags: TOpenFlags; UseWindowID: Boolean = False): TModalResult;
 function RevertMainUnit: TModalResult;
+// recent
+procedure AddRecentProjectFile(const AFilename: string);
+procedure RemoveRecentProjectFile(const AFilename: string);
+procedure UpdateSourceNames;
+function CheckEditorNeedsSave(AEditor: TSourceEditorInterface;
+    IgnoreSharedEdits: Boolean): Boolean;
+procedure ArrangeSourceEditorAndMessageView(PutOnTop: boolean);
+// files/units/projects
+function SomethingOfProjectIsModified(Verbose: boolean = false): boolean;
+function NewFile(NewFileDescriptor: TProjectFileDescriptor;
+  var NewFilename: string; NewSource: string;
+  NewFlags: TNewFlags; NewOwner: TObject): TModalResult;
+function NewOther: TModalResult;
+function NewUnitOrForm(Template: TNewIDEItemTemplate;
+  DefaultDesc: TProjectFileDescriptor): TModalResult;
+procedure CreateFileDialogFilterForSourceEditorFiles(Filter: string;
+    out AllEditorMask, AllMask: string);
+function SaveEditorFile(AEditor: TSourceEditorInterface; Flags: TSaveFlags): TModalResult;
+function SaveEditorFile(const Filename: string; Flags: TSaveFlags): TModalResult;
+function CloseEditorFile(AEditor: TSourceEditorInterface; Flags: TCloseFlags):TModalResult;
+function CloseEditorFile(const Filename: string; Flags: TCloseFlags): TModalResult;
+// interactive unit selection
+function SelectProjectItems(ItemList: TViewUnitEntries; ItemType: TIDEProjectItem): TModalResult;
+function SelectUnitComponents(DlgCaption: string; ItemType: TIDEProjectItem;
+  Files: TStringList): TModalResult;
+// unit search
+function FindUnitFileImpl(const AFilename: string; TheOwner: TObject = nil;
+                          Flags: TFindUnitFileFlags = []): string;
+function FindSourceFileImpl(const AFilename, BaseDirectory: string;
+                            Flags: TFindSourceFlags): string;
+function FindUnitsOfOwnerImpl(TheOwner: TObject; Flags: TFindUnitsOfOwnerFlags): TStrings;
+// project
+function AddUnitToProject(const AEditor: TSourceEditorInterface): TModalResult;
+function AddActiveUnitToProject: TModalResult;
+function RemoveFromProjectDialog: TModalResult;
+function InitNewProject(ProjectDesc: TProjectDescriptor): TModalResult;
+function InitOpenedProjectFile(AFileName: string; Flags: TOpenFlags): TModalResult;
+procedure NewProjectFromFile;
+function CreateProjectForProgram(ProgramBuf: TCodeBuffer): TModalResult;
+function InitProjectForProgram(ProgramBuf: TCodeBuffer): TModalResult;
+function SaveProject(Flags: TSaveFlags): TModalResult;
+function SaveProjectIfChanged: TModalResult;
+function CloseProject: TModalResult;
+procedure OpenProject(aMenuItem: TIDEMenuItem);
+function CompleteLoadingProjectInfo: TModalResult;
+procedure CloseAll;
+procedure InvertedFileClose(PageIndex: LongInt; SrcNoteBook: TSourceNotebook; CloseOnRightSideOnly: Boolean = False);
+function UpdateAppTitleInSource: Boolean;
+function UpdateAppScaledInSource: Boolean;
+function UpdateAppAutoCreateForms: boolean;
+// designer
+function DesignerUnitIsVirtual(aLookupRoot: TComponent): Boolean;
+function CheckLFMInEditor(LFMUnitInfo: TUnitInfo; Quiet: boolean): TModalResult;
+function LoadLFM(AnUnitInfo: TUnitInfo; OpenFlags: TOpenFlags;
+                   CloseFlags: TCloseFlags): TModalResult;
+function LoadLFM(AnUnitInfo: TUnitInfo; LFMBuf: TCodeBuffer;
+                   OpenFlags: TOpenFlags;
+                   CloseFlags: TCloseFlags): TModalResult;
+function OpenComponent(const UnitFilename: string; OpenFlags: TOpenFlags;
+    CloseFlags: TCloseFlags; out Component: TComponent): TModalResult;
+function UpdateUnitInfoResourceBaseClass(AnUnitInfo: TUnitInfo; Quiet: boolean): boolean;
+function CloseUnitComponent(AnUnitInfo: TUnitInfo; Flags: TCloseFlags): TModalResult;
+function CloseDependingUnitComponents(AnUnitInfo: TUnitInfo;
+                                      Flags: TCloseFlags): TModalResult;
+function UnitComponentIsUsed(AnUnitInfo: TUnitInfo;
+                             CheckHasDesigner: boolean): boolean;
+function RemoveFilesFromProject(UnitInfos: TFPList): TModalResult;
+function AskSaveProject(const ContinueText, ContinueBtn: string): TModalResult;
+function SaveEditorChangesToCodeCache(AEditor: TSourceEditorInterface): boolean;
+
+
+// These are local functions. Forward reference is needed for most of them.
+//  function AskToSaveEditors(EditorList: TList): TModalResult;
+//  function CheckMainSrcLCLInterfaces(Silent: boolean): TModalResult;
+//  function FileExistsInIDE(const Filename: string;
+//    SearchFlags: TProjectFileSearchFlags): boolean;
+//new unit
+  function CreateNewCodeBuffer(Descriptor: TProjectFileDescriptor;
+      NewOwner: TObject; NewFilename: string; var NewCodeBuffer: TCodeBuffer;
+      var NewUnitName: string): TModalResult;
+  function CreateNewForm(NewUnitInfo: TUnitInfo;
+      AncestorType: TPersistentClass; ResourceCode: TCodeBuffer;
+      UseCreateFormStatements, DisableAutoSize: Boolean): TModalResult;
+  function NewUniqueComponentName(Prefix: string): string;
+//save unit
+  function ShowSaveFileAsDialog(var AFilename: string; AnUnitInfo: TUnitInfo;
+      var LFMCode, LRSCode: TCodeBuffer; CanAbort: boolean): TModalResult;
+  function SaveUnitComponent(AnUnitInfo: TUnitInfo;
+      LRSCode, LFMCode: TCodeBuffer; Flags: TSaveFlags): TModalResult;
+  function RemoveLooseEvents(AnUnitInfo: TUnitInfo): TModalResult;
+  function RenameUnit(AnUnitInfo: TUnitInfo; NewFilename, NewUnitName: string;
+      var LFMCode, LRSCode: TCodeBuffer): TModalResult;
+  function RenameUnitLowerCase(AnUnitInfo: TUnitInfo; AskUser: boolean): TModalresult;
+  function ReplaceUnitUse(OldFilename, OldUnitName, NewFilename, NewUnitName: string;
+                          IgnoreErrors, Quiet, Confirm: boolean): TModalResult;
+//designer
+  function LoadResourceFile(AnUnitInfo: TUnitInfo; var LFMCode, LRSCode: TCodeBuffer;
+      AutoCreateResourceCode, ShowAbort: boolean): TModalResult;
+//  function FindBaseComponentClass(AnUnitInfo: TUnitInfo; const AComponentClassName,
+//      DescendantClassName: string; out AComponentClass: TComponentClass): boolean;
+  function LoadAncestorDependencyHidden(AnUnitInfo: TUnitInfo;
+      const aComponentClassName: string; OpenFlags: TOpenFlags;
+      out AncestorClass: TComponentClass; out AncestorUnitInfo: TUnitInfo): TModalResult;
+//  function FindComponentClass(AnUnitInfo: TUnitInfo; const AComponentClassName: string;
+//      Quiet: boolean; out ComponentUnitInfo: TUnitInfo; out AComponentClass: TComponentClass;
+//      out LFMFilename: string; out AncestorClass: TComponentClass): TModalResult;
+  function LoadComponentDependencyHidden(AnUnitInfo: TUnitInfo;
+      const AComponentClassName: string; Flags: TOpenFlags; MustHaveLFM: boolean;
+      out AComponentClass: TComponentClass; out ComponentUnitInfo: TUnitInfo;
+      out AncestorClass: TComponentClass; const IgnoreBtnText: string = ''): TModalResult;
+  function LoadIDECodeBuffer(var ACodeBuffer: TCodeBuffer;
+      const AFilename: string; Flags: TLoadBufferFlags; ShowAbort: boolean): TModalResult;
+//save project
+  function ShowSaveProjectAsDialog(UseMainSourceFile: boolean): TModalResult;
+  function SaveProjectInfo(var Flags: TSaveFlags): TModalResult;
+  procedure GetMainUnit(out MainUnitInfo: TUnitInfo; out MainUnitSrcEdit: TSourceEditor);
+  procedure SaveSrcEditorProjectSpecificSettings(AnEditorInfo: TUnitEditorInfo);
+  procedure SaveSourceEditorProjectSpecificSettings;
+  procedure UpdateProjectResourceInfo;
 
 
 implementation
-
-var
-  SourceFileMgrSingleton: TLazSourceFileManager = nil;
-
-function SourceFileMgr: TLazSourceFileManager;
-// Return always the same instance of SourceFileManager. Create at the first time.
-begin
-  if SourceFileMgrSingleton = nil then
-    SourceFileMgrSingleton := TLazSourceFileManager.Create;
-  Result := SourceFileMgrSingleton;
-end;
 
 function CreateSrcEditPageName(const AnUnitName, AFilename: string;
   IgnoreEditor: TSourceEditor): string;
@@ -638,7 +580,7 @@ begin
 
       // update marks and cursor positions in Project1, so that merging the old
       // settings during restoration will work
-      SourceFileMgr.SaveSourceEditorProjectSpecificSettings;
+      SaveSourceEditorProjectSpecificSettings;
       AShareEditor := nil;
       if AnUnitInfo.OpenEditorInfoCount > 0 then
         AShareEditor := TSourceEditor(AnUnitInfo.OpenEditorInfo[0].EditorComponent);
@@ -895,7 +837,7 @@ begin
       CloseFlags:=[cfSaveDependencies];
       if ofRevert in FFlags then
         Include(CloseFlags,cfCloseDependencies);
-      Result:=SourceFileMgr.LoadLFM(FNewUnitInfo,FFlags,CloseFlags);
+      Result:=LoadLFM(FNewUnitInfo,FFlags,CloseFlags);
       if Result<>mrOk then begin
         DebugLn(['TFileOpener.OpenResource LoadLFM failed']);
         exit;
@@ -907,8 +849,7 @@ begin
     // this is no pascal source and there is a designer form
     // This can be the case, when the file is renamed and/or reverted
     // -> close form
-    Result:=SourceFileMgr.CloseUnitComponent(FNewUnitInfo,
-                               [cfCloseDependencies,cfSaveDependencies]);
+    Result:=CloseUnitComponent(FNewUnitInfo,[cfCloseDependencies,cfSaveDependencies]);
     if Result<>mrOk then begin
       DebugLn(['TFileOpener.OpenResource CloseUnitComponent failed']);
     end;
@@ -1137,7 +1078,7 @@ begin
           ACaption:=lisProgramDetected;
           if IDEMessageDialog(ACaption, AText, mtConfirmation, [mbYes,mbNo])=mrYes then
           begin
-            Result:=SourceFileMgr.CreateProjectForProgram(PreReadBuf);
+            Result:=CreateProjectForProgram(PreReadBuf);
             if Result = mrOK then
               Result := mrIgnore;
             exit;
@@ -1757,19 +1698,7 @@ begin
   end;
 end;
 
-{ TLazSourceFileManager }
-
-constructor TLazSourceFileManager.Create;
-begin
-
-end;
-
-destructor TLazSourceFileManager.Destroy;
-begin
-  inherited Destroy;
-end;
-
-function TLazSourceFileManager.CheckMainSrcLCLInterfaces(Silent: boolean): TModalResult;
+function CheckMainSrcLCLInterfaces(Silent: boolean): TModalResult;
 var
   MainUnitInfo: TUnitInfo;
   MainUsesSection,ImplementationUsesSection: TStrings;
@@ -1820,27 +1749,25 @@ begin
   end;
 end;
 
-procedure TLazSourceFileManager.AddRecentProjectFile(const AFilename: string);
+procedure AddRecentProjectFile(const AFilename: string);
 begin
   EnvironmentOptions.AddToRecentProjectFiles(AFilename);
   MainIDE.SetRecentProjectFilesMenu;
   MainIDE.SaveEnvironment;
 end;
 
-procedure TLazSourceFileManager.RemoveRecentProjectFile(const AFilename: string);
+procedure RemoveRecentProjectFile(const AFilename: string);
 begin
   EnvironmentOptions.RemoveFromRecentProjectFiles(AFilename);
   MainIDE.SetRecentProjectFilesMenu;
   MainIDE.SaveEnvironment;
 end;
 
-function TLazSourceFileManager.AddUnitToProject(
-  const AEditor: TSourceEditorInterface): TModalResult;
+function AddUnitToProject(const AEditor: TSourceEditorInterface): TModalResult;
 var
   ActiveSourceEditor: TSourceEditor;
   ActiveUnitInfo: TUnitInfo;
-  s, ShortUnitName, LFMFilename, LFMType, LFMComponentName,
-    LFMClassName: string;
+  s, ShortUnitName, LFMFilename, LFMType, LFMComponentName, LFMClassName: string;
   OkToAdd: boolean;
   Owners: TFPList;
   i: Integer;
@@ -1916,7 +1843,7 @@ begin
     Result:=RenameUnitLowerCase(ActiveUnitInfo,true);
     if Result=mrIgnore then Result:=mrOk;
     if Result<>mrOk then begin
-      DebugLn('AddActiveUnitToProject A RenameUnitLowerCase failed ',ActiveUnitInfo.Filename);
+      DebugLn('AddUnitToProject A RenameUnitLowerCase failed ',ActiveUnitInfo.Filename);
       exit;
     end;
   end;
@@ -1926,9 +1853,9 @@ begin
   then begin
     OkToAdd:=True;
     if FilenameIsPascalUnit(ActiveUnitInfo.Filename) then
-      OkToAdd:=CheckDirIsInSearchPath(ActiveUnitInfo,False,False)
+      OkToAdd:=CheckDirIsInSearchPath(ActiveUnitInfo,False)
     else if CompareFileExt(ActiveUnitInfo.Filename,'inc',false)=0 then
-      OkToAdd:=CheckDirIsInSearchPath(ActiveUnitInfo,False,True);
+      OkToAdd:=CheckDirIsInSearchPath(ActiveUnitInfo,True);
     if OkToAdd then begin
       ActiveUnitInfo.IsPartOfProject:=true;
       Project1.Modified:=true;
@@ -1951,7 +1878,7 @@ begin
   and FilenameIsPascalUnit(ActiveUnitInfo.Filename) then
   begin
     UpdateUnitInfoResourceBaseClass(ActiveUnitInfo,true);
-    if ActiveUnitInfo.ResourceBaseClass in [pfcbcForm,pfcbcDataModule] then
+    if ActiveUnitInfo.ResourceBaseClass in [pfcbcForm,pfcbcCustomForm,pfcbcDataModule] then
     begin
       LFMFilename:=ActiveUnitInfo.UnitResourceFileformat.GetUnitResourceFilename(ActiveUnitInfo.Filename,true);
       if LoadCodeBuffer(LFMCode,LFMFilename,[lbfUpdateFromDisk],false)=mrOk then
@@ -1973,7 +1900,7 @@ begin
   end;
 end;
 
-procedure TLazSourceFileManager.UpdateSourceNames;
+procedure UpdateSourceNames;
 var
   i: integer;
   AnUnitInfo: TUnitInfo;
@@ -1995,7 +1922,7 @@ begin
   end;
 end;
 
-function TLazSourceFileManager.CheckEditorNeedsSave(AEditor: TSourceEditorInterface;
+function CheckEditorNeedsSave(AEditor: TSourceEditorInterface;
   IgnoreSharedEdits: Boolean): Boolean;
 var
   AnEditorInfo: TUnitEditorInfo;
@@ -2016,7 +1943,7 @@ begin
   Result := (AEditor.Modified) or (AnUnitInfo.Modified);
 end;
 
-procedure TLazSourceFileManager.ArrangeSourceEditorAndMessageView(PutOnTop: boolean);
+procedure ArrangeSourceEditorAndMessageView(PutOnTop: boolean);
 begin
   if SourceEditorManager.SourceWindowCount > 0 then
   begin
@@ -2030,21 +1957,21 @@ begin
   MainIDE.DoShowMessagesView(PutOnTop);
 end;
 
-function TLazSourceFileManager.SomethingOfProjectIsModified(Verbose: boolean): boolean;
+function SomethingOfProjectIsModified(Verbose: boolean): boolean;
 begin
   Result:=(Project1<>nil)
       and (Project1.SomethingModified(true,true,Verbose)
            or SourceEditorManager.SomethingModified(Verbose));
 end;
 
-function TLazSourceFileManager.FileExistsInIDE(const Filename: string;
+function FileExistsInIDE(const Filename: string;
   SearchFlags: TProjectFileSearchFlags): boolean;
 begin
   Result:=FileExistsCached(Filename)
           or ((Project1<>nil) and (Project1.UnitInfoWithFilename(Filename,SearchFlags)<>nil));
 end;
 
-function TLazSourceFileManager.NewFile(NewFileDescriptor: TProjectFileDescriptor;
+function NewFile(NewFileDescriptor: TProjectFileDescriptor;
   var NewFilename: string; NewSource: string;
   NewFlags: TNewFlags; NewOwner: TObject): TModalResult;
 
@@ -2076,10 +2003,11 @@ var
   Src: String;
   i: Integer;
   LFindDesignerBaseClassByName: Boolean = True;
+  PreventAutoSize: Boolean;  
 begin
-  //debugln('TLazSourceFileManager.NewFile A NewFilename=',NewFilename);
+  //debugln('NewFile A NewFilename=',NewFilename);
   // empty NewFilename is ok, it will be auto generated
-  SaveSourceEditorChangesToCodeCache(nil);
+  SaveEditorChangesToCodeCache(nil);
 
   // convert macros in filename
   if nfConvertMacros in NewFlags then begin
@@ -2117,7 +2045,7 @@ begin
                                [cfCloseDependencies,cfSaveDependencies]);
     if Result<>mrOk then
     begin
-      debugln(['TLazSourceFileManager.NewFile CloseUnitComponent failed']);
+      debugln(['NewFile CloseUnitComponent failed']);
       exit;
     end;
   end;
@@ -2128,7 +2056,7 @@ begin
                        and (not (nfIsNotPartOfProject in NewFlags)));
 
   // add required packages
-  //debugln(['TLazSourceFileManager.NewFile NewFileDescriptor.RequiredPackages="',NewFileDescriptor.RequiredPackages,'" ',DbgSName(NewFileDescriptor)]);
+  //debugln(['NewFile NewFileDescriptor.RequiredPackages="',NewFileDescriptor.RequiredPackages,'" ',DbgSName(NewFileDescriptor)]);
   RequiredPackages:=NewFileDescriptor.RequiredPackages;
   if (RequiredPackages='') and (NewFileDescriptor.ResourceClass<>nil) then
   begin
@@ -2142,7 +2070,7 @@ begin
       Result:=PkgBoss.AddProjectDependencies(Project1,RequiredPackages);
       if Result<>mrOk then
       begin
-        debugln(['TLazSourceFileManager.NewFile PkgBoss.AddProjectDependencies failed RequiredPackages="',RequiredPackages,'"']);
+        debugln(['NewFile PkgBoss.AddProjectDependencies failed RequiredPackages="',RequiredPackages,'"']);
         exit;
       end;
     end;
@@ -2151,7 +2079,7 @@ begin
       Result:=PkgBoss.AddPackageDependency(APackage,RequiredPackages);
       if Result<>mrOk then
       begin
-        debugln(['TLazSourceFileManager.NewFile PkgBoss.AddPackageDependency failed RequiredPackages="',RequiredPackages,'"']);
+        debugln(['NewFile PkgBoss.AddPackageDependency failed RequiredPackages="',RequiredPackages,'"']);
         exit;
       end;
     end;
@@ -2161,7 +2089,7 @@ begin
   Result:=NewFileDescriptor.CheckOwner(nfQuiet in NewFlags);
   if Result<>mrOk then
   begin
-    debugln(['TLazSourceFileManager.NewFile NewFileDescriptor.CheckOwner failed NewFilename="',NewFilename,'"']);
+    debugln(['NewFile NewFileDescriptor.CheckOwner failed NewFilename="',NewFilename,'"']);
     exit;
   end;
 
@@ -2171,7 +2099,7 @@ begin
   Result:=CreateNewCodeBuffer(NewFileDescriptor,NewOwner,NewFilename,NewBuffer,NewUnitName);
   if Result<>mrOk then
   begin
-    debugln(['TLazSourceFileManager.NewFile CreateNewCodeBuffer failed NewFilename="',NewFilename,'"']);
+    debugln(['NewFile CreateNewCodeBuffer failed NewFilename="',NewFilename,'"']);
     exit;
   end;
   NewFilename:=NewBuffer.Filename;
@@ -2183,14 +2111,14 @@ begin
     NewUnitInfo.Source:=NewBuffer;
   end else
     NewUnitInfo:=TUnitInfo.Create(NewBuffer);
-  //debugln(['TLazSourceFileManager.NewFile ',NewUnitInfo.Filename,' ',NewFilename]);
+  //debugln(['NewFile ',NewUnitInfo.Filename,' ',NewFilename]);
   if (CompareText(NewUnitInfo.Unit_Name,NewUnitName)=0) then
     NewUnitInfo.Unit_Name:=NewUnitName;
   NewUnitInfo.BuildFileIfActive:=NewFileDescriptor.BuildFileIfActive;
   NewUnitInfo.RunFileIfActive:=NewFileDescriptor.RunFileIfActive;
 
   // create source code
-  //debugln('TLazSourceFileManager.NewFile A nfCreateDefaultSrc=',nfCreateDefaultSrc in NewFlags,' ResourceClass=',dbgs(NewFileDescriptor.ResourceClass));
+  //debugln('NewFile A nfCreateDefaultSrc=',nfCreateDefaultSrc in NewFlags,' ResourceClass=',dbgs(NewFileDescriptor.ResourceClass));
   if nfCreateDefaultSrc in NewFlags then begin
     if (NewFileDescriptor.ResourceClass<>nil) then begin
       NewUnitInfo.ComponentName:=NewUniqueComponentName(NewFileDescriptor.DefaultResourceName);
@@ -2198,7 +2126,7 @@ begin
     end;
     Src:=NewFileDescriptor.CreateSource(NewUnitInfo.Filename,NewUnitName,NewUnitInfo.ComponentName);
     Src:=SourceEditorManager.Beautify(Src);
-    //debugln(['TLazSourceFileManager.NewFile ',dbgtext(Src)]);
+    //debugln(['NewFile ',dbgtext(Src)]);
     Src:=CodeToolBoss.SourceChangeCache.BeautifyCodeOptions.BeautifyStatement(Src,0);
     NewUnitInfo.Source.Source:=Src;
   end else begin
@@ -2219,10 +2147,6 @@ begin
                      and NewUnitInfo.IsPartOfProject
                      and (pfMainUnitHasUsesSectionForAllUnits in AProject.Flags));
   end;
-
-  // syntax highlighter type
-  NewUnitInfo.DefaultSyntaxHighlighter := FilenameToLazSyntaxHighlighter(NewFilename);
-
   NewSrcEdit := Nil;
   if nfOpenInEditor in NewFlags then begin
     // open a new sourceeditor
@@ -2253,20 +2177,20 @@ begin
       if LFindDesignerBaseClassByName then
         AncestorType:=FormEditor1.FindDesignerBaseClassByName(AncestorType.ClassName, True);
     end;
-    //DebugLn(['TLazSourceFileManager.NewFile AncestorType=',dbgsName(AncestorType),' ComponentName',NewUnitInfo.ComponentName]);
+    //DebugLn(['NewFile AncestorType=',dbgsName(AncestorType),' ComponentName',NewUnitInfo.ComponentName]);
     if AncestorType<>nil then begin
       ResType:=MainBuildBoss.GetResourceType(NewUnitInfo);
       LFMSourceText:=NewFileDescriptor.GetResourceSource(NewUnitInfo.ComponentName);
-      //DebugLn(['TLazSourceFileManager.NewFile LFMSourceText=',LFMSourceText]);
+      //DebugLn(['NewFile LFMSourceText=',LFMSourceText]);
       if LFMSourceText<>'' then begin
         // the NewFileDescriptor provides a custom .lfm source
         // -> put it into a new .lfm buffer and load it
         LFMFilename:=ChangeFileExt(NewUnitInfo.Filename,'.lfm');
         LFMCode:=CodeToolBoss.CreateFile(LFMFilename);
         LFMCode.Source:=LFMSourceText;
-        //debugln('TLazSourceFileManager.NewFile A ',LFMFilename);
+        //debugln('NewFile A ',LFMFilename);
         Result:=LoadLFM(NewUnitInfo,LFMCode,[],[]);
-        //DebugLn(['TLazSourceFileManager.NewFile ',dbgsName(NewUnitInfo.Component),' ',dbgsName(NewUnitInfo.Component.ClassParent)]);
+        //DebugLn(['NewFile ',dbgsName(NewUnitInfo.Component),' ',dbgsName(NewUnitInfo.Component.ClassParent)]);
         // make sure the .lrs file exists
         if (ResType=rtLRS) and NewUnitInfo.IsVirtual then begin
           LRSFilename:=ChangeFileExt(NewUnitInfo.Filename,'.lrs');
@@ -2283,18 +2207,25 @@ begin
         end;
       end else begin
         // create a designer form for a form/datamodule/frame
-        //DebugLn(['TLazSourceFileManager.NewFile Name=',NewFileDescriptor.Name,' Class=',NewFileDescriptor.ClassName]);
+        //DebugLn(['NewFile Name=',NewFileDescriptor.Name,' Class=',NewFileDescriptor.ClassName]);
         DisableAutoSize:=true;
         Result := CreateNewForm(NewUnitInfo, AncestorType, nil,
                                 NewFileDescriptor.UseCreateFormStatements,
                                 DisableAutoSize);
         if DisableAutoSize and (NewUnitInfo.Component<>nil)
         and (NewUnitInfo.Component is TControl) then
-          TControl(NewUnitInfo.Component).EnableAutoSizing{$IFDEF DebugDisableAutoSizing}('TAnchorDockMaster Delayed'){$ENDIF};
+        begin
+          // disable autosizing for docked form editor forms, see issue #32207
+          PreventAutoSize := (IDETabMaster <> nil)
+                             and (NewUnitInfo.Component is TCustomDesignControl)
+                             and IDETabMaster.AutoSizeInShowDesigner(TControl(NewUnitInfo.Component));
+          if not PreventAutoSize then
+            TControl(NewUnitInfo.Component).EnableAutoSizing{$IFDEF DebugDisableAutoSizing}('TAnchorDockMaster Delayed'){$ENDIF};
+        end;
       end;
       if Result<>mrOk then
       begin
-        debugln(['TLazSourceFileManager.NewFile create designer form failed ',NewUnitInfo.Filename]);
+        debugln(['NewFile create designer form failed ',NewUnitInfo.Filename]);
         exit;
       end;
     end;
@@ -2313,7 +2244,7 @@ begin
   // Update HasResources property (if the .lfm file was created separately)
   if (not NewUnitInfo.HasResources)
   and FilenameIsPascalUnit(NewUnitInfo.Filename) then begin
-    //debugln('TLazSourceFileManager.NewFile no HasResources ',NewUnitInfo.Filename);
+    //debugln('NewFile no HasResources ',NewUnitInfo.Filename);
     LFMFilename:=ChangeFileExt(NewUnitInfo.Filename,'.lfm');
     SearchFlags:=[];
     if NewUnitInfo.IsPartOfProject then
@@ -2321,7 +2252,7 @@ begin
     if NewUnitInfo.IsVirtual then
       Include(SearchFlags,pfsfOnlyVirtualFiles);
     if (AProject.UnitInfoWithFilename(LFMFilename,SearchFlags)<>nil) then begin
-      //debugln('TLazSourceFileManager.NewFile no HasResources ',NewUnitInfo.Filename,' ResourceFile exists');
+      //debugln('NewFile no HasResources ',NewUnitInfo.Filename,' ResourceFile exists');
       NewUnitInfo.HasResources:=true;
     end;
   end;
@@ -2332,7 +2263,7 @@ begin
     Result:=SaveEditorFile(NewSrcEdit,[sfCheckAmbiguousFiles,sfSaveAs]);
     if Result<>mrOk then
     begin
-      debugln(['TLazSourceFileManager.NewFile SaveEditorFile failed ',NewFilename]);
+      debugln(['NewFile SaveEditorFile failed ',NewFilename]);
       exit;
     end;
   end else if nfSave in NewFlags then begin
@@ -2342,7 +2273,7 @@ begin
       Result:=SaveEditorFile(NewSrcEdit,[sfCheckAmbiguousFiles]);
       if Result<>mrOk then
       begin
-        debugln(['TLazSourceFileManager.NewFile SaveEditorFile SaveAs failed ',NewFilename]);
+        debugln(['NewFile SaveEditorFile SaveAs failed ',NewFilename]);
         exit;
       end;
     end else begin
@@ -2352,11 +2283,11 @@ begin
   end;
 
   Result:=mrOk;
-  //DebugLn('TLazSourceFileManager.NewFile END ',NewUnitInfo.Filename);
-  {$IFDEF IDE_MEM_CHECK}CheckHeapWrtMemCnt('TLazSourceFileManager.NewUnit end');{$ENDIF}
+  //DebugLn('NewFile END ',NewUnitInfo.Filename);
+  {$IFDEF IDE_MEM_CHECK}CheckHeapWrtMemCnt('NewUnit end');{$ENDIF}
 end;
 
-function TLazSourceFileManager.NewOther: TModalResult;
+function NewOther: TModalResult;
 var
   NewIDEItem: TNewIDEItemTemplate;
   NewProjFile: TNewItemProjectFile;
@@ -2383,7 +2314,7 @@ begin
     IDEMessageDialog(ueNotImplCap, lisSorryThisTypeIsNotYetImplemented, mtInformation,[mbOk]);
 end;
 
-function TLazSourceFileManager.NewUnitOrForm(Template: TNewIDEItemTemplate;
+function NewUnitOrForm(Template: TNewIDEItemTemplate;
   DefaultDesc: TProjectFileDescriptor): TModalResult;
 var
   Desc: TProjectFileDescriptor;
@@ -2404,7 +2335,7 @@ begin
   end;
 end;
 
-procedure TLazSourceFileManager.CreateFileDialogFilterForSourceEditorFiles(Filter: string;
+procedure CreateFileDialogFilterForSourceEditorFiles(Filter: string;
   out AllEditorMask, AllMask: string);
 // Filter: a TFileDialog filter, e.g. Pascal|*.pas;*.pp|Text|*.txt
 // AllEditorExt: a mask for all open files in the source editor, that are not
@@ -2438,8 +2369,7 @@ begin
   end;
 end;
 
-function TLazSourceFileManager.SaveEditorFile(AEditor: TSourceEditorInterface;
-  Flags: TSaveFlags): TModalResult;
+function SaveEditorFile(AEditor: TSourceEditorInterface; Flags: TSaveFlags): TModalResult;
 var
   AnUnitInfo, MainUnitInfo: TUnitInfo;
   TestFilename, DestFilename: string;
@@ -2452,8 +2382,8 @@ var
 begin
   Result:=mrCancel;
   CanAbort:=[sfCanAbort,sfProjectSaving]*Flags<>[];
-  //debugln('TLazSourceFileManager.SaveEditorFile A PageIndex=',PageIndex,' Flags=',SaveFlagsToString(Flags));
-  {$IFDEF IDE_MEM_CHECK}CheckHeapWrtMemCnt('TLazSourceFileManager.SaveEditorFile A');{$ENDIF}
+  //debugln('SaveEditorFile A PageIndex=',PageIndex,' Flags=',SaveFlagsToString(Flags));
+  {$IFDEF IDE_MEM_CHECK}CheckHeapWrtMemCnt('SaveEditorFile A');{$ENDIF}
   if not (MainIDE.ToolStatus in [itNone,itDebugger]) then
     exit(mrAbort);
   if AEditor=nil then exit(mrCancel);
@@ -2479,7 +2409,7 @@ begin
 
   // update codetools cache and collect Modified flags
   if not (sfProjectSaving in Flags) then
-    SaveSourceEditorChangesToCodeCache(nil);
+    SaveEditorChangesToCodeCache(nil);
 
   if (uifInternalFile in AnUnitInfo.Flags) then
   begin
@@ -2518,7 +2448,7 @@ begin
   end;
 
   // if nothing modified then a simple Save can be skipped
-  //debugln(['TLazSourceFileManager.SaveEditorFile A ',AnUnitInfo.Filename,' ',AnUnitInfo.NeedsSaveToDisk]);
+  //debugln(['SaveEditorFile A ',AnUnitInfo.Filename,' ',AnUnitInfo.NeedsSaveToDisk]);
   if ([sfSaveToTestDir,sfSaveAs]*Flags=[]) and (not AnUnitInfo.NeedsSaveToDisk) then
   begin
     if AEditor.Modified then
@@ -2588,7 +2518,7 @@ begin
                                                   sefsBeforeWrite,DestFilename);
       if Result<>mrOk then exit;
       // actual write
-      //DebugLn(['TLazSourceFileManager.SaveEditorFile TestFilename="',TestFilename,'" Size=',AnUnitInfo.Source.SourceLength]);
+      //DebugLn(['SaveEditorFile TestFilename="',TestFilename,'" Size=',AnUnitInfo.Source.SourceLength]);
       Result := AnUnitInfo.WriteUnitSourceToFile(DestFilename);
       if Result <> mrOk then
         Exit;
@@ -2601,7 +2531,7 @@ begin
       exit(mrCancel);
   end else
   begin
-    if AnUnitInfo.Modified or AnUnitInfo.NeedsSaveToDisk then
+    if AnUnitInfo.Modified or (MainIDE.CheckFilesOnDiskEnabled and AnUnitInfo.NeedsSaveToDisk) then
     begin
       // save source to file
       DestFilename := AnUnitInfo.Filename;
@@ -2626,7 +2556,7 @@ begin
   {$IFDEF IDE_DEBUG}
   debugln(['*** HasResources=',AnUnitInfo.HasResources]);
   {$ENDIF}
-  {$IFDEF IDE_MEM_CHECK}CheckHeapWrtMemCnt('TLazSourceFileManager.SaveEditorFile B');{$ENDIF}
+  {$IFDEF IDE_MEM_CHECK}CheckHeapWrtMemCnt('SaveEditorFile B');{$ENDIF}
   // save resource file and lfm file
   if (LRSCode<>nil) or (AnUnitInfo.Component<>nil) then begin
     Result:=SaveUnitComponent(AnUnitInfo,LRSCode,LFMCode,Flags);
@@ -2663,13 +2593,12 @@ begin
   end;
 
   {$IFDEF IDE_VERBOSE}
-  debugln(['TLazSourceFileManager.SaveEditorFile END ',NewFilename,' AnUnitInfo.Modified=',AnUnitInfo.Modified,' AEditor.Modified=',AEditor.Modified]);
+  debugln(['SaveEditorFile END ',NewFilename,' AnUnitInfo.Modified=',AnUnitInfo.Modified,' AEditor.Modified=',AEditor.Modified]);
   {$ENDIF}
   Result:=mrOk;
 end;
 
-function TLazSourceFileManager.SaveEditorFile(const Filename: string;
-  Flags: TSaveFlags): TModalResult;
+function SaveEditorFile(const Filename: string; Flags: TSaveFlags): TModalResult;
 var
   UnitIndex: Integer;
   AnUnitInfo: TUnitInfo;
@@ -2683,11 +2612,11 @@ begin
   for i := 0 to AnUnitInfo.OpenEditorInfoCount-1 do begin
     Result:=SaveEditorFile(AnUnitInfo.OpenEditorInfo[i].EditorComponent, Flags);
     if Result <> mrOK then Break;
+    Flags:=Flags-[sfSaveAs,sfCheckAmbiguousFiles];
   end;
 end;
 
-function TLazSourceFileManager.CloseEditorFile(AEditor: TSourceEditorInterface;
-  Flags: TCloseFlags): TModalResult;
+function CloseEditorFile(AEditor: TSourceEditorInterface; Flags: TCloseFlags): TModalResult;
 var
   AnUnitInfo: TUnitInfo;
   ACaption, AText: string;
@@ -2697,7 +2626,7 @@ var
   SrcEdit: TSourceEditor;
 begin
   {$IFDEF IDE_DEBUG}
-  //debugln('TLazSourceFileManager.CloseEditorFile A PageIndex=',IntToStr(AnUnitInfo.PageIndex));
+  //debugln('CloseEditorFile A PageIndex=',IntToStr(AnUnitInfo.PageIndex));
   {$ENDIF}
   Result:=mrCancel;
   if AEditor = nil then exit;
@@ -2705,7 +2634,7 @@ begin
   //AnUnitInfo := Project1.UnitWithEditorComponent(AEditor);
   if AnEditorInfo = nil then begin
     // we need to close the page anyway or else we might enter a loop
-    DebugLn('TLazSourceFileManager.CloseEditorFile INCONSISTENCY: NO AnUnitInfo');
+    DebugLn('CloseEditorFile INCONSISTENCY: NO AnUnitInfo');
     SourceEditorManager.CloseFile(AEditor);
     Result:=mrOk;
     exit;
@@ -2715,9 +2644,9 @@ begin
   SrcEditWasFocused:=(AnEditorInfo.EditorComponent<>nil)
      and (AnEditorInfo.EditorComponent.EditorControl<>nil)
      and AnEditorInfo.EditorComponent.EditorControl.Focused;
-  //debugln(['TLazSourceFileManager.CloseEditorFile File=',AnUnitInfo.Filename,' WasFocused=',SrcEditWasFocused]);
+  //debugln(['CloseEditorFile File=',AnUnitInfo.Filename,' WasFocused=',SrcEditWasFocused]);
   try
-    //debugln(['TLazSourceFileManager.CloseEditorFile File=',AnUnitInfo.Filename,' UnitSession=',AnUnitInfo.SessionModified,' ProjSession=',project1.SessionModified]);
+    //debugln(['CloseEditorFile File=',AnUnitInfo.Filename,' UnitSession=',AnUnitInfo.SessionModified,' ProjSession=',project1.SessionModified]);
     if AnUnitInfo.OpenEditorInfoCount > 1 then begin
       // opened multiple times => close one instance
       SourceEditorManager.CloseFile(AEditor);
@@ -2756,6 +2685,9 @@ begin
       if Result in [mrAbort,mrCancel] then exit;
       Result:=mrOk;
     end;
+    // mark file as unmodified
+    if (AnUnitInfo.Source<>nil) and AnUnitInfo.Source.Modified then
+      AnUnitInfo.Source.Clear;
 
     // add to recent file list
     if (not AnUnitInfo.IsVirtual) and (not (cfProjectClosing in Flags)) then
@@ -2801,17 +2733,16 @@ begin
       and (SrcEdit.EditorControl<>nil)
       and (SrcEdit.EditorControl.CanFocus) then
         SrcEdit.EditorControl.SetFocus;
-      //debugln(['TLazSourceFileManager.CloseEditorFile Focus=',SrcEdit.FileName,' Editor=',DbgSName(SrcEdit.EditorControl),' Focused=',(SrcEdit.EditorControl<>nil) and (SrcEdit.EditorControl.Focused)]);
+      //debugln(['CloseEditorFile Focus=',SrcEdit.FileName,' Editor=',DbgSName(SrcEdit.EditorControl),' Focused=',(SrcEdit.EditorControl<>nil) and (SrcEdit.EditorControl.Focused)]);
     end;
   end;
   {$IFDEF IDE_DEBUG}
-  DebugLn('TLazSourceFileManager.CloseEditorFile end');
+  DebugLn('CloseEditorFile end');
   {$ENDIF}
   Result:=mrOk;
 end;
 
-function TLazSourceFileManager.CloseEditorFile(const Filename: string;
-  Flags: TCloseFlags): TModalResult;
+function CloseEditorFile(const Filename: string; Flags: TCloseFlags): TModalResult;
 var
   UnitIndex: Integer;
   AnUnitInfo: TUnitInfo;
@@ -2825,7 +2756,7 @@ begin
     Result:=CloseEditorFile(AnUnitInfo.OpenEditorInfo[0].EditorComponent, Flags);
 end;
 
-function TLazSourceFileManager.FindUnitFile(const AFilename: string; TheOwner: TObject;
+function FindUnitFileImpl(const AFilename: string; TheOwner: TObject;
   Flags: TFindUnitFileFlags): string;
 
   function FindInBaseIDE: string;
@@ -2941,7 +2872,7 @@ begin
   Result:='';
 end;
 
-function TLazSourceFileManager.FindSourceFile(const AFilename, BaseDirectory: string;
+function FindSourceFileImpl(const AFilename, BaseDirectory: string;
   Flags: TFindSourceFlags): string;
 // AFilename can be an absolute or relative filename, of a source file or a
 // compiled unit (.ppu).
@@ -2998,7 +2929,7 @@ var
         CompiledUnitPath:=CompiledUnitPath+';'+CurDir;
     end;
     {$IFDEF VerboseFindSourceFile}
-    debugln(['TLazSourceFileManager.SearchIndirectIncludeFile CompiledUnitPath="',CompiledUnitPath,'"']);
+    debugln(['SearchIndirectIncludeFile CompiledUnitPath="',CompiledUnitPath,'"']);
     {$ENDIF}
 
     // collect all src paths for the compiled units
@@ -3011,7 +2942,7 @@ var
       AllSrcPaths:=MergeSearchPaths(AllSrcPaths,CurSrcPath);
     end;
     {$IFDEF VerboseFindSourceFile}
-    debugln(['TLazSourceFileManager.SearchIndirectIncludeFile AllSrcPaths="',AllSrcPaths,'"']);
+    debugln(['SearchIndirectIncludeFile AllSrcPaths="',AllSrcPaths,'"']);
     {$ENDIF}
 
     // add fpc src directories
@@ -3027,14 +2958,14 @@ var
       AllIncPaths:=MergeSearchPaths(AllIncPaths,CurIncPath);
     end;
     {$IFDEF VerboseFindSourceFile}
-    debugln(['TLazSourceFileManager.SearchIndirectIncludeFile AllIncPaths="',AllIncPaths,'"']);
+    debugln(['SearchIndirectIncludeFile AllIncPaths="',AllIncPaths,'"']);
     {$ENDIF}
 
     SearchFile:=AFilename;
     SearchPath:=AllIncPaths;
     Result:=FileUtil.SearchFileInPath(SearchFile,BaseDir,SearchPath,';',[]);
     {$IFDEF VerboseFindSourceFile}
-    debugln(['TLazSourceFileManager.SearchIndirectIncludeFile Result="',Result,'"']);
+    debugln(['SearchIndirectIncludeFile Result="',Result,'"']);
     {$ENDIF}
     MarkPathAsSearched(SearchPath);
   end;
@@ -3049,7 +2980,7 @@ var
     if SearchPath<>'' then begin
       Filename:=FileUtil.SearchFileInPath(SearchFile,BaseDir,SearchPath,';',[]);
       {$IFDEF VerboseFindSourceFile}
-      debugln(['TLazSourceFileManager.FindSourceFile trying "',SearchPath,'" Filename="',Filename,'"']);
+      debugln(['FindSourceFile trying "',SearchPath,'" Filename="',Filename,'"']);
       {$ENDIF}
       MarkPathAsSearched(SearchPath);
     end;
@@ -3059,9 +2990,10 @@ var
 var
   SearchPath: String;
   SearchFile: String;
+  ProjFile: TLazProjectFile;
 begin
   {$IFDEF VerboseFindSourceFile}
-  debugln(['TLazSourceFileManager.FindSourceFile Filename="',AFilename,'" BaseDirectory="',BaseDirectory,'"']);
+  debugln(['FindSourceFile Filename="',AFilename,'" BaseDirectory="',BaseDirectory,'"']);
   {$ENDIF}
   if AFilename='' then exit('');
 
@@ -3091,15 +3023,23 @@ begin
   BaseDir:=AppendPathDelim(TrimFilename(BaseDir));
 
   // search file in base directory
-  Result:=TrimFilename(BaseDir+AFilename);
-  {$IFDEF VerboseFindSourceFile}
-  debugln(['TLazSourceFileManager.FindSourceFile trying Base "',Result,'"']);
-  {$ENDIF}
-  if FileExistsCached(Result) then exit;
-  MarkPathAsSearched(BaseDir);
+  if FilenameIsAbsolute(BaseDir) then begin
+    Result:=TrimFilename(BaseDir+AFilename);
+    {$IFDEF VerboseFindSourceFile}
+    debugln(['FindSourceFile trying Base "',Result,'"']);
+    {$ENDIF}
+    if FileExistsCached(Result) then exit;
+    MarkPathAsSearched(BaseDir);
+  end else if Project1<>nil then begin
+    // search in virtual files
+    Result:=TrimFilename(BaseDir+AFilename);
+    ProjFile:=Project1.FindFile(Result,[pfsfOnlyVirtualFiles]);
+    if ProjFile<>nil then
+      exit;
+  end;
 
   // search file in debug path
-  if fsfUseDebugPath in Flags then begin
+  if (fsfUseDebugPath in Flags) and (Project1<>nil) then begin
     SearchPath:=EnvironmentOptions.GetParsedDebuggerSearchPath;
     SearchPath:=MergeSearchPaths(Project1.CompilerOptions.GetDebugPath(false),
                                  SearchPath);
@@ -3120,7 +3060,7 @@ begin
     Result:=CodeToolBoss.FindUnitInUnitSet(BaseDir,
                                            ExtractFilenameOnly(AFilename));
     {$IFDEF VerboseFindSourceFile}
-    debugln(['TLazSourceFileManager.FindSourceFile tried unitset Result=',Result]);
+    debugln(['FindSourceFile tried unitset Result=',Result]);
     {$ENDIF}
     if Result<>'' then exit;
   end;
@@ -3139,7 +3079,7 @@ begin
       SearchFile:=AFilename;
       Result:=PkgBoss.FindIncludeFileInProjectDependencies(Project1,SearchFile);
       {$IFDEF VerboseFindSourceFile}
-      debugln(['TLazSourceFileManager.FindSourceFile trying packages "',SearchPath,'" Result=',Result]);
+      debugln(['FindSourceFile trying packages "',SearchPath,'" Result=',Result]);
       {$ENDIF}
     end;
     if Result<>'' then exit;
@@ -3151,8 +3091,7 @@ begin
   Result:='';
 end;
 
-function TLazSourceFileManager.FindUnitsOfOwner(TheOwner: TObject;
-  Flags: TFindUnitsOfOwnerFlags): TStrings;
+function FindUnitsOfOwnerImpl(TheOwner: TObject; Flags: TFindUnitsOfOwnerFlags): TStrings;
 var
   Files: TFilenameToStringTree;
   UnitPath: string; // only if not AddPackages:
@@ -3163,7 +3102,7 @@ var
     if Files.Contains(aFilename) then exit(false);
     //debugln(['  Add ',aFilename]);
     Files[aFilename]:='';
-    FindUnitsOfOwner.Add(aFilename);
+    FindUnitsOfOwnerImpl.Add(aFilename);
     Result := True;
   end;
 
@@ -3253,7 +3192,7 @@ begin
   PkgList:=nil;
   Files:=TFilenameToStringTree.Create(false);
   try
-    //debugln(['TLazSourceFileManager.FindUnitsOfOwner ',DbgSName(TheOwner)]);
+    //debugln(['FindUnitsOfOwner ',DbgSName(TheOwner)]);
     if TheOwner is TProject then
     begin
       aProject:=TProject(TheOwner);
@@ -3299,7 +3238,7 @@ begin
       end;
     end else begin
       FreeAndNil(Result);
-      raise Exception.Create('TLazSourceFileManager.FindUnitsOfOwner: invalid owner '+DbgSName(TheOwner));
+      raise Exception.Create('FindUnitsOfOwner: invalid owner '+DbgSName(TheOwner));
     end;
 
     if (fuooListed in Flags) and (fuooPackages in Flags) and (PkgList<>nil) then begin
@@ -3339,7 +3278,7 @@ begin
             RemoveSearchPaths(UnitPath,aPackage.CompilerOptions.GetInheritedOption(icoUnitPath,false));
           end;
         end;
-        //debugln(['TLazSourceFileManager.FindUnitsOfOwner UnitPath="',UnitPath,'"']);
+        //debugln(['FindUnitsOfOwner UnitPath="',UnitPath,'"']);
         if FoundInUnits<>nil then
           for i:=0 to FoundInUnits.Count-1 do
           begin
@@ -3369,261 +3308,7 @@ begin
   end;
 end;
 
-function TLazSourceFileManager.CheckFilesOnDisk(Instantaneous: boolean): TModalResult;
-var
-  AnUnitList, AIgnoreList: TFPList; // list of TUnitInfo
-  APackageList: TStringList; // list of alternative lpkfilename and TLazPackage
-  i: integer;
-  CurUnit: TUnitInfo;
-begin
-  Result:=mrOk;
-  if not MainIDE.CheckFilesOnDiskEnabled then exit;
-  if Project1=nil then exit;
-  if Screen.GetCurrentModalForm<>nil then exit;
-
-  if not Instantaneous then begin
-    FCheckFilesOnDiskNeeded:=true;
-    exit;
-  end;
-  FCheckFilesOnDiskNeeded:=false;
-
-  MainIDE.CheckFilesOnDiskEnabled:=False;
-  AnUnitList:=nil;
-  APackageList:=nil;
-  AIgnoreList:=nil;
-  try
-    AIgnoreList := TFPList.Create;
-    InvalidateFileStateCache;
-
-    if Project1.HasProjectInfoFileChangedOnDisk then begin
-      if IDEQuestionDialog(lisProjectChangedOnDisk,
-        Format(lisTheProjectInformationFileHasChangedOnDisk,[Project1.ProjectInfoFile,LineEnding]),
-        mtConfirmation, [mrYes, lisReopenProject,
-                         mrIgnore], '') = mrYes
-      then begin
-        MainIDE.DoOpenProjectFile(Project1.ProjectInfoFile,[]);
-      end else begin
-        Project1.IgnoreProjectInfoFileOnDisk;
-      end;
-      exit(mrOk);
-    end;
-
-    Project1.GetUnitsChangedOnDisk(AnUnitList, True);
-    PkgBoss.GetPackagesChangedOnDisk(APackageList, True);
-    if (AnUnitList=nil) and (APackageList=nil) then exit;
-    Result:=ShowDiskDiffsDialog(AnUnitList,APackageList,AIgnoreList);
-    if Result in [mrYes,mrYesToAll] then
-      Result:=mrOk;
-
-    // reload units
-    if AnUnitList<>nil then begin
-      for i:=0 to AnUnitList.Count-1 do begin
-        CurUnit:=TUnitInfo(AnUnitList[i]);
-        //DebugLn(['TLazSourceFileManager.CheckFilesOnDisk revert ',CurUnit.Filename,' EditorIndex=',CurUnit.EditorIndex]);
-        if (Result=mrOk)
-        and (AIgnoreList.IndexOf(CurUnit)<0) then // ignore current
-        begin
-          if CurUnit.OpenEditorInfoCount > 0 then begin
-            // Revert one Editor-View, the others follow
-            Result:=OpenEditorFile(CurUnit.Filename, CurUnit.OpenEditorInfo[0].PageIndex,
-              CurUnit.OpenEditorInfo[0].WindowID, nil, [ofRevert], True);
-            //DebugLn(['TLazSourceFileManager.CheckFilesOnDisk OpenEditorFile=',Result]);
-          end else if CurUnit.IsMainUnit then begin
-            Result:=RevertMainUnit;
-            //DebugLn(['TLazSourceFileManager.CheckFilesOnDisk RevertMainUnit=',Result]);
-          end else
-            Result:=mrIgnore;
-          if Result=mrAbort then exit;
-        end else begin
-          //DebugLn(['TLazSourceFileManager.CheckFilesOnDisk IgnoreCurrentFileDateOnDisk']);
-          CurUnit.IgnoreCurrentFileDateOnDisk;
-          CurUnit.Modified:=True;
-          CurUnit.OpenEditorInfo[0].EditorComponent.Modified:=True;
-        end;
-      end;
-    end;
-
-    // reload packages
-    if APackageList<>nil then
-    begin
-      for i:=APackageList.Count-1 downto 0 do
-        if AIgnoreList.IndexOf(APackageList.Objects[i])>=0 then
-          APackageList.Delete(i);
-      Result:=PkgBoss.RevertPackages(APackageList);
-      if Result<>mrOk then exit;
-    end;
-
-    Result:=mrOk;
-  finally
-    MainIDE.CheckFilesOnDiskEnabled:=True;
-    AnUnitList.Free;
-    APackageList.Free;
-    AIgnoreList.Free;
-  end;
-end;
-
-procedure TLazSourceFileManager.OnCopyFile(const Filename: string; var Copy: boolean; Data: TObject);
-begin
-  if Data=nil then exit;
-  if Data is TPublishModuleOptions then begin
-    Copy:=TPublishModuleOptions(Data).FileCanBePublished(Filename);
-    //debugln('TLazSourceFileManager.OnCopyFile "',Filename,'" ',Copy);
-  end;
-end;
-
-procedure TLazSourceFileManager.OnCopyError(const ErrorData: TCopyErrorData;
-  var Handled: boolean; Data: TObject);
-begin
-  case ErrorData.Error of
-    ceSrcDirDoesNotExists:
-      IDEMessageDialog(lisCopyError2,
-        Format(lisSourceDirectoryDoesNotExist, [ErrorData.Param1]),
-        mtError,[mbCancel]);
-    ceCreatingDirectory:
-      IDEMessageDialog(lisCopyError2,
-        Format(lisUnableToCreateDirectory, [ErrorData.Param1]),
-        mtError,[mbCancel]);
-    ceCopyFileError:
-      IDEMessageDialog(lisCopyError2,
-        Format(lisUnableToCopyFileTo, [ErrorData.Param1, LineEnding, ErrorData.Param1]),
-        mtError,[mbCancel]);
-  end;
-end;
-
-function TLazSourceFileManager.PublishModule(Options: TPublishModuleOptions;
-  const SrcDirectory, DestDirectory: string): TModalResult;
-var
-  SrcDir, DestDir: string;
-  NewProjectFilename: string;
-  Tool: TIDEExternalToolOptions;
-  CommandAfter, CmdAfterExe, CmdAfterParams: string;
-  CurProject: TProject;
-  TempCmd: String;
-
-  procedure ShowErrorForCommandAfter;
-  begin
-    IDEMessageDialog(lisInvalidCommand,
-      Format(lisTheCommandAfterIsNotExecutable, [CmdAfterExe]),
-      mtError,[mbCancel]);
-  end;
-
-begin
-  //DebugLn('Hint: (lazarus) [TLazSourceFileManager.PublishModule] START');
-  Result:=mrCancel;
-
-  // do not delete project/package files
-  DestDir:=TrimAndExpandDirectory(DestDirectory);
-  SrcDir:=TrimAndExpandDirectory(SrcDirectory);
-  if (DestDir='') then begin
-    IDEMessageDialog('Invalid publishing Directory',
-      'Destination directory for publishing is empty.',mtError,
-      [mbCancel]);
-    Result:=mrCancel;
-    exit;
-  end;
-  //DebugLn('Hint: (lazarus) [TLazSourceFileManager.PublishModule] SrcDir="',SrcDir,'" DestDir="',DestDir,'"');
-  if CompareFilenames(SrcDir,DestDir)=0
-  then begin
-    IDEMessageDialog(lisInvalidPublishingDirectory,
-      Format(lisSourceDirectoryAndDestinationDirectoryAreTheSameMa,
-             [SrcDir, LineEnding, DestDir, LineEnding, LineEnding]),
-      mtError, [mbCancel]);
-    Result:=mrCancel;
-    exit;
-  end;
-
-  // check command after
-  CommandAfter:=Options.CommandAfter;
-  if not GlobalMacroList.SubstituteStr(CommandAfter) then begin
-    Result:=mrCancel;
-    exit;
-  end;
-  SplitCmdLine(CommandAfter,CmdAfterExe,CmdAfterParams);
-  if (CmdAfterExe<>'') then begin
-    //DebugLn('Hint: (lazarus) [TLazSourceFileManager.PublishModule] CmdAfterExe="',CmdAfterExe,'"');
-    // first look in the project directory
-    TempCmd:=CmdAfterExe;
-    if not FilenameIsAbsolute(TempCmd) then
-      TempCmd:=TrimFilename(AppendPathDelim(Project1.Directory)+TempCmd);
-    if FileExistsCached(TempCmd) then begin
-      CmdAfterExe:=TempCmd;
-    end else begin
-      TempCmd:=FindDefaultExecutablePath(CmdAfterExe);
-      if TempCmd<>'' then
-        CmdAfterExe:=TempCmd;
-    end;
-    if not FileIsExecutableCached(CmdAfterExe) then begin
-      IDEMessageDialog(lisCommandAfterInvalid,
-        Format(lisTheCommandAfterPublishingIsInvalid, [LineEnding, CmdAfterExe]),
-        mtError, [mbCancel]);
-      Result:=mrCancel;
-      exit;
-    end;
-  end;
-
-  // clear destination directory
-  if DirPathExists(DestDir) then begin
-    // ask user, if destination can be deleted
-    if IDEMessageDialog(lisClearDirectory,
-      Format(lisInOrderToCreateACleanCopyOfTheProjectPackageAllFil,
-             [LineEnding+LineEnding, DestDir]),
-      mtConfirmation, [mbYes,mbNo])<>mrYes
-    then
-      exit(mrCancel);
-
-    if (not DeleteDirectory(ChompPathDelim(DestDir),true)) then begin
-      IDEMessageDialog(lisUnableToCleanUpDestinationDirectory,
-        Format(lisUnableToCleanUpPleaseCheckPermissions, [DestDir, LineEnding]),
-        mtError,[mbOk]);
-      Result:=mrCancel;
-      exit;
-    end;
-  end;
-
-  // copy the directory
-  if not CopyDirectoryWithMethods(SrcDir,DestDir,@OnCopyFile,@OnCopyError,Options) then
-  begin
-    debugln('Hint: (lazarus) [TLazSourceFileManager.PublishModule] CopyDirectoryWithMethods failed');
-    Result:=mrCancel;
-    exit;
-  end;
-
-  // write a filtered .lpi file
-  if Options is TPublishProjectOptions then begin
-    CurProject:=TProject(TPublishProjectOptions(Options).Owner);
-    NewProjectFilename:=DestDir+ExtractFilename(CurProject.ProjectInfoFile);
-    DeleteFileUTF8(NewProjectFilename);
-    Result:=CurProject.WriteProject(CurProject.PublishOptions.WriteFlags
-           +pwfSkipSessionInfo+[pwfIgnoreModified],
-           NewProjectFilename,nil);
-    if Result<>mrOk then begin
-      debugln('Hint: (lazarus) [TLazSourceFileManager.PublishModule] CurProject.WriteProject failed');
-      exit;
-    end;
-  end;
-
-  // execute 'CommandAfter'
-  if (CmdAfterExe<>'') then begin
-    if FileIsExecutableCached(CmdAfterExe) then begin
-      Tool:=TIDEExternalToolOptions.Create;
-      Tool.Title:=lisCommandAfterPublishingModule;
-      Tool.WorkingDirectory:=DestDir;
-      Tool.CmdLineParams:=CmdAfterParams;
-      Tool.Executable:=CmdAfterExe;
-      if RunExternalTool(Tool) then
-        Result:=mrOk
-      else
-        Result:=mrCancel;
-    end else begin
-      ShowErrorForCommandAfter;
-      exit(mrCancel);
-    end;
-  end;
-end;
-
-function TLazSourceFileManager.SelectProjectItems(ItemList: TViewUnitEntries;
-  ItemType: TIDEProjectItem; MultiSelect: boolean;
-  var MultiSelectCheckedState: Boolean): TModalResult;
+function SelectProjectItems(ItemList: TViewUnitEntries; ItemType: TIDEProjectItem): TModalResult;
 var
   i: integer;
   AUnitName, DlgCaption: string;
@@ -3706,12 +3391,11 @@ begin
     piFrame:     DlgCaption := dlgMainViewFrames;
     else         DlgCaption := '';
   end;
-  Result := ShowViewUnitsDlg(ItemList, MultiSelect, MultiSelectCheckedState, DlgCaption, ItemType);
+  Result := ShowViewUnitsDlg(ItemList, true, DlgCaption, ItemType);
 end;
 
-function TLazSourceFileManager.SelectUnitComponents(DlgCaption: string;
-  ItemType: TIDEProjectItem; Files: TStringList; MultiSelect: boolean;
-  var MultiSelectCheckedState: Boolean): TModalResult;
+function SelectUnitComponents(DlgCaption: string; ItemType: TIDEProjectItem;
+  Files: TStringList): TModalResult;
 var
   ActiveSourceEditor: TSourceEditor;
   ActiveUnitInfo: TUnitInfo;
@@ -3810,7 +3494,7 @@ begin
     end;
     if AProject<>nil then begin
       // add project units
-      //debugln(['TLazSourceFileManager.SelectUnitComponents Project=',AProject.ProjectInfoFile]);
+      //debugln(['SelectUnitComponents Project=',AProject.ProjectInfoFile]);
       FirstDependency:=AProject.FirstRequiredDependency;
       for i:=0 to AProject.UnitCount-1 do begin
         AnUnitInfo:=AProject.Units[i];
@@ -3846,7 +3530,7 @@ begin
       inc(i);
     end;
     // show dialog
-    Result := ShowViewUnitsDlg(UnitList, MultiSelect, MultiSelectCheckedState,
+    Result := ShowViewUnitsDlg(UnitList, false,
                                DlgCaption, ItemType, ActiveUnitInfo.Filename);
     // create list of selected files
     for Entry in UnitList do
@@ -3861,12 +3545,12 @@ begin
   end;
 end;
 
-function TLazSourceFileManager.AddActiveUnitToProject: TModalResult;
+function AddActiveUnitToProject: TModalResult;
 begin
   Result := AddUnitToProject(nil);
 end;
 
-function TLazSourceFileManager.RemoveFromProjectDialog: TModalResult;
+function RemoveFromProjectDialog: TModalResult;
 var
   ViewUnitEntries: TViewUnitEntries;
   i:integer;
@@ -3874,8 +3558,6 @@ var
   AnUnitInfo: TUnitInfo;
   UnitInfos: TFPList;
   UEntry: TViewUnitsEntry;
-const
-  MultiSelectCheckedState: Boolean = true;
 Begin
   if Project1=nil then exit(mrCancel);
   Project1.UpdateIsPartOfProjectFromMainUnit;
@@ -3891,8 +3573,7 @@ Begin
         ViewUnitEntries.Add(AName,AnUnitInfo.FileName,i,false);
       end;
     end;
-    if ShowViewUnitsDlg(ViewUnitEntries, true, MultiSelectCheckedState,
-          lisRemoveFromProject, piUnit) <> mrOk then
+    if ShowViewUnitsDlg(ViewUnitEntries,true,lisRemoveFromProject,piUnit) <> mrOk then
       exit(mrOk);
     { This is where we check what the user selected. }
     UnitInfos:=TFPList.Create;
@@ -3907,7 +3588,7 @@ Begin
       end;
     end;
     if UnitInfos.Count>0 then
-      Result:=RemoveFilesFromProject(Project1,UnitInfos)
+      Result:=RemoveFilesFromProject(UnitInfos)
     else
       Result:=mrOk;
   finally
@@ -3916,7 +3597,7 @@ Begin
   end;
 end;
 
-function TLazSourceFileManager.InitNewProject(ProjectDesc: TProjectDescriptor): TModalResult;
+function InitNewProject(ProjectDesc: TProjectDescriptor): TModalResult;
 var
   i:integer;
   HandlerResult: TModalResult;
@@ -3924,7 +3605,8 @@ begin
   try
     Project1.BeginUpdate(true);
     try
-      Project1.CompilerOptions.CompilerPath:=DefaultCompilerPath;
+      if Project1.CompilerOptions.CompilerPath='' then
+        Project1.CompilerOptions.CompilerPath:=DefaultCompilerPath;
       if pfUseDefaultCompilerOptions in Project1.Flags then begin
         MainIDE.DoMergeDefaultProjectOptions(Project1);
         Project1.Flags:=Project1.Flags-[pfUseDefaultCompilerOptions];
@@ -3948,7 +3630,7 @@ begin
     try
       // create files
       if ProjectDesc.CreateStartFiles(Project1)<>mrOk then begin
-        debugln('TLazSourceFileManager.InitNewProject ProjectDesc.CreateStartFiles failed');
+        debugln('InitNewProject ProjectDesc.CreateStartFiles failed');
       end;
       if (Project1.MainUnitInfo<>nil)
       and ((Project1.FirstUnitWithEditorIndex=nil)
@@ -3961,7 +3643,7 @@ begin
 
       // init resource files
       if not Project1.ProjResources.Regenerate(Project1.MainFilename, True, False,'') then
-        DebugLn('TLazSourceFileManager.InitNewProject Project1.Resources.Regenerate failed');
+        DebugLn('InitNewProject Project1.Resources.Regenerate failed');
     finally
       Project1.EndUpdate;
     end;
@@ -3981,8 +3663,7 @@ begin
   end;
 end;
 
-function TLazSourceFileManager.InitOpenedProjectFile(AFileName: string;
-  Flags: TOpenFlags): TModalResult;
+function InitOpenedProjectFile(AFileName: string; Flags: TOpenFlags): TModalResult;
 var
   EditorInfoIndex, i, j: Integer;
   NewBuf: TCodeBuffer;
@@ -3999,14 +3680,14 @@ begin
       if ProjInspector<>nil then ProjInspector.LazProject:=Project1;
 
       // read project info file
-      {$IFDEF IDE_MEM_CHECK}CheckHeapWrtMemCnt('TLazSourceFileManager.InitOpenedProjectFile B3');{$ENDIF}
+      {$IFDEF IDE_MEM_CHECK}CheckHeapWrtMemCnt('InitOpenedProjectFile B3');{$ENDIF}
       Project1.ReadProject(AFilename, EnvironmentOptions.BuildMatrixOptions, True);
-      {$IFDEF IDE_MEM_CHECK}CheckHeapWrtMemCnt('TLazSourceFileManager.InitOpenedProjectFile B4');{$ENDIF}
+      {$IFDEF IDE_MEM_CHECK}CheckHeapWrtMemCnt('InitOpenedProjectFile B4');{$ENDIF}
       Result:=CompleteLoadingProjectInfo;
     finally
       Project1.EndUpdate;
     end;
-    {$IFDEF IDE_MEM_CHECK}CheckHeapWrtMemCnt('TLazSourceFileManager.InitOpenedProjectFile B5');{$ENDIF}
+    {$IFDEF IDE_MEM_CHECK}CheckHeapWrtMemCnt('InitOpenedProjectFile B5');{$ENDIF}
     if Result<>mrOk then exit;
 
     if Project1.MainUnitID>=0 then begin
@@ -4019,8 +3700,8 @@ begin
       else exit(mrCancel);
       end;
     end;
-    //debugln('TLazSourceFileManager.InitOpenedProjectFile C');
-    {$IFDEF IDE_MEM_CHECK}CheckHeapWrtMemCnt('TLazSourceFileManager.InitOpenedProjectFile C');{$ENDIF}
+    //debugln('InitOpenedProjectFile C');
+    {$IFDEF IDE_MEM_CHECK}CheckHeapWrtMemCnt('InitOpenedProjectFile C');{$ENDIF}
     IncreaseCompilerParseStamp;
 
     // restore files
@@ -4057,7 +3738,7 @@ begin
       inc(EditorInfoIndex);
     end; // while EditorInfoIndex < Project1.AllEditorsInfoCount
     Result:=mrCancel;
-    //debugln('TLazSourceFileManager.InitOpenedProjectFile D');
+    //debugln('InitOpenedProjectFile D');
 
     // set active editor source editor
     for i := 0 to Project1.AllEditorsInfoCount - 1 do begin
@@ -4106,7 +3787,7 @@ begin
     // select a form (object inspector, formeditor, control selection)
     if MainIDE.LastFormActivated<>nil then begin
       LastDesigner:=MainIDE.LastFormActivated.Designer;
-      debugln(['TLazSourceFileManager.InitOpenedProjectFile select form in designer: ',
+      debugln(['InitOpenedProjectFile select form in designer: ',
                DbgSName(MainIDE.LastFormActivated),' ',DbgSName(MainIDE.LastFormActivated.Designer)]);
       LastDesigner.SelectOnlyThisComponent(LastDesigner.LookupRoot);
     end;
@@ -4138,18 +3819,18 @@ begin
       Result:=HandlerResult;
   end;
   if Result=mrAbort then exit;
-  //debugln('TLazSourceFileManager.InitOpenedProjectFile end  CodeToolBoss.ConsistencyCheck=',IntToStr(CodeToolBoss.ConsistencyCheck));
-  {$IFDEF IDE_MEM_CHECK}CheckHeapWrtMemCnt('TLazSourceFileManager.InitOpenedProjectFile end');{$ENDIF}
+  //debugln('InitOpenedProjectFile end  CodeToolBoss.ConsistencyCheck=',IntToStr(CodeToolBoss.ConsistencyCheck));
+  {$IFDEF IDE_MEM_CHECK}CheckHeapWrtMemCnt('InitOpenedProjectFile end');{$ENDIF}
 end;
 
-procedure TLazSourceFileManager.NewProjectFromFile;
+procedure NewProjectFromFile;
 var
   OpenDialog:TOpenDialog;
   AFilename: string;
   PreReadBuf: TCodeBuffer;
   Filter: String;
 Begin
-  OpenDialog:=TOpenDialog.Create(nil);
+  OpenDialog:=IDEOpenDialogClass.Create(nil);
   try
     InputHistories.ApplyFileDialogSettings(OpenDialog);
     OpenDialog.Title:=lisChooseProgramSourcePpPasLpr;
@@ -4179,11 +3860,11 @@ Begin
   end;
 end;
 
-function TLazSourceFileManager.CreateProjectForProgram(ProgramBuf: TCodeBuffer): TModalResult;
+function CreateProjectForProgram(ProgramBuf: TCodeBuffer): TModalResult;
 var
   NewProjectDesc: TProjectDescriptor;
 begin
-  //debugln('[TLazSourceFileManager.CreateProjectForProgram] A ',ProgramBuf.Filename);
+  //debugln('[CreateProjectForProgram] A ',ProgramBuf.Filename);
   if (Project1 <> nil)
   and (not MainIDE.DoResetToolStatus([rfInteractive, rfSuccessOnTrigger])) then exit(mrAbort);
 
@@ -4212,10 +3893,10 @@ begin
   // create a new project
   Project1:=MainIDE.CreateProjectObject(NewProjectDesc,ProjectDescriptorProgram);
   Result:=InitProjectForProgram(ProgramBuf);
-  //debugln('[TLazSourceFileManager.CreateProjectForProgram] END');
+  //debugln('[CreateProjectForProgram] END');
 end;
 
-function TLazSourceFileManager.InitProjectForProgram(ProgramBuf: TCodeBuffer): TModalResult;
+function InitProjectForProgram(ProgramBuf: TCodeBuffer): TModalResult;
 var
   MainUnitInfo: TUnitInfo;
 begin
@@ -4242,7 +3923,7 @@ begin
   Result:=mrOk;
 end;
 
-function TLazSourceFileManager.SaveProject(Flags: TSaveFlags):TModalResult;
+function SaveProject(Flags: TSaveFlags):TModalResult;
 var
   i, j: integer;
   AnUnitInfo: TUnitInfo;
@@ -4254,20 +3935,28 @@ begin
     Result:=mrAbort;
     exit;
   end;
-  SaveSourceEditorChangesToCodeCache(nil);
-  //DebugLn('TLazSourceFileManager.SaveProject A SaveAs=',dbgs(sfSaveAs in Flags),' SaveToTestDir=',dbgs(sfSaveToTestDir in Flags),' ProjectInfoFile=',Project1.ProjectInfoFile);
+  SaveEditorChangesToCodeCache(nil);
+  //DebugLn('SaveProject A SaveAs=',dbgs(sfSaveAs in Flags),' SaveToTestDir=',dbgs(sfSaveToTestDir in Flags),' ProjectInfoFile=',Project1.ProjectInfoFile);
   Result:=MainIDE.DoCheckFilesOnDisk(true);
-  if Result in [mrCancel,mrAbort] then exit;
+  if Result in [mrCancel,mrAbort] then begin
+    debugln(['Info: (lazarus) [SaveProject] MainIDE.DoCheckFilesOnDisk failed']);
+    exit;
+  end;
 
-  if CheckMainSrcLCLInterfaces(sfQuietUnitCheck in Flags)<>mrOk then
+  if CheckMainSrcLCLInterfaces(sfQuietUnitCheck in Flags)<>mrOk then begin
+    debugln(['Info: (lazarus) [SaveProject] CheckMainSrcLCLInterfaces failed']);
     exit(mrCancel);
+  end;
 
   // if this is a virtual project then save first the project info file
   // to get a project directory
   if Project1.IsVirtual and ([sfSaveToTestDir,sfDoNotSaveVirtualFiles]*Flags=[])
   then begin
     Result:=SaveProjectInfo(Flags);
-    if Result in [mrCancel,mrAbort] then exit;
+    if Result in [mrCancel,mrAbort] then begin
+      debugln(['Info: (lazarus) [SaveProject] SaveProjectInfo failed']);
+      exit;
+    end;
   end;
 
   // save virtual files
@@ -4287,13 +3976,19 @@ begin
           Include(SaveFileFlags,sfSaveToTestDir);
         end;
         Result:=SaveEditorFile(AnUnitInfo.OpenEditorInfo[0].EditorComponent, SaveFileFlags);
-        if Result in [mrCancel,mrAbort] then exit;
+        if Result in [mrCancel,mrAbort] then begin
+          debugln(['Info: (lazarus) [SaveProject] SaveEditorFile "',AnUnitInfo.Filename,'" failed']);
+          exit;
+        end;
       end;
     end;
   end;
 
   Result:=SaveProjectInfo(Flags);
-  if Result in [mrCancel,mrAbort] then exit;
+  if Result in [mrCancel,mrAbort] then begin
+    debugln(['Info: (lazarus) [SaveProject] SaveProjectInfo failed']);
+    exit;
+  end;
 
   // save all editor files
   for i:=0 to SourceEditorManager.SourceEditorCount-1 do begin
@@ -4305,9 +4000,9 @@ begin
     if AnUnitInfo = nil
     then begin
       // inconsistency detected, write debug info
-      DebugLn(['TLazSourceFileManager.SaveProject - unit not found for page ',i,' File="',SrcEdit.FileName,'" SrcEdit=',dbgsname(SrcEdit),'=',dbgs(Pointer(SrcEdit))]);
+      DebugLn(['SaveProject - unit not found for page ',i,' File="',SrcEdit.FileName,'" SrcEdit=',dbgsname(SrcEdit),'=',dbgs(Pointer(SrcEdit))]);
       DumpStack;
-      debugln(['TLazSourceFileManager.SaveProject Project1 has the following information about the source editor:']);
+      debugln(['SaveProject Project1 has the following information about the source editor:']);
       AnUnitInfo:=Project1.FirstUnitWithEditorIndex;
       while AnUnitInfo<>nil do begin
         for j:=0 to AnUnitInfo.EditorInfoCount-1 do begin
@@ -4327,8 +4022,11 @@ begin
           continue;
       end;
     end;
-    Result:=SaveEditorFile(SourceEditorManager.SourceEditors[i], SaveFileFlags);
-    if Result=mrAbort then exit;
+    Result:=SaveEditorFile(SrcEdit, SaveFileFlags);
+    if Result=mrAbort then begin
+      debugln(['Info: (lazarus) [SaveProject] SaveEditorFile "',SrcEdit.FileName,'" failed']);
+      exit;
+    end;
     // mrCancel: continue saving other files
   end;
 
@@ -4342,11 +4040,11 @@ begin
   Project1.ClearModifieds(true);
   // update menu and buttons state
   MainIDE.UpdateSaveMenuItemsAndButtons(true);
-  //DebugLn('TLazSourceFileManager.SaveProject End');
+  //DebugLn('SaveProject End');
   Result:=mrOk;
 end;
 
-function TLazSourceFileManager.SaveProjectIfChanged: TModalResult;
+function SaveProjectIfChanged: TModalResult;
 begin
   if SomethingOfProjectIsModified then begin
     if IDEMessageDialog(lisProjectChanged, Format(lisSaveChangesToProject,
@@ -4362,15 +4060,17 @@ begin
   Result:=mrOk;
 end;
 
-function TLazSourceFileManager.CloseProject: TModalResult;
+function CloseProject: TModalResult;
+var
+  SrcEdit: TSourceEditor;
 begin
   if Project1=nil then exit(mrOk);
 
-  //debugln('TLazSourceFileManager.CloseProject A');
-  {$IFDEF IDE_MEM_CHECK}CheckHeapWrtMemCnt('TLazSourceFileManager.CloseProject A');{$ENDIF}
+  //debugln('CloseProject A');
+  {$IFDEF IDE_MEM_CHECK}CheckHeapWrtMemCnt('CloseProject A');{$ENDIF}
   Result:=DebugBoss.DoStopProject;
   if Result<>mrOk then begin
-    debugln('TLazSourceFileManager.CloseProject DebugBoss.DoStopProject failed');
+    debugln('CloseProject DebugBoss.DoStopProject failed');
     exit;
   end;
 
@@ -4382,15 +4082,17 @@ begin
   SourceEditorManager.IncUpdateLock;
   try
     while SourceEditorManager.SourceEditorCount > 0 do begin
-      Result:=CloseEditorFile(
-        SourceEditorManager.SourceEditors[SourceEditorManager.SourceEditorCount-1],
-        [cfProjectClosing]);
+      SrcEdit:=SourceEditorManager.SourceEditors[SourceEditorManager.SourceEditorCount-1];
+      Result:=CloseEditorFile(SrcEdit,[cfProjectClosing]);
       if Result=mrAbort then exit;
     end;
   finally
     SourceEditorManager.DecUpdateLock;
   end;
-  {$IFDEF IDE_MEM_CHECK}CheckHeapWrtMemCnt('TLazSourceFileManager.CloseProject B');{$ENDIF}
+  // remove all source modifications
+  CodeToolBoss.SourceCache.ClearAllModified;
+
+  {$IFDEF IDE_MEM_CHECK}CheckHeapWrtMemCnt('CloseProject B');{$ENDIF}
   IncreaseCompilerParseStamp;
 
   // close Project
@@ -4400,12 +4102,12 @@ begin
   if IDEMessagesWindow<>nil then IDEMessagesWindow.Clear;
 
   MainIDE.UpdateCaption;
-  {$IFDEF IDE_MEM_CHECK}CheckHeapWrtMemCnt('TLazSourceFileManager.CloseProject C');{$ENDIF}
+  {$IFDEF IDE_MEM_CHECK}CheckHeapWrtMemCnt('CloseProject C');{$ENDIF}
   Result:=mrOk;
-  //debugln('TLazSourceFileManager.CloseProject end ',CodeToolBoss.ConsistencyCheck);
+  //debugln('CloseProject end ',CodeToolBoss.ConsistencyCheck);
 end;
 
-procedure TLazSourceFileManager.OpenProject(aMenuItem: TIDEMenuItem);
+procedure OpenProject(aMenuItem: TIDEMenuItem);
 var
   OpenDialog: TOpenDialog;
   AFileName: string;
@@ -4418,8 +4120,7 @@ begin
   begin
     // Hint holds the full filename, Caption may have a shortened form.
     AFileName:=aMenuItem.Hint;
-    Assert(AFileName = ExpandFileNameUTF8(AFileName),
-           'TLazSourceFileManager.OpenProject: AFileName is not absolute.');
+    Assert(AFileName = ExpandFileNameUTF8(AFileName),'OpenProject: AFileName is not absolute.');
     if MainIDE.DoOpenProjectFile(AFilename,[ofAddToRecent])=mrOk then begin
       AddRecentProjectFile(AFilename);
     end else begin
@@ -4431,7 +4132,7 @@ begin
     end;
   end
   else begin
-    OpenDialog:=TOpenDialog.Create(nil);
+    OpenDialog:=IDEOpenDialogClass.Create(nil);
     try
       InputHistories.ApplyFileDialogSettings(OpenDialog);
       OpenDialog.Title:=lisOpenProjectFile+' (*.lpi)';
@@ -4486,7 +4187,7 @@ begin
   end;
 end;
 
-function TLazSourceFileManager.AskToSaveEditors(EditorList: TList): TModalResult;
+function AskToSaveEditors(EditorList: TList): TModalResult;
 // Ask from user about saving the changed SourceEditors in EditorList.
 var
   Ed: TSourceEditor;
@@ -4534,7 +4235,7 @@ begin
     end;
 end;
 
-procedure TLazSourceFileManager.CloseAll;
+procedure CloseAll;
 // Close editor files
 var
   Ed: TSourceEditor;
@@ -4568,7 +4269,8 @@ begin
   PkgBoss.DoCloseAllPackageEditors;
 end;
 
-procedure TLazSourceFileManager.InvertedFileClose(PageIndex: LongInt; SrcNoteBook: TSourceNotebook);
+procedure InvertedFileClose(PageIndex: LongInt; SrcNoteBook: TSourceNotebook;
+  CloseOnRightSideOnly: Boolean);
 // close all source editors except the clicked
 var
   Ed: TSourceEditor;
@@ -4580,7 +4282,11 @@ begin
     // Collect changed editors, except the active one, into a list and maybe save them.
     for i := 0 to SrcNoteBook.EditorCount - 1 do begin
       Ed := SrcNoteBook.Editors[i];
-      if (i <> PageIndex) and CheckEditorNeedsSave(Ed, True) then
+      if ( (i > PageIndex) or // to right
+           ( (i <> PageIndex) and not CloseOnRightSideOnly )
+         ) and
+         CheckEditorNeedsSave(Ed, True)
+      then
         EditorList.Add(Ed);
     end;
     if AskToSaveEditors(EditorList) <> mrOK then Exit;
@@ -4592,7 +4298,11 @@ begin
   try
     repeat
       i:=SrcNoteBook.PageCount-1;
-      if i=PageIndex then dec(i);
+      if i=PageIndex then
+        if CloseOnRightSideOnly then
+          break
+        else
+          dec(i);
       if i<0 then break;
       if CloseEditorFile(SrcNoteBook.FindSourceEditorWithPageIndex(i),[])<>mrOk then exit;
       if i<PageIndex then PageIndex:=i;
@@ -4602,180 +4312,89 @@ begin
   end;
 end;
 
-function TLazSourceFileManager.ShowCheckListBuildModes(DlgMsg: String): Boolean;
+function UpdateAppTitleInSource: Boolean;
 var
-  i: Integer;
+  TitleProject, ErrMsg: String;
 begin
-  FListForm:=TGenericCheckListForm.Create(Nil);
-  //lisApplyForBuildModes = 'Apply for build modes:';
-  FListForm.Caption:=lisAvailableProjectBuildModes;
-  FListForm.InfoLabel.Caption:=DlgMsg;
-  for i:=0 to Project1.BuildModes.Count-1 do begin
-    FListForm.CheckListBox1.Items.Add(Project1.BuildModes[i].Identifier);
-    FListForm.CheckListBox1.Checked[i]:=True;
+  Result := True;
+  if not (pfMainUnitHasTitleStatement in Project1.Flags) then Exit;
+  TitleProject := Project1.GetTitle;
+  //DebugLn(['UpdateAppTitleInSource: Project title=',TitleProject,', Default=',Project1.GetDefaultTitle]);
+  if (TitleProject <> Project1.GetDefaultTitle) then
+  begin        // Add or update Title statement.
+    //DebugLn(['UpdateAppTitleInSource: Setting Title to ',TitleProject]);
+    Result := CodeToolBoss.SetApplicationTitleStatement(Project1.MainUnitInfo.Source, TitleProject);
+    ErrMsg := lisUnableToChangeProjectTitleInSource; // Used in case of error.
+  end
+  else begin   // Remove Title statement if it's not needed.
+    //DebugLn(['UpdateAppTitleInSource: Removing Title']);
+    Result := CodeToolBoss.RemoveApplicationTitleStatement(Project1.MainUnitInfo.Source);
+    ErrMsg := lisUnableToRemoveProjectTitleFromSource;
   end;
-  Result:=FListForm.ShowModal=mrOK;
+  if not Result then
+    IDEMessageDialog(lisProjOptsError,
+                     Format(ErrMsg, [LineEnding, CodeToolBoss.ErrorMessage]),
+                     mtWarning, [mbOk]);
 end;
 
-function TLazSourceFileManager.AddPathToBuildModes(aPath, CurDirectory: string;
-  IsIncludeFile: Boolean): Boolean;
+function UpdateAppScaledInSource: Boolean;
 var
-  DlgCapt, DlgMsg: String;
-  i: Integer;
-  Ok: Boolean;
+  ErrMsg: String;
 begin
-  Result:=True;
-  FListForm:=Nil;
+  Result := True;
+  if not (pfMainUnitHasScaledStatement in Project1.Flags) then Exit;
+  //DebugLn(['UpdateAppScaledInSource: Project Scaled=',Project1.Scaled]);
+  if Project1.Scaled then
+  begin        // Add or update Scaled statement.
+    //DebugLn(['UpdateAppScaledInSource: Setting Scaled to ',Project1.Scaled]);
+    Result := CodeToolBoss.SetApplicationScaledStatement(Project1.MainUnitInfo.Source, Project1.Scaled);
+    ErrMsg := lisUnableToChangeProjectScaledInSource; // Used in case of error.
+  end
+  else begin   // Remove Scaled statement if it's not needed.
+    //DebugLn(['UpdateAppScaledInSource: Removing Scaled']);
+    Result := CodeToolBoss.RemoveApplicationScaledStatement(Project1.MainUnitInfo.Source);
+    ErrMsg := lisUnableToRemoveProjectScaledFromSource;
+  end;
+  if not Result then
+    IDEMessageDialog(lisProjOptsError,
+                     Format(ErrMsg, [LineEnding, CodeToolBoss.ErrorMessage]),
+                     mtWarning, [mbOk]);
+end;
+
+function UpdateAppAutoCreateForms: boolean;
+var
+  i: integer;
+  OldList: TStrings;
+begin
+  Result := True;
+  if not (pfMainUnitHasCreateFormStatements in Project1.Flags) then Exit;
+  OldList := Project1.GetAutoCreatedFormsList;
+  if OldList = nil then Exit;
   try
-    if IsIncludeFile then begin
-      DlgCapt:=lisAddToIncludeSearchPath;
-      DlgMsg:=lisTheNewIncludeFileIsNotYetInTheIncludeSearchPathAdd;
-    end
-    else begin
-      DlgCapt:=lisAddToUnitSearchPath;
-      DlgMsg:=lisTheNewUnitIsNotYetInTheUnitSearchPathAddDirectory;
+    if OldList.Count = Project1.TmpAutoCreatedForms.Count then
+    begin
+      i := OldList.Count - 1;
+      while (i >= 0)
+      and (CompareText(OldList[i], Project1.TmpAutoCreatedForms[i]) = 0) do
+        Dec(i);
+      if i < 0 then
+        Exit;                  // Just exit if the form list is the same
     end;
-    DlgMsg:=Format(DlgMsg,[LineEnding,CurDirectory]);
-    if Project1.BuildModes.Count > 1 then
-      Ok:=ShowCheckListBuildModes(DlgMsg)
-    else
-      Ok:=IDEMessageDialog(DlgCapt,DlgMsg,mtConfirmation,[mbYes,mbNo])=mrYes;
-    if not Ok then Exit(False);
-    for i:=0 to Project1.BuildModes.Count-1 do
-      if (FListForm=Nil) or FListForm.CheckListBox1.Checked[i] then
-        if IsIncludeFile then
-          Project1.BuildModes[i].CompilerOptions.MergeToIncludePaths(aPath)
-        else
-          Project1.BuildModes[i].CompilerOptions.MergeToUnitPaths(aPath);
+    if not CodeToolBoss.SetAllCreateFromStatements(Project1.MainUnitInfo.Source,
+      Project1.TmpAutoCreatedForms) then
+    begin
+      IDEMessageDialog(lisProjOptsError,
+        Format(lisProjOptsUnableToChangeTheAutoCreateFormList, [LineEnding]),
+        mtWarning, [mbOK]);
+      Result := False;
+      Exit;
+    end;
   finally
-    FListForm.Free;
+    OldList.Free;
   end;
 end;
 
-function TLazSourceFileManager.PrepareForCompileWithMsg: TModalResult;
-begin
-  Result:=mrCancel;
-  if Project1=nil then exit;
-  if Project1.MainUnitInfo=nil then
-    // this project has no source to compile
-    IDEMessageDialog(lisCanNotCompileProject,lisTheProjectHasNoMainSourceFile,mtError,[mbCancel])
-  else
-    Result:=MainIDE.PrepareForCompile;
-end;
-
-function TLazSourceFileManager.BuildManyModes(): Boolean;
-var
-  ModeCnt: Integer;
-
-  function BuildOneMode(LastMode: boolean): Boolean;
-  begin
-    Inc(ModeCnt);
-    DebugLn('');
-    DebugLn(Format('Building mode %d: %s ...', [ModeCnt, Project1.ActiveBuildMode.Identifier]));
-    DebugLn('');
-    Result := MainIDE.DoBuildProject(crCompile, [], LastMode) = mrOK;
-  end;
-
-var
-  ModeList: TList;
-  md, ActiveMode: TProjectBuildMode;
-  BuildActiveMode: Boolean;
-  i: Integer;
-  LastMode: boolean;
-begin
-  Result := False;
-  ModeCnt := 0;
-  if PrepareForCompileWithMsg <> mrOk then exit;
-  FListForm := Nil;
-  ModeList := TList.Create;
-  try
-    if not ShowCheckListBuildModes(lisBuildFollowingModes) then Exit;
-    ActiveMode := Project1.ActiveBuildMode;
-    BuildActiveMode := False;
-    // Collect modes to be built.
-    for i := 0 to Project1.BuildModes.Count-1 do
-    begin
-      md := Project1.BuildModes[i];
-      if (FListForm=Nil) or FListForm.CheckListBox1.Checked[i] then
-        if md = ActiveMode then
-          BuildActiveMode := True
-        else
-          ModeList.Add(md);
-    end;
-    // Build first the active mode so we don't have to switch many times.
-    if BuildActiveMode then
-    begin
-      LastMode := (ModeList.Count=0);
-      if not BuildOneMode(LastMode) then Exit;
-    end;
-    // Build rest of the modes.
-    for i := 0 to ModeList.Count-1 do
-    begin
-      LastMode := (i=(ModeList.Count-1));
-      Project1.ActiveBuildMode := TProjectBuildMode(ModeList[i]);
-      if not BuildOneMode(LastMode) then Exit;
-    end;
-    // Switch back to original mode.
-    Project1.ActiveBuildMode := ActiveMode;
-    SaveProject([]);
-    IDEMessageDialog(lisSuccess, Format(lisSelectedModesWereBuilt, [ModeCnt]),
-                     mtInformation, [mbOK]);
-    Result:=True;
-  finally
-    ModeList.Free;
-    FListForm.Free;
-  end;
-end;
-
-function TLazSourceFileManager.CheckDirIsInSearchPath(UnitInfo: TUnitInfo;
-  AllowAddingDependencies, IsIncludeFile: Boolean): Boolean;
-// Check if the given unit's path is on Unit- or Include-search path.
-// Returns true if it is OK to add the unit to current project.
-var
-  CurDirectory, CurPath, ShortDir: String;
-  Owners: TFPList;
-  APackage: TLazPackage;
-  i: Integer;
-begin
-  Result:=True;
-  if UnitInfo.IsVirtual then exit;
-  if IsIncludeFile then
-    CurPath:=Project1.CompilerOptions.GetIncludePath(false)
-  else
-    CurPath:=Project1.CompilerOptions.GetUnitPath(false);
-  CurDirectory:=AppendPathDelim(UnitInfo.GetDirectory);
-  if SearchDirectoryInSearchPath(CurPath,CurDirectory)<1 then
-  begin
-    if AllowAddingDependencies then begin
-      Owners:=PkgBoss.GetPossibleOwnersOfUnit(UnitInfo.Filename,[]);
-      try
-        if (Owners<>nil) then begin
-          for i:=0 to Owners.Count-1 do begin
-            if TObject(Owners[i]) is TLazPackage then begin
-              APackage:=TLazPackage(Owners[i]);
-              if IDEMessageDialog(lisAddPackageRequirement,
-                Format(lisAddPackageToProject, [APackage.IDAsString]),
-                mtConfirmation,[mbYes,mbCancel],'')<>mrYes
-              then
-                Exit(True);
-              PkgBoss.AddProjectDependency(Project1,APackage);
-              Exit(False);
-            end;
-          end;
-        end;
-      finally
-        Owners.Free;
-      end;
-    end;
-    // unit is not in a package => extend unit path
-    ShortDir:=CurDirectory;
-    if (not Project1.IsVirtual) then
-      ShortDir:=CreateRelativePath(ShortDir,Project1.Directory);
-    Result:=AddPathToBuildModes(ShortDir,CurDirectory,IsIncludeFile);
-  end;
-end;
-
-function TLazSourceFileManager.CreateNewCodeBuffer(Descriptor: TProjectFileDescriptor;
+function CreateNewCodeBuffer(Descriptor: TProjectFileDescriptor;
   NewOwner: TObject; NewFilename: string;
   var NewCodeBuffer: TCodeBuffer; var NewUnitName: string): TModalResult;
 var
@@ -4783,7 +4402,7 @@ var
   NewFileExt: String;
   SearchFlags: TSearchIDEFileFlags;
 begin
-  //debugln('TLazSourceFileManager.CreateNewCodeBuffer START NewFilename=',NewFilename,' ',Descriptor.DefaultFilename,' ',Descriptor.ClassName);
+  //debugln('CreateNewCodeBuffer START NewFilename=',NewFilename,' ',Descriptor.DefaultFilename,' ',Descriptor.ClassName);
   NewUnitName:='';
   NewCodeBuffer:=nil;
   if NewFilename='' then begin
@@ -4804,7 +4423,7 @@ begin
     NewFilename:=MainIDE.CreateNewUniqueFilename(NewShortFilename,
                                            NewFileExt,NewOwner,SearchFlags,true);
     if NewFilename='' then
-      RaiseException('');
+      RaiseGDBException('');
     NewShortFilename:=ExtractFilenameOnly(NewFilename);
     // use as unitname the NewShortFilename, but with the case of the
     // original unitname. e.g. 'unit12.pas' becomes 'Unit12.pas'
@@ -4814,14 +4433,13 @@ begin
                                     length(NewShortFilename));
     end;
   end;
-  //debugln('TLazSourceFileManager.CreateNewCodeBuffer NewFilename=',NewFilename,' NewUnitName=',NewUnitName);
+  //debugln('CreateNewCodeBuffer NewFilename=',NewFilename,' NewUnitName=',NewUnitName);
 
   if FilenameIsPascalUnit(NewFilename) then begin
     if NewUnitName='' then
       NewUnitName:=ExtractFileNameOnly(NewFilename);
     if EnvironmentOptions.CharcaseFileAction in [ccfaAsk, ccfaAutoRename] then
-      NewFilename:=ExtractFilePath(NewFilename)
-                   +lowercase(ExtractFileName(NewFilename));
+      NewFilename:=ExtractFilePath(NewFilename)+lowercase(ExtractFileName(NewFilename));
   end;
 
   NewCodeBuffer:=CodeToolBoss.CreateFile(NewFilename);
@@ -4830,7 +4448,7 @@ begin
   Result:=mrOk;
 end;
 
-function TLazSourceFileManager.CreateNewForm(NewUnitInfo: TUnitInfo;
+function CreateNewForm(NewUnitInfo: TUnitInfo;
   AncestorType: TPersistentClass; ResourceCode: TCodeBuffer;
   UseCreateFormStatements, DisableAutoSize: Boolean): TModalResult;
 var
@@ -4840,14 +4458,14 @@ var
   r: TRect;
 begin
   if not AncestorType.InheritsFrom(TComponent) then
-    RaiseException('TLazSourceFileManager.CreateNewForm invalid AncestorType');
+    RaiseGDBException('CreateNewForm invalid AncestorType');
 
-  //debugln('TLazSourceFileManager.CreateNewForm START ',NewUnitInfo.Filename,' ',AncestorType.ClassName,' ',dbgs(ResourceCode<>nil));
+  //debugln('CreateNewForm START ',NewUnitInfo.Filename,' ',AncestorType.ClassName,' ',dbgs(ResourceCode<>nil));
   // create a buffer for the new resource file and for the LFM file
   if ResourceCode=nil then
     ResourceCode:=CodeToolBoss.CreateFile(ChangeFileExt(NewUnitInfo.Filename,
                                                         ResourceFileExt));
-  //debugln('TLazSourceFileManager.CreateNewForm B ',ResourceCode.Filename);
+  //debugln('CreateNewForm B ',ResourceCode.Filename);
   ResourceCode.Source:='{ '+LRSComment+' }';
   CodeToolBoss.CreateFile(ChangeFileExt(NewUnitInfo.Filename,'.lfm'));
 
@@ -4882,7 +4500,7 @@ begin
   NewComponent := FormEditor1.CreateComponent(nil,TComponentClass(AncestorType),
       NewUnitInfo.CreateUnitName, new_x, new_y, 0,0,DisableAutoSize);
   if NewComponent=nil then begin
-    DebugLn(['TLazSourceFileManager.CreateNewForm FormEditor1.CreateComponent failed ',dbgsName(TComponentClass(AncestorType))]);
+    DebugLn(['CreateNewForm FormEditor1.CreateComponent failed ',dbgsName(TComponentClass(AncestorType))]);
     exit(mrCancel);
   end;
   FormEditor1.SetComponentNameAndClass(NewComponent,
@@ -4914,7 +4532,7 @@ begin
   Result:=mrOk;
 end;
 
-function TLazSourceFileManager.NewUniqueComponentName(Prefix: string): string;
+function NewUniqueComponentName(Prefix: string): string;
 
   function SearchProject(AProject: TProject; const Identifier: string): boolean;
   var
@@ -4992,8 +4610,8 @@ begin
   until IdentifierIsOk(Result);
 end;
 
-function TLazSourceFileManager.ShowSaveFileAsDialog(var AFilename: string;
-  AnUnitInfo: TUnitInfo; var LFMCode, LRSCode: TCodeBuffer; CanAbort: boolean): TModalResult;
+function ShowSaveFileAsDialog(var AFilename: string; AnUnitInfo: TUnitInfo;
+  var LFMCode, LRSCode: TCodeBuffer; CanAbort: boolean): TModalResult;
 var
   SaveDialog: TSaveDialog;
   SrcEdit: TSourceEditor;
@@ -5007,7 +4625,7 @@ begin
     SrcEdit := TSourceEditor(AnUnitInfo.OpenEditorInfo[0].EditorComponent)
   else
     SrcEdit:=nil;
-  //debugln('TLazSourceFileManager.ShowSaveFileAsDialog ',AnUnitInfo.Filename);
+  //debugln('ShowSaveFileAsDialog ',AnUnitInfo.Filename);
 
   // try to keep the old filename and extension
   SaveAsFileExt:=ExtractFileExt(AFileName);
@@ -5025,7 +4643,7 @@ begin
       OldUnitName:=ExtractFileNameOnly(AFilename);
   end else
     OldUnitName:='';
-  //debugln('TLazSourceFileManager.ShowSaveFileAsDialog sourceunitname=',OldUnitName);
+  //debugln('ShowSaveFileAsDialog sourceunitname=',OldUnitName);
   SaveAsFilename:=OldUnitName;
   if SaveAsFilename='' then
     SaveAsFilename:=ExtractFileNameOnly(AFilename);
@@ -5037,7 +4655,7 @@ begin
     SaveAsFilename:=LowerCase(SaveAsFilename);
 
   // let user choose a filename
-  SaveDialog:=TSaveDialog.Create(nil);
+  SaveDialog:=IDESaveDialogClass.Create(nil);
   try
     InputHistories.ApplyFileDialogSettings(SaveDialog);
     SaveDialog.Title:=lisSaveSpace+SaveAsFilename+' (*'+SaveAsFileExt+')';
@@ -5067,19 +4685,20 @@ begin
     // if this is a project file, start in project directory
     if (AnUnitInfo=nil)
     or (AnUnitInfo.IsPartOfProject and (not Project1.IsVirtual)
-        and (not FileIsInPath(SaveDialog.InitialDir,Project1.Directory)))
+        and (not PathIsInPath(SaveDialog.InitialDir,Project1.Directory)))
     then begin
       SaveDialog.InitialDir:=Project1.Directory;
     end;
     // if this is a package file, then start in package directory
     APath:=PkgBoss.GetDefaultSaveDirectoryForFile(AFilename);
-    if (APath<>'') and (not FileIsInPath(SaveDialog.InitialDir,APath)) then
+    if (APath<>'') and (not PathIsInPath(SaveDialog.InitialDir,APath)) then
       SaveDialog.InitialDir:=APath;
 
     repeat
+      Result:=mrCancel;
       // show save dialog
       if (not SaveDialog.Execute) or (ExtractFileName(SaveDialog.Filename)='') then
-        exit(mrCancel);  // user cancels
+        exit;  // user cancels
       NewFilename:=ExpandFileNameUTF8(SaveDialog.Filename);
 
       // check file extension
@@ -5142,27 +4761,30 @@ begin
   if FilenameIsPascalUnit(NewFilename) then begin
     AText:=ExtractFileName(NewFilename);
     // check if file should be auto renamed
-    if EnvironmentOptions.CharcaseFileAction = ccfaAsk then begin
+    case EnvironmentOptions.CharcaseFileAction of
+    ccfaAsk:
       if LowerCase(AText)<>AText then begin
         Result:=IDEQuestionDialogAb(lisRenameFile,
             Format(lisThisLooksLikeAPascalFileItIsRecommendedToUseLowerC,
                    [LineEnding, LineEnding]),
             mtWarning, [mrYes, lisRenameToLowercase,
-                        mrNoToAll, lisKeepName,
+                        mrNo, lisKeepName,
                         mrAbort, lisAbort], not CanAbort);
-        if Result=mrYes then
-          NewFileName:=ExtractFilePath(NewFilename)+lowercase(AText);
+        case Result of
+        mrYes: NewFileName:=ExtractFilePath(NewFilename)+lowercase(AText);
+        mrAbort, mrCancel: exit;
+        end;
         Result:=mrOk;
       end;
-    end else begin
-      if EnvironmentOptions.CharcaseFileAction = ccfaAutoRename then
-        NewFileName:=ExtractFilePath(NewFilename)+LowerCase(AText);
+    ccfaAutoRename:
+      NewFileName:=ExtractFilePath(NewFilename)+LowerCase(AText);
+    ccfaIgnore: ;
     end;
   end;
 
   // check overwrite existing file
   if ((not FilenameIsAbsolute(AFilename)) or (CompareFilenames(NewFilename,AFilename)<>0))
-  and FileExistsUTF8(NewFilename) then
+      and FileExistsUTF8(NewFilename) then
   begin
     ACaption:=lisOverwriteFile;
     AText:=Format(lisAFileAlreadyExistsReplaceIt, [NewFilename, LineEnding]);
@@ -5171,6 +4793,17 @@ begin
                                  mrCancel,
                                  mrAbort, lisAbort], not CanAbort);
     if Result=mrCancel then exit;
+  end;
+
+  // check overwrite directory
+  if DirectoryExistsUTF8(NewFilename) then
+  begin
+    Result:=IDEQuestionDialogAb(lisFileIsDirectory,
+        lisUnableToCreateNewFileBecauseThereIsAlreadyADirecto,
+        mtError,
+        [mrCancel,
+         mrAbort, lisAbort], not CanAbort);
+    exit;
   end;
 
   if AnUnitInfo<>nil then begin
@@ -5344,7 +4977,7 @@ begin
   FGrubbed.Add(LowerCase(Path),Content);
 end;
 
-function TLazSourceFileManager.SaveUnitComponent(AnUnitInfo: TUnitInfo;
+function SaveUnitComponent(AnUnitInfo: TUnitInfo;
   LRSCode, LFMCode: TCodeBuffer; Flags: TSaveFlags): TModalResult;
 
   function IsI18NEnabled(UnitOwners: TFPList): boolean;
@@ -5450,13 +5083,15 @@ begin
           if HasI18N then
             Grubber:=TLRJGrubber.Create(Writer);
           Writer.OnWriteMethodProperty:=@FormEditor1.WriteMethodPropertyEvent;
-          //DebugLn(['TLazSourceFileManager.SaveUnitComponent AncestorInstance=',dbgsName(AncestorInstance)]);
+          //DebugLn(['SaveUnitComponent AncestorInstance=',dbgsName(AncestorInstance)]);
           Writer.OnFindAncestor:=@FormEditor1.WriterFindAncestor;
           AncestorUnit:=AnUnitInfo.FindAncestorUnit;
           Ancestor:=nil;
           if AncestorUnit<>nil then
             Ancestor:=AncestorUnit.Component;
-          //DebugLn(['TLazSourceFileManager.SaveUnitComponent Writer.WriteDescendent ARoot=',AnUnitInfo.Component,' Ancestor=',DbgSName(Ancestor)]);
+          //DebugLn(['SaveUnitComponent Writer.WriteDescendent ARoot=',AnUnitInfo.Component,' Ancestor=',DbgSName(Ancestor)]);
+          if AnUnitInfo.Component is TCustomDesignControl then // set DesignTimePPI on save
+            TCustomDesignControl(AnUnitInfo.Component).DesignTimePPI := TCustomDesignControl(AnUnitInfo.Component).PixelsPerInch;
           Writer.WriteDescendent(AnUnitInfo.Component,Ancestor);
           if DestroyDriver then
             Writer.Driver.Free;
@@ -5508,7 +5143,7 @@ begin
         end;
         if ComponentSavingOk then begin
           {$IFDEF IDE_DEBUG}
-          debugln('TLazSourceFileManager.SaveUnitComponent E ',CompResourceCode);
+          debugln('SaveUnitComponent E ',CompResourceCode);
           {$ENDIF}
           // replace lazarus form resource code in include file (.lrs)
           if not (sfSaveToTestDir in Flags) then begin
@@ -5564,12 +5199,12 @@ begin
           end;
           if (LFMCode<>nil) then begin
             {$IFDEF IDE_DEBUG}
-            debugln('TLazSourceFileManager.SaveUnitComponent E2 LFM=',LFMCode.Filename);
+            debugln('SaveUnitComponent E2 LFM=',LFMCode.Filename);
             {$ENDIF}
             if (ResType=rtRes) and (LFMCode.DiskEncoding<>EncodingUTF8) then
             begin
               // the .lfm file is used by fpcres, which only supports UTF8 without BOM
-              DebugLn(['TLazSourceFileManager.SaveUnitComponent fixing encoding of ',LFMCode.Filename,' from ',LFMCode.DiskEncoding,' to ',EncodingUTF8]);
+              DebugLn(['SaveUnitComponent fixing encoding of ',LFMCode.Filename,' from ',LFMCode.DiskEncoding,' to ',EncodingUTF8]);
               LFMCode.DiskEncoding:=EncodingUTF8;
             end;
 
@@ -5597,7 +5232,7 @@ begin
               except
                 on E: Exception do begin
                   // added to get more feedback on issue 7009
-                  Debugln('TLazSourceFileManager.SaveFileResources E3: ', E.Message);
+                  Debugln('SaveFileResources E3: ', E.Message);
                   DumpExceptionBackTrace;
                   ACaption:=lisStreamingError;
                   AText:=Format(
@@ -5624,7 +5259,7 @@ begin
       and (not (sfSaveToTestDir in Flags))
       and (not AnUnitInfo.IsVirtual) then begin
         LRJFilename:=ChangeFileExt(AnUnitInfo.Filename,'.lrj');
-        DebugLn(['TLazSourceFileManager.SaveUnitComponent save lrj: ',LRJFilename]);
+        DebugLn(['SaveUnitComponent save lrj: ',LRJFilename]);
         Result:=SaveStringToFile(LRJFilename,Grubber.Grubbed.Text,
                                  [mbIgnore,mbAbort],AnUnitInfo.Filename);
         if (Result<>mrOk) and (Result<>mrIgnore) then exit;
@@ -5639,14 +5274,14 @@ begin
         FreeAndNil(UnitOwners);
       except
         on E: Exception do begin
-          debugln('TLazSourceFileManager.SaveUnitComponent Error cleaning up: ',E.Message);
+          debugln('SaveUnitComponent Error cleaning up: ',E.Message);
         end;
       end;
     end;
   end;
   {$IFDEF IDE_DEBUG}
   if ResourceCode<>nil then
-    debugln('TLazSourceFileManager.SaveUnitComponent F ',ResourceCode.Modified);
+    debugln('SaveUnitComponent F ',ResourceCode.Modified);
   {$ENDIF}
   // save binary stream (.lrs)
   if LRSCode<>nil then begin
@@ -5679,12 +5314,11 @@ begin
 
   Result:=mrOk;
   {$IFDEF IDE_DEBUG}
-  debugln('TLazSourceFileManager.SaveUnitComponent G ',LFMCode<>nil);
+  debugln('SaveUnitComponent G ',LFMCode<>nil);
   {$ENDIF}
 end;
 
-function TLazSourceFileManager.RemoveLooseEvents(AnUnitInfo: TUnitInfo
-  ): TModalResult;
+function RemoveLooseEvents(AnUnitInfo: TUnitInfo): TModalResult;
 var
   ComponentModified: boolean;
   ActiveSrcEdit: TSourceEditor;
@@ -5701,7 +5335,7 @@ begin
     ObjectInspector1.EventGrid.ItemIndex:=-1;
     ObjectInspector1.FavoriteGrid.ItemIndex:=-1;
   end;
-  //debugln('TLazSourceFileManager.RemoveLooseEvents ',AnUnitInfo.Filename,' ',dbgsName(AnUnitInfo.Component));
+  //debugln('RemoveLooseEvents ',AnUnitInfo.Filename,' ',dbgsName(AnUnitInfo.Component));
   // remove dangling methods
   Result:=RemoveDanglingEvents(AnUnitInfo.Component, AnUnitInfo.Source, True,
                                ComponentModified);
@@ -5715,8 +5349,8 @@ begin
   end;
 end;
 
-function TLazSourceFileManager.RenameUnit(AnUnitInfo: TUnitInfo; NewFilename,
-  NewUnitName: string; var LFMCode, LRSCode: TCodeBuffer): TModalResult;
+function RenameUnit(AnUnitInfo: TUnitInfo; NewFilename, NewUnitName: string;
+  var LFMCode, LRSCode: TCodeBuffer): TModalResult;
 var
   NewLFMFilename: String;
   OldSourceCode: String;
@@ -5741,9 +5375,14 @@ var
   OldFileExisted: Boolean;
   ConvTool: TConvDelphiCodeTool;
 begin
-  // Project is marked as changed already here. ToDo: Mark changed only if really renamed.
+  // Project is marked as changed already here.
   Project1.BeginUpdate(true);
   try
+    // notify IDE addons
+    Result:=MainIDEInterface.CallSaveEditorFileHandler(LazarusIDE,AnUnitInfo,
+                                                       sefsSaveAs,NewFilename);
+    if Result<>mrOk then exit;
+
     OldFilename:=AnUnitInfo.Filename;
     OldFilePath:=ExtractFilePath(OldFilename);
     OldLFMFilename:='';
@@ -5755,7 +5394,7 @@ begin
     end;
     if NewUnitName='' then
       NewUnitName:=AnUnitInfo.Unit_Name;
-    debugln(['TLazSourceFileManager.RenameUnit ',AnUnitInfo.Filename,' NewUnitName=',NewUnitName,' OldUnitName=',AnUnitInfo.Unit_Name,' LFMCode=',LFMCode<>nil,' LRSCode=',LRSCode<>nil,' NewFilename="',NewFilename,'"']);
+    debugln(['Hint: (lazarus) RenameUnit ',AnUnitInfo.Filename,' NewUnitName=',NewUnitName,' OldUnitName=',AnUnitInfo.Unit_Name,' LFMCode=',LFMCode<>nil,' LRSCode=',LRSCode<>nil,' NewFilename="',NewFilename,'"']);
 
     // check new resource file
     NewLFMFilename:='';
@@ -5799,22 +5438,11 @@ begin
 
     // add new path to unit path
     if AnUnitInfo.IsPartOfProject
-    and (not Project1.IsVirtual)
     and (FilenameIsPascalUnit(NewFilename))
     and (CompareFilenames(NewFilePath,Project1.Directory)<>0) then begin
       OldUnitPath:=Project1.CompilerOptions.GetUnitPath(false);
-
-      if SearchDirectoryInSearchPath(OldUnitPath,NewFilePath,1)<1 then begin
-        //DebugLn('TLazSourceFileManager.RenameUnit NewFilePath="',NewFilePath,'" OldUnitPath="',OldUnitPath,'"');
-        if IDEMessageDialog(lisExtendUnitPath,
-          Format(lisTheDirectoryIsNotYetInTheUnitPathAddIt,[NewFilePath,LineEnding]),
-          mtConfirmation,[mbYes,mbNo])=mrYes then
-        begin
-          Project1.CompilerOptions.OtherUnitFiles:=
-                       Project1.CompilerOptions.OtherUnitFiles+';'
-                       +CreateRelativePath(NewFilePath,Project1.Directory);
-        end;
-      end;
+      if SearchDirectoryInSearchPath(OldUnitPath,NewFilePath,1)<1 then
+        AddPathToBuildModes(NewFilePath, False);
     end;
 
     // rename lfm file
@@ -5826,7 +5454,7 @@ begin
       if (LFMCode<>nil) then begin
         Result:=SaveCodeBufferToFile(LFMCode,NewLFMFilename,true);
         if not (Result in [mrOk,mrIgnore]) then begin
-          DebugLn(['TLazSourceFileManager.RenameUnit SaveCodeBufferToFile failed for "',NewLFMFilename,'"']);
+          DebugLn(['RenameUnit SaveCodeBufferToFile failed for "',NewLFMFilename,'"']);
           exit;
         end;
         LFMCode:=CodeToolBoss.LoadFile(NewLFMFilename,true,false);
@@ -5835,7 +5463,7 @@ begin
         ConvTool:=TConvDelphiCodeTool.Create(NewSource);
         try
           if not ConvTool.RenameResourceDirectives then
-            debugln(['TLazSourceFileManager.RenameUnit WARNING: unable to rename resource directive in "',NewSource.Filename,'"']);
+            debugln(['RenameUnit WARNING: unable to rename resource directive in "',NewSource.Filename,'"']);
         finally
           ConvTool.Free;
         end;
@@ -5856,7 +5484,7 @@ begin
         OldLRSFilePath:=ExtractFilePath(LRSCode.Filename);
         NewLRSFilePath:=OldLRSFilePath;
         if FilenameIsAbsolute(OldFilePath)
-        and FileIsInPath(OldLRSFilePath,OldFilePath) then begin
+        and PathIsInPath(OldLRSFilePath,OldFilePath) then begin
           // resource code was in the same or in a sub directory of source
           // -> try to keep this relationship
           NewLRSFilePath:=NewFilePath
@@ -5873,13 +5501,12 @@ begin
       Result:=ForceDirectoryInteractive(ExtractFilePath(NewLRSFilename),[mbRetry,mbIgnore]);
       if Result=mrCancel then exit;
       if Result=mrOk then begin
-        if not CodeToolBoss.SaveBufferAs(LRSCode,NewLRSFilename,LRSCode)
-        then
-          DebugLn(['TLazSourceFileManager.RenameUnit CodeToolBoss.SaveBufferAs failed: NewResFilename="',NewLRSFilename,'"']);
+        if not CodeToolBoss.SaveBufferAs(LRSCode,NewLRSFilename,LRSCode) then
+          DebugLn(['RenameUnit CodeToolBoss.SaveBufferAs failed: NewResFilename="',NewLRSFilename,'"']);
       end;
 
       {$IFDEF IDE_DEBUG}
-      debugln(['TLazSourceFileManager.RenameUnit C ',ResourceCode<>nil]);
+      debugln(['RenameUnit C ',ResourceCode<>nil]);
       debugln(['   NewResFilePath="',NewResFilePath,'" NewResFilename="',NewResFilename,'"']);
       if ResourceCode<>nil then debugln('*** ResourceFileName ',ResourceCode.Filename);
       {$ENDIF}
@@ -5891,11 +5518,15 @@ begin
       FormEditor1.RenameJITComponentUnitname(AnUnitInfo.Component,NewUnitName);
     {$IFDEF IDE_DEBUG}
     if AnUnitInfo.Component<>nil then debugln('*** AnUnitInfo.Component ',dbgsName(AnUnitInfo.Component),' ClassUnitname=',GetClassUnitName(AnUnitInfo.Component.ClassType));
-    debugln(['TLazSourceFileManager.RenameUnit D ',ResourceCode<>nil]);
+    debugln(['RenameUnit D ',ResourceCode<>nil]);
     {$ENDIF}
 
     // set new codebuffer in unitinfo and sourceeditor
     AnUnitInfo.Source:=NewSource;
+    if AnUnitInfo.IsPartOfProject then
+      Project1.Modified:=true
+    else
+      Project1.SessionModified:=true;
     AnUnitInfo.ClearModifieds;
     for i := 0 to AnUnitInfo.EditorInfoCount -1 do
       if AnUnitInfo.EditorInfo[i].EditorComponent <> nil then
@@ -5909,7 +5540,7 @@ begin
       if not CodeToolBoss.RenameMainInclude(AnUnitInfo.Source,
         ExtractFilename(LRSCode.Filename),false)
       then
-        DebugLn(['TLazSourceFileManager.RenameUnit CodeToolBoss.RenameMainInclude failed: AnUnitInfo.Source="',AnUnitInfo.Source,'" ResourceCode="',ExtractFilename(LRSCode.Filename),'"']);
+        DebugLn(['RenameUnit CodeToolBoss.RenameMainInclude failed: AnUnitInfo.Source="',AnUnitInfo.Source,'" ResourceCode="',ExtractFilename(LRSCode.Filename),'"']);
     end;
 
     // change unitname on SourceNotebook
@@ -5986,11 +5617,11 @@ begin
     if AnUnitInfo.IsPartOfProject
     and (FilenameIsPascalUnit(OldFilename))
     and (OldFilePath<>'') then begin
-      //DebugLn('TLazSourceFileManager.RenameUnit OldFilePath="',OldFilePath,'" SourceDirs="',Project1.SourceDirectories.CreateSearchPathFromAllFiles,'"');
+      //DebugLn('RenameUnit OldFilePath="',OldFilePath,'" SourceDirs="',Project1.SourceDirectories.CreateSearchPathFromAllFiles,'"');
       if (SearchDirectoryInSearchPath(
         Project1.SourceDirectories.CreateSearchPathFromAllFiles,OldFilePath,1)<1)
       then
-        //DebugLn('TLazSourceFileManager.RenameUnit OldFilePath="',OldFilePath,'" UnitPath="',Project1.CompilerOptions.GetUnitPath(false),'"');
+        //DebugLn('RenameUnit OldFilePath="',OldFilePath,'" UnitPath="',Project1.CompilerOptions.GetUnitPath(false),'"');
         if (SearchDirectoryInSearchPath(Project1.CompilerOptions.GetUnitPath(false),OldFilePath,1)<1)
         then
           if IDEMessageDialog(lisCleanUpUnitPath,
@@ -6009,7 +5640,7 @@ begin
         Result:=DeleteFileInteractive(OldFilename,[mbAbort]);
         if Result=mrAbort then exit;
         // delete old lfm
-        //debugln(['TLazSourceFileManager.RenameUnit NewLFMFilename=',NewLFMFilename,' exists=',FileExistsUTF8(NewLFMFilename),' Old=',OldLFMFilename,' exists=',FileExistsUTF8(OldLFMFilename)]);
+        //debugln(['RenameUnit NewLFMFilename=',NewLFMFilename,' exists=',FileExistsUTF8(NewLFMFilename),' Old=',OldLFMFilename,' exists=',FileExistsUTF8(OldLFMFilename)]);
         if FileExistsUTF8(NewLFMFilename) then begin
           // the new file has a lfm, so it is safe to delete the old
           // (if NewLFMFilename does not exist, it didn't belong to the unit
@@ -6079,14 +5710,17 @@ begin
       end;
     end;
 
+    // notify IDE addons
+    Result:=MainIDEInterface.CallSaveEditorFileHandler(LazarusIDE,AnUnitInfo,
+                                                       sefsSavedAs,OldFilename);
+    if Result<>mrOk then exit;
   finally
     Project1.EndUpdate;
   end;
   Result:=mrOk;
 end;
 
-function TLazSourceFileManager.RenameUnitLowerCase(AnUnitInfo: TUnitInfo;
-  AskUser: boolean): TModalresult;
+function RenameUnitLowerCase(AnUnitInfo: TUnitInfo; AskUser: boolean): TModalresult;
 var
   OldFilename: String;
   OldShortFilename: String;
@@ -6124,8 +5758,7 @@ begin
   Result:=RenameUnit(AnUnitInfo,NewFilename,NewUnitName,LFMCode,LRSCode);
 end;
 
-function TLazSourceFileManager.CheckLFMInEditor(
-  LFMUnitInfo: TUnitInfo; Quiet: boolean): TModalResult;
+function CheckLFMInEditor(LFMUnitInfo: TUnitInfo; Quiet: boolean): TModalResult;
 var
   LFMChecker: TLFMChecker;
   UnitFilename: String;
@@ -6177,12 +5810,12 @@ begin
   end;
 
   if MainIDE.ToolStatus<>itNone then begin
-    DebugLn(['TLazSourceFileManager.CheckLFMInEditor ToolStatus<>itNone']);
+    DebugLn(['CheckLFMInEditor ToolStatus<>itNone']);
     Result:=mrCancel;
     exit;
   end;
   // load the pascal unit
-  SaveSourceEditorChangesToCodeCache(nil);
+  SaveEditorChangesToCodeCache(nil);
   Result:=LoadCodeBuffer(PascalBuf,UnitFilename,[],false);
   if Result<>mrOk then exit;
 
@@ -6216,8 +5849,7 @@ begin
   Result:=mrOk;
 end;
 
-function TLazSourceFileManager.LoadResourceFile(AnUnitInfo: TUnitInfo;
-  var LFMCode, LRSCode: TCodeBuffer;
+function LoadResourceFile(AnUnitInfo: TUnitInfo; var LFMCode, LRSCode: TCodeBuffer;
   AutoCreateResourceCode, ShowAbort: boolean): TModalResult;
 var
   LFMFilename: string;
@@ -6226,7 +5858,7 @@ var
 begin
   LFMCode:=nil;
   LRSCode:=nil;
-  //DebugLn(['TLazSourceFileManager.LoadResourceFile ',AnUnitInfo.Filename,' HasResources=',AnUnitInfo.HasResources,' IgnoreSourceErrors=',IgnoreSourceErrors,' AutoCreateResourceCode=',AutoCreateResourceCode]);
+  //DebugLn(['LoadResourceFile ',AnUnitInfo.Filename,' HasResources=',AnUnitInfo.HasResources,' IgnoreSourceErrors=',IgnoreSourceErrors,' AutoCreateResourceCode=',AutoCreateResourceCode]);
   // Load the lfm file (without parsing)
   if not AnUnitInfo.IsVirtual then begin  // and (AnUnitInfo.Component<>nil)
     LFMFilename:=AnUnitInfo.UnitResourceFileformat.GetUnitResourceFilename(AnUnitInfo.Filename,true);
@@ -6237,7 +5869,7 @@ begin
     end;
   end;
   if AnUnitInfo.HasResources then begin
-    //debugln('TLazSourceFileManager.LoadResourceFile A "',AnUnitInfo.Filename,'" "',AnUnitInfo.ResourceFileName,'"');
+    //debugln('LoadResourceFile A "',AnUnitInfo.Filename,'" "',AnUnitInfo.ResourceFileName,'"');
     ResType:=MainBuildBoss.GetResourceType(AnUnitInfo);
     if ResType=rtLRS then begin
       LRSFilename:=MainBuildBoss.FindLRSFilename(AnUnitInfo,false);
@@ -6249,7 +5881,7 @@ begin
         if AutoCreateResourceCode then begin
           LRSCode:=CodeToolBoss.CreateFile(LRSFilename);
         end else begin
-          DebugLn(['TLazSourceFileManager.LoadResourceFile .lrs file not found of unit ',AnUnitInfo.Filename]);
+          DebugLn(['LoadResourceFile .lrs file not found of unit ',AnUnitInfo.Filename]);
           exit(mrCancel);
         end;
       end;
@@ -6261,8 +5893,8 @@ begin
   Result:=mrOk;
 end;
 
-function TLazSourceFileManager.LoadLFM(AnUnitInfo: TUnitInfo;
-  OpenFlags: TOpenFlags; CloseFlags: TCloseFlags): TModalResult;
+function LoadLFM(AnUnitInfo: TUnitInfo; OpenFlags: TOpenFlags;
+  CloseFlags: TCloseFlags): TModalResult;
 // if there is a .lfm file, open the resource
 var
   UnitResourceFilename: string;
@@ -6279,7 +5911,7 @@ begin
   if not FileExistsInIDE(UnitResourceFilename,[pfsfOnlyEditorFiles]) then begin
     // there is no LFM file -> ok
     {$IFDEF IDE_DEBUG}
-    debugln('TLazSourceFileManager.LoadLFM there is no LFM file for "',AnUnitInfo.Filename,'"');
+    debugln('LoadLFM there is no LFM file for "',AnUnitInfo.Filename,'"');
     {$ENDIF}
     Result:=mrOk;
     exit;
@@ -6288,13 +5920,13 @@ begin
   // there is a lazarus form text file -> load it
   Result:=LoadIDECodeBuffer(LFMBuf,UnitResourceFilename,[lbfUpdateFromDisk],CanAbort);
   if Result<>mrOk then begin
-    DebugLn(['TLazSourceFileManager.LoadLFM LoadIDECodeBuffer failed']);
+    DebugLn(['LoadLFM LoadIDECodeBuffer failed']);
     exit;
   end;
   Result:=LoadLFM(AnUnitInfo,LFMBuf,OpenFlags,CloseFlags);
 end;
 
-function TLazSourceFileManager.LoadLFM(AnUnitInfo: TUnitInfo; LFMBuf: TCodeBuffer;
+function LoadLFM(AnUnitInfo: TUnitInfo; LFMBuf: TCodeBuffer;
   OpenFlags: TOpenFlags; CloseFlags: TCloseFlags): TModalResult;
 const
   BufSize = 4096; // allocating mem in 4k chunks helps many mem managers
@@ -6320,6 +5952,7 @@ var
   NestedClassName: string;
   NestedClass: TComponentClass;
   DisableAutoSize: Boolean;
+  PreventAutoSize: Boolean;
   NewControl: TControl;
   ARestoreVisible: Boolean;
   AncestorClass: TComponentClass;
@@ -6329,7 +5962,7 @@ var
   {$ENDIF}
 begin
   {$IFDEF IDE_DEBUG}
-  debugln('TLazSourceFileManager.LoadLFM A ',AnUnitInfo.Filename,' IsPartOfProject=',dbgs(AnUnitInfo.IsPartOfProject),' ');
+  debugln('LoadLFM A ',AnUnitInfo.Filename,' IsPartOfProject=',dbgs(AnUnitInfo.IsPartOfProject),' ');
   {$ENDIF}
 
   ReferencesLocked:=false;
@@ -6345,7 +5978,7 @@ begin
       // close old designer form
       Result:=CloseUnitComponent(AnUnitInfo,CloseFlags);
       if Result<>mrOk then begin
-        DebugLn(['TLazSourceFileManager.LoadLFM CloseUnitComponent failed']);
+        DebugLn(['LoadLFM CloseUnitComponent failed']);
         exit;
       end;
     end;
@@ -6361,12 +5994,12 @@ begin
                                        OpenFlags * [ofProjectLoading, ofQuiet] = []);
       if not (Result in [mrOk, mrIgnore]) then
       begin
-        DebugLn(['TLazSourceFileManager.LoadLFM PkgBoss.CheckProjectHasInstalledPackages failed']);
+        DebugLn(['LoadLFM PkgBoss.CheckProjectHasInstalledPackages failed']);
         exit;
       end;
     end;
     {$IFDEF VerboseLFMSearch}
-    debugln('TLazSourceFileManager.LoadLFM LFM file loaded, parsing "',LFMBuf.Filename,'" ...');
+    debugln('LoadLFM LFM file loaded, parsing "',LFMBuf.Filename,'" ...');
     {$ENDIF}
 
     // someone created a .lfm file -> Update HasResources
@@ -6378,13 +6011,13 @@ begin
       NewClassName,LCLVersion,MissingClasses);
 
     {$IFDEF VerboseLFMSearch}
-    debugln('TLazSourceFileManager.LoadLFM LFM="',LFMBuf.Source,'"');
+    debugln('LoadLFM LFM="',LFMBuf.Source,'"');
     {$ENDIF}
     if AnUnitInfo.Component=nil then begin
       // load/create new instance
 
       if (NewClassName='') or (LFMType='') then begin
-        DebugLn(['TLazSourceFileManager.LoadLFM LFM file corrupt']);
+        DebugLn(['LoadLFM LFM file corrupt']);
         Result:=IDEMessageDialog(lisLFMFileCorrupt,
           Format(lisUnableToFindAValidClassnameIn, [LFMBuf.Filename]),
           mtError,[mbIgnore,mbCancel,mbAbort]);
@@ -6395,24 +6028,24 @@ begin
       Result:=LoadAncestorDependencyHidden(AnUnitInfo,NewClassName,OpenFlags,
                                            AncestorType,AncestorUnitInfo);
       if Result<>mrOk then begin
-        DebugLn(['TLazSourceFileManager.LoadLFM DoLoadAncestorDependencyHidden failed for ',AnUnitInfo.Filename]);
+        DebugLn(['LoadLFM DoLoadAncestorDependencyHidden failed for ',AnUnitInfo.Filename]);
         exit;
       end;
 
       if MissingClasses<>nil then begin
         {$IFDEF VerboseLFMSearch}
-        DebugLn(['TLazSourceFileManager.LoadLFM has nested: ',AnUnitInfo.Filename]);
+        DebugLn(['LoadLFM has nested: ',AnUnitInfo.Filename]);
         {$ENDIF}
         for i:=MissingClasses.Count-1 downto 0 do begin
           NestedClassName:=MissingClasses[i];
           {$IFDEF VerboseLFMSearch}
-          DebugLn(['TLazSourceFileManager.LoadLFM nested ',i,' ',MissingClasses.Count,': ',NestedClassName]);
+          DebugLn(['LoadLFM nested ',i,' ',MissingClasses.Count,': ',NestedClassName]);
           {$ENDIF}
           if SysUtils.CompareText(NestedClassName,AncestorType.ClassName)=0 then
           begin
             MissingClasses.Delete(i);
           end else begin
-            DebugLn(['TLazSourceFileManager.LoadLFM loading nested class ',NestedClassName,' needed by ',AnUnitInfo.Filename]);
+            DebugLn(['LoadLFM loading nested class ',NestedClassName,' needed by ',AnUnitInfo.Filename]);
             NestedClass:=nil;
             NestedUnitInfo:=nil;
             Result:=LoadComponentDependencyHidden(AnUnitInfo,NestedClassName,
@@ -6424,7 +6057,7 @@ begin
                       {$ENDIF}
                       NestedClass,NestedUnitInfo,AncestorClass);
             if Result<>mrOk then begin
-              DebugLn(['TLazSourceFileManager.LoadLFM DoLoadComponentDependencyHidden NestedClassName=',NestedClassName,' failed for ',AnUnitInfo.Filename]);
+              DebugLn(['LoadLFM DoLoadComponentDependencyHidden NestedClassName=',NestedClassName,' failed for ',AnUnitInfo.Filename]);
               exit;
             end;
             if NestedClass<>nil then
@@ -6433,7 +6066,7 @@ begin
               MissingClasses.Objects[i]:=TObject(Pointer(AncestorClass));
           end;
         end;
-        //DebugLn(['TLazSourceFileManager.LoadLFM had nested: ',AnUnitInfo.Filename]);
+        //DebugLn(['LoadLFM had nested: ',AnUnitInfo.Filename]);
         if AnUnitInfo.ComponentFallbackClasses<>nil then begin
           AnUnitInfo.ComponentFallbackClasses.Free;
           AnUnitInfo.ComponentFallbackClasses:=nil;
@@ -6449,9 +6082,9 @@ begin
         TxtLFMStream:=TExtMemoryStream.Create;
         try
           {$IFDEF VerboseIDELFMConversion}
-          DebugLn(['TLazSourceFileManager.LoadLFM LFMBuf START =======================================']);
+          DebugLn(['LoadLFM LFMBuf START =======================================']);
           DebugLn(LFMBuf.Source);
-          DebugLn(['TLazSourceFileManager.LoadLFM LFMBuf END   =======================================']);
+          DebugLn(['LoadLFM LFMBuf END   =======================================']);
           {$ENDIF}
           LFMBuf.SaveToStream(TxtLFMStream);
           AnUnitInfo.ComponentLastLFMStreamSize:=TxtLFMStream.Size;
@@ -6465,9 +6098,9 @@ begin
             BinStream.Position:=0;
 
             {$IFDEF VerboseIDELFMConversion}
-            DebugLn(['TLazSourceFileManager.LoadLFM Binary START =======================================']);
+            DebugLn(['LoadLFM Binary START =======================================']);
             debugln(dbgMemStream(BinStream,BinStream.Size));
-            DebugLn(['TLazSourceFileManager.LoadLFM Binary END   =======================================']);
+            DebugLn(['LoadLFM Binary END   =======================================']);
             BinStream.Position:=0;
             {$ENDIF}
 
@@ -6502,7 +6135,13 @@ begin
           if ofLoadHiddenResource in OpenFlags then
             NewControl.ControlStyle:=NewControl.ControlStyle+[csNoDesignVisible];
           if DisableAutoSize then
-            NewControl.EnableAutoSizing{$IFDEF DebugDisableAutoSizing}('TAnchorDockMaster Delayed'){$ENDIF};
+          begin
+            PreventAutoSize := (IDETabMaster <> nil)
+                               and (NewControl is TCustomDesignControl)
+                               and IDETabMaster.AutoSizeInShowDesigner(NewControl);
+            if not PreventAutoSize then
+              NewControl.EnableAutoSizing{$IFDEF DebugDisableAutoSizing}('TAnchorDockMaster Delayed'){$ENDIF};
+          end;
         end;
 
         if NewComponent is TCustomDesignControl then
@@ -6535,12 +6174,7 @@ begin
         end;
         {$ENDIF}
 
-        if NewComponent is TFrame then
-          AnUnitInfo.ResourceBaseClass:=pfcbcFrame
-        else if NewComponent is TDataModule then
-          AnUnitInfo.ResourceBaseClass:=pfcbcDataModule
-        else if NewComponent is TForm then
-          AnUnitInfo.ResourceBaseClass:=pfcbcForm;
+        AnUnitInfo.ResourceBaseClass:=GetComponentBaseClass(NewComponent.ClassType);
 
         Project1.InvalidateUnitComponentDesignerDependencies;
         AnUnitInfo.Component:=NewComponent;
@@ -6550,7 +6184,7 @@ begin
           // component loaded, now load the referenced units
           Result:=MainIDE.DoFixupComponentReferences(AnUnitInfo.Component,OpenFlags);
           if Result<>mrOk then begin
-            DebugLn(['TLazSourceFileManager.LoadLFM DoFixupComponentReferences failed']);
+            DebugLn(['LoadLFM DoFixupComponentReferences failed']);
             exit;
           end;
         end else begin
@@ -6566,7 +6200,7 @@ begin
             Result:=OpenEditorFile(LFMBuf.Filename, -1, -1, nil,
               OpenFlags+[ofOnlyIfExists,ofQuiet,ofRegularFile]);
           if Result<>mrOk then begin
-            DebugLn(['TLazSourceFileManager.LoadLFM DoOpenEditorFile failed']);
+            DebugLn(['LoadLFM DoOpenEditorFile failed']);
             exit;
           end;
           LFMUnitInfo:=Project1.UnitWithEditorComponent(SourceEditorManager.ActiveEditor);
@@ -6580,11 +6214,11 @@ begin
     end else if SysUtils.CompareText(AnUnitInfo.Component.ClassName,NewClassName)<>0
     then begin
       // lfm and current designer are about different classes
-      debugln(['TLazSourceFileManager.LoadLFM unit="',AnUnitInfo.Filename,'": loaded component has class "',AnUnitInfo.Component.ClassName,'", lfm has class "',NewClassName,'"']);
+      debugln(['LoadLFM unit="',AnUnitInfo.Filename,'": loaded component has class "',AnUnitInfo.Component.ClassName,'", lfm has class "',NewClassName,'"']);
       // keep old instance, add a designer, so user can see current component
     end else begin
       // make hidden component visible, keep old instance, add a designer
-      DebugLn(['TLazSourceFileManager.LoadLFM Creating designer for hidden component of ',AnUnitInfo.Filename]);
+      DebugLn(['LoadLFM Creating designer for hidden component of ',AnUnitInfo.Filename]);
     end;
   finally
     MissingClasses.Free;
@@ -6635,17 +6269,18 @@ begin
       DesignerForm.Visible := ARestoreVisible;
       DesignerForm.WindowState := wsMinimized;
     end else
-      LCLIntf.ShowWindow(DesignerForm.Handle, ShowCommands[AnUnitInfo.ComponentState]);
+      if IDETabMaster = nil then
+        LCLIntf.ShowWindow(DesignerForm.Handle, ShowCommands[AnUnitInfo.ComponentState]);
     MainIDE.LastFormActivated := DesignerForm;
   end;
 
   {$IFDEF IDE_DEBUG}
-  debugln('[TLazSourceFileManager.LoadLFM] LFM end');
+  debugln('[LoadLFM] LFM end');
   {$ENDIF}
   Result:=mrOk;
 end;
 
-function TLazSourceFileManager.OpenComponent(const UnitFilename: string;
+function OpenComponent(const UnitFilename: string;
   OpenFlags: TOpenFlags; CloseFlags: TCloseFlags; out Component: TComponent): TModalResult;
 var
   AnUnitInfo: TUnitInfo;
@@ -6663,7 +6298,7 @@ begin
   begin
     AFilename:=TrimAndExpandFilename(UnitFilename);
     if (AFilename='') or (not FileExistsInIDE(AFilename,[])) then begin
-      DebugLn(['TLazSourceFileManager.OpenComponent file not found ',AFilename]);
+      DebugLn(['OpenComponent file not found ',AFilename]);
       exit(mrCancel);
     end;
     AnUnitInfo:=Project1.UnitInfoWithFilename(AFilename);
@@ -6681,14 +6316,14 @@ begin
   if not FileExistsInIDE(LFMFilename,[]) then
     LFMFilename:=ChangeFileExt(AFilename,'.dfm');
   if not FileExistsInIDE(LFMFilename,[]) then begin
-    DebugLn(['TLazSourceFileManager.OpenComponent file not found ',LFMFilename]);
+    DebugLn(['OpenComponent file not found ',LFMFilename]);
     exit(mrCancel);
   end;
 
   // load unit source
   Result:=LoadCodeBuffer(UnitCode,AFilename,[lbfCheckIfText],true);
   if Result<>mrOk then begin
-    debugln('TLazSourceFileManager.OpenComponent Failed loading ',AFilename);
+    debugln('OpenComponent Failed loading ',AFilename);
     exit;
   end;
 
@@ -6702,14 +6337,14 @@ begin
   // load lfm source
   Result:=LoadCodeBuffer(LFMCode,LFMFilename,[lbfCheckIfText],true);
   if Result<>mrOk then begin
-    debugln('TLazSourceFileManager.OpenComponent Failed loading ',LFMFilename);
+    debugln('OpenComponent Failed loading ',LFMFilename);
     exit;
   end;
 
   // load resource
   Result:=LoadLFM(AnUnitInfo,LFMCode,OpenFlags,CloseFlags);
   if Result<>mrOk then begin
-    debugln('TLazSourceFileManager.OpenComponent DoLoadLFM failed ',LFMFilename);
+    debugln('OpenComponent DoLoadLFM failed ',LFMFilename);
     exit;
   end;
 
@@ -6720,8 +6355,7 @@ begin
     Result:=mrCancel;
 end;
 
-function TLazSourceFileManager.UpdateUnitInfoResourceBaseClass(
-  AnUnitInfo: TUnitInfo; Quiet: boolean): boolean;
+function UpdateUnitInfoResourceBaseClass(AnUnitInfo: TUnitInfo; Quiet: boolean): boolean;
 var
   LFMFilename, LFMClassName, LFMType, Ancestor, LFMComponentName: String;
   LFMCode, Code: TCodeBuffer;
@@ -6801,8 +6435,11 @@ begin
       for i:=0 to ListOfPFindContext.Count-1 do begin
         Context:=PFindContext(ListOfPFindContext[i]);
         Ancestor:=UpperCase(Context^.Tool.ExtractClassName(Context^.Node,false));
-        if (Ancestor='TFORM') or (Ancestor='TCUSTOMFORM') then begin
+        if (Ancestor='TFORM') then begin
           AnUnitInfo.ResourceBaseClass:=pfcbcForm;
+          exit(true);
+        end else if (Ancestor='TCUSTOMFORM') then begin
+          AnUnitInfo.ResourceBaseClass:=pfcbcCustomForm;
           exit(true);
         end else if Ancestor='TDATAMODULE' then begin
           AnUnitInfo.ResourceBaseClass:=pfcbcDataModule;
@@ -6821,9 +6458,8 @@ begin
   end;
 end;
 
-function TLazSourceFileManager.FindBaseComponentClass(AnUnitInfo: TUnitInfo;
-  const AComponentClassName, DescendantClassName: string; out
-  AComponentClass: TComponentClass): boolean;
+function FindBaseComponentClass(AnUnitInfo: TUnitInfo; const AComponentClassName,
+  DescendantClassName: string; out AComponentClass: TComponentClass): boolean;
 // returns false if an error occured
 // Important: returns true even if AComponentClass=nil
 begin
@@ -6865,7 +6501,7 @@ begin
   Result:=true;
 end;
 
-function TLazSourceFileManager.LoadAncestorDependencyHidden(AnUnitInfo: TUnitInfo;
+function LoadAncestorDependencyHidden(AnUnitInfo: TUnitInfo;
   const aComponentClassName: string;
   OpenFlags: TOpenFlags;
   out AncestorClass: TComponentClass;
@@ -6889,14 +6525,14 @@ begin
   if not CodeToolBoss.FindFormAncestor(AnUnitInfo.Source,aComponentClassName,
                                        AncestorClassName,true)
   then begin
-    DebugLn('TLazSourceFileManager.LoadAncestorDependencyHidden Filename="',AnUnitInfo.Filename,'" ClassName=',aComponentClassName,'. Unable to find ancestor class: ',CodeToolBoss.ErrorMessage);
+    DebugLn('LoadAncestorDependencyHidden Filename="',AnUnitInfo.Filename,'" ClassName=',aComponentClassName,'. Unable to find ancestor class: ',CodeToolBoss.ErrorMessage);
   end;
 
   // try the base designer classes
   if not FindBaseComponentClass(AnUnitInfo,AncestorClassName,
     aComponentClassName,AncestorClass) then
   begin
-    DebugLn(['TLazSourceFileManager.LoadAncestorDependencyHidden FindUnitComponentClass failed for AncestorClassName=',AncestorClassName]);
+    DebugLn(['LoadAncestorDependencyHidden FindUnitComponentClass failed for AncestorClassName=',AncestorClassName]);
     exit(mrCancel);
   end;
 
@@ -6919,7 +6555,7 @@ begin
              OpenFlags,false,AncestorClass,AncestorUnitInfo,GrandAncestorClass,
              IgnoreBtnText);
     if Result<>mrOk then begin
-      DebugLn(['TLazSourceFileManager.LoadAncestorDependencyHidden DoLoadComponentDependencyHidden failed AnUnitInfo=',AnUnitInfo.Filename]);
+      DebugLn(['LoadAncestorDependencyHidden DoLoadComponentDependencyHidden failed AnUnitInfo=',AnUnitInfo.Filename]);
     end;
     case  Result of
     mrAbort: exit;
@@ -6933,16 +6569,15 @@ begin
     end;
   end;
 
-  //DebugLn('TLazSourceFileManager.LoadAncestorDependencyHidden Filename="',AnUnitInfo.Filename,'" AncestorClassName=',AncestorClassName,' AncestorClass=',dbgsName(AncestorClass));
+  //DebugLn('LoadAncestorDependencyHidden Filename="',AnUnitInfo.Filename,'" AncestorClassName=',AncestorClassName,' AncestorClass=',dbgsName(AncestorClass));
   if AncestorClass=nil then
     AncestorClass:=DefAncestorClass;
   Result:=mrOk;
 end;
 
-function TLazSourceFileManager.FindComponentClass(AnUnitInfo: TUnitInfo;
-  const AComponentClassName: string; Quiet: boolean;
-  out ComponentUnitInfo: TUnitInfo; out AComponentClass: TComponentClass; out
-  LFMFilename: string; out AncestorClass: TComponentClass): TModalResult;
+function FindComponentClass(AnUnitInfo: TUnitInfo; const AComponentClassName: string;
+  Quiet: boolean; out ComponentUnitInfo: TUnitInfo; out AComponentClass: TComponentClass;
+  out LFMFilename: string; out AncestorClass: TComponentClass): TModalResult;
 { Possible results:
   mrOk:
    - AComponentClass<>nil and ComponentUnitInfo<>nil
@@ -6995,7 +6630,7 @@ var
     CurUnitInfo:=Project1.UnitInfoWithFilename(UnitFilename);
     if (CurUnitInfo=nil) or (CurUnitInfo.Component=nil) then exit;
     // unit with loaded component found -> check if it is the right one
-    //DebugLn(['TLazSourceFileManager.FindComponentClass unit with a component found CurUnitInfo=',CurUnitInfo.Filename,' ',dbgsName(CurUnitInfo.Component)]);
+    //DebugLn(['FindComponentClass unit with a component found CurUnitInfo=',CurUnitInfo.Filename,' ',dbgsName(CurUnitInfo.Component)]);
     if SysUtils.CompareText(CurUnitInfo.Component.ClassName,AComponentClassName)<>0
     then exit;
     // component found (it was already loaded)
@@ -7028,7 +6663,7 @@ var
     if FoundComponentClass=nil then
       FoundComponentClass:=FormEditor1.FindDesignerBaseClassByName(aClassName,true);
     if FoundComponentClass<>nil then begin
-      DebugLn(['TLazSourceFileManager.FindComponentClass.TryRegisteredClasses found: ',FoundComponentClass.ClassName]);
+      DebugLn(['FindComponentClass.TryRegisteredClasses found: ',FoundComponentClass.ClassName]);
       TheModalResult:=mrOk;
       Result:=true;
     end;
@@ -7074,7 +6709,7 @@ var
     TheModalResult:=LoadCodeBuffer(LFMCode,CurLFMFilename,[lbfCheckIfText],true);
     if TheModalResult<>mrOk then
     begin
-      debugln('TLazSourceFileManager.FindComponentClass Failed loading ',CurLFMFilename);
+      debugln('FindComponentClass Failed loading ',CurLFMFilename);
       exit;
     end;
     // read the LFM classname
@@ -7143,7 +6778,7 @@ var
     // parse interface current unit
     Code:=CodeToolBoss.LoadFile(AnUnitInfo.Filename,false,false);
     if Code=nil then begin
-      debugln(['TLazSourceFileManager.FindComponentClass unable to load ',AnUnitInfo.Filename]);
+      debugln(['FindComponentClass unable to load ',AnUnitInfo.Filename]);
       exit;
     end;
     if not CodeToolBoss.Explore(Code,Tool,false,true) then begin
@@ -7163,7 +6798,7 @@ var
           Node:=Tool.Tree.Root;
         Node:=FindTypeNode(Node,0);
         if Node=nil then begin
-          debugln('TLazSourceFileManager.FindComponentClass Failed finding reference of ',AComponentClassName,' in ',Code.Filename);
+          debugln('FindComponentClass Failed finding reference of ',AComponentClassName,' in ',Code.Filename);
           exit;
         end;
         if Node.Desc=ctnIdentifier then begin
@@ -7175,7 +6810,7 @@ var
                          fdfIgnoreCurContextNode];
           Params.SetIdentifier(Tool,@Tool.Src[Node.StartPos],nil);
           if not Tool.FindIdentifierInContext(Params) then begin
-            debugln(['TLazSourceFileManager.FindComponentClass find declaration failed at ',Tool.CleanPosToStr(Node.StartPos,true)]);
+            debugln(['FindComponentClass find declaration failed at ',Tool.CleanPosToStr(Node.StartPos,true)]);
             exit;
           end;
           NewNode:=Params.NewNode;
@@ -7201,7 +6836,7 @@ var
       if (NewNode.Desc<>ctnTypeDefinition)
       or (ClassNode=nil) or (ClassNode.Desc<>ctnClass) then
       begin
-        debugln(['TLazSourceFileManager.FindComponentClass ',AComponentClassName,' is not a class at ',NewTool.CleanPosToStr(NewNode.StartPos,true)]);
+        debugln(['FindComponentClass ',AComponentClassName,' is not a class at ',NewTool.CleanPosToStr(NewNode.StartPos,true)]);
         exit;
       end;
       // find inheritance list
@@ -7209,7 +6844,7 @@ var
       while (InheritedNode<>nil) and (InheritedNode.Desc<>ctnClassInheritance) do
         InheritedNode:=InheritedNode.NextBrother;
       if (InheritedNode=nil) or (InheritedNode.FirstChild=nil) then begin
-        debugln(['TLazSourceFileManager.FindComponentClass ',AComponentClassName,' is not a TComponent at ',NewTool.CleanPosToStr(NewNode.StartPos,true)]);
+        debugln(['FindComponentClass ',AComponentClassName,' is not a TComponent at ',NewTool.CleanPosToStr(NewNode.StartPos,true)]);
         exit;
       end;
       AncestorNode:=InheritedNode.FirstChild;
@@ -7256,7 +6891,7 @@ var
     AncestorClassName:='';
     Code:=CodeToolBoss.LoadFile(UnitFilename,true,false);
     if Code=nil then begin
-      debugln(['TLazSourceFileManager.FindComponentClass unable to load ',AnUnitInfo.Filename]);
+      debugln(['FindComponentClass unable to load ',AnUnitInfo.Filename]);
       exit;
     end;
     if not CodeToolBoss.FindFormAncestor(Code,AComponentClassName,AncestorClassName,true) then
@@ -7293,13 +6928,13 @@ begin
 
   if not IsValidIdent(AComponentClassName) then
   begin
-    DebugLn(['TLazSourceFileManager.FindComponentClass invalid component class name "',AComponentClassName,'"']);
+    DebugLn(['FindComponentClass invalid component class name "',AComponentClassName,'"']);
     exit(mrCancel);
   end;
 
   // search component lfm
   {$ifdef VerboseFormEditor}
-  debugln('TLazSourceFileManager.FindComponentClass START ',AnUnitInfo.Filename,' AComponentClassName=',AComponentClassName);
+  debugln('FindComponentClass START ',AnUnitInfo.Filename,' AComponentClassName=',AComponentClassName);
   {$endif}
   // first search the resource of ComponentUnitInfo
   if AnUnitInfo<>nil then begin
@@ -7321,7 +6956,7 @@ begin
 
     {$IFDEF VerboseLFMSearch}
     if (UsedUnitFilenames=nil) or (UsedUnitFilenames.Count=0) then
-      debugln(['TLazSourceFileManager.FindComponentClass unit has no main uses']);
+      debugln(['FindComponentClass unit has no main uses']);
     {$ENDIF}
 
     if (UsedUnitFilenames<>nil) then begin
@@ -7355,11 +6990,10 @@ begin
   Result:=mrCancel;
 end;
 
-function TLazSourceFileManager.LoadComponentDependencyHidden(
-  AnUnitInfo: TUnitInfo; const AComponentClassName: string; Flags: TOpenFlags;
-  MustHaveLFM: boolean; out AComponentClass: TComponentClass; out
-  ComponentUnitInfo: TUnitInfo; out AncestorClass: TComponentClass;
-  const IgnoreBtnText: string): TModalResult;
+function LoadComponentDependencyHidden(AnUnitInfo: TUnitInfo;
+  const AComponentClassName: string; Flags: TOpenFlags; MustHaveLFM: boolean;
+  out AComponentClass: TComponentClass; out ComponentUnitInfo: TUnitInfo;
+  out AncestorClass: TComponentClass; const IgnoreBtnText: string): TModalResult;
 { Possible results:
   mrOk:
    - AComponentClass<>nil and ComponentUnitInfo<>nil
@@ -7444,12 +7078,12 @@ function TLazSourceFileManager.LoadComponentDependencyHidden(
       ComponentUnitInfo:=CurUnitInfo;
       AComponentClass:=TComponentClass(ComponentUnitInfo.Component.ClassType);
       {$if defined(VerboseFormEditor) or defined(VerboseLFMSearch)}
-      debugln('TLazSourceFileManager.LoadComponentDependencyHidden Wanted=',AComponentClassName,' Class=',AComponentClass.ClassName);
+      debugln('LoadComponentDependencyHidden Wanted=',AComponentClassName,' Class=',AComponentClass.ClassName);
       {$endif}
       TheModalResult:=mrOk;
       exit(true);
     end else begin
-      debugln('TLazSourceFileManager.LoadComponentDependencyHidden Failed to load component ',AComponentClassName);
+      debugln('LoadComponentDependencyHidden Failed to load component ',AComponentClassName);
       TheModalResult:=mrCancel;
     end;
   end;
@@ -7465,7 +7099,7 @@ begin
 
   if not IsValidIdent(AComponentClassName) then
   begin
-    DebugLn(['TLazSourceFileManager.LoadComponentDependencyHidden invalid component class name "',AComponentClassName,'"']);
+    DebugLn(['LoadComponentDependencyHidden invalid component class name "',AComponentClassName,'"']);
     exit(mrCancel);
   end;
 
@@ -7481,12 +7115,12 @@ begin
   try
     // search component lfm
     {$if defined(VerboseFormEditor) or defined(VerboseLFMSearch)}
-    debugln('TLazSourceFileManager.LoadComponentDependencyHidden ',AnUnitInfo.Filename,' AComponentClassName=',AComponentClassName,' AComponentClass=',dbgsName(AComponentClass));
+    debugln('LoadComponentDependencyHidden ',AnUnitInfo.Filename,' AComponentClassName=',AComponentClassName,' AComponentClass=',dbgsName(AComponentClass));
     {$endif}
     Result:=FindComponentClass(AnUnitInfo,AComponentClassName,Quiet,
       ComponentUnitInfo,AComponentClass,LFMFilename,AncestorClass);
     { $if defined(VerboseFormEditor) or defined(VerboseLFMSearch)}
-    debugln('TLazSourceFileManager.LoadComponentDependencyHidden ',AnUnitInfo.Filename,' AComponentClassName=',AComponentClassName,' AComponentClass=',dbgsName(AComponentClass),' AncestorClass=',DbgSName(AncestorClass),' LFMFilename=',LFMFilename);
+    debugln('LoadComponentDependencyHidden ',AnUnitInfo.Filename,' AComponentClassName=',AComponentClassName,' AComponentClass=',dbgsName(AComponentClass),' AncestorClass=',DbgSName(AncestorClass),' LFMFilename=',LFMFilename);
     { $endif}
 
     //- AComponentClass<>nil and ComponentUnitInfo<>nil
@@ -7522,7 +7156,7 @@ begin
   end;
 end;
 
-function TLazSourceFileManager.LoadIDECodeBuffer(var ACodeBuffer: TCodeBuffer;
+function LoadIDECodeBuffer(var ACodeBuffer: TCodeBuffer;
   const AFilename: string; Flags: TLoadBufferFlags; ShowAbort: boolean): TModalResult;
 begin
   if (Project1<>nil)
@@ -7531,8 +7165,7 @@ begin
   Result:=LoadCodeBuffer(ACodeBuffer,AFilename,Flags,ShowAbort);
 end;
 
-function TLazSourceFileManager.CloseUnitComponent(AnUnitInfo: TUnitInfo;
-  Flags: TCloseFlags): TModalResult;
+function CloseUnitComponent(AnUnitInfo: TUnitInfo; Flags: TCloseFlags): TModalResult;
 
   procedure FreeUnusedComponents;
   var
@@ -7561,7 +7194,7 @@ begin
   LookupRoot:=AnUnitInfo.Component;
   if LookupRoot=nil then exit(mrOk);
   {$IFDEF VerboseIDEMultiForm}
-  DebugLn(['TLazSourceFileManager.CloseUnitComponent ',AnUnitInfo.Filename,' ',dbgsName(LookupRoot)]);
+  DebugLn(['CloseUnitComponent ',AnUnitInfo.Filename,' ',dbgsName(LookupRoot)]);
   {$ENDIF}
 
   Project1.LockUnitComponentDependencies; // avoid circles
@@ -7571,7 +7204,7 @@ begin
     and (not AnUnitInfo.IsReverting) then begin
       Result:=SaveEditorFile(AnUnitInfo.OpenEditorInfo[0].EditorComponent,[sfCheckAmbiguousFiles]);
       if Result<>mrOk then begin
-        DebugLn(['TLazSourceFileManager.CloseUnitComponent DoSaveEditorFile failed']);
+        DebugLn(['CloseUnitComponent DoSaveEditorFile failed']);
         exit;
       end;
     end;
@@ -7579,11 +7212,11 @@ begin
     // close dependencies
     if cfCloseDependencies in Flags then begin
       {$IFDEF VerboseIDEMultiForm}
-      DebugLn(['TLazSourceFileManager.CloseUnitComponent cfCloseDependencies ',AnUnitInfo.Filename,' ',dbgsName(LookupRoot)]);
+      DebugLn(['CloseUnitComponent cfCloseDependencies ',AnUnitInfo.Filename,' ',dbgsName(LookupRoot)]);
       {$ENDIF}
       Result:=CloseDependingUnitComponents(AnUnitInfo,Flags);
       if Result<>mrOk then begin
-        DebugLn(['TLazSourceFileManager.CloseUnitComponent CloseDependingUnitComponents failed']);
+        DebugLn(['CloseUnitComponent CloseDependingUnitComponents failed']);
         exit;
       end;
       // now only soft dependencies are left. The component can be freed.
@@ -7599,20 +7232,20 @@ begin
     ComponentStillUsed:=(not (cfCloseDependencies in Flags))
                         and UnitComponentIsUsed(AnUnitInfo,false);
     {$IFDEF VerboseTFrame}
-    DebugLn(['TLazSourceFileManager.CloseUnitComponent ',AnUnitInfo.Filename,' ComponentStillUsed=',ComponentStillUsed,' UnitComponentIsUsed=',UnitComponentIsUsed(AnUnitInfo,false),' ',dbgs(AnUnitInfo.Flags),' DepAncestor=',AnUnitInfo.FindUsedByComponentDependency([ucdtAncestor])<>nil,' DepInline=',AnUnitInfo.FindUsedByComponentDependency([ucdtInlineClass])<>nil]);
+    DebugLn(['CloseUnitComponent ',AnUnitInfo.Filename,' ComponentStillUsed=',ComponentStillUsed,' UnitComponentIsUsed=',UnitComponentIsUsed(AnUnitInfo,false),' ',dbgs(AnUnitInfo.Flags),' DepAncestor=',AnUnitInfo.FindUsedByComponentDependency([ucdtAncestor])<>nil,' DepInline=',AnUnitInfo.FindUsedByComponentDependency([ucdtInlineClass])<>nil]);
     {$ENDIF}
     if (OldDesigner=nil) then begin
       // hidden component
-      //DebugLn(['TLazSourceFileManager.CloseUnitComponent freeing hidden component without designer: ',AnUnitInfo.Filename,' ',DbgSName(AnUnitInfo.Component)]);
+      //DebugLn(['CloseUnitComponent freeing hidden component without designer: ',AnUnitInfo.Filename,' ',DbgSName(AnUnitInfo.Component)]);
       if ComponentStillUsed then begin
         // hidden component is still used => keep it
         {$IFDEF VerboseIDEMultiForm}
-        DebugLn(['TLazSourceFileManager.CloseUnitComponent hidden component is still used => keep it ',AnUnitInfo.Filename,' ',DbgSName(AnUnitInfo.Component)]);
+        DebugLn(['CloseUnitComponent hidden component is still used => keep it ',AnUnitInfo.Filename,' ',DbgSName(AnUnitInfo.Component)]);
         {$ENDIF}
       end else begin
         // hidden component is not used => free it
         {$IFDEF VerboseIDEMultiForm}
-        DebugLn(['TLazSourceFileManager.CloseUnitComponent hidden component is not used => free it ',AnUnitInfo.Filename,' ',DbgSName(AnUnitInfo.Component)]);
+        DebugLn(['CloseUnitComponent hidden component is not used => free it ',AnUnitInfo.Filename,' ',DbgSName(AnUnitInfo.Component)]);
         {$ENDIF}
         try
           FormEditor1.DeleteComponent(LookupRoot,true);
@@ -7627,13 +7260,13 @@ begin
       if ComponentStillUsed then begin
         // free designer, keep component hidden
         {$IFDEF VerboseIDEMultiForm}
-        DebugLn(['TLazSourceFileManager.CloseUnitComponent hiding component and freeing designer: ',AnUnitInfo.Filename,' ',DbgSName(AnUnitInfo.Component)]);
+        DebugLn(['CloseUnitComponent hiding component and freeing designer: ',AnUnitInfo.Filename,' ',DbgSName(AnUnitInfo.Component)]);
         {$ENDIF}
         OldDesigner.PrepareFreeDesigner(false);
       end else begin
         // free designer and design form
         {$IFDEF VerboseIDEMultiForm}
-        DebugLn(['TLazSourceFileManager.CloseUnitComponent freeing component and designer: ',AnUnitInfo.Filename,' ',DbgSName(AnUnitInfo.Component)]);
+        DebugLn(['CloseUnitComponent freeing component and designer: ',AnUnitInfo.Filename,' ',DbgSName(AnUnitInfo.Component)]);
         {$ENDIF}
         try
           OldDesigner.PrepareFreeDesigner(true);
@@ -7650,8 +7283,7 @@ begin
   Result:=mrOk;
 end;
 
-function TLazSourceFileManager.CloseDependingUnitComponents(AnUnitInfo: TUnitInfo;
-  Flags: TCloseFlags): TModalResult;
+function CloseDependingUnitComponents(AnUnitInfo: TUnitInfo; Flags: TCloseFlags): TModalResult;
 var
   UserAsked: Boolean;
 
@@ -7713,7 +7345,7 @@ begin
   Result:=mrOk;
 end;
 
-function TLazSourceFileManager.UnitComponentIsUsed(AnUnitInfo: TUnitInfo;
+function UnitComponentIsUsed(AnUnitInfo: TUnitInfo;
   CheckHasDesigner: boolean): boolean;
 // if CheckHasDesigner=true and AnUnitInfo has a designer (visible) return true
 // otherwise check if another unit needs AnUnitInfo
@@ -7727,140 +7359,72 @@ begin
   Project1.UpdateUnitComponentDependencies;
   if Project1.UnitComponentIsUsed(AnUnitInfo,CheckHasDesigner) then
     exit(true);
-  //DebugLn(['TLazSourceFileManager.UnitComponentIsUsed ',AnUnitInfo.Filename,' ',dbgs(AnUnitInfo.Flags)]);
+  //DebugLn(['UnitComponentIsUsed ',AnUnitInfo.Filename,' ',dbgs(AnUnitInfo.Flags)]);
 end;
 
-procedure TLazSourceFileManager.RemovePathFromBuildModes(ObsoletePaths: String;
-  pcos: TParsedCompilerOptString);
-var
-  bm: TProjectBuildMode;
-  DlgCapt, DlgMsg: String;
-  ProjPaths, CurDir, ResolvedDir, PrevResolvedDir: String;
-  i, p, OldP: Integer;
-  QRes: TModalResult;
-begin
-  if pcos=pcosUnitPath then begin
-    DlgCapt:=lisRemoveUnitPath;
-    DlgMsg:=lisTheDirectoryContainsNoProjectUnitsAnyMoreRemoveThi;
-  end
-  else begin    // pcos=pcosIncludePath
-    DlgCapt:=lisRemoveIncludePath;
-    DlgMsg:=lisTheDirectoryContainsNoProjectIncludeFilesAnyMoreRe;
-  end;
-  QRes:=mrNone;
-  i:=0;
-  // Iterate all build modes until the user chooses to cancel.
-  PrevResolvedDir:='';
-  while (i < FProject.BuildModes.Count) and (QRes in [mrNone,mrYes]) do begin
-    bm:=FProject.BuildModes[i];
-    p:=1;
-    repeat
-      OldP:=p;
-      if pcos=pcosUnitPath then
-        ProjPaths:=bm.CompilerOptions.OtherUnitFiles
-      else
-        ProjPaths:=bm.CompilerOptions.IncludePath;
-      CurDir:=GetNextDirectoryInSearchPath(ProjPaths,p);
-      if CurDir='' then break;
-
-      // Find build modes that have unneeded search paths
-      ResolvedDir:=bm.CompilerOptions.ParsedOpts.DoParseOption(CurDir,pcos,false);
-      if (ResolvedDir<>'')
-      and (SearchDirectoryInSearchPath(ObsoletePaths,ResolvedDir)>0) then begin
-        // Ask confirmation once for each path.
-        // In fact there should be only one path after one source file is removed.
-        if (QRes=mrNone) or ((PrevResolvedDir<>'') and (PrevResolvedDir<>ResolvedDir)) then
-          QRes:=IDEQuestionDialog(DlgCapt,Format(DlgMsg,[CurDir]),
-                   mtConfirmation, [mrYes, lisRemove,
-                                    mrNo, lisKeep2], '');
-        if QRes=mrYes then begin
-          // remove
-          if pcos=pcosUnitPath then
-            bm.CompilerOptions.OtherUnitFiles:=RemoveSearchPaths(ProjPaths,CurDir)
-          else
-            bm.CompilerOptions.IncludePath:=RemoveSearchPaths(ProjPaths,CurDir);
-          p:=OldP;
-        end;
-        PrevResolvedDir:=ResolvedDir;
-      end;
-    until false;
-    Inc(i);
-  end;
-end;
-
-function TLazSourceFileManager.RemoveFilesFromProject(AProject: TProject;
-  UnitInfos: TFPList): TModalResult;
+function RemoveFilesFromProject(UnitInfos: TFPList): TModalResult;
 var
   AnUnitInfo: TUnitInfo;
   ShortUnitName, UnitPath: String;
   ObsoleteUnitPaths, ObsoleteIncPaths: String;
   i: Integer;
-  Dummy: Boolean;
+  SomeRemoved: Boolean;
 begin
   Result:=mrOk;
-  if UnitInfos=nil then exit;
-  // check if something will change
-  i:=UnitInfos.Count-1;
-  while (i>=0) and (not TUnitInfo(UnitInfos[i]).IsPartOfProject) do dec(i);
-  if i<0 then exit;
+  Assert(Assigned(UnitInfos));
   // check ToolStatus
   if (MainIDE.ToolStatus in [itCodeTools,itCodeToolAborting]) then begin
-    debugln('TLazSourceFileManager.RemoveUnitsFromProject wrong ToolStatus ',dbgs(ord(MainIDE.ToolStatus)));
+    debugln('RemoveUnitsFromProject wrong ToolStatus ',dbgs(ord(MainIDE.ToolStatus)));
     exit;
   end;
-  FProject := AProject;
   // commit changes from source editor to codetools
-  SaveSourceEditorChangesToCodeCache(nil);
-
+  SaveEditorChangesToCodeCache(nil);
+  SomeRemoved:=false;
   ObsoleteUnitPaths:='';
   ObsoleteIncPaths:='';
-  AProject.BeginUpdate(true);
+  Project1.BeginUpdate(true);
   try
-    for i:=0 to UnitInfos.Count-1 do begin
+    for i:=0 to UnitInfos.Count-1 do
+    begin
       AnUnitInfo:=TUnitInfo(UnitInfos[i]);
-      //debugln(['TLazSourceFileManager.RemoveUnitsFromProject Unit ',AnUnitInfo.Filename]);
       if not AnUnitInfo.IsPartOfProject then continue;
       UnitPath:=ChompPathDelim(ExtractFilePath(AnUnitInfo.Filename));
       AnUnitInfo.IsPartOfProject:=false;
-      AProject.Modified:=true;
-      if FilenameIsPascalUnit(AnUnitInfo.Filename) then begin
+      SomeRemoved:=true;
+      Project1.Modified:=true;
+      if FilenameIsPascalUnit(AnUnitInfo.Filename) then
+      begin
         if FilenameIsAbsolute(AnUnitInfo.Filename) then
           ObsoleteUnitPaths:=MergeSearchPaths(ObsoleteUnitPaths,UnitPath);
         // remove from project's unit section
-        if (AProject.MainUnitID>=0)
-        and (pfMainUnitIsPascalSource in AProject.Flags)
+        if (Project1.MainUnitID>=0)
+        and (pfMainUnitIsPascalSource in Project1.Flags)
         then begin
           ShortUnitName:=ExtractFileNameOnly(AnUnitInfo.Filename);
-          //debugln(['TLazSourceFileManager.RemoveUnitsFromProject UnitName=',ShortUnitName]);
           if (ShortUnitName<>'') then begin
-            Dummy:=CodeToolBoss.RemoveUnitFromAllUsesSections(
-                                      AProject.MainUnitInfo.Source,ShortUnitName);
-            if not Dummy then begin
+            if not CodeToolBoss.RemoveUnitFromAllUsesSections(
+                                 Project1.MainUnitInfo.Source,ShortUnitName) then
+            begin
               MainIDE.DoJumpToCodeToolBossError;
               exit(mrCancel);
             end;
           end;
         end;
         // remove CreateForm statement from project
-        if (AProject.MainUnitID>=0)
-        and (pfMainUnitHasCreateFormStatements in AProject.Flags)
-        and (AnUnitInfo.ComponentName<>'') then begin
-          Dummy:=AProject.RemoveCreateFormFromProjectFile(
-              'T'+AnUnitInfo.ComponentName,AnUnitInfo.ComponentName);
-          if not Dummy then begin
-            MainIDE.DoJumpToCodeToolBossError;
-            exit(mrCancel);
-          end;
-        end;
+        if (Project1.MainUnitID>=0) and (AnUnitInfo.ComponentName<>'')
+        and (pfMainUnitHasCreateFormStatements in Project1.Flags) then
+          // Do not care if this fails. A user may have removed the line from source.
+          Project1.RemoveCreateFormFromProjectFile(AnUnitInfo.ComponentName);
       end;
       if CompareFileExt(AnUnitInfo.Filename,'.inc',false)=0 then
         // include file
         if FilenameIsAbsolute(AnUnitInfo.Filename) then
           ObsoleteIncPaths:=MergeSearchPaths(ObsoleteIncPaths,UnitPath);
     end;
+    if not SomeRemoved then exit;  // No units were actually removed.
 
     // removed directories still used for ObsoleteUnitPaths, ObsoleteIncPaths
-    AnUnitInfo:=AProject.FirstPartOfProject;
+    AnUnitInfo:=Project1.FirstPartOfProject;
     while AnUnitInfo<>nil do begin
       if FilenameIsAbsolute(AnUnitInfo.Filename) then begin
         UnitPath:=ChompPathDelim(ExtractFilePath(AnUnitInfo.Filename));
@@ -7881,14 +7445,15 @@ begin
 
   finally
     // all changes were handled automatically by events, just clear the logs
-    CodeToolBoss.SourceCache.ClearAllSourceLogEntries;
-    AProject.EndUpdate;
+    if SomeRemoved then
+      CodeToolBoss.SourceCache.ClearAllSourceLogEntries;
+    Project1.EndUpdate;
   end;
 end;
 
 // methods for open project, create project from source
 
-function TLazSourceFileManager.CompleteLoadingProjectInfo: TModalResult;
+function CompleteLoadingProjectInfo: TModalResult;
 begin
   MainIDE.UpdateCaption;
   EnvironmentOptions.LastSavedProjectFile:=Project1.ProjectInfoFile;
@@ -7900,7 +7465,7 @@ begin
   PkgBoss.OpenProjectDependencies(Project1,true);
 
   Project1.DefineTemplates.AllChanged;
-  //DebugLn('TLazSourceFileManager.CompleteLoadingProjectInfo ',Project1.IDAsString);
+  //DebugLn('CompleteLoadingProjectInfo ',Project1.IDAsString);
   Project1.DefineTemplates.Active:=true;
 
   Result:=mrOk;
@@ -7908,7 +7473,7 @@ end;
 
 // Methods for 'save project'
 
-function TLazSourceFileManager.SaveProjectInfo(var Flags: TSaveFlags): TModalResult;
+function SaveProjectInfo(var Flags: TSaveFlags): TModalResult;
 var
   MainUnitInfo: TUnitInfo;
   MainUnitSrcEdit: TSourceEditor;
@@ -7922,7 +7487,7 @@ begin
   UpdateSourceNames;
 
   // find mainunit
-  GetMainUnit(MainUnitInfo,MainUnitSrcEdit,true);
+  GetMainUnit(MainUnitInfo, MainUnitSrcEdit);
 
   // save project specific settings of the source editor
   SaveSourceEditorProjectSpecificSettings;
@@ -7933,7 +7498,10 @@ begin
   if ([sfSaveAs,sfSaveToTestDir]*Flags=[sfSaveAs]) then begin
     // let user choose a filename
     Result:=ShowSaveProjectAsDialog(sfSaveMainSourceAs in Flags);
-    if Result<>mrOk then exit;
+    if Result<>mrOk then begin
+      debugln(['Info: (lazarus) [SaveProjectInfo] ShowSaveProjectAsDialog failed']);
+      exit;
+    end;
     Flags:=Flags-[sfSaveAs,sfSaveMainSourceAs];
   end;
 
@@ -7941,10 +7509,14 @@ begin
   UpdateProjectResourceInfo;
 
   // save project info file
+  //debugln(['SaveProjectInfo ',Project1.ProjectInfoFile,' Test=',sfSaveToTestDir in Flags,' Virt=',Project1.IsVirtual]);
   if (not (sfSaveToTestDir in Flags))
   and (not Project1.IsVirtual) then begin
     Result:=Project1.WriteProject([],'',EnvironmentOptions.BuildMatrixOptions);
-    if Result=mrAbort then exit;
+    if Result=mrAbort then begin
+      debugln(['Info: (lazarus) [SaveProjectInfo] Project1.WriteProject failed']);
+      exit;
+    end;
     EnvironmentOptions.LastSavedProjectFile:=Project1.ProjectInfoFile;
     IDEProtocolOpts.LastProjectLoadingCrashed := False;
     AddRecentProjectFile(Project1.ProjectInfoFile);
@@ -7965,7 +7537,10 @@ begin
       // loaded in source editor
       Result:=SaveEditorFile(MainUnitInfo.OpenEditorInfo[0].EditorComponent,
                [sfProjectSaving]+[sfSaveToTestDir,sfCheckAmbiguousFiles]*Flags);
-      if Result=mrAbort then exit;
+      if Result=mrAbort then begin
+        debugln(['Info: (lazarus) [SaveProjectInfo] SaveEditorFile MainUnitInfo failed "',DestFilename,'"']);
+        exit;
+      end;
     end else
     begin
       // not loaded in source editor (hidden)
@@ -7975,7 +7550,10 @@ begin
       if (not SkipSavingMainSource) and (MainUnitInfo.Source<>nil) then
       begin
         Result:=SaveCodeBufferToFile(MainUnitInfo.Source, DestFilename);
-        if Result=mrAbort then exit;
+        if Result=mrAbort then begin
+          debugln(['Info: (lazarus) [SaveProjectInfo] SaveEditorFile failed "',DestFilename,'"']);
+          exit;
+        end;
       end;
     end;
 
@@ -7990,22 +7568,21 @@ begin
   end;
 end;
 
-procedure TLazSourceFileManager.GetMainUnit(out MainUnitInfo: TUnitInfo; out
-  MainUnitSrcEdit: TSourceEditor; UpdateModified: boolean);
+procedure GetMainUnit(out MainUnitInfo: TUnitInfo; out MainUnitSrcEdit: TSourceEditor);
 begin
   MainUnitSrcEdit:=nil;
   if Project1.MainUnitID>=0 then begin
     MainUnitInfo:=Project1.MainUnitInfo;
     if MainUnitInfo.OpenEditorInfoCount > 0 then begin
       MainUnitSrcEdit := TSourceEditor(MainUnitInfo.OpenEditorInfo[0].EditorComponent);
-      if UpdateModified and MainUnitSrcEdit.Modified then
+      if MainUnitSrcEdit.Modified then
         MainUnitSrcEdit.UpdateCodeBuffer;
     end;
   end else
     MainUnitInfo:=nil;
 end;
 
-procedure TLazSourceFileManager.SaveSrcEditorProjectSpecificSettings(AnEditorInfo: TUnitEditorInfo);
+procedure SaveSrcEditorProjectSpecificSettings(AnEditorInfo: TUnitEditorInfo);
 var
   ASrcEdit: TSourceEditor;
 begin
@@ -8016,7 +7593,7 @@ begin
   AnEditorInfo.FoldState := ASrcEdit.EditorComponent.FoldState;
 end;
 
-procedure TLazSourceFileManager.SaveSourceEditorProjectSpecificSettings;
+procedure SaveSourceEditorProjectSpecificSettings;
 var
   i: Integer;
 begin
@@ -8024,7 +7601,7 @@ begin
     SaveSrcEditorProjectSpecificSettings(Project1.AllEditorsInfo[i]);
 end;
 
-procedure TLazSourceFileManager.UpdateProjectResourceInfo;
+procedure UpdateProjectResourceInfo;
 var
   AnUnitInfo: TUnitInfo;
   LFMFilename: String;
@@ -8043,7 +7620,7 @@ begin
   end;
 end;
 
-function TLazSourceFileManager.ShowSaveProjectAsDialog(UseMainSourceFile: boolean): TModalResult;
+function ShowSaveProjectAsDialog(UseMainSourceFile: boolean): TModalResult;
 var
   MainUnitSrcEdit: TSourceEditor;
   MainUnitInfo: TUnitInfo;
@@ -8062,7 +7639,7 @@ begin
     if Project1.MainUnitInfo = nil then
       UseMainSourceFile := False;
 
-    SaveDialog:=TSaveDialog.Create(nil);
+    SaveDialog:=IDESaveDialogClass.Create(nil);
     try
       InputHistories.ApplyFileDialogSettings(SaveDialog);
       AFilename:='';
@@ -8090,8 +7667,10 @@ begin
       Ext := ExtractFileExt(AFilename);
       SaveDialog.Title := Format(lisSaveProject, [Project1.GetTitleOrName, Ext]);
       SaveDialog.FileName := AFilename;
-      SaveDialog.Filter := '*' + Ext + '|' + '*' + Ext;
-      SaveDialog.DefaultExt := ExtractFileExt(AFilename);
+      // Note: add *.* filter, so users can see the files in the target directory
+      SaveDialog.Filter := '*' + Ext + '|' + '*' + Ext
+         + '|' + dlgFilterAll + ' (' + GetAllFilesMask + ')|' + GetAllFilesMask;
+      SaveDialog.DefaultExt := Ext;
       if not Project1.IsVirtual then
         SaveDialog.InitialDir := Project1.Directory;
 
@@ -8101,14 +7680,10 @@ begin
         NewProgramName:='';     // the pascal program identifier
         NewProgramFN:='';       // the program source filename
 
-        if not SaveDialog.Execute then begin
-          // user cancels
-          Result:=mrCancel;
-          exit;
-        end;
+        if not SaveDialog.Execute then
+          exit;   // user cancels
         AFilename:=ExpandFileNameUTF8(SaveDialog.FileName);
-        Assert(FilenameIsAbsolute(AFilename),
-               'TLazSourceFileManager.ShowSaveProjectAsDialog: buggy ExpandFileNameUTF8');
+        Assert(FilenameIsAbsolute(AFilename),'ShowSaveProjectAsDialog: buggy ExpandFileNameUTF8');
 
         // check program name
         NewProgramName:=ExtractFileNameOnly(AFilename);
@@ -8142,7 +7717,7 @@ begin
           if UseMainSourceFile then
             NewProgramFN := ExtractFileName(AFilename)
           else
-            NewProgramFN := ExtractFileNameWithoutExt(NewProgramName) + Ext;
+            NewProgramFN := NewProgramName + Ext;
           NewProgramFN := ExtractFilePath(NewLPIFilename) + NewProgramFN;
           if (CompareFilenames(NewLPIFilename, NewProgramFN) = 0) then
           begin
@@ -8174,7 +7749,7 @@ begin
       SaveDialog.Free;
     end;
 
-    //DebugLn(['TLazSourceFileManager.ShowSaveProjectAsDialog NewLPI=',NewLPIFilename,' NewProgramName=',NewProgramName,' NewMainSource=',NewProgramFN]);
+    //DebugLn(['ShowSaveProjectAsDialog NewLPI=',NewLPIFilename,' NewProgramName=',NewProgramName,' NewMainSource=',NewProgramFN]);
 
     // check if info file or source file already exists
     // Note: if user confirms overwriting .lpi do not ask for overwriting .lpr
@@ -8205,11 +7780,12 @@ begin
         or (Project1.ProjectInfoFile='') ) then
     begin
       // target file is default => change to all build modes, but keep sub directories
-      // Note: Extension is appended automatically => do not add it
-      NewTargetFN:=ExtractFilePath(Project1.TargetFilename)+ExtractFileNameOnly(NewProgramFN);
+      // And keep old extension.
+      NewTargetFN:=ExtractFilePath(Project1.TargetFilename)+ExtractFileNameOnly(NewProgramFN)
+        +ExtractFileExt(Project1.TargetFilename);
       for i := 0 to Project1.BuildModes.Count-1 do
         Project1.BuildModes[i].CompilerOptions.TargetFilename:=NewTargetFN;
-      //DebugLn(['TLazSourceFileManager.ShowSaveProjectAsDialog changed targetfilename to ',Project1.TargetFilename]);
+      //DebugLn(['ShowSaveProjectAsDialog changed targetfilename to ',Project1.TargetFilename]);
     end;
 
     // set new project filename
@@ -8220,11 +7796,10 @@ begin
     // change main source
     if (Project1.MainUnitID >= 0) then
     begin
-      GetMainUnit(MainUnitInfo, MainUnitSrcEdit, true);
-
+      GetMainUnit(MainUnitInfo, MainUnitSrcEdit);
       if not Project1.ProjResources.RenameDirectives(MainUnitInfo.Filename,NewProgramFN)
       then begin
-        DebugLn(['TLazSourceFileManager.ShowSaveProjectAsDialog failed renaming directives Old="',MainUnitInfo.Filename,'" New="',NewProgramFN,'"']);
+        DebugLn(['ShowSaveProjectAsDialog failed renaming directives Old="',MainUnitInfo.Filename,'" New="',NewProgramFN,'"']);
         // silently ignore
       end;
 
@@ -8286,10 +7861,10 @@ begin
     Project1.EndUpdate;
   end;
   Result:=mrOk;
-  //DebugLn(['TLazSourceFileManager.ShowSaveProjectAsDialog END OK']);
+  //DebugLn(['ShowSaveProjectAsDialog END OK']);
 end;
 
-function TLazSourceFileManager.AskSaveProject(const ContinueText, ContinueBtn: string): TModalResult;
+function AskSaveProject(const ContinueText, ContinueBtn: string): TModalResult;
 var
   DataModified: Boolean;
   SrcModified: Boolean;
@@ -8359,8 +7934,7 @@ begin
   end;
 end;
 
-function TLazSourceFileManager.SaveSourceEditorChangesToCodeCache(
-  AEditor: TSourceEditorInterface): boolean;
+function SaveEditorChangesToCodeCache(AEditor: TSourceEditorInterface): boolean;
 // save all open sources to code tools cache
 
   procedure SaveChanges(SaveEditor: TSourceEditorInterface);
@@ -8373,9 +7947,9 @@ function TLazSourceFileManager.SaveSourceEditorChangesToCodeCache(
       //debugln(['SaveChanges ',AnUnitInfo.Filename,' ',SaveEditor.NeedsUpdateCodeBuffer]);
       if SaveEditor.NeedsUpdateCodeBuffer then
       begin
-        SaveSourceEditorChangesToCodeCache:=true;
+        SaveEditorChangesToCodeCache:=true;
         SaveEditor.UpdateCodeBuffer;
-        //debugln(['TLazSourceFileManager.SaveSourceEditorChangesToCodeCache.SaveChanges ',AnUnitInfo.Filename,' Step=',TCodeBuffer(SaveEditor.CodeToolsBuffer).ChangeStep]);
+        //debugln(['SaveEditorChangesToCodeCache.SaveChanges ',AnUnitInfo.Filename,' Step=',TCodeBuffer(SaveEditor.CodeToolsBuffer).ChangeStep]);
       end;
     end;
   end;
@@ -8384,7 +7958,7 @@ var
   i: integer;
 begin
   Result:=false;
-  //debugln(['TLazSourceFileManager.SaveSourceEditorChangesToCodeCache ']);
+  //debugln(['SaveEditorChangesToCodeCache ']);
   if AEditor = nil then begin
     for i:=0 to SourceEditorManager.SourceEditorCount - 1 do
       SaveChanges(SourceEditorManager.SourceEditors[i]);
@@ -8393,8 +7967,8 @@ begin
   end;
 end;
 
-function TLazSourceFileManager.ReplaceUnitUse(OldFilename, OldUnitName, NewFilename,
-  NewUnitName: string; IgnoreErrors, Quiet, Confirm: boolean): TModalResult;
+function ReplaceUnitUse(OldFilename, OldUnitName, NewFilename, NewUnitName: string;
+  IgnoreErrors, Quiet, Confirm: boolean): TModalResult;
 // Replaces all references to a unit
 var
   OwnerList: TFPList;
@@ -8451,10 +8025,10 @@ begin
       or (CompareFilenames(Files[i],NewFilename)=0) then
         Files.Delete(i);
     end;
-    //DebugLn(['TLazSourceFileManager.ReplaceUnitUse ',Files.Text]);
+    //DebugLn(['ReplaceUnitUse ',Files.Text]);
 
     // commit source editor to codetools
-    SaveSourceEditorChangesToCodeCache(nil);
+    SaveEditorChangesToCodeCache(nil);
 
     // load or create old unit
     OldCode:=CodeToolBoss.LoadFile(OldFilename,true,false);
@@ -8469,7 +8043,7 @@ begin
     if (not IgnoreErrors) and (not Quiet) and (CodeToolBoss.ErrorMessage<>'') then
       MainIDE.DoJumpToCodeToolBossError;
     if Result<>mrOk then begin
-      debugln('TLazSourceFileManager.ReplaceUnitUse GatherUnitReferences failed');
+      debugln('ReplaceUnitUse GatherUnitReferences failed');
       exit;
     end;
 
@@ -8494,12 +8068,11 @@ begin
           exit;
         end;
       end;
-      if not CodeToolBoss.RenameIdentifier(PascalReferences,
-        OldUnitName,NewUnitName)
+      if not CodeToolBoss.RenameIdentifier(PascalReferences,OldUnitName,NewUnitName)
       then begin
         if (not IgnoreErrors) and (not Quiet) then
           MainIDE.DoJumpToCodeToolBossError;
-        debugln('TLazSourceFileManager.ReplaceUnitUse unable to commit');
+        debugln('ReplaceUnitUse unable to commit');
         if not IgnoreErrors then begin
           Result:=mrCancel;
           exit;
@@ -8518,18 +8091,15 @@ begin
   Result:=mrOk;
 end;
 
-function TLazSourceFileManager.DesignerUnitIsVirtual(aLookupRoot: TComponent): Boolean;
+function DesignerUnitIsVirtual(aLookupRoot: TComponent): Boolean;
 var
   ActiveSourceEditor: TSourceEditor;
   ActiveUnitInfo: TUnitInfo;
 begin
-  Assert(Assigned(aLookupRoot),'SourceFileMgr.DesignerUnitIsVirtual: aLookupRoot is not assigned');
+  Assert(Assigned(aLookupRoot),'DesignerUnitIsVirtual: aLookupRoot is not assigned');
   MainIDE.GetUnitWithPersistent(aLookupRoot, ActiveSourceEditor, ActiveUnitInfo);
   Result := ActiveUnitInfo.IsVirtual;
 end;
-
-finalization
-  SourceFileMgrSingleton.Free;
 
 end.
 

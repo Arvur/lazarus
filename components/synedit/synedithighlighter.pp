@@ -32,8 +32,12 @@ unit SynEditHighlighter;
 interface
 
 uses
-  SysUtils, Classes,
-  Graphics, LazUTF8, LCLProc, LCLIntf, LCLType, Registry, IniFiles,
+  SysUtils, Classes, Registry, IniFiles,
+  // LCL
+  LCLProc, LCLIntf, LCLType, Graphics,
+  // LazUtils
+  LazUTF8, LazMethodList,
+  // SynEdit
   SynEditTypes, SynEditTextBase;
 
 type
@@ -142,6 +146,7 @@ type
     constructor Create;
     constructor Create(aCaption: string; aStoredName: String = '');
     constructor Create(aCaption: PString; aStoredName: String = '');
+    function  IsEnabled: boolean; virtual;
     procedure InternalSaveDefaultValues; virtual;
     function  LoadFromBorlandRegistry(rootKey: HKEY; attrKey, attrName: string;
                                       oldStyle: boolean): boolean; virtual;
@@ -401,7 +406,12 @@ type
     procedure ContinueNextLine; // To be called at EOL; does not read the range
 
     procedure ScanRanges;
-    function  IdleScanRanges: Boolean; // Scan little by little during OnIdle; Return True, if more work avail
+    (* IdleScanRanges
+       Scan in small chunks during OnIdle; Return True, if more work avail
+       This method is still under development. It may be changed, removed, un-virtualized, or anything.
+       In future SynEdit & HL may have other IDLE tasks, and if and when that happens, there will be new ways to control this
+    *)
+    function  IdleScanRanges: Boolean; virtual; experimental;
     function NeedScan: Boolean;
     procedure ScanAllRanges;
     procedure SetRange(Value: Pointer); virtual;
@@ -893,6 +903,13 @@ begin
   if aStoredName = '' then
     aStoredName := FConstName;
   FStoredName := aStoredName;;
+end;
+
+function TSynHighlighterAttributes.IsEnabled: boolean;
+begin
+  Result := (Background <> clNone) or (Foreground <> clNone) or
+            ( (FrameColor <> clNone) and (FrameEdges <> sfeNone) ) or
+            (Style <> []) or (StyleMask <> []);
 end;
 
 function TSynHighlighterAttributes.GetBackgroundColorStored: boolean;

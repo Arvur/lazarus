@@ -39,8 +39,15 @@ unit MultiPasteDlg;
 interface
 
 uses
-  SysUtils, Classes, StdCtrls, ButtonPanel, Forms, Clipbrd, SynEdit,
-  IDEHelpIntf, InputHistory, IDEProcs, LazarusIDEStrConsts;
+  SysUtils, Classes,
+  // LCL
+  StdCtrls, ButtonPanel, Forms, Clipbrd,
+  // SynEdit
+  SynEdit,
+  // IdeIntf
+  IDEHelpIntf,
+  // IDE
+  InputHistory, IDEProcs, LazarusIDEStrConsts, EnvironmentOpts;
 
 const
   hlFormatPasteTxtBefore = 'FormatPasteTxtBefore';
@@ -117,6 +124,9 @@ begin
   EscQuotesStyleComboBox.Items[1] := lismpCStyle;
   TrimClipbrdContentsCheckBox.Caption := lismpTrimClipboardContents;
   PreviewGroupBox.Caption := lismpPreview;
+  TxtBeforeLinesComboBox.DropDownCount := EnvironmentOptions.DropDownCount;
+  TxtAfterLinesComboBox.DropDownCount := EnvironmentOptions.DropDownCount;
+  EscQuotesStyleComboBox.DropDownCount := EnvironmentOptions.DropDownCount;
 end;
 
 procedure TMultiPasteDialog.FormDestroy(Sender: TObject);

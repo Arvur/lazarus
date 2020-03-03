@@ -14,14 +14,17 @@ msgstr ""
 "Language: lt\n"
 
 #: lclstrconsts.hhshelpbrowsernotexecutable
+#, object-pascal-format
 msgid "Browser \"%s\" not executable."
 msgstr "Naršyklė „%s“ nėra vykdomasis failas."
 
 #: lclstrconsts.hhshelpbrowsernotfound
+#, object-pascal-format
 msgid "Browser \"%s\" not found."
 msgstr "Naršyklė „%s“ nerasta."
 
 #: lclstrconsts.hhshelperrorwhileexecuting
+#, object-pascal-format
 msgid "Error while executing \"%s\":%s%s"
 msgstr "Įvyko klaida vykdant „%s“:%s%s"
 
@@ -30,14 +33,17 @@ msgid "Unable to find a HTML browser."
 msgstr "Nepavyko rasti HTML naršyklės."
 
 #: lclstrconsts.hhshelpnohtmlbrowserfoundpleasedefineone
+#, object-pascal-format
 msgid "No HTML Browser found.%sPlease define one in Tools -> Options -> Help -> Help Options"
 msgstr "Nerasta HTML Naršyklė.%sJą galima nustatyti „Aplinka -> Aplinkos parinktys -> Žinynas -> Žinyno parinktys“"
 
 #: lclstrconsts.hhshelpthehelpdatabasewasunabletofindfile
+#, object-pascal-format
 msgid "The help database \"%s\" was unable to find file \"%s\"."
 msgstr "Žinyno duomenų bazė „%s“ nerado failo „%s“."
 
 #: lclstrconsts.hhshelpthemacrosinbrowserparamswillbereplacedbytheurl
+#, object-pascal-format
 msgid "The macro %s in BrowserParams will be replaced by the URL."
 msgstr "Makrokomanda %s naršyklės parametruose bus pakeista URL reikšme."
 
@@ -49,212 +55,33 @@ msgstr "Alt"
 msgid "Ctrl"
 msgstr "Vald"
 
-#: lclstrconsts.ifsvk_accept
-msgid "Accept"
-msgstr "Priimti"
-
-#: lclstrconsts.ifsvk_apps
-msgid "application key"
-msgstr "Programos klavišas"
-
-#: lclstrconsts.ifsvk_back
-msgid "Backspace"
-msgstr "Naikinimo klavišas"
-
-#: lclstrconsts.ifsvk_cancel
-msgctxt "lclstrconsts.ifsvk_cancel"
-msgid "Cancel"
-msgstr "Atsisakyti"
-
-#: lclstrconsts.ifsvk_capital
-msgid "Capital"
-msgstr "Didž"
-
-#: lclstrconsts.ifsvk_clear
-msgid "Clear"
-msgstr "Išvalyti"
-
 #: lclstrconsts.ifsvk_cmd
 msgid "Cmd"
 msgstr "Cmd"
 
-#: lclstrconsts.ifsvk_control
-msgid "Control"
-msgstr "Vald"
-
-#: lclstrconsts.ifsvk_convert
-msgid "Convert"
-msgstr "Paversti"
-
-#: lclstrconsts.ifsvk_delete
-msgctxt "lclstrconsts.ifsvk_delete"
-msgid "Delete"
-msgstr "Šalinti"
-
-#: lclstrconsts.ifsvk_down
-msgctxt "lclstrconsts.ifsvk_down"
-msgid "Down"
-msgstr "Žemyn"
-
-#: lclstrconsts.ifsvk_end
-msgctxt "lclstrconsts.ifsvk_end"
-msgid "End"
-msgstr "Pabaiga"
-
-#: lclstrconsts.ifsvk_escape
-msgid "Escape"
-msgstr "Grįžimas"
-
-#: lclstrconsts.ifsvk_execute
-msgid "Execute"
-msgstr "Vykdyti"
-
-#: lclstrconsts.ifsvk_final
-msgid "Final"
-msgstr "Galutinis"
-
-#: lclstrconsts.ifsvk_hanja
-msgid "Hanja"
-msgstr "Hanja"
-
 #: lclstrconsts.ifsvk_help
+msgctxt "lclstrconsts.ifsvk_help"
 msgid "Help"
 msgstr "Žinynas"
-
-#: lclstrconsts.ifsvk_home
-msgctxt "lclstrconsts.ifsvk_home"
-msgid "Home"
-msgstr "Į pradžią"
-
-#: lclstrconsts.ifsvk_insert
-msgctxt "lclstrconsts.ifsvk_insert"
-msgid "Insert"
-msgstr "Įterpti"
-
-#: lclstrconsts.ifsvk_junja
-msgid "Junja"
-msgstr "Junja"
-
-#: lclstrconsts.ifsvk_kana
-msgid "Kana"
-msgstr "Kana"
-
-#: lclstrconsts.ifsvk_lbutton
-msgid "Mouse Button Left"
-msgstr "Kairys peles klavišas"
-
-#: lclstrconsts.ifsvk_left
-msgctxt "lclstrconsts.ifsvk_left"
-msgid "Left"
-msgstr "Kairėn"
-
-#: lclstrconsts.ifsvk_lwin
-msgid "left windows key"
-msgstr "Kairysis windows klavišas"
-
-#: lclstrconsts.ifsvk_mbutton
-msgid "Mouse Button Middle"
-msgstr "Vidurinis pelės klavišas"
-
-#: lclstrconsts.ifsvk_menu
-msgctxt "lclstrconsts.ifsvk_menu"
-msgid "Menu"
-msgstr "Meniu"
 
 #: lclstrconsts.ifsvk_meta
 msgid "Meta"
 msgstr "Meta"
 
-#: lclstrconsts.ifsvk_modechange
-msgid "Mode Change"
-msgstr "Būsenos keitimas"
-
-#: lclstrconsts.ifsvk_next
-msgctxt "lclstrconsts.ifsvk_next"
-msgid "Next"
-msgstr "Kitas"
-
-#: lclstrconsts.ifsvk_nonconvert
-msgid "Nonconvert"
-msgstr "Nonconvert"
-
-#: lclstrconsts.ifsvk_numlock
-msgid "Numlock"
-msgstr "Skaitm"
-
-#: lclstrconsts.ifsvk_numpad
-msgid "Numpad %d"
-msgstr "%d skaičių klaviatūros"
-
-#: lclstrconsts.ifsvk_pause
-msgid "Pause key"
-msgstr "Pazės klavišas"
-
-#: lclstrconsts.ifsvk_print
-msgid "Print"
-msgstr "Spausdinti"
-
-#: lclstrconsts.ifsvk_prior
-msgctxt "lclstrconsts.ifsvk_prior"
-msgid "Prior"
-msgstr "Ankstesnis"
-
-#: lclstrconsts.ifsvk_rbutton
-msgid "Mouse Button Right"
-msgstr "Dešinys pelės klavišas"
-
-#: lclstrconsts.ifsvk_return
-msgid "Return"
-msgstr "Įvedimas"
-
-#: lclstrconsts.ifsvk_right
-msgctxt "lclstrconsts.ifsvk_right"
-msgid "Right"
-msgstr "Dešinėn"
-
-#: lclstrconsts.ifsvk_rwin
-msgid "right windows key"
-msgstr "Dešinysis windows klavišas"
-
-#: lclstrconsts.ifsvk_scroll
-msgid "Scroll"
-msgstr "Slinkti"
-
-#: lclstrconsts.ifsvk_select
-msgid "Select"
-msgstr "Pasirinkti"
-
 #: lclstrconsts.ifsvk_shift
 msgid "Shift"
 msgstr "Lyg2"
-
-#: lclstrconsts.ifsvk_snapshot
-msgid "Snapshot"
-msgstr "Momentinė kopija"
-
-#: lclstrconsts.ifsvk_space
-msgid "Space key"
-msgstr "Tarpo klavišas"
 
 #: lclstrconsts.ifsvk_super
 msgid "Super"
 msgstr "Super"
 
-#: lclstrconsts.ifsvk_tab
-msgctxt "lclstrconsts.ifsvk_tab"
-msgid "Tab"
-msgstr "Tab"
-
 #: lclstrconsts.ifsvk_unknown
 msgid "Unknown"
 msgstr "Nežinomas"
 
-#: lclstrconsts.ifsvk_up
-msgctxt "lclstrconsts.ifsvk_up"
-msgid "Up"
-msgstr "Aukštyn"
-
 #: lclstrconsts.lislclresourcesnotfound
+#, object-pascal-format
 msgctxt "lclstrconsts.lislclresourcesnotfound"
 msgid "Resource %s not found"
 msgstr "Resursas %s nerastas"
@@ -280,6 +107,7 @@ msgid "Active Caption"
 msgstr "Aktyvi antraštė"
 
 #: lclstrconsts.rsallfiles
+#, object-pascal-format
 msgid "All files (%s)|%s|%s"
 msgstr "Visi failai (%s)|%s|%s"
 
@@ -292,6 +120,7 @@ msgid "Aqua"
 msgstr "Žydra"
 
 #: lclstrconsts.rsascannothaveasparent
+#, object-pascal-format
 msgid "Class %s cannot have %s as parent."
 msgstr "Klasė „%s“ negali turėti „%s“ kaip tėvo."
 
@@ -361,28 +190,28 @@ msgid "Case sensitive"
 msgstr "Skirti raidžių lygį"
 
 #: lclstrconsts.rscontrolclasscantcontainchildclass
+#, object-pascal-format
 msgid "Control of class '%s' can't have control of class '%s' as a child"
 msgstr "„%s“ klasės valdiklis negali būti „%s“ klasės valdiklio tėvas"
 
 #: lclstrconsts.rscontrolhasnoparentformorframe
+#, object-pascal-format
 msgid "Control '%s' has no parent form or frame"
 msgstr "Valdiklis „%s“ neturi tėvinės formos ar kadro"
 
 #: lclstrconsts.rscontrolhasnoparentwindow
+#, object-pascal-format
 msgid "Control '%s' has no parent window"
 msgstr "„%s“ valdiklis neturi tėvinio lango"
 
 #: lclstrconsts.rscontrolisnotaparent
+#, object-pascal-format
 msgid "'%s' is not a parent of '%s'"
 msgstr "„%s“ nėra „%s“ tėvas"
 
 #: lclstrconsts.rscreamcolorcaption
 msgid "Cream"
 msgstr "Kreminė"
-
-#: lclstrconsts.rscreatinggdbcatchableerror
-msgid "Creating gdb catchable error:"
-msgstr "Kuriama GDB aptinkama klaida:"
 
 #: lclstrconsts.rscursor
 msgid "Cursor"
@@ -417,10 +246,6 @@ msgstr "Kryptis"
 msgid "&Directory"
 msgstr "&Aplankas"
 
-#: lclstrconsts.rsdocking
-msgid "Docking"
-msgstr "Pritvirtinimas"
-
 #: lclstrconsts.rsdocopy
 msgid "Copy"
 msgstr "Kopijuoti"
@@ -447,14 +272,12 @@ msgid "Error"
 msgstr "Klaida"
 
 #: lclstrconsts.rserrorcreatingdevicecontext
+#, object-pascal-format
 msgid "Error creating device context for %s.%s"
 msgstr "Įvyko klaida kuriant įrenginio kontekstą, skirtą %s.%s"
 
-#: lclstrconsts.rserrorinlcl
-msgid "ERROR in LCL: "
-msgstr "LCL klaida:"
-
 #: lclstrconsts.rserroroccurredinataddressframe
+#, object-pascal-format
 msgid "Error occurred in %s at %sAddress %s%s Frame %s"
 msgstr "%s įvyko klaida:%sadresas %s%s, kadras %s"
 
@@ -471,10 +294,12 @@ msgid "Directory must exist"
 msgstr "Aplankas turi egzistuoti"
 
 #: lclstrconsts.rsfddirectorynotexist
+#, object-pascal-format
 msgid "The directory \"%s\" does not exist."
 msgstr "Aplankas „%s“ neegzistuoja."
 
 #: lclstrconsts.rsfdfilealreadyexists
+#, object-pascal-format
 msgid "The file \"%s\" already exists. Overwrite ?"
 msgstr "Failas „%s“ jau yra. Perrašyti?"
 
@@ -483,10 +308,12 @@ msgid "File must exist"
 msgstr "Failas turi egzistuoti"
 
 #: lclstrconsts.rsfdfilenotexist
+#, object-pascal-format
 msgid "The file \"%s\" does not exist."
 msgstr "Failas „%s“ neegzistuoja."
 
 #: lclstrconsts.rsfdfilereadonly
+#, object-pascal-format
 msgid "The file \"%s\" is not writable."
 msgstr "Failas „%s“ nėra skirtas rašymui."
 
@@ -511,6 +338,7 @@ msgid "Path must exist"
 msgstr "Kelias turi egzistuoti"
 
 #: lclstrconsts.rsfdpathnoexist
+#, object-pascal-format
 msgid "The path \"%s\" does not exist."
 msgstr "Kelias „%s“ neegzistuoja."
 
@@ -519,6 +347,7 @@ msgid "Select Directory"
 msgstr "Pasirinkite katalogą"
 
 #: lclstrconsts.rsfileinfofilenotfound
+#, object-pascal-format
 msgid "(file not found: \"%s\")"
 msgstr "(failas nerastas: „%s“)"
 
@@ -556,10 +385,12 @@ msgid "Form"
 msgstr "Forma"
 
 #: lclstrconsts.rsformresourcesnotfoundforresourcelessformscreatenew
+#, object-pascal-format
 msgid "Form resource %s not found. For resourceless forms CreateNew constructor must be used. See the global variable RequireDerivedFormResource."
 msgstr "Nepavyko rasti formos ištekliaus „%s“. Formoms be išteklių turi būti naudojamas „CreateNew“ konstruktorius. Žvilktelėkite į globalų kintamąjį „RequireDerivedFormResource“."
 
 #: lclstrconsts.rsformstreamingerror
+#, object-pascal-format
 msgid "Form streaming \"%s\" error: %s"
 msgstr "Formą siunčiant srautu „%s“ įvyko klaida: %s"
 
@@ -675,7 +506,14 @@ msgstr "--no-xshm     Nenaudoti „X Shared Memory“ plėtinio."
 msgid "--sync                Call XSynchronize (display, True) after the Xserver connection has been established. This makes debugging X protocol errors easier, because X request buffering will be disabled and X errors will be received immediately after the protocol request that generated the error has been processed by the X server."
 msgstr "--sync     Kai XServer ryšys sukurtas, vykdyti „XSynchronize (display, True)“. Tai palengvins X protokolo klaidų derinimą, nes bus išjungtas X kreipinių buferis ir X serveriui apdorojant protokolo kreipinį įvykusi klaida bus gauta iškart."
 
+#: lclstrconsts.rshelp
+#, fuzzy
+msgctxt "lclstrconsts.rshelp"
+msgid "Help"
+msgstr "Žinynas"
+
 #: lclstrconsts.rshelpalreadyregistered
+#, object-pascal-format
 msgid "%s: Already registered"
 msgstr "%s: jau yra registruotas"
 
@@ -692,42 +530,52 @@ msgid "Help Error"
 msgstr "Žinyno klaida"
 
 #: lclstrconsts.rshelphelpcontextnotfound
+#, object-pascal-format
 msgid "Help context %s not found."
 msgstr "Žinyno turinys %s nerastas."
 
 #: lclstrconsts.rshelphelpcontextnotfoundindatabase
+#, object-pascal-format
 msgid "Help context %s not found in Database \"%s\"."
 msgstr "Žinyno turinys „%s“ duomenų bazėje „%s“ nerastas."
 
 #: lclstrconsts.rshelphelpdatabasedidnotfoundaviewerforahelppageoftype
+#, object-pascal-format
 msgid "Help Database \"%s\" did not find a viewer for a help page of type %s"
 msgstr "Žinyno duomenų bazė „%s“ nerado žiūryklės „%s“ tipo žinyno lapui."
 
 #: lclstrconsts.rshelphelpdatabasenotfound
+#, object-pascal-format
 msgid "Help Database \"%s\" not found"
 msgstr "Žinyno duomenų bazė „%s“ nerasta."
 
 #: lclstrconsts.rshelphelpfordirectivenotfound
+#, object-pascal-format
 msgid "Help for directive \"%s\" not found."
 msgstr "Žinyne nėra informacijos apie direktyvą „%s“."
 
 #: lclstrconsts.rshelphelpfordirectivenotfoundindatabase
+#, object-pascal-format
 msgid "Help for directive \"%s\" not found in Database \"%s\"."
 msgstr "Informacijos apie direktyvą „%s“ duomenų bazėje „%s“ nerasta."
 
 #: lclstrconsts.rshelphelpkeywordnotfound
+#, object-pascal-format
 msgid "Help keyword \"%s\" not found."
 msgstr "Žinyno raktažodis „%s“ nerastas."
 
 #: lclstrconsts.rshelphelpkeywordnotfoundindatabase
+#, object-pascal-format
 msgid "Help keyword \"%s\" not found in Database \"%s\"."
 msgstr "Žinyno raktažodis „%s“ duomenų bazėje „%s“ nerastas."
 
 #: lclstrconsts.rshelphelpnodehasnohelpdatabase
+#, object-pascal-format
 msgid "Help node \"%s\" has no Help Database"
 msgstr "Žinyno mazgas „%s“ neturi žinyno duomenų bazės."
 
 #: lclstrconsts.rshelpnohelpfoundforsource
+#, object-pascal-format
 msgid "No help found for line %d, column %d of %s."
 msgstr "Žinyne nėra duomenų eilutei %d, stulpeliui %d šio %s."
 
@@ -740,6 +588,7 @@ msgid "No help found for this topic"
 msgstr "Žinyne nėra informacijos šia tema"
 
 #: lclstrconsts.rshelpnotregistered
+#, object-pascal-format
 msgid "%s: Not registered"
 msgstr "%s: neregistruotas"
 
@@ -748,6 +597,7 @@ msgid "Help Selector Error"
 msgstr "Žinyno parinkiklio klaida"
 
 #: lclstrconsts.rshelpthereisnoviewerforhelptype
+#, object-pascal-format
 msgid "There is no viewer for help type \"%s\""
 msgstr "Nerasta žiūryklė „%s“ žinyno tipui."
 
@@ -818,10 +668,12 @@ msgid "Inactive Caption"
 msgstr "Neaktyvi antraštė"
 
 #: lclstrconsts.rsindexoutofbounds
+#, object-pascal-format
 msgid "%s Index %d out of bounds 0 .. %d"
 msgstr "%s indeksas %d peržengia ribas 0 .. %d"
 
 #: lclstrconsts.rsindexoutofrange
+#, object-pascal-format
 msgid "Index Out of range Cell[Col=%d Row=%d]"
 msgstr "Langelio [stulpelis = %d, eilutė = %d] indeksas peržengia ribas"
 
@@ -839,10 +691,12 @@ msgid "Insert"
 msgstr "Įterpti"
 
 #: lclstrconsts.rsinvaliddate
+#, object-pascal-format
 msgid "Invalid Date : %s"
 msgstr "Netinkama data: %s"
 
 #: lclstrconsts.rsinvaliddaterangehint
+#, object-pascal-format
 msgid "Invalid Date: %s. Must be between %s and %s"
 msgstr "Netinkama data: %s. Ji turi būti tarp %s ir %s"
 
@@ -859,6 +713,7 @@ msgid "Invalid stream format"
 msgstr "Netinkamas srauto formatas"
 
 #: lclstrconsts.rsisalreadyassociatedwith
+#, object-pascal-format
 msgid "%s is already associated with %s"
 msgstr "%s jau yra susietas su %s"
 
@@ -875,8 +730,31 @@ msgid "Lime"
 msgstr "Gelsvai žalsva"
 
 #: lclstrconsts.rslistindexexceedsbounds
+#, object-pascal-format
 msgid "List index exceeds bounds (%d)"
 msgstr "Sąrašo indeksas peržengė ribas (%d)"
+
+#: lclstrconsts.rsmacosmenuhide
+#, object-pascal-format
+msgid "Hide %s"
+msgstr ""
+
+#: lclstrconsts.rsmacosmenuhideothers
+msgid "Hide Others"
+msgstr ""
+
+#: lclstrconsts.rsmacosmenuquit
+#, object-pascal-format
+msgid "Quit %s"
+msgstr ""
+
+#: lclstrconsts.rsmacosmenuservices
+msgid "Services"
+msgstr ""
+
+#: lclstrconsts.rsmacosmenushowall
+msgid "Show All"
+msgstr ""
 
 #: lclstrconsts.rsmarooncolorcaption
 msgid "Maroon"
@@ -1051,6 +929,7 @@ msgid "Post"
 msgstr "Išsiųsti"
 
 #: lclstrconsts.rspressoktoignoreandriskdatacorruptionpressaborttok
+#, object-pascal-format
 msgid "%s%sPress OK to ignore and risk data corruption.%sPress Abort to kill the program."
 msgstr "%s%sSpustelėjus „Tinka“ bus tęsiama, tačiau iškils sugadintų duomenų rizika.%sSpustelėjus „Nutraukti“ programas darbas bus nutrauktas."
 
@@ -1064,6 +943,7 @@ msgid "Prompt on replace"
 msgstr "Keičiant klausti patvirtinimo"
 
 #: lclstrconsts.rspropertydoesnotexist
+#, object-pascal-format
 msgid "Property %s does not exist"
 msgstr "Savybė %s neegzistuoja"
 
@@ -1188,6 +1068,7 @@ msgid "Replace all"
 msgstr "Pakeisti visus"
 
 #: lclstrconsts.rsresourcenotfound
+#, object-pascal-format
 msgctxt "lclstrconsts.rsresourcenotfound"
 msgid "Resource %s not found"
 msgstr "Resursas %s nerastas"
@@ -1276,26 +1157,32 @@ msgid "Unsupported bitmap format."
 msgstr "Nepalaikomas rastrinio paveikslo formatas."
 
 #: lclstrconsts.rsunsupportedclipboardformat
+#, object-pascal-format
 msgid "Unsupported clipboard format: %s"
 msgstr "Nepalaikomas iškarpinės formatas: %s"
 
 #: lclstrconsts.rswarningunreleaseddcsdump
+#, object-pascal-format
 msgid " WARNING: There are %d unreleased DCs, a detailed dump follows:"
 msgstr " Įspėjimas: liko %d neatlaisvinti „DC“, išsamiau:"
 
 #: lclstrconsts.rswarningunreleasedgdiobjectsdump
+#, object-pascal-format
 msgid " WARNING: There are %d unreleased GDIObjects, a detailed dump follows:"
 msgstr " Įspėjimas: liko %d neatlaisvinti „GDIObject“, išsamiau:"
 
 #: lclstrconsts.rswarningunreleasedmessagesinqueue
+#, object-pascal-format
 msgid " WARNING: There are %d messages left in the queue! I'll free them"
 msgstr " Įspėjimas: eilėje dar yra %d pranešimai, jie bus sunaikinti."
 
 #: lclstrconsts.rswarningunreleasedtimerinfos
+#, object-pascal-format
 msgid " WARNING: There are %d TimerInfo structures left, I'll free them"
 msgstr " Įspėjimas: dar liko %d „TimerInfo“ struktūrų, jos bus sunaikintos."
 
 #: lclstrconsts.rswarningunremovedpaintmessages
+#, object-pascal-format
 msgid " WARNING: There are %s unremoved LM_PAINT/LM_GtkPAINT message links left."
 msgstr " Įspėjimas: liko %s nepašalintos nuorodos į LM_PAINT/LM_GtkPAINT pranešimus."
 
@@ -1335,10 +1222,6 @@ msgstr "Geltona"
 msgid "Cannot focus a disabled or invisible window"
 msgstr "Negalima sufokusuoti neveiksnaus ar nematomo lango"
 
-#: lclstrconsts.scannotsetdesigntimeppi
-msgid "Cannot set design time PPI."
-msgstr "Nepavyko nustatyti konstravimo rėžimo „PPI“."
-
 #: lclstrconsts.sduplicatemenus
 msgid "Duplicate menus"
 msgstr "Meniu dubliuojasi"
@@ -1360,6 +1243,7 @@ msgid "Invalid action unregistration"
 msgstr "Netinakamas veiksmo išregistravimas"
 
 #: lclstrconsts.sinvalidcharset
+#, object-pascal-format
 msgid "The char set in mask \"%s\" is not valid!"
 msgstr "Netinkama kaukės „%s“ koduotė!"
 
@@ -1470,31 +1354,32 @@ msgctxt "lclstrconsts.smkcup"
 msgid "Up"
 msgstr "Aukštyn"
 
-#: lclstrconsts.snomdiform
-msgid "No MDI form present."
-msgstr "MDI formos nėra."
-
 #: lclstrconsts.snotimers
 msgid "No timers available"
 msgstr "Nėra laikmačių"
 
 #: lclstrconsts.sparentrequired
+#, object-pascal-format
 msgid "Control \"%s\" has no parent window."
 msgstr "Valdiklis „\"%s“ neturi tėvinės formos."
 
 #: lclstrconsts.sparexpected
+#, object-pascal-format
 msgid "Wrong token type: %s expected"
 msgstr "Klaidingas leksemos tipas: tikėtasi %s"
 
 #: lclstrconsts.sparinvalidfloat
+#, object-pascal-format
 msgid "Invalid floating point number: %s"
 msgstr "Netinkamas slankaus kablelio skaičius: %s"
 
 #: lclstrconsts.sparinvalidinteger
+#, object-pascal-format
 msgid "Invalid integer number: %s"
 msgstr "Netinkamas sveikasis skaičius: %s"
 
 #: lclstrconsts.sparlocinfo
+#, object-pascal-format
 msgid " (at %d,%d, stream offset %d)"
 msgstr " (ties %d,%d, srauto poslinkis: %d)"
 
@@ -1507,32 +1392,45 @@ msgid "Unterminated string"
 msgstr "Nepabaigta eilutė"
 
 #: lclstrconsts.sparwrongtokensymbol
+#, object-pascal-format
 msgid "Wrong token symbol: %s expected but %s found"
 msgstr "Klaidingas leksemos simbolis: tikėtasi %s, tačiau rasta %s"
 
 #: lclstrconsts.sparwrongtokentype
+#, object-pascal-format
 msgid "Wrong token type: %s expected but %s found"
 msgstr "Klaidingas leksemos tipas: tikėtasi %s, tačiau rasta %s"
 
 #: lclstrconsts.sshellctrlsbytes
+#, object-pascal-format
 msgid "%s bytes"
 msgstr "%s baitų"
 
 #: lclstrconsts.sshellctrlsinvalidpath
+#, object-pascal-format, fuzzy
+#| msgid ""
+#| "Invalid pathname:\n"
+#| "\"%s\"\n"
 msgctxt "lclstrconsts.sshellctrlsinvalidpath"
 msgid ""
 "Invalid pathname:\n"
-"\"%s\"\n"
+"\"%s\""
 msgstr ""
 "Klaidingas kelio pavadinimas:\n"
 "„%s“\n"
 
 #: lclstrconsts.sshellctrlsinvalidpathrelative
+#, object-pascal-format, fuzzy
+#| msgid ""
+#| "Invalid relative pathname:\n"
+#| "\"%s\"\n"
+#| "in relation to rootpath:\n"
+#| "\"%s\"\n"
 msgid ""
 "Invalid relative pathname:\n"
 "\"%s\"\n"
 "in relation to rootpath:\n"
-"\"%s\"\n"
+"\"%s\""
 msgstr ""
 "Klaidingas snatykinio kelio pavadinimas:\n"
 "„%s“\n"
@@ -1540,19 +1438,25 @@ msgstr ""
 "„%s“\n"
 
 #: lclstrconsts.sshellctrlsinvalidroot
+#, object-pascal-format, fuzzy
+#| msgid ""
+#| "Invalid pathname:\n"
+#| "\"%s\"\n"
 msgctxt "lclstrconsts.sshellctrlsinvalidroot"
 msgid ""
 "Invalid pathname:\n"
-"\"%s\"\n"
+"\"%s\""
 msgstr ""
 "Klaidingas kelio pavadinimas:\n"
 "„%s“\n"
 
 #: lclstrconsts.sshellctrlskb
+#, object-pascal-format
 msgid "%s kB"
 msgstr "%s kB"
 
 #: lclstrconsts.sshellctrlsmb
+#, object-pascal-format
 msgid "%s MB"
 msgstr "%s MB"
 
@@ -1561,9 +1465,13 @@ msgid "Name"
 msgstr "Pavadinimas"
 
 #: lclstrconsts.sshellctrlsselecteditemdoesnotexists
+#, object-pascal-format, fuzzy
+#| msgid ""
+#| "The selected item does not exist on disk:\n"
+#| "\"%s\"\n"
 msgid ""
 "The selected item does not exist on disk:\n"
-"\"%s\"\n"
+"\"%s\""
 msgstr ""
 "Parinktojo elemento diske nėra;\n"
 "„%s“\n"

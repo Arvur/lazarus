@@ -31,7 +31,7 @@ uses
   // LazUtils
   Laz2_XMLCfg, LazFileUtils,
   // IdeIntf
-  LazIDEIntf,
+  LazIDEIntf,MacroIntf,
   // OpkMan
   opkman_const;
 
@@ -57,8 +57,12 @@ type
     FRemoteRepository: TStringList;
     FRemoteRepositoryTmp: TStringList;
     FActiveRepositoryIndex: Integer;
+    FLoadJsonLocally: Boolean;
+    FLoadJsonLocallyCnt: Integer;
     FForceDownloadAndExtract: Boolean;
     FDeleteZipAfterInstall: Boolean;
+    FIncompatiblePackages: Boolean;
+    FAlreadyInstalledPackages: Boolean;
     FCheckForUpdates: Integer;
     FLastUpdate: TDateTime;
     FConTimeOut: Integer;
@@ -76,14 +80,18 @@ type
     FLocalPackagesDefault: String;
     FLocalArchiveDefault: String;
     FLocalUpdateDefault: String;
-    // Actual local repositories.
+    // Actual local repositories in macro format.
     FLocalRepositoryPackages: String;
     FLocalRepositoryArchive: String;
     FLocalRepositoryUpdate: String;
     FUserProfile: Integer;
     FExcludedFiles: String;
     FExcludedFolders: String;
+    FOpenSSLDownloadType: Integer;
     procedure CheckColors;
+    function GetLocalRepositoryArchiveExpanded:string;
+    function GetLocalRepositoryPackagesExpanded:string;
+    function GetLocalRepositoryUpdateExpanded:string;
   public
     constructor Create(const AFileName: String);
     destructor Destroy; override;
@@ -91,13 +99,20 @@ type
     procedure Save;
     procedure LoadDefault;
     procedure CreateMissingPaths;
+    property LocalRepositoryPackagesExpanded:string read GetLocalRepositoryPackagesExpanded;
+    property LocalRepositoryArchiveExpanded:string read GetLocalRepositoryArchiveExpanded;
+    property LocalRepositoryUpdateExpanded:string read GetLocalRepositoryUpdateExpanded;
   published
     property Changed: Boolean read FChanged write FChanged;
     property RemoteRepository: TStringList read FRemoteRepository write FRemoteRepository;
     property RemoteRepositoryTmp: TStringList read FRemoteRepositoryTmp write FRemoteRepositoryTmp;
     property ActiveRepositoryIndex: Integer read FActiveRepositoryIndex write FActiveRepositoryIndex;
+    property LoadJsonLocally: Boolean read FLoadJsonLocally write FLoadJsonLocally;
+    property LoadJsonLocallyCnt: Integer read FLoadJsonLocallyCnt write FLoadJsonLocallyCnt;
     property ForceDownloadAndExtract: Boolean read FForceDownloadAndExtract write FForceDownloadAndExtract;
     property DeleteZipAfterInstall: Boolean read FDeleteZipAfterInstall write FDeleteZipAfterInstall;
+    property IncompatiblePackages: Boolean read FIncompatiblePackages write FIncompatiblePackages;
+    property AlreadyInstalledPackages: Boolean read FAlreadyInstalledPackages write FAlreadyInstalledPackages;
     property CheckForUpdates: Integer read FCheckForUpdates write FCheckForUpdates;
     property LastUpdate: TDateTime read FLastUpdate write FLastUpdate;
     property ConTimeOut: Integer read FConTimeOut write FConTimeOut;
@@ -116,6 +131,7 @@ type
     property ProxyPort: Word read FProxySettings.FPort write FProxySettings.FPort;
     property ProxyUser: String read FProxySettings.FUser write FProxySettings.FUser;
     property ProxyPassword: String read FProxySettings.FPassword write FProxySettings.FPassword;
+    property OpenSSLDownloadType: Integer read FOpenSSLDownloadType write FOpenSSLDownloadType;
     property LocalRepositoryPackages: String read FLocalRepositoryPackages write FLocalRepositoryPackages;
     property LocalRepositoryArchive: String read FLocalRepositoryArchive write FLocalRepositoryArchive;
     property LocalRepositoryUpdate: String read FLocalRepositoryUpdate write FLocalRepositoryUpdate;
@@ -184,8 +200,12 @@ begin
   if Trim(FRemoteRepository.Text) = '' then
     FRemoteRepository.Add(cRemoteRepository);
   FActiveRepositoryIndex := FXML.GetValue('General/ActiveRepositoryIndex/Value', 0);
+  FLoadJsonLocally := FXML.GetValue('General/LoadJsonLocally/Value', False);
+  FLoadJsonLocallyCnt := FXML.GetValue('General/LoadJsonLocallyCnt/Value', 0);
   FForceDownloadAndExtract := FXML.GetValue('General/ForceDownloadAndExtract/Value', True);
   FDeleteZipAfterInstall := FXML.GetValue('General/DeleteZipAfterInstall/Value', True);
+  FIncompatiblePackages := FXML.GetValue('General/IncompatiblePackages/Value', True);
+  FAlreadyInstalledPackages := FXML.GetValue('General/AlreadyInstalledPackages/Value', False);
   FLastDownloadDir := FXML.GetValue('General/LastDownloadDir/Value', '');
   FLastPackageDirSrc := FXML.GetValue('General/LastPackageDirSrc/Value', '');
   FLastPackageDirDst := FXML.GetValue('General/LastPackageDirDst/Value', '');
@@ -205,6 +225,8 @@ begin
   FProxySettings.FUser := FXML.GetValue('Proxy/User/Value', '');
   FProxySettings.FPassword := FXML.GetValue('Proxy/Password/Value', '');
 
+  FOpenSSLDownloadType := FXML.GetValue('OpenSSL/DownloadType/Value', 1);
+
   FLocalRepositoryPackages := FXML.GetValue('Folders/LocalRepositoryPackages/Value', '');
   FLocalRepositoryArchive := FXML.GetValue('Folders/LocalRepositoryArchive/Value', '');
   FLocalRepositoryUpdate := FXML.GetValue('Folders/LocalRepositoryUpdate/Value', '');
@@ -219,8 +241,12 @@ begin
   FXML.SetDeleteValue('Version/Value', OpkVersion, 0);
   FXML.SetDeleteValue('General/RemoteRepository/Value', FRemoteRepository.Text, '');
   FXML.SetDeleteValue('General/ActiveRepositoryIndex/Value', FActiveRepositoryIndex, 0);
+  FXML.SetDeleteValue('General/LoadJsonLocally/Value', FLoadJsonLocally, False);
+  FXML.SetDeleteValue('General/LoadJsonLocallyCnt/Value', FLoadJsonLocallyCnt, 0);
   FXML.SetDeleteValue('General/ForceDownloadAndExtract/Value', FForceDownloadAndExtract, True);
   FXML.SetDeleteValue('General/DeleteZipAfterInstall/Value', FDeleteZipAfterInstall, True);
+  FXML.SetDeleteValue('General/IncompatiblePackages/Value', FIncompatiblePackages, True);
+  FXML.SetDeleteValue('General/AlreadyInstalledPackages/Value', FAlreadyInstalledPackages, False);
   FXML.SetDeleteValue('General/LastDownloadDir/Value', FLastDownloadDir, '');
   FXML.SetDeleteValue('General/LastPackageDirSrc/Value', FLastPackageDirSrc, '');
   FXML.SetDeleteValue('General/LastPackageDirDst/Value', FLastPackageDirDst, '');
@@ -229,6 +255,7 @@ begin
   FXML.SetDeleteExtendedValue('General/LastUpdate/Value', FLastUpdate, 0.0);
   FXML.SetDeleteValue('General/ConTimeOut/Value', FConTimeOut, 10);
   FXML.SetDeleteValue('General/DaysToShowNewPackages/Value', FDaysToShowNewPackages, 31);
+
   FXML.SetDeleteValue('General/ShowRegularIcons/Value', FShowRegularIcons, True);
   FXML.SetDeleteValue('General/UseDefaultTheme/Value', FUseDefaultTheme, True);
   FXML.SetDeleteValue('General/HintFormOption/Value', FHintFormOption, 0);
@@ -239,6 +266,8 @@ begin
   FXML.SetDeleteValue('Proxy/Port/Value', FProxySettings.FPort, 0);
   FXML.SetDeleteValue('Proxy/User/Value', FProxySettings.FUser, '');
   FXML.SetDeleteValue('Proxy/Password/Value', FProxySettings.FPassword, '');
+
+  FXML.SetDeleteValue('OpenSSL/DownloadType/Value', FOpenSSLDownloadType, 1);
 
   FXML.SetDeleteValue('Folders/LocalRepositoryPackages/Value', FLocalRepositoryPackages, '');
   FXML.SetDeleteValue('Folders/LocalRepositoryArchive/Value', FLocalRepositoryArchive, '');
@@ -260,9 +289,13 @@ begin
   FHintFormOptionColors.Clear;
   CheckColors;
   FActiveRepositoryIndex := 0;
+  FLoadJsonLocally := False;
+  FLoadJsonLocallyCnt := 0;
   FForceDownloadAndExtract := True;
   FDeleteZipAfterInstall := True;
-  FCheckForUpdates := 0;
+  FIncompatiblePackages := True;
+  FAlreadyInstalledPackages := False;
+  FCheckForUpdates := 5;
   FLastUpdate := 0.0;
   FConTimeOut := 10;
   FDaysToShowNewPackages := 31;
@@ -276,6 +309,8 @@ begin
   FProxySettings.FUser := '';
   FProxySettings.FPassword := '';
 
+  FOpenSSLDownloadType := 1;
+
   FLocalRepositoryPackages := FLocalPackagesDefault;
   FLocalRepositoryArchive := FLocalArchiveDefault;
   FLocalRepositoryUpdate := FLocalUpdateDefault;
@@ -288,12 +323,12 @@ end;
 
 procedure TOptions.CreateMissingPaths;
 begin
-  if not DirectoryExists(FLocalRepositoryPackages) then
-    CreateDir(FLocalRepositoryPackages);
-  if not DirectoryExists(FLocalRepositoryArchive) then
-    CreateDir(FLocalRepositoryArchive);
-  if not DirectoryExists(FLocalRepositoryUpdate) then
-    CreateDir(FLocalRepositoryUpdate);
+  if not DirectoryExists(LocalRepositoryPackagesExpanded) then
+    CreateDir(LocalRepositoryPackagesExpanded);
+  if not DirectoryExists(LocalRepositoryArchiveExpanded) then
+    CreateDir(LocalRepositoryArchiveExpanded);
+  if not DirectoryExists(LocalRepositoryUpdateExpanded) then
+    CreateDir(LocalRepositoryUpdateExpanded);
 end;
 
 procedure TOptions.CheckColors;
@@ -307,6 +342,26 @@ begin
   end
 end;
 
+function TOptions.GetLocalRepositoryArchiveExpanded:string;
+begin
+  result:=FLocalRepositoryArchive;
+  IDEMacros.SubstituteMacros(result);
+  Result:=AppendPathDelim(result);
+end;
+
+function TOptions.GetLocalRepositoryPackagesExpanded:string;
+begin
+  result:=FLocalRepositoryPackages;
+  IDEMacros.SubstituteMacros(result);
+  Result:=AppendPathDelim(result);
+end;
+
+function TOptions.GetLocalRepositoryUpdateExpanded:string;
+begin
+  result:=FLocalRepositoryUpdate;
+  IDEMacros.SubstituteMacros(result);
+  Result:=AppendPathDelim(result);
+end;
 
 end.
 
